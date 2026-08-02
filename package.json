@@ -1,0 +1,16 @@
+{
+  "name": "finderdom-landing",
+  "version": "1.0.0",
+  "description": "FinderDom.pl - Landing page + email collection",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "mongodb": "^6.10.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -112,6 +112,45 @@
   .portals-list{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
   .portal-chip{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);padding:6px 14px;border-radius:100px;font-size:12px;color:#a3b3d1;font-weight:600}
 
+  /* Preview section - sample listings */
+  .preview-section{margin-top:80px;width:100%;max-width:1200px;animation:fadeIn 1s ease 0.5s both}
+  .preview-header{text-align:center;margin-bottom:48px}
+  .preview-badge{display:inline-block;background:rgba(255,184,0,0.15);border:1px solid rgba(255,184,0,0.3);color:#FFB800;padding:6px 14px;border-radius:100px;font-size:11px;font-weight:800;letter-spacing:1.5px;margin-bottom:16px;text-transform:uppercase}
+  .preview-title{font-size:clamp(28px,4vw,42px);font-weight:900;line-height:1.15;letter-spacing:-1px;margin-bottom:12px}
+  .preview-subtitle{font-size:16px;color:#a3b3d1;max-width:600px;margin:0 auto;line-height:1.6}
+  .listings{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;width:100%}
+  .listing{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:20px;overflow:hidden;transition:all 0.3s ease;text-align:left}
+  .listing:hover{transform:translateY(-4px);border-color:rgba(255,184,0,0.3)}
+  .listing-img{width:100%;height:180px;background:linear-gradient(135deg,#1a2e5c,#2d4a8a);position:relative;display:flex;align-items:center;justify-content:center;font-size:64px}
+  .listing-img.img2{background:linear-gradient(135deg,#3d1e6b,#6b3aa8)}
+  .listing-img.img3{background:linear-gradient(135deg,#1e3a3d,#3a7b6b)}
+  .listing-badge{position:absolute;top:12px;left:12px;padding:6px 12px;border-radius:100px;font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;backdrop-filter:blur(10px)}
+  .badge-deal{background:rgba(34,197,94,0.95);color:#052e16}
+  .badge-normal{background:rgba(59,130,246,0.95);color:#0c1a3d}
+  .badge-overpriced{background:rgba(239,68,68,0.95);color:#3d0a0a}
+  .listing-portal{position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.6);color:#fff;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:700;backdrop-filter:blur(10px)}
+  .listing-body{padding:20px}
+  .listing-title{font-size:16px;font-weight:800;color:#fff;margin-bottom:6px;line-height:1.3}
+  .listing-loc{font-size:12px;color:#8ba3d4;margin-bottom:14px;display:flex;align-items:center;gap:4px}
+  .listing-specs{display:flex;gap:14px;font-size:12px;color:#c5d0e6;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.08)}
+  .listing-specs span{display:flex;align-items:center;gap:4px}
+  .listing-price{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px}
+  .listing-price .big{font-size:22px;font-weight:900;color:#fff}
+  .listing-price .m2{font-size:12px;color:#8ba3d4}
+  .analysis{background:rgba(0,0,0,0.3);border-radius:12px;padding:14px;margin-bottom:14px}
+  .analysis-title{font-size:10px;color:#FFB800;text-transform:uppercase;letter-spacing:1.5px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+  .analysis-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:6px}
+  .analysis-row .lbl{color:#8ba3d4}
+  .analysis-row .val{color:#e6edf3;font-weight:700}
+  .analysis-row.rcn{padding-top:6px;border-top:1px dashed rgba(255,184,0,0.3);margin-top:6px}
+  .analysis-row.rcn .lbl{color:#FFB800;font-weight:700}
+  .analysis-row.rcn .val{color:#FFB800}
+  .verdict{font-size:11px;font-weight:800;padding:8px 12px;border-radius:8px;text-align:center;letter-spacing:0.5px}
+  .verdict.deal{background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3)}
+  .verdict.normal{background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3)}
+  .verdict.overpriced{background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3)}
+  .preview-note{margin-top:32px;font-size:12px;color:#5e7099;text-align:center;font-style:italic}
+
   /* Footer */
   .footer{margin-top:80px;padding-top:32px;border-top:1px solid rgba(255,255,255,0.05);width:100%;max-width:900px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-size:12px;color:#5e7099}
   .footer a{color:#8ba3d4;text-decoration:none;margin-left:16px}
@@ -197,6 +236,108 @@
       <h3>Zaawansowane filtry</h3>
       <p>Powierzchnia, cena, dzielnica, piętro, rok budowy, balkon — precyzyjne filtry we wszystkich portalach naraz.</p>
     </div>
+  </div>
+
+  <!-- Preview: Sample Listings with AI Analysis -->
+  <div class="preview-section">
+    <div class="preview-header">
+      <div class="preview-badge">📊 tak będzie to działać</div>
+      <h2 class="preview-title">Analiza ceny <span style="background:linear-gradient(120deg,#FFB800,#FFA200);-webkit-background-clip:text;background-clip:text;color:transparent">w akcji</span></h2>
+      <p class="preview-subtitle">Zobacz na przykładach jak AI porówna każdą ofertę z realnymi cenami transakcyjnymi z Rejestru Cen Nieruchomości (RCN).</p>
+    </div>
+
+    <div class="listings">
+
+      <!-- Listing 1: OKAZJA -->
+      <div class="listing">
+        <div class="listing-img">
+          🏢
+          <div class="listing-badge badge-deal">🔥 OKAZJA</div>
+          <div class="listing-portal">Otodom</div>
+        </div>
+        <div class="listing-body">
+          <div class="listing-title">Mieszkanie 2 pokoje, słoneczne</div>
+          <div class="listing-loc">📍 Kraków, Podgórze</div>
+          <div class="listing-specs">
+            <span>📐 48 m²</span>
+            <span>🛏️ 2 pok.</span>
+            <span>🏢 3 piętro</span>
+          </div>
+          <div class="listing-price">
+            <span class="big">545 000 zł</span>
+            <span class="m2">11 354 zł/m²</span>
+          </div>
+          <div class="analysis">
+            <div class="analysis-title">🧠 AI Analiza ceny</div>
+            <div class="analysis-row"><span class="lbl">Ta oferta:</span><span class="val">11 354 zł/m²</span></div>
+            <div class="analysis-row"><span class="lbl">Śr. oferty w okolicy:</span><span class="val">12 800 zł/m²</span></div>
+            <div class="analysis-row rcn"><span class="lbl">⭐ Śr. transakcja RCN:</span><span class="val">12 100 zł/m²</span></div>
+          </div>
+          <div class="verdict deal">✨ 6% PONIŻEJ REALNYCH TRANSAKCJI</div>
+        </div>
+      </div>
+
+      <!-- Listing 2: W NORMIE -->
+      <div class="listing">
+        <div class="listing-img img2">
+          🏠
+          <div class="listing-badge badge-normal">✓ W NORMIE</div>
+          <div class="listing-portal">OLX</div>
+        </div>
+        <div class="listing-body">
+          <div class="listing-title">3 pokoje z balkonem, po remoncie</div>
+          <div class="listing-loc">📍 Warszawa, Mokotów</div>
+          <div class="listing-specs">
+            <span>📐 62 m²</span>
+            <span>🛏️ 3 pok.</span>
+            <span>🏢 5 piętro</span>
+          </div>
+          <div class="listing-price">
+            <span class="big">1 240 000 zł</span>
+            <span class="m2">20 000 zł/m²</span>
+          </div>
+          <div class="analysis">
+            <div class="analysis-title">🧠 AI Analiza ceny</div>
+            <div class="analysis-row"><span class="lbl">Ta oferta:</span><span class="val">20 000 zł/m²</span></div>
+            <div class="analysis-row"><span class="lbl">Śr. oferty w okolicy:</span><span class="val">20 500 zł/m²</span></div>
+            <div class="analysis-row rcn"><span class="lbl">⭐ Śr. transakcja RCN:</span><span class="val">19 800 zł/m²</span></div>
+          </div>
+          <div class="verdict normal">💙 CENA ZGODNA Z RYNKIEM</div>
+        </div>
+      </div>
+
+      <!-- Listing 3: ZAWYŻONA -->
+      <div class="listing">
+        <div class="listing-img img3">
+          🏘️
+          <div class="listing-badge badge-overpriced">⚠️ ZAWYŻONA</div>
+          <div class="listing-portal">Morizon</div>
+        </div>
+        <div class="listing-body">
+          <div class="listing-title">Kawalerka z widokiem na park</div>
+          <div class="listing-loc">📍 Wrocław, Śródmieście</div>
+          <div class="listing-specs">
+            <span>📐 32 m²</span>
+            <span>🛏️ 1 pok.</span>
+            <span>🏢 2 piętro</span>
+          </div>
+          <div class="listing-price">
+            <span class="big">520 000 zł</span>
+            <span class="m2">16 250 zł/m²</span>
+          </div>
+          <div class="analysis">
+            <div class="analysis-title">🧠 AI Analiza ceny</div>
+            <div class="analysis-row"><span class="lbl">Ta oferta:</span><span class="val">16 250 zł/m²</span></div>
+            <div class="analysis-row"><span class="lbl">Śr. oferty w okolicy:</span><span class="val">14 000 zł/m²</span></div>
+            <div class="analysis-row rcn"><span class="lbl">⭐ Śr. transakcja RCN:</span><span class="val">13 200 zł/m²</span></div>
+          </div>
+          <div class="verdict overpriced">📉 23% POWYŻEJ TRANSAKCJI · negocjuj do ~420 000 zł</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="preview-note">💡 Dane w przykładach są poglądowe. Prawdziwa analiza opiera się na aktualnych ofertach + Rejestrze Cen Nieruchomości (RCN) — od 13.02.2026 dostępnym bezpłatnie dla wszystkich.</div>
   </div>
 
   <!-- Newsletter -->
@@ -292,3 +433,5 @@
 
 </body>
 </html>
+
+FinderDom.pl

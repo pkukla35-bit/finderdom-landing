@@ -6,7 +6,7 @@ Stronę „Coming Soon" dla wyszukiwarki ogłoszeń nieruchomości.
 
 ```
 finderdom-landing/
-├── index.html          # Strona główna (statyczna, PL, responsywna)
+├── index.html          # Strona główna (statyczna, PL, responsywna) 
 ├── api/
 │   └── subscribe.js    # Serverless function - zapis emaili
 ├── favicon.svg         # Ikona

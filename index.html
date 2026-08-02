@@ -27,6 +27,18 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
+<!-- Google Analytics 4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-8BX5DVXPDV"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-8BX5DVXPDV', {
+    'page_title': 'FinderDom.pl - Landing',
+    'page_location': window.location.href
+  });
+</script>
+
 <!-- Structured data -->
 <script type="application/ld+json">
 {
@@ -415,8 +427,17 @@
         msg.className = 'msg success';
         msg.textContent = '✅ Dziękujemy! Powiadomimy Cię jak tylko startujemy.';
         form.reset();
-        // Track conversion (if analytics added later)
-        if (window.gtag) window.gtag('event', 'subscribe', { method: 'landing' });
+        // Track successful signup in GA4
+        if (window.gtag) {
+          gtag('event', 'sign_up', {
+            'method': 'landing_newsletter',
+            'is_new': data.new || false
+          });
+          gtag('event', 'generate_lead', {
+            'currency': 'PLN',
+            'value': 39
+          });
+        }
       } else {
         msg.className = 'msg error';
         msg.textContent = data.error || '❌ Coś poszło nie tak. Spróbuj ponownie.';

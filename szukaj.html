@@ -197,6 +197,16 @@
       </div>
     </div>
 
+    <div class="filter-group">
+      <div class="filter-title">👤 Kto oferuje</div>
+      <div class="chip-group">
+        <div class="chip active" data-seller="prywatna">👨‍👩‍👧 Prywatna (bez prowizji)</div>
+        <div class="chip active" data-seller="posrednik">🏢 Pośrednik</div>
+        <div class="chip" data-seller="deweloper">🏗️ Deweloper (rynek pierwotny)</div>
+        <div class="chip" data-seller="fliper">💼 Fliper (po flipie)</div>
+      </div>
+    </div>
+
     <!-- Media/Uzbrojenie - only for działka -->
     <div class="filter-group" id="mediaGroup" style="display:none">
       <div class="filter-title">💧 Uzbrojenie działki</div>
@@ -498,6 +508,7 @@ function renderListings(list) {
           ${l.emoji}
           <div class="card-badge b-${l.verdict_badge}">${l.verdict_text}</div>
           <div class="card-portal">${l.portal}</div>
+          ${l.seller_label ? `<div style="position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,0.75);color:#FFB800;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:800;backdrop-filter:blur(8px)">${l.seller_label}</div>` : ''}
         </div>
         <div class="card-body">
           <div class="card-title">${l.title}</div>

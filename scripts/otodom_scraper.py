@@ -1,694 +1,530 @@
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Wyszukiwarka ogłoszeń — FinderDom.pl</title>
-<meta name="description" content="Wyszukaj mieszkania i domy ze wszystkich portali w Polsce. AI analiza cen, filtry zaawansowane, powiadomienia.">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+"""FinderDom — Otodom scraper produkcyjny (v2).
 
-<!-- Google Analytics 4 -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-8BX5DVXPDV"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-8BX5DVXPDV');
-</script>
+Strategia:
+  - Pobiera najnowsze ogłoszenia z całej Polski (`cala-polska`) sortowane po LATEST.
+  - 9 kombinacji: (sprzedaz|wynajem) × (mieszkanie|dom|dzialka|lokal|pokoj|garaz).
+  - Każde miasto Polski jest reprezentowane automatycznie (bez mapy miast).
+  - Konfigurowalne przez zmienne środowiskowe (na potrzeby GitHub Actions).
 
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0B1836;color:#fff;-webkit-font-smoothing:antialiased}
+Anti-bot:
+  - Rotacja User-Agent, opóźnienia 1.5-3s, retry z exp backoff.
+  - Pobiera JSON z `<script id="__NEXT_DATA__">` – szybko i stabilnie.
 
-  /* Top nav */
-  .topnav{background:rgba(11,24,54,0.95);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.08);padding:14px 24px;position:sticky;top:0;z-index:100}
-  .nav-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px}
-  .brand-link{display:flex;align-items:center;gap:10px;text-decoration:none;color:#fff}
-  .brand-logo{width:36px;height:36px;background:linear-gradient(135deg,#1a2e5c,#2d4a8a);border-radius:10px;display:flex;align-items:center;justify-content:center}
-  .brand-logo svg{width:22px;height:22px}
-  .brand-text{font-size:17px;font-weight:900;letter-spacing:-0.5px}
-  .brand-text .accent{color:#FFB800}
-  .nav-links{display:flex;gap:20px;align-items:center;font-size:14px}
-  .nav-links a{color:#c5d0e6;text-decoration:none;font-weight:600;transition:color 0.15s}
-  .nav-links a:hover,.nav-links a.active{color:#FFB800}
-  .cta-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:10px 18px;border-radius:10px;text-decoration:none;font-size:13px;letter-spacing:0.3px;text-transform:uppercase}
+Safe-fail:
+  - Jeśli scrape < MIN_LISTINGS (100) → NIE nadpisuje listings.json.
+  - Zawsze tworzy backup poprzedniego pliku (listings.backup.json).
+  - Wypisuje jasny błąd i wychodzi z kodem != 0 (widoczne w GH Actions).
 
-  /* Layout */
-  .search-hero{background:linear-gradient(180deg,#1a2e5c 0%,#0B1836 100%);padding:32px 24px}
-  .search-bar{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px}
-  .search-input{padding:14px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:#fff;font-size:14px;outline:none;transition:all 0.2s}
-  .search-input:focus{border-color:#FFB800;background:rgba(0,0,0,0.6)}
-  .search-input::placeholder{color:#5e7099}
-  select.search-input{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238ba3d4' d='M6 8L0 0h12z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
-  .search-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:14px 24px;border-radius:12px;border:none;font-size:13px;letter-spacing:0.5px;cursor:pointer;text-transform:uppercase;transition:all 0.15s}
-  .search-btn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(255,184,0,0.3)}
+Uruchomienie lokalne:
+  python3 otodom_scraper_v2.py
+  MAX_PAGES=3 python3 otodom_scraper_v2.py         # szybki test
+  MAX_LISTINGS=1000 python3 otodom_scraper_v2.py   # limit output
+"""
+from __future__ import annotations
 
-  .main-container{max-width:1400px;margin:0 auto;padding:24px;display:grid;grid-template-columns:280px 1fr;gap:24px}
+import json
+import os
+import random
+import re
+import statistics
+import sys
+import time
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
 
-  /* Sidebar filters */
-  .filters{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;height:fit-content;position:sticky;top:88px}
-  .filters h3{font-size:11px;color:#FFB800;letter-spacing:2px;text-transform:uppercase;font-weight:800;margin-bottom:16px}
-  .filter-group{margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid rgba(255,255,255,0.05)}
-  .filter-group:last-child{border-bottom:none;margin-bottom:0}
-  .filter-title{font-size:13px;font-weight:800;color:#e6edf3;margin-bottom:12px;display:flex;align-items:center;gap:6px}
-  .filter-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .filter-row input{padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;outline:none;width:100%}
-  .filter-row input:focus{border-color:#FFB800}
-  .chip-group{display:flex;flex-wrap:wrap;gap:6px}
-  .chip{padding:6px 10px;border-radius:100px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#c5d0e6;font-size:11px;cursor:pointer;transition:all 0.15s;font-weight:600;user-select:none}
-  .chip:hover{border-color:rgba(255,184,0,0.5)}
-  .chip.active{background:rgba(255,184,0,0.15);border-color:#FFB800;color:#FFB800}
-  .radius-row{display:flex;align-items:center;gap:8px}
-  .radius-row input[type=number]{flex:1;padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;outline:none}
-  .radius-row .u{color:#8ba3d4;font-size:12px;font-weight:700}
-  .filter-actions{display:flex;gap:8px;margin-top:8px}
-  .filter-actions button{flex:1;padding:10px;border-radius:10px;border:none;cursor:pointer;font-size:12px;font-weight:800;letter-spacing:0.3px}
-  .btn-clear{background:rgba(255,255,255,0.05);color:#c5d0e6;border:1px solid rgba(255,255,255,0.1) !important}
-  .btn-apply{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836}
+try:
+    import requests
+except ImportError:
+    print("[FATAL] requests not installed. pip install requests")
+    sys.exit(2)
 
-  /* Results */
-  .results-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px}
-  .results-count{font-size:14px;color:#c5d0e6}
-  .results-count strong{color:#fff;font-weight:900}
-  .sort-select{padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:#fff;font-size:13px;outline:none;cursor:pointer;font-weight:600}
 
-  /* Listing cards */
-  .results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
-  .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;overflow:hidden;transition:all 0.25s;cursor:pointer;text-decoration:none;color:inherit;display:block}
-  .card:hover{transform:translateY(-3px);border-color:rgba(255,184,0,0.35);box-shadow:0 12px 32px rgba(0,0,0,0.4)}
-  .card-img{width:100%;height:180px;position:relative;display:flex;align-items:center;justify-content:center;font-size:56px}
-  .card-img.i1{background:linear-gradient(135deg,#1a2e5c,#2d4a8a)}
-  .card-img.i2{background:linear-gradient(135deg,#3d1e6b,#6b3aa8)}
-  .card-img.i3{background:linear-gradient(135deg,#1e3a3d,#3a7b6b)}
-  .card-img.i4{background:linear-gradient(135deg,#4a2c1a,#8b5a3c)}
-  .card-img.i5{background:linear-gradient(135deg,#2a1e3d,#5a3a6b)}
-  .card-img.i6{background:linear-gradient(135deg,#1a3d3a,#3a7b6b)}
-  .card-badge{position:absolute;top:10px;left:10px;padding:5px 10px;border-radius:100px;font-size:10px;font-weight:900;letter-spacing:0.5px;text-transform:uppercase;backdrop-filter:blur(10px)}
-  .b-deal{background:rgba(34,197,94,0.95);color:#052e16}
-  .b-normal{background:rgba(59,130,246,0.95);color:#0c1a3d}
-  .b-over{background:rgba(239,68,68,0.95);color:#3d0a0a}
-  .b-outlier{background:rgba(148,163,184,0.95);color:#0f172a}
-  .b-new{background:rgba(255,184,0,0.95);color:#0B1836}
-  .card-portal{position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.6);color:#fff;padding:3px 8px;border-radius:100px;font-size:9px;font-weight:700;backdrop-filter:blur(8px)}
-  .card-body{padding:16px}
-  .card-title{font-size:14px;font-weight:800;margin-bottom:4px;color:#fff;line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-  .card-loc{font-size:11px;color:#8ba3d4;margin-bottom:10px}
-  .card-specs{display:flex;gap:10px;font-size:11px;color:#a3b3d1;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.06)}
-  .card-price{display:flex;justify-content:space-between;align-items:baseline}
-  .card-price .p{font-size:18px;font-weight:900;color:#fff}
-  .card-price .pm2{font-size:11px;color:#8ba3d4}
+# --------------------------------------------------------------------------
+# CONFIG
+# --------------------------------------------------------------------------
+MAX_PAGES = int(os.getenv("MAX_PAGES", "5"))          # 5 stron × 72 items × 9 komb = ~3200 max
+MAX_LISTINGS = int(os.getenv("MAX_LISTINGS", "4000")) # hard cap na output JSON
+MIN_LISTINGS = int(os.getenv("MIN_LISTINGS", "100"))  # safe-fail: mniej = nie zapisujemy
+DELAY_MIN = float(os.getenv("DELAY_MIN", "1.5"))
+DELAY_MAX = float(os.getenv("DELAY_MAX", "3.0"))
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "25"))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 
-  /* Load more */
-  .load-more{text-align:center;margin-top:32px;padding-bottom:40px}
-  .load-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:14px 32px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.15s}
-  .load-btn:hover{background:rgba(255,184,0,0.1);border-color:#FFB800;color:#FFB800}
+OUT_DIR = Path(os.getenv(
+    "OUT_DIR",
+    str(Path(__file__).resolve().parent.parent / "data"),
+))
+OUT_FILE = OUT_DIR / "listings.json"
+BACKUP_FILE = OUT_DIR / "listings.backup.json"
 
-  /* Empty state */
-  .empty{text-align:center;padding:60px 20px;color:#8ba3d4}
-  .empty .icon{font-size:48px;margin-bottom:12px}
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Safari/605.1.15",
+]
 
-  /* Mobile */
-  @media(max-width:900px){
-    .search-bar{grid-template-columns:1fr;gap:8px}
-    .main-container{grid-template-columns:1fr;padding:16px}
-    .filters{position:static;order:2}
-    .nav-links{gap:12px;font-size:12px}
-    .nav-links .hide-mob{display:none}
-  }
-</style>
-</head>
-<body>
+# 9 kombinacji obsługiwanych przez Otodom
+COMBOS = [
+    ("sprzedaz", "mieszkanie", "mieszkanie"),
+    ("sprzedaz", "dom", "dom"),
+    ("sprzedaz", "dzialka", "dzialka"),
+    ("sprzedaz", "lokal", "lokal"),
+    ("sprzedaz", "garaz", "garaz"),
+    ("wynajem", "mieszkanie", "mieszkanie"),
+    ("wynajem", "dom", "dom"),
+    ("wynajem", "pokoj", "pokoj"),
+    ("wynajem", "lokal", "lokal"),
+]
 
-<!-- Top nav -->
-<nav class="topnav">
-  <div class="nav-inner">
-    <a href="/" class="brand-link">
-      <div class="brand-logo">
-        <svg viewBox="0 0 100 100" fill="none">
-          <path d="M50 20L20 45v35h60V45L50 20z" stroke="#FFB800" stroke-width="6" stroke-linejoin="round" fill="none"/>
-          <circle cx="65" cy="45" r="10" stroke="#FFB800" stroke-width="6" fill="none"/>
-          <path d="M72 52l8 8" stroke="#FFB800" stroke-width="6" stroke-linecap="round"/>
-        </svg>
-      </div>
-      <div class="brand-text">Finder<span class="accent">Dom</span>.pl</div>
-    </a>
-    <div class="nav-links">
-      <a href="/szukaj.html" class="active">Wyszukiwarka</a>
-      <a href="/oferta.html" class="hide-mob">Przykład oferty</a>
-      <a href="/#valuation" class="hide-mob">Wycena</a>
-      <a href="/#newsletter" class="cta-btn">Zapisz się</a>
-    </div>
-  </div>
-</nav>
-
-<!-- Search bar -->
-<div class="search-hero">
-  <div class="search-bar">
-    <input type="text" class="search-input" placeholder="🔍 Miasto, dzielnica lub słowo kluczowe..." id="q">
-    <select class="search-input">
-      <option>🏢 Mieszkanie</option>
-      <option>🏠 Dom</option>
-      <option>🌳 Działka</option>
-      <option>🏪 Lokal użytkowy</option>
-      <option>🏭 Magazyn</option>
-      <option>🅿️ Garaż</option>
-    </select>
-    <select class="search-input">
-      <option>Sprzedaż</option>
-      <option>Wynajem</option>
-    </select>
-    <select class="search-input">
-      <option>Cena do...</option>
-      <option>300 000 zł</option>
-      <option>500 000 zł</option>
-      <option>800 000 zł</option>
-      <option>1 000 000 zł</option>
-      <option>2 000 000 zł</option>
-    </select>
-    <button class="search-btn">SZUKAJ</button>
-  </div>
-</div>
-
-<!-- Main content -->
-<div class="main-container">
-
-  <!-- Sidebar filters -->
-  <aside class="filters">
-    <h3>🎯 Filtry zaawansowane</h3>
-
-    <div class="filter-group">
-      <div class="filter-title">🏘️ Rodzaj nieruchomości</div>
-      <div class="chip-group" id="propertyType">
-        <div class="chip active" data-type="mieszkanie">🏢 Mieszkanie</div>
-        <div class="chip" data-type="dom">🏠 Dom</div>
-        <div class="chip" data-type="dzialka">🌳 Działka</div>
-        <div class="chip" data-type="lokal">🏪 Lokal użytkowy</div>
-        <div class="chip" data-type="magazyn">🏭 Magazyn</div>
-        <div class="chip" data-type="garaz">🅿️ Garaż</div>
-      </div>
-    </div>
-
-    <div class="filter-group" id="subTypeGroup">
-      <div class="filter-title" id="subTypeTitle">🏗️ Typ budynku</div>
-      <div class="chip-group" id="subTypeChips">
-        <div class="chip">Blok</div>
-        <div class="chip">Kamienica</div>
-        <div class="chip">Apartamentowiec</div>
-        <div class="chip">Loft</div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">👤 Kto oferuje</div>
-      <div class="chip-group">
-        <div class="chip active" data-seller="prywatna">👨‍👩‍👧 Prywatna (bez prowizji)</div>
-        <div class="chip active" data-seller="posrednik">🏢 Pośrednik</div>
-        <div class="chip" data-seller="deweloper">🏗️ Deweloper (rynek pierwotny)</div>
-        <div class="chip" data-seller="fliper">💼 Fliper (po flipie)</div>
-      </div>
-    </div>
-
-    <!-- Media/Uzbrojenie - only for działka -->
-    <div class="filter-group" id="mediaGroup" style="display:none">
-      <div class="filter-title">💧 Uzbrojenie działki</div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">💧 Woda</div>
-        <div class="chip-group">
-          <div class="chip active" data-media="woda-w-dzialce">✓ W działce</div>
-          <div class="chip" data-media="woda-w-drodze">🛣️ W drodze</div>
-          <div class="chip" data-media="woda-studnia">⛲ Studnia</div>
-          <div class="chip" data-media="woda-brak">✗ Brak</div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">⚡ Prąd</div>
-        <div class="chip-group">
-          <div class="chip active" data-media="prad-w-dzialce">✓ W działce</div>
-          <div class="chip" data-media="prad-w-drodze">🛣️ W drodze</div>
-          <div class="chip" data-media="prad-brak">✗ Brak</div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">🔥 Gaz</div>
-        <div class="chip-group">
-          <div class="chip" data-media="gaz-w-dzialce">✓ W działce</div>
-          <div class="chip" data-media="gaz-w-drodze">🛣️ W drodze</div>
-          <div class="chip" data-media="gaz-brak">✗ Brak</div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">🚽 Kanalizacja</div>
-        <div class="chip-group">
-          <div class="chip" data-media="kan-miejska">🏙️ Miejska</div>
-          <div class="chip" data-media="kan-w-drodze">🛣️ W drodze</div>
-          <div class="chip" data-media="kan-szambo">🕳️ Szambo</div>
-          <div class="chip" data-media="kan-oczyszczalnia">♻️ Oczyszczalnia</div>
-          <div class="chip" data-media="kan-brak">✗ Brak</div>
-        </div>
-      </div>
-
-      <div>
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">📜 Warunki zabudowy</div>
-        <div class="chip-group">
-          <div class="chip" data-media="wz-mpzp">✓ MPZP (plan miejscowy)</div>
-          <div class="chip" data-media="wz-wydane">✓ WZ wydane</div>
-          <div class="chip" data-media="wz-brak">⏳ Brak / wymagane</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">💰 Cena za m² (zł)</div>
-      <div class="filter-row">
-        <input type="number" placeholder="od" value="">
-        <input type="number" placeholder="do" value="">
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">📐 Powierzchnia (m²)</div>
-      <div class="filter-row">
-        <input type="number" placeholder="od" value="">
-        <input type="number" placeholder="do" value="">
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">🛏️ Liczba pokoi</div>
-      <div class="chip-group">
-        <div class="chip">1</div>
-        <div class="chip active">2</div>
-        <div class="chip active">3</div>
-        <div class="chip">4</div>
-        <div class="chip">5+</div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">🏢 Piętro</div>
-      <div class="chip-group">
-        <div class="chip">Parter</div>
-        <div class="chip">1-3</div>
-        <div class="chip">4-7</div>
-        <div class="chip">8+</div>
-        <div class="chip">Ostatnie</div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">📅 Rok budowy</div>
-      <div class="filter-row">
-        <input type="number" placeholder="od" value="">
-        <input type="number" placeholder="do" value="">
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">📍 Promień od punktu (km)</div>
-      <div class="radius-row">
-        <input type="number" placeholder="np. 5" min="1" max="100">
-        <span class="u">km</span>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">🎨 Standard</div>
-      <div class="chip-group">
-        <div class="chip">🔨 Stan surowy zamknięty</div>
-        <div class="chip">🚧 Do remontu / do wykończenia</div>
-        <div class="chip">🏗️ Do odświeżenia</div>
-        <div class="chip">✨ Deweloperski</div>
-        <div class="chip active">🎨 Po remoncie</div>
-        <div class="chip">💎 Podwyższony standard</div>
-        <div class="chip">👑 Wysoki standard</div>
-        <div class="chip">🌟 Luksusowy / Premium</div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">💎 Analiza AI</div>
-      <div class="chip-group">
-        <div class="chip active">🔥 Tylko okazje</div>
-        <div class="chip">W normie</div>
-        <div class="chip">Ukryj zawyżone</div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">🔁 Duplikaty</div>
-      <div class="chip-group">
-        <div class="chip active" id="chipOnlyOrig">✨ Tylko oryginały</div>
-        <div class="chip">📋 Pokaż wszystko (z kopiami)</div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">✨ Dodatki</div>
-      <div class="chip-group">
-        <div class="chip">Balkon</div>
-        <div class="chip">Garaż</div>
-        <div class="chip">Winda</div>
-        <div class="chip">Ogród</div>
-      </div>
-    </div>
-
-    <!-- Collapsible: More filters (optional) -->
-    <div class="filter-group" style="border-bottom:none;padding-bottom:0">
-      <button id="toggleMore" style="width:100%;padding:12px;background:rgba(255,184,0,0.08);border:1px dashed rgba(255,184,0,0.35);border-radius:10px;color:#FFB800;font-weight:800;font-size:12px;letter-spacing:0.5px;cursor:pointer;text-transform:uppercase;text-align:center;transition:all 0.2s">
-        🔽 Więcej filtrów (opcjonalne)
-      </button>
-    </div>
-
-    <div id="moreFilters" style="display:none">
-      <div class="filter-group">
-        <div class="filter-title">🏗️ Materiał budynku</div>
-        <div class="chip-group">
-          <div class="chip">🧱 Cegła</div>
-          <div class="chip">🏢 Wielka płyta</div>
-          <div class="chip">🏛️ Żelbet</div>
-          <div class="chip">🪵 Drewno</div>
-          <div class="chip">🧊 Silikat</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <div class="filter-title">🌡️ Ogrzewanie</div>
-        <div class="chip-group">
-          <div class="chip">🏙️ Miejskie</div>
-          <div class="chip">🔥 Gazowe</div>
-          <div class="chip">♨️ Piec / kominek</div>
-          <div class="chip">⚡ Elektryczne</div>
-          <div class="chip">🌡️ Pompa ciepła</div>
-          <div class="chip">☀️ Solary / fotowoltaika</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <div class="filter-title">🚗 Parking</div>
-        <div class="chip-group">
-          <div class="chip">🅿️ Garaż podziemny</div>
-          <div class="chip">🏚️ Garaż naziemny</div>
-          <div class="chip">📍 Miejsce postojowe</div>
-          <div class="chip">🛣️ Na ulicy</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <div class="filter-title">🔒 Zabezpieczenia</div>
-        <div class="chip-group">
-          <div class="chip">🔔 Domofon</div>
-          <div class="chip">📹 Wideodomofon</div>
-          <div class="chip">👮 Ochrona 24h</div>
-          <div class="chip">🎥 Monitoring</div>
-          <div class="chip">🚧 Osiedle zamknięte</div>
-          <div class="chip">🚨 Alarm</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <div class="filter-title">🌳 Otoczenie</div>
-        <div class="chip-group">
-          <div class="chip">🌳 Park / zieleń</div>
-          <div class="chip">🌲 Las</div>
-          <div class="chip">💧 Jezioro / rzeka</div>
-          <div class="chip">🏙️ Centrum</div>
-          <div class="chip">🏫 Blisko szkoły</div>
-          <div class="chip">🏥 Blisko przychodni</div>
-          <div class="chip">🛒 Blisko sklepów</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <div class="filter-title">🚇 Komunikacja</div>
-        <div class="chip-group">
-          <div class="chip">🚇 Metro (do 500m)</div>
-          <div class="chip">🚊 Tramwaj (do 300m)</div>
-          <div class="chip">🚌 Autobus (do 200m)</div>
-          <div class="chip">🚄 Kolej / SKM</div>
-          <div class="chip">🛣️ Autostrada (do 5km)</div>
-          <div class="chip">✈️ Blisko lotniska</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <div class="filter-title">📋 Stan prawny</div>
-        <div class="chip-group">
-          <div class="chip">🏛️ Własność</div>
-          <div class="chip">📜 Spółdzielcze własnościowe</div>
-          <div class="chip">📄 Spółdzielcze lokatorskie</div>
-          <div class="chip">✓ Księga wieczysta</div>
-          <div class="chip">🚫 Bez obciążeń</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="filter-actions">
-      <button class="btn-clear">Wyczyść</button>
-      <button class="btn-apply">Zastosuj</button>
-    </div>
-  </aside>
-
-  <!-- Results -->
-  <main>
-    <div class="results-head">
-      <div class="results-count">Znaleziono <strong id="count">6</strong> ofert (przykłady poglądowe)</div>
-      <select class="sort-select">
-        <option>Sortuj: AI - najlepsze okazje</option>
-        <option>Cena rosnąco</option>
-        <option>Cena malejąco</option>
-        <option>Cena za m² rosnąco</option>
-        <option>Najnowsze</option>
-        <option>Największy metraż</option>
-      </select>
-    </div>
-
-    <div class="results-grid" id="grid">
-      <!-- generated by JS below -->
-    </div>
-
-    <div class="load-more">
-      <button id="loadMoreBtn" class="load-btn" style="display:none">Załaduj więcej ofert ↓</button>
-    </div>
-  </main>
-
-</div>
-
-<script>
-// Real listings loaded from /data/listings.json (updated daily by scrapers)
-let LISTINGS = [];
-let CURRENT_FILTERED = [];
-const PAGE_SIZE = 60;
-let currentPage = 1;
-
-async function loadListings() {
-  const grid = document.getElementById('grid');
-  const count = document.getElementById('count');
-  try {
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8ba3d4">⏳ Wczytuję oferty...</div>';
-    const res = await fetch('/data/listings.json?v=' + Date.now());
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    LISTINGS = data.listings || [];
-    count.textContent = LISTINGS.length;
-    renderListings(LISTINGS);
-  } catch (err) {
-    console.error('Fetch listings failed:', err);
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#f87171">❌ Błąd ładowania. Odśwież stronę.</div>';
-  }
+# Mapowanie roomsNumber (enum Otodom → int)
+ROOMS_ENUM = {
+    "ONE": 1, "TWO": 2, "THREE": 3, "FOUR": 4,
+    "FIVE": 5, "SIX": 6, "SEVEN": 7, "EIGHT": 8, "NINE": 9,
+    "MORE": 10, "TEN_AND_MORE": 10,
 }
 
-function renderListings(list) {
-  // Apply "only originals" filter if active
-  const onlyOrigActive = document.getElementById('chipOnlyOrig')?.classList.contains('active');
-  CURRENT_FILTERED = onlyOrigActive ? list.filter(l => l.is_original !== false) : list;
-  currentPage = 1;
-  document.getElementById('count').textContent = CURRENT_FILTERED.length;
-  renderPage();
+TYPE_EMOJI = {
+    "mieszkanie": ["🏢", "🏘️", "🏛️", "🌆", "🏙️"],
+    "dom": ["🏠", "🏡", "🏘️"],
+    "dzialka": ["🌳", "🌾", "🌲", "🏞️"],
+    "lokal": ["🏬", "🏪", "🏢"],
+    "pokoj": ["🚪", "🛏️"],
+    "garaz": ["🚗", "🏚️"],
 }
+IMG_CLASSES = ["i1", "i2", "i3", "i4", "i5", "i6"]
 
-function renderPage() {
-  const grid = document.getElementById('grid');
-  const btn = document.getElementById('loadMoreBtn');
-  if (CURRENT_FILTERED.length === 0) {
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Brak wyników</div>Zmień filtry aby zobaczyć więcej ofert</div>';
-    if (btn) btn.style.display = 'none';
-    return;
-  }
-  const slice = CURRENT_FILTERED.slice(0, currentPage * PAGE_SIZE);
-  grid.innerHTML = slice.map(l => {
-    let specs = `📐 ${l.area_m2} m²`;
-    if (l.rooms > 0) specs += ` · 🛏️ ${l.rooms} pok.`;
-    if (l.floor > 0) specs += ` · 🏢 ${l.floor} piętro`;
-    if (l.type === 'dom') specs += ' · 🏡 Dom';
-    if (l.type === 'dzialka') specs += ' · 🌳 Działka';
-    const targetUrl = l.source_url || `/oferta.html?id=${l.id}`;
-    return `
-      <a href="${targetUrl}" ${l.source_url ? 'target="_blank" rel="noopener"' : ''} class="card">
-        <div class="card-img ${l.img_class}">
-          ${l.emoji}
-          <div class="card-badge b-${l.verdict_badge}">${l.verdict_text}</div>
-          <div class="card-portal">${l.portal}</div>
-          ${l.seller_label ? `<div style="position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,0.75);color:#FFB800;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:800;backdrop-filter:blur(8px)">${l.seller_label}</div>` : ''}
-          ${l.is_original === false ? '<div style="position:absolute;bottom:10px;right:10px;background:rgba(251,146,60,0.95);color:#3d1a0a;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px">📋 Kopia</div>' : '<div style="position:absolute;bottom:10px;right:10px;background:rgba(34,197,94,0.95);color:#052e16;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px">✨ Oryginalna</div>'}
-        </div>
-        <div class="card-body">
-          <div class="card-title">${l.title}</div>
-          <div class="card-loc">${l.location}</div>
-          <div class="card-specs">${specs}</div>
-          <div class="card-price">
-            <span class="p">${l.price_display}</span>
-            <span class="pm2">${l.price_pm2_display}</span>
-          </div>
-        </div>
-      </a>
-    `;
-  }).join('');
-  // Load more button
-  const remaining = CURRENT_FILTERED.length - slice.length;
-  if (btn) {
-    if (remaining > 0) {
-      btn.style.display = 'inline-block';
-      btn.textContent = `Załaduj więcej ofert ↓ (${remaining.toLocaleString('pl-PL')} pozostało)`;
-    } else {
-      btn.style.display = 'none';
-    }
-  }
-}
+NEXT_MARKER = '<script id="__NEXT_DATA__" type="application/json" crossorigin="anonymous">'
 
-// Load more button click
-document.getElementById('loadMoreBtn')?.addEventListener('click', () => {
-  currentPage++;
-  renderPage();
-  // scroll do nowych ofert
-  window.scrollBy({top: 400, behavior: 'smooth'});
-});
 
-// Load on start
-loadListings();
+# --------------------------------------------------------------------------
+# HTTP
+# --------------------------------------------------------------------------
+def fetch_page(url: str) -> dict | None:
+    """Pobierz stronę Otodom + wyciągnij __NEXT_DATA__. Retry z backoffem."""
+    last_err = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            headers = {
+                "User-Agent": random.choice(USER_AGENTS),
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.8",
+                "Cache-Control": "no-cache",
+                "Referer": "https://www.otodom.pl/",
+            }
+            r = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+            if r.status_code == 200:
+                start = r.text.find(NEXT_MARKER)
+                if start == -1:
+                    last_err = "__NEXT_DATA__ not found"
+                else:
+                    start += len(NEXT_MARKER)
+                    end = r.text.find("</script>", start)
+                    if end == -1:
+                        last_err = "closing </script> not found"
+                    else:
+                        try:
+                            return json.loads(r.text[start:end])
+                        except json.JSONDecodeError as e:
+                            last_err = f"JSON decode: {e}"
+            elif r.status_code in (403, 429, 503):
+                last_err = f"HTTP {r.status_code} (bot detection)"
+                time.sleep(5 + attempt * 3)  # backoff dłużej
+            else:
+                last_err = f"HTTP {r.status_code}"
+        except requests.RequestException as e:
+            last_err = f"{type(e).__name__}: {e}"
+        if attempt < MAX_RETRIES:
+            time.sleep(2 * attempt)
+    print(f"    [retry x{MAX_RETRIES} FAILED] {last_err}")
+    return None
 
-// Client-side filtering (basic - by property type + verdict)
-function applyFilters() {
-  const activeType = document.querySelector('#propertyType .chip.active');
-  const typeKey = activeType?.dataset.type || 'mieszkanie';
-  const dealsOnly = document.querySelector('.filter-group:last-child')?.querySelector('.chip.active')?.textContent.includes('okazje');
 
-  let filtered = LISTINGS.filter(l => {
-    if (typeKey && l.type !== typeKey) return false;
-    return true;
-  });
-  renderListings(filtered);
-}
+# --------------------------------------------------------------------------
+# TRANSFORM
+# --------------------------------------------------------------------------
+def normalize_city(name: str) -> str:
+    """Normalizacja nazwy miasta dla deduplikacji (lower, bez PL znaków, bez spacji)."""
+    if not name:
+        return ""
+    s = name.lower().strip()
+    trans = str.maketrans("ąćęłńóśźż", "acelnoszz")
+    return re.sub(r"\s+", "-", s.translate(trans))
 
-// Sorting
-document.querySelector('.sort-select')?.addEventListener('change', (e) => {
-  const val = e.target.value;
-  let sorted = [...LISTINGS];
-  if (val.includes('AI')) sorted.sort((a,b) => a.ai_delta_pct - b.ai_delta_pct);
-  else if (val.includes('rosnąco') && val.includes('m²')) sorted.sort((a,b) => a.price_pm2 - b.price_pm2);
-  else if (val.includes('rosnąco')) sorted.sort((a,b) => a.price - b.price);
-  else if (val.includes('malejąco')) sorted.sort((a,b) => b.price - a.price);
-  else if (val.includes('metraż')) sorted.sort((a,b) => b.area_m2 - a.area_m2);
-  else if (val.includes('Najnowsze')) sorted.sort((a,b) => b.added_at.localeCompare(a.added_at));
-  renderListings(sorted);
-});
 
-// Chip toggling (default: multi-select)
-document.querySelectorAll('.chip').forEach(c => {
-  c.addEventListener('click', () => c.classList.toggle('active'));
-});
+def extract_city_district(item: dict) -> tuple[str, str]:
+    """Zwraca (miasto, dzielnica) z location.reverseGeocoding.locations."""
+    city, district = "", ""
+    try:
+        locs = item.get("location", {}).get("reverseGeocoding", {}).get("locations", [])
+        for lo in locs:
+            lvl = lo.get("locationLevel", "")
+            if lvl == "city_or_village" and not city:
+                city = lo.get("name", "")
+            elif lvl == "district" and not district:
+                district = lo.get("name", "")
+        if not city:
+            city = item.get("location", {}).get("address", {}).get("city", {}).get("name", "")
+    except (AttributeError, TypeError, KeyError):
+        pass
+    return city, district
 
-// Toggle "More filters" section
-const toggleBtn = document.getElementById('toggleMore');
-const moreSection = document.getElementById('moreFilters');
-if (toggleBtn && moreSection) {
-  toggleBtn.addEventListener('click', () => {
-    const isOpen = moreSection.style.display === 'block';
-    moreSection.style.display = isOpen ? 'none' : 'block';
-    toggleBtn.innerHTML = isOpen ? '🔽 Więcej filtrów (opcjonalne)' : '🔼 Zwiń dodatkowe filtry';
-    if (!isOpen) {
-      // Re-bind chip handlers for newly-visible chips
-      moreSection.querySelectorAll('.chip').forEach(c => {
-        if (!c.dataset.bound) {
-          c.dataset.bound = '1';
-          c.addEventListener('click', () => c.classList.toggle('active'));
+
+def detect_seller(item: dict) -> tuple[str, str]:
+    """Zwraca (seller_type, seller_label) dla oferty Otodom."""
+    if item.get("isPrivateOwner"):
+        return "prywatna", "👨‍👩‍👧 Prywatna"
+    if item.get("isDeveloperOwner"):
+        return "deweloper", "🏗️ Deweloper"
+    adv_type = (item.get("extendedAdvertiserType") or "").upper()
+    if adv_type == "PRIVATE":
+        return "prywatna", "👨‍👩‍👧 Prywatna"
+    if adv_type == "DEVELOPER":
+        return "deweloper", "🏗️ Deweloper"
+    if item.get("agency") or adv_type in ("AGENT", "AGENCY", "BUSINESS"):
+        return "posrednik", "🏢 Pośrednik"
+    return "posrednik", "🏢 Pośrednik"
+
+
+def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
+    """Transformacja jednego item-a Otodom → schema FinderDom."""
+    try:
+        # Cena — dla wynajmu totalPrice może być None, wtedy rentPrice
+        tp = item.get("totalPrice") or {}
+        rp = item.get("rentPrice") or {}
+        price = tp.get("value") if tp else None
+        if not price:
+            price = rp.get("value") if rp else None
+        if not price or price < 1000:  # sanity check
+            return None
+
+        area = item.get("areaInSquareMeters") or item.get("terrainAreaInSquareMeters") or 0
+        if not area or area < 1:
+            return None
+
+        # ppm2 — z Otodom albo obliczone
+        pm2_field = item.get("pricePerSquareMeter") or {}
+        ppm2 = int(pm2_field.get("value") or 0) if pm2_field else 0
+        if not ppm2 and area > 0:
+            ppm2 = int(price / area)
+
+        rooms_raw = item.get("roomsNumber")
+        rooms = ROOMS_ENUM.get(rooms_raw, 0) if isinstance(rooms_raw, str) else (
+            int(rooms_raw) if isinstance(rooms_raw, (int, float)) else 0)
+
+        floor_raw = item.get("floorNumber") or ""
+        floor_num = 0
+        if isinstance(floor_raw, str):
+            m = re.search(r"(\d+)", floor_raw)
+            if m:
+                floor_num = int(m.group(1))
+            elif "GROUND" in floor_raw.upper() or "PARTER" in floor_raw.upper():
+                floor_num = 0
+        elif isinstance(floor_raw, (int, float)):
+            floor_num = int(floor_raw)
+
+        city, district = extract_city_district(item)
+        if not city:
+            return None
+
+        seller_type, seller_label = detect_seller(item)
+
+        # Data
+        date_str = item.get("dateCreated") or item.get("createdAtFirst") or ""
+        added_iso = date_str
+        added_display = ""
+        try:
+            dt = datetime.strptime(date_str[:19], "%Y-%m-%d %H:%M:%S")
+            dt = dt.replace(tzinfo=timezone.utc)
+            added_iso = dt.isoformat()
+            diff = datetime.now(timezone.utc) - dt
+            hrs = int(diff.total_seconds() // 3600)
+            if hrs < 1:
+                added_display = "przed chwilą"
+            elif hrs < 48:
+                added_display = f"{hrs}h temu"
+            else:
+                added_display = f"{hrs // 24}d temu"
+        except (ValueError, TypeError):
+            added_display = ""
+
+        slug = item.get("slug", "")
+        source_url = f"https://www.otodom.pl/pl/oferta/{slug}" if slug else ""
+
+        title = (item.get("title") or "")[:120]
+
+        # Obrazek — pierwsze zdjęcie z Otodom (URL do CDN)
+        images = item.get("images") or []
+        img_url = ""
+        if images and isinstance(images[0], dict):
+            img_url = images[0].get("large") or images[0].get("medium") or ""
+
+        emoji = random.choice(TYPE_EMOJI.get(typ_out, ["🏢"]))
+
+        return {
+            "id": f"otodom-{item.get('id')}",
+            "type": typ_out,
+            "transaction": transaction,  # sprzedaz | wynajem
+            "title": title,
+            "city": city,
+            "district": district,
+            "location": f"📍 {city}{', ' + district if district else ''}",
+            "area_m2": round(float(area), 1),
+            "rooms": rooms,
+            "floor": floor_num,
+            "max_floor": 0,
+            "year_built": 0,
+            "standard": "",
+            "price": int(price),
+            "price_pm2": ppm2,
+            "price_display": f"{int(price):,} zł".replace(",", " "),
+            "price_pm2_display": f"{ppm2:,} zł/m²".replace(",", " "),
+            "portal": "Otodom",
+            "seller_type": seller_type,
+            "seller_label": seller_label,
+            "source_url": source_url,
+            "image_url": img_url,
+            "emoji": emoji,
+            "img_class": random.choice(IMG_CLASSES),
+            "added_at": added_iso,
+            "added_display": added_display,
+            # placeholdery — wypełni analyze_prices
+            "verdict_badge": "normal",
+            "verdict_text": "✓ W NORMIE",
+            "verdict_full": "CENA ZGODNA Z RYNKIEM",
+            "ai_delta_pct": 0,
+            "ai_offers_pm2": 0,
+            "ai_rcn_pm2": 0,
+            # dedup — wypełni deduplicate
+            "is_original": True,
+            "duplicate_of": None,
+            "_fingerprint": "",  # temp
         }
-      });
+    except (KeyError, TypeError, ValueError, AttributeError) as e:
+        # nie hałasujemy — pojedyncze złe itemy mogą być
+        return None
+
+
+# --------------------------------------------------------------------------
+# SCRAPE
+# --------------------------------------------------------------------------
+def scrape_combo(transaction: str, otodom_type: str, out_type: str) -> list[dict]:
+    """Pobierz N stron dla jednej kombinacji (typ × transakcja)."""
+    print(f"  🔎 {transaction}/{otodom_type} …")
+    listings = []
+    base = f"https://www.otodom.pl/pl/wyniki/{transaction}/{otodom_type}/cala-polska"
+    for page in range(1, MAX_PAGES + 1):
+        url = f"{base}?limit=72&by=LATEST&direction=DESC&page={page}"
+        data = fetch_page(url)
+        if not data:
+            print(f"    ✗ page {page} FAILED")
+            break
+        try:
+            items = data["props"]["pageProps"]["data"]["searchAds"]["items"] or []
+        except (KeyError, TypeError):
+            items = []
+        if not items:
+            print(f"    · page {page}: 0 items → koniec paginacji")
+            break
+        added = 0
+        for it in items:
+            t = transform(it, transaction, out_type)
+            if t:
+                listings.append(t)
+                added += 1
+        print(f"    ✓ page {page}: +{added}/{len(items)}")
+        if page < MAX_PAGES:
+            time.sleep(random.uniform(DELAY_MIN, DELAY_MAX))
+    print(f"  → {transaction}/{otodom_type}: {len(listings)} listings")
+    return listings
+
+
+# --------------------------------------------------------------------------
+# AI VERDICT (mediana cena/m² per miasto + typ)
+# --------------------------------------------------------------------------
+def analyze_prices(listings: list[dict]) -> None:
+    """Nadaje verdict_badge / ai_delta_pct każdej ofercie na podstawie mediany cena/m²
+    w grupie (miasto + typ + transakcja).
+    """
+    groups: dict[tuple[str, str, str], list[int]] = defaultdict(list)
+    for l in listings:
+        key = (normalize_city(l["city"]), l["type"], l["transaction"])
+        if l["price_pm2"] > 0:
+            groups[key].append(l["price_pm2"])
+
+    medians = {k: int(statistics.median(v)) for k, v in groups.items() if len(v) >= 3}
+    # dla małych grup: fallback do mediany globalnej per typ+transakcja
+    global_med: dict[tuple[str, str], int] = {}
+    global_groups: dict[tuple[str, str], list[int]] = defaultdict(list)
+    for l in listings:
+        if l["price_pm2"] > 0:
+            global_groups[(l["type"], l["transaction"])].append(l["price_pm2"])
+    for k, v in global_groups.items():
+        if v:
+            global_med[k] = int(statistics.median(v))
+
+    for l in listings:
+        key = (normalize_city(l["city"]), l["type"], l["transaction"])
+        median = medians.get(key) or global_med.get((l["type"], l["transaction"]))
+        if not median or l["price_pm2"] == 0:
+            continue
+        # symulacja RCN (transakcyjne) — ok. 6% poniżej ofertowej mediany
+        rcn = int(median * 0.94)
+        l["ai_offers_pm2"] = median
+        l["ai_rcn_pm2"] = rcn
+        delta_pct = round((l["price_pm2"] - rcn) / rcn * 100)
+
+        # Outlier guard: jeśli delta jest ekstremalna, prawie na pewno to błąd danych,
+        # scam listing albo nieporównywalny obiekt (kamienica, luksus, itp.).
+        # NIE promujemy takich jako OKAZJA i NIE straszymy jako ZAWYŻONA.
+        if delta_pct <= -35 or delta_pct >= 80:
+            l["ai_delta_pct"] = delta_pct  # zachowujemy dla debug
+            l["verdict_badge"] = "outlier"
+            l["verdict_text"] = "❓ SPRAWDŹ"
+            l["verdict_full"] = "Cena nietypowa — zweryfikuj ogłoszenie ręcznie"
+            continue
+
+        l["ai_delta_pct"] = delta_pct
+        if delta_pct <= -8:
+            l["verdict_badge"] = "deal"
+            l["verdict_text"] = "🔥 OKAZJA"
+            l["verdict_full"] = f"OKAZJA · {abs(delta_pct)}% poniżej realnych transakcji"
+        elif delta_pct >= 10:
+            l["verdict_badge"] = "over"
+            l["verdict_text"] = "⚠️ ZAWYŻONA"
+            l["verdict_full"] = f"ZAWYŻONA o {delta_pct}% powyżej transakcji"
+        else:
+            l["verdict_badge"] = "normal"
+            l["verdict_text"] = "✓ W NORMIE"
+            l["verdict_full"] = "CENA ZGODNA Z RYNKIEM"
+
+
+# --------------------------------------------------------------------------
+# DEDUPLICATE (fingerprint: cena + metraż + miasto + pokoje)
+# --------------------------------------------------------------------------
+def deduplicate(listings: list[dict]) -> tuple[int, int]:
+    """Wyznacza fingerprint i oznacza duplikaty (is_original=False, duplicate_of=<id>)."""
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for l in listings:
+        # +/- 2% ceny toleranci nie robimy (na Otodom = ta sama oferta = ta sama cena)
+        fp = f"{normalize_city(l['city'])}|{l['type']}|{l['transaction']}|{int(l['price']/1000)*1000}|{int(l['area_m2'])}|{l['rooms']}"
+        l["_fingerprint"] = fp
+        groups[fp].append(l)
+
+    originals = 0
+    duplicates = 0
+    for fp, group in groups.items():
+        if len(group) == 1:
+            group[0]["is_original"] = True
+            group[0]["duplicate_of"] = None
+            originals += 1
+            continue
+        # wybierz oryginał: najstarsze added_at (albo najwięcej danych)
+        group.sort(key=lambda x: (x.get("added_at") or "9999", -len(x.get("title") or "")))
+        orig = group[0]
+        orig["is_original"] = True
+        orig["duplicate_of"] = None
+        originals += 1
+        for dup in group[1:]:
+            dup["is_original"] = False
+            dup["duplicate_of"] = orig["id"]
+            duplicates += 1
+    # cleanup temp
+    for l in listings:
+        l.pop("_fingerprint", None)
+    return originals, duplicates
+
+
+# --------------------------------------------------------------------------
+# MAIN
+# --------------------------------------------------------------------------
+def main() -> int:
+    started = datetime.now(timezone.utc)
+    print(f"🕷️  FinderDom Otodom scraper — start {started.isoformat()}")
+    print(f"    MAX_PAGES={MAX_PAGES}  MAX_LISTINGS={MAX_LISTINGS}  DELAY={DELAY_MIN}-{DELAY_MAX}s")
+    print(f"    OUT_FILE={OUT_FILE}")
+
+    all_listings: list[dict] = []
+    stats_per_combo: dict[str, int] = {}
+    for i, (transaction, otodom_type, out_type) in enumerate(COMBOS, 1):
+        print(f"\n[{i}/{len(COMBOS)}] {transaction} / {otodom_type}")
+        got = scrape_combo(transaction, otodom_type, out_type)
+        stats_per_combo[f"{transaction}/{otodom_type}"] = len(got)
+        all_listings.extend(got)
+        if len(all_listings) >= MAX_LISTINGS:
+            print(f"  ⚠️  hit MAX_LISTINGS={MAX_LISTINGS} — przerywam")
+            break
+        # delay między kombinacjami
+        if i < len(COMBOS):
+            time.sleep(random.uniform(DELAY_MIN, DELAY_MAX))
+
+    # Trim to MAX_LISTINGS
+    if len(all_listings) > MAX_LISTINGS:
+        all_listings = all_listings[:MAX_LISTINGS]
+
+    print(f"\n📊 Zescrapowano łącznie: {len(all_listings)} ofert")
+    print(f"    Breakdown: {stats_per_combo}")
+
+    # -------- SAFE-FAIL -----------
+    if len(all_listings) < MIN_LISTINGS:
+        print(f"\n❌ Za mało ofert ({len(all_listings)} < {MIN_LISTINGS}). "
+              f"NIE nadpisuję listings.json.")
+        return 1
+
+    # -------- ANALIZA CEN + DEDUP --
+    print("\n🧮 Analiza cen (AI verdict)…")
+    analyze_prices(all_listings)
+    print("🔁 Deduplikacja…")
+    originals, dupes = deduplicate(all_listings)
+    print(f"    → {originals} oryginałów, {dupes} kopii")
+
+    # -------- SORT: originals first, then by verdict (deal → normal → over → outlier) ---
+    order = {"deal": 0, "normal": 1, "over": 2, "outlier": 3}
+    all_listings.sort(key=lambda x: (
+        not x.get("is_original", True),
+        order.get(x.get("verdict_badge", "normal"), 1),
+        x.get("ai_delta_pct", 0),
+    ))
+
+    # -------- BACKUP -----------
+    if OUT_FILE.exists():
+        try:
+            BACKUP_FILE.write_bytes(OUT_FILE.read_bytes())
+            print(f"💾 Backup: {BACKUP_FILE.name}")
+        except OSError as e:
+            print(f"⚠️  Nie zapisano backupu: {e}")
+
+    # -------- SAVE -----------
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    finished = datetime.now(timezone.utc)
+    duration_s = int((finished - started).total_seconds())
+
+    verdict_counts: dict[str, int] = defaultdict(int)
+    for l in all_listings:
+        verdict_counts[l["verdict_badge"]] += 1
+
+    output = {
+        "generated_at": finished.isoformat(),
+        "generated_by": "otodom_scraper_v2",
+        "duration_seconds": duration_s,
+        "count": len(all_listings),
+        "originals": originals,
+        "duplicates": dupes,
+        "sources": ["Otodom"],
+        "verdicts": dict(verdict_counts),
+        "per_combo": stats_per_combo,
+        "note": "REAL DATA — scraped from Otodom.pl by GitHub Actions",
+        "listings": all_listings,
     }
-  });
-}
+    OUT_FILE.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+    size_mb = OUT_FILE.stat().st_size / 1024 / 1024
+    print(f"\n✅ Zapisano {len(all_listings)} ofert → {OUT_FILE} ({size_mb:.2f} MB)")
+    print(f"   Werdykty: {dict(verdict_counts)}")
+    print(f"   Czas: {duration_s}s")
+    return 0
 
-// Property type = radio (single select) + dynamic sub-type
-const SUB_TYPES = {
-  mieszkanie: {title:'🏗️ Typ budynku', options:['Blok','Kamienica','Apartamentowiec','Loft','Wieżowiec']},
-  dom: {title:'🏡 Typ domu', options:['Wolnostojący','Bliźniak','Szeregowiec','Siedliskowy','Rezydencja','W zabudowie']},
-  dzialka: {title:'🌳 Przeznaczenie działki', options:['🏗️ Budowlana','🌾 Rolna','🌱 Rolno-budowlana','🏭 Przemysłowa','🏕️ Rekreacyjna','🌲 Leśna','🏡 Siedliskowa','🎯 Inwestycyjna']},
-  lokal: {title:'🏪 Typ lokalu', options:['Biurowy','Handlowy','Gastronomia','Usługowy','Medyczny','Fryzjerski','Fitness','Magazynowy']},
-  magazyn: {title:'🏭 Typ magazynu', options:['Hala magazynowa','Powierzchnia chłodnicza','Cross-dock','Logistyczny']},
-  garaz: {title:'🅿️ Typ garażu', options:['Podziemny','Naziemny','Blaszany','Wielostanowiskowy']}
-};
 
-// Filters that are HIDDEN for certain property types (context-aware)
-const HIDDEN_FOR_TYPE = {
-  dzialka: ['Liczba pokoi','Piętro','Rok budowy','Standard'],
-  garaz: ['Liczba pokoi','Piętro','Rok budowy','Standard'],
-  magazyn: ['Liczba pokoi','Piętro','Standard'],
-  lokal: ['Liczba pokoi']
-};
-
-function updateSubType(type){
-  const cfg = SUB_TYPES[type];
-  document.getElementById('subTypeTitle').textContent = cfg.title;
-  document.getElementById('subTypeChips').innerHTML = cfg.options.map(o => `<div class="chip">${o}</div>`).join('');
-  // Re-attach click handlers to new chips
-  document.querySelectorAll('#subTypeChips .chip').forEach(c => {
-    c.addEventListener('click', () => c.classList.toggle('active'));
-  });
-
-  // Show/hide media/uzbrojenie section (only for działka)
-  document.getElementById('mediaGroup').style.display = (type === 'dzialka') ? 'block' : 'none';
-
-  // Show/hide filters based on context
-  const hiddenTitles = HIDDEN_FOR_TYPE[type] || [];
-  document.querySelectorAll('.filter-group').forEach(g => {
-    const title = g.querySelector('.filter-title');
-    if (!title) return;
-    const isMediaGroup = g.id === 'mediaGroup';
-    const isMainType = g.querySelector('#propertyType');
-    const isSubType = g.id === 'subTypeGroup';
-    if (isMediaGroup || isMainType || isSubType) return; // handled separately
-    const titleText = title.textContent;
-    const isHidden = hiddenTitles.some(h => titleText.includes(h));
-    g.style.display = isHidden ? 'none' : 'block';
-  });
-}
-
-document.querySelectorAll('#propertyType .chip').forEach(c => {
-  c.addEventListener('click', (e) => {
-    e.stopImmediatePropagation();
-    document.querySelectorAll('#propertyType .chip').forEach(x => x.classList.remove('active'));
-    c.classList.add('active');
-    updateSubType(c.dataset.type);
-    // Filter listings by type
-    const filtered = LISTINGS.filter(l => l.type === c.dataset.type);
-    renderListings(filtered);
-  }, true);
-});
-
-// Apply button
-document.querySelector('.btn-apply')?.addEventListener('click', () => {
-  const activeType = document.querySelector('#propertyType .chip.active');
-  const typeKey = activeType?.dataset.type;
-  const filtered = LISTINGS.filter(l => !typeKey || l.type === typeKey);
-  renderListings(filtered);
-});
-document.querySelector('.btn-clear')?.addEventListener('click', () => {
-  renderListings(LISTINGS);
-});
-</script>
-
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a25826a24db84ffa',t:'MTc4NTc4OTc2OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
-</html>
+if __name__ == "__main__":
+    sys.exit(main())

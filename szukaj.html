@@ -338,6 +338,14 @@
     </div>
 
     <div class="filter-group">
+      <div class="filter-title">🔁 Duplikaty</div>
+      <div class="chip-group">
+        <div class="chip active" id="chipOnlyOrig">✨ Tylko oryginały</div>
+        <div class="chip">📋 Pokaż wszystko (z kopiami)</div>
+      </div>
+    </div>
+
+    <div class="filter-group">
       <div class="filter-title">✨ Dodatki</div>
       <div class="chip-group">
         <div class="chip">Balkon</div>
@@ -491,12 +499,15 @@ async function loadListings() {
 
 function renderListings(list) {
   const grid = document.getElementById('grid');
-  document.getElementById('count').textContent = list.length;
-  if (list.length === 0) {
+  // Apply "only originals" filter if active
+  const onlyOrigActive = document.getElementById('chipOnlyOrig')?.classList.contains('active');
+  const filtered = onlyOrigActive ? list.filter(l => l.is_original !== false) : list;
+  document.getElementById('count').textContent = filtered.length;
+  if (filtered.length === 0) {
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Brak wyników</div>Zmień filtry aby zobaczyć więcej ofert</div>';
     return;
   }
-  grid.innerHTML = list.map(l => {
+  grid.innerHTML = filtered.map(l => {
     let specs = `📐 ${l.area_m2} m²`;
     if (l.rooms > 0) specs += ` · 🛏️ ${l.rooms} pok.`;
     if (l.floor > 0) specs += ` · 🏢 ${l.floor} piętro`;
@@ -509,6 +520,7 @@ function renderListings(list) {
           <div class="card-badge b-${l.verdict_badge}">${l.verdict_text}</div>
           <div class="card-portal">${l.portal}</div>
           ${l.seller_label ? `<div style="position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,0.75);color:#FFB800;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:800;backdrop-filter:blur(8px)">${l.seller_label}</div>` : ''}
+          ${l.is_original === false ? '<div style="position:absolute;bottom:10px;right:10px;background:rgba(251,146,60,0.95);color:#3d1a0a;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px">📋 Kopia</div>' : '<div style="position:absolute;bottom:10px;right:10px;background:rgba(34,197,94,0.95);color:#052e16;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px">✨ Oryginalna</div>'}
         </div>
         <div class="card-body">
           <div class="card-title">${l.title}</div>

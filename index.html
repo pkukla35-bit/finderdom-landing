@@ -124,9 +124,36 @@
   .portals-list{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
   .portal-chip{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);padding:6px 14px;border-radius:100px;font-size:12px;color:#a3b3d1;font-weight:600}
 
+  /* Premium Valuation card - Pełna wycena */
+  .valuation{margin-top:80px;width:100%;max-width:1100px;background:linear-gradient(135deg,rgba(255,184,0,0.08) 0%,rgba(255,255,255,0.02) 100%);border:2px solid rgba(255,184,0,0.35);border-radius:28px;padding:44px;position:relative;overflow:hidden;animation:fadeIn 1s ease 0.4s both;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+  .valuation::before{content:'';position:absolute;top:0;right:0;width:300px;height:300px;background:radial-gradient(circle,rgba(255,184,0,0.15) 0%,transparent 70%);pointer-events:none}
+  .val-header{display:flex;align-items:center;gap:14px;margin-bottom:8px;position:relative;z-index:1;flex-wrap:wrap}
+  .val-tag{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;padding:6px 14px;border-radius:100px;font-size:11px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;box-shadow:0 4px 12px rgba(255,184,0,0.35)}
+  .val-price{color:#FFB800;font-weight:900;font-size:14px;letter-spacing:0.5px}
+  .val-price strong{font-size:22px}
+  .val-title{font-size:clamp(28px,4vw,42px);font-weight:900;line-height:1.1;letter-spacing:-1px;margin-bottom:14px;position:relative;z-index:1}
+  .val-title .gold{background:linear-gradient(120deg,#FFB800,#FFA200);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .val-subtitle{font-size:16px;color:#c5d0e6;line-height:1.6;margin-bottom:32px;max-width:700px;position:relative;z-index:1}
+  .val-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;position:relative;z-index:1}
+  .val-col h4{font-size:13px;color:#FFB800;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px}
+  .val-list{list-style:none;padding:0;margin:0}
+  .val-list li{padding:8px 0;color:#c5d0e6;font-size:14px;display:flex;align-items:center;gap:10px;line-height:1.4}
+  .val-list li::before{content:'';width:18px;height:18px;background:rgba(255,184,0,0.15);border:1px solid rgba(255,184,0,0.4);border-radius:50%;flex-shrink:0;position:relative}
+  .val-list li.check::before{background:#FFB800;border-color:#FFB800}
+  .val-list li.check::after{content:'✓';color:#0B1836;font-size:12px;font-weight:900;position:absolute;margin-left:3px;margin-top:-1px}
+  .val-list li{position:relative}
+  .val-cta{margin-top:32px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;position:relative;z-index:1}
+  .val-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:14px 28px;border-radius:14px;border:none;font-size:14px;letter-spacing:0.5px;cursor:pointer;box-shadow:0 6px 20px rgba(255,184,0,0.35);transition:all 0.2s;text-transform:uppercase}
+  .val-btn:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(255,184,0,0.45)}
+  .val-note{font-size:12px;color:#8ba3d4}
+  .val-note strong{color:#fff}
+  @media(max-width:700px){
+    .valuation{padding:28px 20px}
+    .val-grid{grid-template-columns:1fr;gap:20px}
+  }
+
   /* Preview section - sample listings */
-  .preview-section{margin-top:80px;width:100%;max-width:1200px;animation:fadeIn 1s ease 0.5s both}
-  .preview-header{text-align:center;margin-bottom:48px}
+  .preview-section{margin-top:80px;width:100%;max-width:1200px;animation:fadeIn 1s ease 0.5s both}  .preview-header{text-align:center;margin-bottom:48px}
   .preview-badge{display:inline-block;background:rgba(255,184,0,0.15);border:1px solid rgba(255,184,0,0.3);color:#FFB800;padding:6px 14px;border-radius:100px;font-size:11px;font-weight:800;letter-spacing:1.5px;margin-bottom:16px;text-transform:uppercase}
   .preview-title{font-size:clamp(28px,4vw,42px);font-weight:900;line-height:1.15;letter-spacing:-1px;margin-bottom:12px}
   .preview-subtitle{font-size:16px;color:#a3b3d1;max-width:600px;margin:0 auto;line-height:1.6}
@@ -247,6 +274,49 @@
       <div class="icon-wrap">🎯</div>
       <h3>Zaawansowane filtry</h3>
       <p>Powierzchnia, cena, dzielnica, piętro, rok budowy, balkon — precyzyjne filtry we wszystkich portalach naraz.</p>
+    </div>
+  </div>
+
+  <!-- Premium Valuation - Pełna wycena nieruchomości -->
+  <div class="valuation">
+    <div class="val-header">
+      <div class="val-tag">💎 Premium · Jednorazowa usługa</div>
+      <div class="val-price">od <strong>49 zł</strong></div>
+    </div>
+    <h2 class="val-title">Pełna <span class="gold">wycena nieruchomości</span></h2>
+    <p class="val-subtitle">Profesjonalny raport wartości Twojego mieszkania lub domu. AI analizuje wszystkie parametry (rok budowy, standard, powierzchnię, piętro, lokalizację) i porównuje z realnymi transakcjami z RCN. Otrzymujesz PDF w 60 sekund.</p>
+
+    <div class="val-grid">
+      <div class="val-col">
+        <h4>📋 Podajesz parametry</h4>
+        <ul class="val-list">
+          <li class="check">Dokładny adres / lokalizacja</li>
+          <li class="check">Rok budowy budynku</li>
+          <li class="check">Standard (do remontu / po remoncie / developerski)</li>
+          <li class="check">Powierzchnia w m² i liczba pokoi</li>
+          <li class="check">Piętro / liczba pięter w budynku</li>
+          <li class="check">Typ (blok / kamienica / apartamentowiec / dom)</li>
+          <li class="check">Dodatki (balkon, garaż, winda, ogród)</li>
+        </ul>
+      </div>
+
+      <div class="val-col">
+        <h4>📄 Otrzymujesz raport PDF</h4>
+        <ul class="val-list">
+          <li class="check">Realna wartość rynkowa (zakres min-max)</li>
+          <li class="check">Porównanie z aktami notarialnymi z RCN</li>
+          <li class="check">Cena za m² vs. mediana dzielnicy</li>
+          <li class="check">10 podobnych ofert w okolicy</li>
+          <li class="check">Analiza wpływu roku budowy i standardu</li>
+          <li class="check">Strategia negocjacji (kupno) lub cena ofertowa (sprzedaż)</li>
+          <li class="check">Prognoza wartości za 12 miesięcy</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="val-cta">
+      <button class="val-btn" onclick="alert('Ta usługa startuje razem z pełną aplikacją. Zapisz się na newsletter aby dostać powiadomienie i 30% rabatu!')">Zamów wycenę</button>
+      <div class="val-note"><strong>29 zł</strong> dla subskrybentów · <strong>PDF w 60 sek</strong> · Bez podpisywania umów</div>
     </div>
   </div>
 
@@ -455,4 +525,4 @@
 </body>
 </html>
 
-FinderDom.pl
+

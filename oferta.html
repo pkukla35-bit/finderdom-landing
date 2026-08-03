@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FinderDom.pl — Wyszukiwarka ogłoszeń nieruchomości ze wszystkich portali</title>
+<meta name="description" content="FinderDom.pl — nowa wyszukiwarka ogłoszeń nieruchomości. Wszystkie dostępne portale w jednym miejscu — Otodom, OLX, Morizon, Gratka i inne. AI analiza cen, powiadomienia o nowych ofertach. Zapisz się na start!">
+<meta name="keywords" content="mieszkania, domy, nieruchomości, wyszukiwarka, otodom, olx, morizon, gratka, analiza cen">
+<meta name="author" content="FinderDom.pl">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://finderdom.pl/">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://finderdom.pl/">
+<meta property="og:title" content="FinderDom.pl — Wyszukiwarka ogłoszeń nieruchomości">
+<meta property="og:description" content="Wszystkie portale nieruchomości w jednym miejscu. AI analiza cen. Podobne oferty w okolicy. Powiadomienia. Wkrótce startujemy!">
+<meta property="og:image" content="https://finderdom.pl/og-image.png">
+<meta property="og:locale" content="pl_PL">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="FinderDom.pl — Wyszukiwarka ogłoszeń nieruchomości">
+<meta name="twitter:description" content="Wszystkie portale nieruchomości w jednym miejscu. AI analiza cen. Wkrótce startujemy!">
+
+<!-- Favicon -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+<!-- Google Analytics 4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-8BX5DVXPDV"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-8BX5DVXPDV', {
+    'page_title': 'FinderDom.pl - Landing',
+    'page_location': window.location.href
+  });
+</script>
+
+<!-- Structured data -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "FinderDom.pl",
+  "url": "https://finderdom.pl",
+  "description": "Wyszukiwarka ogłoszeń nieruchomości ze wszystkich dostępnych portali w Polsce",
+  "inLanguage": "pl-PL"
+}
+</script>
+
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0B1836;color:#fff;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+  /* Animated background */
+  .bg-orbs{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+  .orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.4}
+  .orb1{width:500px;height:500px;background:#FFB800;top:-100px;left:-100px;animation:float1 20s ease-in-out infinite}
+  .orb2{width:400px;height:400px;background:#4A90E2;bottom:-100px;right:-100px;animation:float2 25s ease-in-out infinite}
+  .orb3{width:300px;height:300px;background:#8B5CF6;top:40%;left:60%;animation:float3 18s ease-in-out infinite}
+  @keyframes float1{0%,100%{transform:translate(0,0)}50%{transform:translate(100px,80px)}}
+  @keyframes float2{0%,100%{transform:translate(0,0)}50%{transform:translate(-80px,-100px)}}
+  @keyframes float3{0%,100%{transform:translate(0,0)}50%{transform:translate(-60px,60px)}}
+
+  .wrap{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 24px 60px;text-align:center}
+
+  /* Header */
+  .header{display:flex;align-items:center;gap:12px;margin-bottom:60px;animation:fadeIn 0.8s ease}
+  .logo-mini{width:44px;height:44px;background:linear-gradient(135deg,#1a2e5c 0%,#2d4a8a 100%);border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
+  .logo-mini svg{width:26px;height:26px}
+  .brand{font-size:18px;font-weight:900;letter-spacing:-0.5px}
+  .brand .accent{color:#FFB800}
+
+  /* Hero */
+  .hero{max-width:900px;width:100%;animation:fadeIn 1s ease 0.2s both}
+  .badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,184,0,0.15);border:1px solid rgba(255,184,0,0.3);color:#FFB800;padding:8px 16px;border-radius:100px;font-size:12px;font-weight:800;letter-spacing:1px;margin-bottom:24px;text-transform:uppercase}
+  .badge .dot{width:8px;height:8px;background:#FFB800;border-radius:50%;animation:pulse 1.5s infinite;box-shadow:0 0 12px #FFB800}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.3)}}
+
+  h1{font-size:clamp(36px,7vw,72px);font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:24px}
+  h1 .highlight{background:linear-gradient(120deg,#FFB800 0%,#FFA200 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .subtitle{font-size:clamp(16px,2.2vw,22px);color:#c5d0e6;line-height:1.5;margin-bottom:48px;max-width:640px;margin-left:auto;margin-right:auto}
+
+  /* Stats */
+  .stats{display:flex;gap:32px;justify-content:center;margin-bottom:64px;flex-wrap:wrap}
+  .stat{text-align:center}
+  .stat .num{font-size:36px;font-weight:900;color:#FFB800;line-height:1;margin-bottom:4px}
+  .stat .lbl{font-size:11px;color:#8ba3d4;text-transform:uppercase;letter-spacing:1.5px;font-weight:700}
+
+  /* Features */
+  .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;max-width:1000px;width:100%;margin-bottom:72px;animation:fadeIn 1s ease 0.4s both}
+  .feat{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);padding:28px 24px;border-radius:20px;text-align:left;transition:all 0.3s ease;backdrop-filter:blur(10px)}
+  .feat:hover{transform:translateY(-4px);border-color:rgba(255,184,0,0.3);background:rgba(255,255,255,0.06)}
+  .feat .icon-wrap{width:52px;height:52px;background:linear-gradient(135deg,rgba(255,184,0,0.2),rgba(255,184,0,0.05));border-radius:14px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;font-size:26px}
+  .feat h3{font-size:15px;font-weight:900;margin-bottom:8px;color:#fff;letter-spacing:0.3px}
+  .feat p{font-size:13px;color:#a3b3d1;line-height:1.6}
+
+  /* Newsletter card */
+  .newsletter{background:linear-gradient(135deg,rgba(255,184,0,0.12) 0%,rgba(255,184,0,0.04) 100%);border:1px solid rgba(255,184,0,0.25);padding:40px 32px;border-radius:28px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);animation:fadeIn 1s ease 0.6s both}
+  .newsletter .gift{font-size:44px;margin-bottom:16px;display:inline-block;animation:bounce 2s ease-in-out infinite}
+  @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+  .newsletter h2{font-size:24px;font-weight:900;margin-bottom:8px;letter-spacing:-0.5px}
+  .newsletter .promo{color:#FFB800;font-weight:800;font-size:14px;margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
+  .newsletter p{font-size:14px;color:#c5d0e6;margin-bottom:24px;line-height:1.5}
+  .form{display:flex;gap:8px;flex-wrap:wrap}
+  .form input{flex:1;min-width:200px;padding:16px 18px;border-radius:14px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:#fff;font-size:15px;outline:none;transition:all 0.2s}
+  .form input:focus{border-color:#FFB800;background:rgba(0,0,0,0.6);box-shadow:0 0 0 3px rgba(255,184,0,0.15)}
+  .form input::placeholder{color:#5e7099}
+  .form button{padding:16px 28px;background:linear-gradient(135deg,#FFB800 0%,#FFA200 100%);color:#0B1836;font-weight:900;border:none;border-radius:14px;font-size:14px;cursor:pointer;transition:all 0.15s;letter-spacing:0.5px;box-shadow:0 4px 20px rgba(255,184,0,0.3)}
+  .form button:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(255,184,0,0.4)}
+  .form button:active{transform:translateY(0)}
+  .form button:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+  .privacy{font-size:11px;color:#5e7099;margin-top:14px;line-height:1.5}
+  .msg{margin-top:16px;padding:12px 16px;border-radius:12px;font-size:14px;font-weight:600;display:none}
+  .msg.success{display:block;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);color:#4ade80}
+  .msg.error{display:block;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#f87171}
+
+  /* Portals ticker */
+  .portals{margin-top:64px;width:100%;max-width:1000px;overflow:hidden;animation:fadeIn 1s ease 0.8s both}
+  .portals-label{font-size:11px;color:#5e7099;text-transform:uppercase;letter-spacing:2px;font-weight:700;margin-bottom:20px}
+  .portals-list{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+  .portal-chip{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);padding:6px 14px;border-radius:100px;font-size:12px;color:#a3b3d1;font-weight:600}
+
+  /* Premium Valuation card - Pełna wycena */
+  .valuation{margin-top:80px;width:100%;max-width:1100px;background:linear-gradient(135deg,rgba(255,184,0,0.08) 0%,rgba(255,255,255,0.02) 100%);border:2px solid rgba(255,184,0,0.35);border-radius:28px;padding:44px;position:relative;overflow:hidden;animation:fadeIn 1s ease 0.4s both;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+  .valuation::before{content:'';position:absolute;top:0;right:0;width:300px;height:300px;background:radial-gradient(circle,rgba(255,184,0,0.15) 0%,transparent 70%);pointer-events:none}
+  .val-header{display:flex;align-items:center;gap:14px;margin-bottom:8px;position:relative;z-index:1;flex-wrap:wrap}
+  .val-tag{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;padding:6px 14px;border-radius:100px;font-size:11px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;box-shadow:0 4px 12px rgba(255,184,0,0.35)}
+  .val-price{color:#FFB800;font-weight:900;font-size:14px;letter-spacing:0.5px}
+  .val-price strong{font-size:22px}
+  .val-title{font-size:clamp(28px,4vw,42px);font-weight:900;line-height:1.1;letter-spacing:-1px;margin-bottom:14px;position:relative;z-index:1}
+  .val-title .gold{background:linear-gradient(120deg,#FFB800,#FFA200);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .val-subtitle{font-size:16px;color:#c5d0e6;line-height:1.6;margin-bottom:32px;max-width:700px;position:relative;z-index:1}
+  .val-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;position:relative;z-index:1}
+  .val-col h4{font-size:13px;color:#FFB800;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px}
+  .val-list{list-style:none;padding:0;margin:0}
+  .val-list li{padding:8px 0;color:#c5d0e6;font-size:14px;display:flex;align-items:center;gap:10px;line-height:1.4}
+  .val-list li::before{content:'';width:18px;height:18px;background:rgba(255,184,0,0.15);border:1px solid rgba(255,184,0,0.4);border-radius:50%;flex-shrink:0;position:relative}
+  .val-list li.check::before{background:#FFB800;border-color:#FFB800}
+  .val-list li.check::after{content:'✓';color:#0B1836;font-size:12px;font-weight:900;position:absolute;margin-left:3px;margin-top:-1px}
+  .val-list li{position:relative}
+  .val-cta{margin-top:32px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;position:relative;z-index:1}
+  .val-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:14px 28px;border-radius:14px;border:none;font-size:14px;letter-spacing:0.5px;cursor:pointer;box-shadow:0 6px 20px rgba(255,184,0,0.35);transition:all 0.2s;text-transform:uppercase}
+  .val-btn:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(255,184,0,0.45)}
+  .val-note{font-size:12px;color:#8ba3d4}
+  .val-note strong{color:#fff}
+  @media(max-width:700px){
+    .valuation{padding:28px 20px}
+    .val-grid{grid-template-columns:1fr;gap:20px}
+  }
+
+  /* Preview section - sample listings */
+  .preview-section{margin-top:80px;width:100%;max-width:1200px;animation:fadeIn 1s ease 0.5s both}  .preview-header{text-align:center;margin-bottom:48px}
+  .preview-badge{display:inline-block;background:rgba(255,184,0,0.15);border:1px solid rgba(255,184,0,0.3);color:#FFB800;padding:6px 14px;border-radius:100px;font-size:11px;font-weight:800;letter-spacing:1.5px;margin-bottom:16px;text-transform:uppercase}
+  .preview-title{font-size:clamp(28px,4vw,42px);font-weight:900;line-height:1.15;letter-spacing:-1px;margin-bottom:12px}
+  .preview-subtitle{font-size:16px;color:#a3b3d1;max-width:600px;margin:0 auto;line-height:1.6}
+  .listings{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;width:100%}
+  .listing{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:20px;overflow:hidden;transition:all 0.3s ease;text-align:left}
+  .listing:hover{transform:translateY(-4px);border-color:rgba(255,184,0,0.3)}
+  .listing-img{width:100%;height:180px;background:linear-gradient(135deg,#1a2e5c,#2d4a8a);position:relative;display:flex;align-items:center;justify-content:center;font-size:64px}
+  .listing-img.img2{background:linear-gradient(135deg,#3d1e6b,#6b3aa8)}
+  .listing-img.img3{background:linear-gradient(135deg,#1e3a3d,#3a7b6b)}
+  .listing-badge{position:absolute;top:12px;left:12px;padding:6px 12px;border-radius:100px;font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;backdrop-filter:blur(10px)}
+  .badge-deal{background:rgba(34,197,94,0.95);color:#052e16}
+  .badge-normal{background:rgba(59,130,246,0.95);color:#0c1a3d}
+  .badge-overpriced{background:rgba(239,68,68,0.95);color:#3d0a0a}
+  .listing-portal{position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.6);color:#fff;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:700;backdrop-filter:blur(10px)}
+  .listing-body{padding:20px}
+  .listing-title{font-size:16px;font-weight:800;color:#fff;margin-bottom:6px;line-height:1.3}
+  .listing-loc{font-size:12px;color:#8ba3d4;margin-bottom:14px;display:flex;align-items:center;gap:4px}
+  .listing-specs{display:flex;gap:14px;font-size:12px;color:#c5d0e6;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.08)}
+  .listing-specs span{display:flex;align-items:center;gap:4px}
+  .listing-price{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px}
+  .listing-price .big{font-size:22px;font-weight:900;color:#fff}
+  .listing-price .m2{font-size:12px;color:#8ba3d4}
+  .analysis{background:rgba(0,0,0,0.3);border-radius:12px;padding:14px;margin-bottom:14px}
+  .analysis-title{font-size:10px;color:#FFB800;text-transform:uppercase;letter-spacing:1.5px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+  .analysis-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:6px}
+  .analysis-row .lbl{color:#8ba3d4}
+  .analysis-row .val{color:#e6edf3;font-weight:700}
+  .analysis-row.rcn{padding-top:6px;border-top:1px dashed rgba(255,184,0,0.3);margin-top:6px}
+  .analysis-row.rcn .lbl{color:#FFB800;font-weight:700}
+  .analysis-row.rcn .val{color:#FFB800}
+  .verdict{font-size:11px;font-weight:800;padding:8px 12px;border-radius:8px;text-align:center;letter-spacing:0.5px}
+  .verdict.deal{background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3)}
+  .verdict.normal{background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3)}
+  .verdict.overpriced{background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3)}
+  .preview-note{margin-top:32px;font-size:12px;color:#5e7099;text-align:center;font-style:italic}
+
+  /* Footer */
+  .footer{margin-top:80px;padding-top:32px;border-top:1px solid rgba(255,255,255,0.05);width:100%;max-width:900px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-size:12px;color:#5e7099}
+  .footer a{color:#8ba3d4;text-decoration:none;margin-left:16px}
+  .footer a:hover{color:#FFB800}
+
+  @keyframes fadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+  @media(max-width:600px){
+    .stats{gap:20px}
+    .stat .num{font-size:28px}
+    .newsletter{padding:28px 20px}
+    .newsletter h2{font-size:20px}
+    .footer{flex-direction:column;text-align:center}
+    .footer a{margin:0 8px}
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo-mini">
+      <svg viewBox="0 0 100 100" fill="none">
+        <path d="M50 20L20 45v35h60V45L50 20z" stroke="#FFB800" stroke-width="6" stroke-linejoin="round"/>
+        <circle cx="65" cy="45" r="10" stroke="#FFB800" stroke-width="6"/>
+        <path d="M72 52l8 8" stroke="#FFB800" stroke-width="6" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="brand">Finder<span class="accent">Dom</span>.pl</div>
+  </div>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="badge"><span class="dot"></span>WKRÓTCE STARTUJEMY</div>
+    <h1>Wszystkie ogłoszenia<br><span class="highlight">nieruchomości</span><br>w jednym miejscu</h1>
+    <p class="subtitle">Otodom, OLX, Morizon, Gratka i wszystkie pozostałe portale w Polsce — jedno wyszukiwanie. AI analiza cen sprawdzi czy oferta to okazja czy zawyżka.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="num">100%</div><div class="lbl">pokrycia rynku</div></div>
+      <div class="stat"><div class="num">AI</div><div class="lbl">analiza cen</div></div>
+      <div class="stat"><div class="num">∞</div><div class="lbl">dowolny promień</div></div>
+      <div class="stat"><div class="num">24/7</div><div class="lbl">monitoring</div></div>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <div class="features">
+    <div class="feat">
+      <div class="icon-wrap">🔍</div>
+      <h3>Wszystkie portale — jedno wyszukiwanie</h3>
+      <p>Nie musisz sprawdzać Otodom, OLX, Morizon, Gratki osobno. Zbieramy oferty ze wszystkich dostępnych portali w Polsce i pokazujemy w jednym miejscu.</p>
+    </div>
+    <div class="feat">
+      <div class="icon-wrap">💰</div>
+      <h3>AI Analiza ceny (killer feature)</h3>
+      <p>Sztuczna inteligencja porówna każdą ofertę z medianą cen z okolicy. OKAZJA, w normie czy zawyżona — wiesz od razu.</p>
+    </div>
+    <div class="feat">
+      <div class="icon-wrap">📍</div>
+      <h3>Podobne oferty w okolicy</h3>
+      <p>Na każdej ofercie — karuzela podobnych mieszkań w wybranym przez Ciebie promieniu (1-100 km). Ty ustawiasz zasięg, my znajdujemy oferty.</p>
+    </div>
+    <div class="feat">
+      <div class="icon-wrap">🔔</div>
+      <h3>Powiadomienia w czasie rzeczywistym</h3>
+      <p>Ustaw kryteria i dostawaj e-mail lub push gdy pojawi się pasująca oferta. Zanim inni zdążą zareagować.</p>
+    </div>
+    <div class="feat">
+      <div class="icon-wrap">📊</div>
+      <h3>Historia cen — złap obniżkę</h3>
+      <p>Widzisz każdą zmianę ceny oferty. Sprzedawca zszedł z ceny? Wiesz o tym natychmiast — czas negocjować.</p>
+    </div>
+    <div class="feat">
+      <div class="icon-wrap">🎯</div>
+      <h3>Zaawansowane filtry</h3>
+      <p>Powierzchnia, cena, dzielnica, piętro, rok budowy, balkon — precyzyjne filtry we wszystkich portalach naraz.</p>
+    </div>
+  </div>
+
+  <!-- Premium Valuation - Pełna wycena nieruchomości -->
+  <div class="valuation">
+    <div class="val-header">
+      <div class="val-tag">💎 Premium · Jednorazowa usługa</div>
+      <div class="val-price">od <strong>49 zł</strong></div>
+    </div>
+    <h2 class="val-title">Pełna <span class="gold">wycena nieruchomości</span></h2>
+    <p class="val-subtitle">Profesjonalny raport wartości Twojego mieszkania lub domu. AI analizuje wszystkie parametry (rok budowy, standard, powierzchnię, piętro, lokalizację) i porównuje z realnymi transakcjami z RCN. Otrzymujesz PDF w 60 sekund.</p>
+
+    <div class="val-grid">
+      <div class="val-col">
+        <h4>📋 Podajesz parametry</h4>
+        <ul class="val-list">
+          <li class="check">Dokładny adres / lokalizacja</li>
+          <li class="check">Rok budowy budynku</li>
+          <li class="check">Standard (do remontu / po remoncie / developerski)</li>
+          <li class="check">Powierzchnia w m² i liczba pokoi</li>
+          <li class="check">Piętro / liczba pięter w budynku</li>
+          <li class="check">Typ (blok / kamienica / apartamentowiec / dom)</li>
+          <li class="check">Dodatki (balkon, garaż, winda, ogród)</li>
+        </ul>
+      </div>
+
+      <div class="val-col">
+        <h4>📄 Otrzymujesz raport PDF</h4>
+        <ul class="val-list">
+          <li class="check">Realna wartość rynkowa (zakres min-max)</li>
+          <li class="check">Porównanie z aktami notarialnymi z RCN</li>
+          <li class="check">Cena za m² vs. mediana dzielnicy</li>
+          <li class="check">10 podobnych ofert w okolicy</li>
+          <li class="check">Analiza wpływu roku budowy i standardu</li>
+          <li class="check">Strategia negocjacji (kupno) lub cena ofertowa (sprzedaż)</li>
+          <li class="check">Prognoza wartości za 12 miesięcy</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="val-cta">
+      <button class="val-btn" onclick="alert('Ta usługa startuje razem z pełną aplikacją. Zapisz się na newsletter aby dostać powiadomienie i 30% rabatu!')">Zamów wycenę</button>
+      <div class="val-note"><strong>29 zł</strong> dla subskrybentów · <strong>PDF w 60 sek</strong> · Bez podpisywania umów</div>
+    </div>
+  </div>
+
+  <!-- Preview: Sample Listings with AI Analysis -->
+  <div class="preview-section">
+    <div class="preview-header">
+      <div class="preview-badge">📊 tak będzie to działać</div>
+      <h2 class="preview-title">Analiza ceny <span style="background:linear-gradient(120deg,#FFB800,#FFA200);-webkit-background-clip:text;background-clip:text;color:transparent">w akcji</span></h2>
+      <p class="preview-subtitle">Zobacz na przykładach jak AI porówna każdą ofertę z realnymi cenami transakcyjnymi z Rejestru Cen Nieruchomości (RCN).</p>
+    </div>
+
+    <div class="listings">
+
+      <!-- Listing 1: OKAZJA -->
+      <div class="listing">
+        <div class="listing-img">
+          🏢
+          <div class="listing-badge badge-deal">🔥 OKAZJA</div>
+          <div class="listing-portal">Otodom</div>
+        </div>
+        <div class="listing-body">
+          <div class="listing-title">Mieszkanie 2 pokoje, słoneczne</div>
+          <div class="listing-loc">📍 Kraków, Podgórze</div>
+          <div class="listing-specs">
+            <span>📐 48 m²</span>
+            <span>🛏️ 2 pok.</span>
+            <span>🏢 3 piętro</span>
+          </div>
+          <div class="listing-price">
+            <span class="big">545 000 zł</span>
+            <span class="m2">11 354 zł/m²</span>
+          </div>
+          <div class="analysis">
+            <div class="analysis-title">🧠 AI Analiza ceny</div>
+            <div class="analysis-row"><span class="lbl">Ta oferta:</span><span class="val">11 354 zł/m²</span></div>
+            <div class="analysis-row"><span class="lbl">Śr. oferty w okolicy:</span><span class="val">12 800 zł/m²</span></div>
+            <div class="analysis-row rcn"><span class="lbl">⭐ Śr. transakcja RCN:</span><span class="val">12 100 zł/m²</span></div>
+          </div>
+          <div class="verdict deal">✨ 6% PONIŻEJ REALNYCH TRANSAKCJI</div>
+        </div>
+      </div>
+
+      <!-- Listing 2: W NORMIE -->
+      <div class="listing">
+        <div class="listing-img img2">
+          🏠
+          <div class="listing-badge badge-normal">✓ W NORMIE</div>
+          <div class="listing-portal">OLX</div>
+        </div>
+        <div class="listing-body">
+          <div class="listing-title">3 pokoje z balkonem, po remoncie</div>
+          <div class="listing-loc">📍 Warszawa, Mokotów</div>
+          <div class="listing-specs">
+            <span>📐 62 m²</span>
+            <span>🛏️ 3 pok.</span>
+            <span>🏢 5 piętro</span>
+          </div>
+          <div class="listing-price">
+            <span class="big">1 240 000 zł</span>
+            <span class="m2">20 000 zł/m²</span>
+          </div>
+          <div class="analysis">
+            <div class="analysis-title">🧠 AI Analiza ceny</div>
+            <div class="analysis-row"><span class="lbl">Ta oferta:</span><span class="val">20 000 zł/m²</span></div>
+            <div class="analysis-row"><span class="lbl">Śr. oferty w okolicy:</span><span class="val">20 500 zł/m²</span></div>
+            <div class="analysis-row rcn"><span class="lbl">⭐ Śr. transakcja RCN:</span><span class="val">19 800 zł/m²</span></div>
+          </div>
+          <div class="verdict normal">💙 CENA ZGODNA Z RYNKIEM</div>
+        </div>
+      </div>
+
+      <!-- Listing 3: ZAWYŻONA -->
+      <div class="listing">
+        <div class="listing-img img3">
+          🏘️
+          <div class="listing-badge badge-overpriced">⚠️ ZAWYŻONA</div>
+          <div class="listing-portal">Morizon</div>
+        </div>
+        <div class="listing-body">
+          <div class="listing-title">Kawalerka z widokiem na park</div>
+          <div class="listing-loc">📍 Wrocław, Śródmieście</div>
+          <div class="listing-specs">
+            <span>📐 32 m²</span>
+            <span>🛏️ 1 pok.</span>
+            <span>🏢 2 piętro</span>
+          </div>
+          <div class="listing-price">
+            <span class="big">520 000 zł</span>
+            <span class="m2">16 250 zł/m²</span>
+          </div>
+          <div class="analysis">
+            <div class="analysis-title">🧠 AI Analiza ceny</div>
+            <div class="analysis-row"><span class="lbl">Ta oferta:</span><span class="val">16 250 zł/m²</span></div>
+            <div class="analysis-row"><span class="lbl">Śr. oferty w okolicy:</span><span class="val">14 000 zł/m²</span></div>
+            <div class="analysis-row rcn"><span class="lbl">⭐ Śr. transakcja RCN:</span><span class="val">13 200 zł/m²</span></div>
+          </div>
+          <div class="verdict overpriced">📉 23% POWYŻEJ TRANSAKCJI · negocjuj do ~420 000 zł</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="preview-note">💡 Dane w przykładach są poglądowe. Prawdziwa analiza opiera się na aktualnych ofertach + Rejestrze Cen Nieruchomości (RCN) — od 13.02.2026 dostępnym bezpłatnie dla wszystkich.</div>
+  </div>
+
+  <!-- Newsletter -->
+  <div class="newsletter">
+    <div class="gift">🎁</div>
+    <div class="promo">Oferta pre-launch</div>
+    <h2>Zapisz się i otrzymaj 30 dni gratis</h2>
+    <p>Bądź pierwszy który dostanie dostęp gdy startujemy. Pierwsze 100 osób dostaje <strong>30 dni Premium za darmo</strong> (wartość 39 zł).</p>
+    <form class="form" id="newsletterForm">
+      <input type="email" name="email" required placeholder="twoj@email.pl" autocomplete="email">
+      <button type="submit" id="submitBtn">ZAPISZ MNIE</button>
+    </form>
+    <div class="msg" id="msg"></div>
+    <div class="privacy">Zapisując się akceptujesz naszą politykę prywatności. Możesz się wypisać w każdej chwili. Nie wysyłamy spamu.</div>
+  </div>
+
+  <!-- Portals list -->
+  <div class="portals">
+    <div class="portals-label">Agregujemy oferty z</div>
+    <div class="portals-list">
+      <span class="portal-chip">Otodom</span>
+      <span class="portal-chip">OLX</span>
+      <span class="portal-chip">Morizon</span>
+      <span class="portal-chip">Gratka</span>
+      <span class="portal-chip">Nieruchomosci-online</span>
+      <span class="portal-chip">Domy.pl</span>
+      <span class="portal-chip">Szybko.pl</span>
+      <span class="portal-chip">Oferty-dom</span>
+      <span class="portal-chip">Lento</span>
+      <span class="portal-chip">Oferty.net</span>
+      <span class="portal-chip">Adresowo</span>
+      <span class="portal-chip">Sprzedajemy.pl</span>
+      <span class="portal-chip">Trovit</span>
+      <span class="portal-chip">Mitula</span>
+      <span class="portal-chip">Allegro</span>
+      <span class="portal-chip">+ wiele innych</span>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div>© 2026 FinderDom.pl</div>
+    <div>
+      <a href="mailto:kontakt@finderdom.pl">kontakt@finderdom.pl</a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const form = document.getElementById('newsletterForm');
+  const msg = document.getElementById('msg');
+  const btn = document.getElementById('submitBtn');
+  const emailInput = form.querySelector('input[name="email"]');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = emailInput.value.trim();
+    if (!email) return;
+
+    btn.disabled = true;
+    btn.textContent = 'ZAPISUJĘ...';
+    msg.className = 'msg';
+    msg.textContent = '';
+
+    try {
+      const res = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, source: 'landing' })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        msg.className = 'msg success';
+        msg.textContent = '✅ Dziękujemy! Powiadomimy Cię jak tylko startujemy.';
+        form.reset();
+        // Track successful signup in GA4
+        if (window.gtag) {
+          gtag('event', 'sign_up', {
+            'method': 'landing_newsletter',
+            'is_new': data.new || false
+          });
+          gtag('event', 'generate_lead', {
+            'currency': 'PLN',
+            'value': 39
+          });
+        }
+      } else {
+        msg.className = 'msg error';
+        msg.textContent = data.error || '❌ Coś poszło nie tak. Spróbuj ponownie.';
+      }
+    } catch (err) {
+      msg.className = 'msg error';
+      msg.textContent = '❌ Błąd połączenia. Spróbuj ponownie za chwilę.';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'ZAPISZ MNIE';
+    }
+  });
+</script>
+
+</body>
+</html>
+
+FinderDom.pl

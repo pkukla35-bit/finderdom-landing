@@ -1,458 +1,915 @@
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Wyszukiwarka ogłoszeń — FinderDom.pl</title>
-<meta name="description" content="Wyszukaj mieszkania i domy ze wszystkich portali w Polsce. AI analiza cen, filtry zaawansowane, powiadomienia.">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-
-<!-- Google Analytics 4 -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-8BX5DVXPDV"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-8BX5DVXPDV');
-</script>
-
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0B1836;color:#fff;-webkit-font-smoothing:antialiased}
-
-  /* Top nav */
-  .topnav{background:rgba(11,24,54,0.95);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.08);padding:14px 24px;position:sticky;top:0;z-index:100}
-  .nav-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px}
-  .brand-link{display:flex;align-items:center;gap:10px;text-decoration:none;color:#fff}
-  .brand-logo{width:36px;height:36px;background:linear-gradient(135deg,#1a2e5c,#2d4a8a);border-radius:10px;display:flex;align-items:center;justify-content:center}
-  .brand-logo svg{width:22px;height:22px}
-  .brand-text{font-size:17px;font-weight:900;letter-spacing:-0.5px}
-  .brand-text .accent{color:#FFB800}
-  .nav-links{display:flex;gap:20px;align-items:center;font-size:14px}
-  .nav-links a{color:#c5d0e6;text-decoration:none;font-weight:600;transition:color 0.15s}
-  .nav-links a:hover,.nav-links a.active{color:#FFB800}
-  .cta-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:10px 18px;border-radius:10px;text-decoration:none;font-size:13px;letter-spacing:0.3px;text-transform:uppercase}
-
-  /* Layout */
-  .search-hero{background:linear-gradient(180deg,#1a2e5c 0%,#0B1836 100%);padding:32px 24px}
-  .search-bar{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px}
-  .search-input{padding:14px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:#fff;font-size:14px;outline:none;transition:all 0.2s}
-  .search-input:focus{border-color:#FFB800;background:rgba(0,0,0,0.6)}
-  .search-input::placeholder{color:#5e7099}
-  select.search-input{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238ba3d4' d='M6 8L0 0h12z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
-  .search-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:14px 24px;border-radius:12px;border:none;font-size:13px;letter-spacing:0.5px;cursor:pointer;text-transform:uppercase;transition:all 0.15s}
-  .search-btn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(255,184,0,0.3)}
-
-  .main-container{max-width:1400px;margin:0 auto;padding:24px;display:grid;grid-template-columns:280px 1fr;gap:24px}
-
-  /* Sidebar filters */
-  .filters{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;height:fit-content;position:sticky;top:88px}
-  .filters h3{font-size:11px;color:#FFB800;letter-spacing:2px;text-transform:uppercase;font-weight:800;margin-bottom:16px}
-  .filter-group{margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid rgba(255,255,255,0.05)}
-  .filter-group:last-child{border-bottom:none;margin-bottom:0}
-  .filter-title{font-size:13px;font-weight:800;color:#e6edf3;margin-bottom:12px;display:flex;align-items:center;gap:6px}
-  .filter-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .filter-row input{padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;outline:none;width:100%}
-  .filter-row input:focus{border-color:#FFB800}
-  .chip-group{display:flex;flex-wrap:wrap;gap:6px}
-  .chip{padding:6px 10px;border-radius:100px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#c5d0e6;font-size:11px;cursor:pointer;transition:all 0.15s;font-weight:600;user-select:none}
-  .chip:hover{border-color:rgba(255,184,0,0.5)}
-  .chip.active{background:rgba(255,184,0,0.15);border-color:#FFB800;color:#FFB800}
-  .radius-row{display:flex;align-items:center;gap:8px}
-  .radius-row input[type=number]{flex:1;padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;outline:none}
-  .radius-row .u{color:#8ba3d4;font-size:12px;font-weight:700}
-  .filter-actions{display:flex;gap:8px;margin-top:8px}
-  .filter-actions button{flex:1;padding:10px;border-radius:10px;border:none;cursor:pointer;font-size:12px;font-weight:800;letter-spacing:0.3px}
-  .btn-clear{background:rgba(255,255,255,0.05);color:#c5d0e6;border:1px solid rgba(255,255,255,0.1) !important}
-  .btn-apply{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836}
-
-  /* Results */
-  .results-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px}
-  .results-count{font-size:14px;color:#c5d0e6}
-  .results-count strong{color:#fff;font-weight:900}
-  .sort-select{padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:#fff;font-size:13px;outline:none;cursor:pointer;font-weight:600}
-
-  /* Listing cards */
-  .results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
-  .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;overflow:hidden;transition:all 0.25s;cursor:pointer;text-decoration:none;color:inherit;display:block}
-  .card:hover{transform:translateY(-3px);border-color:rgba(255,184,0,0.35);box-shadow:0 12px 32px rgba(0,0,0,0.4)}
-  .card-img{width:100%;height:180px;position:relative;display:flex;align-items:center;justify-content:center;font-size:56px}
-  .card-img.i1{background:linear-gradient(135deg,#1a2e5c,#2d4a8a)}
-  .card-img.i2{background:linear-gradient(135deg,#3d1e6b,#6b3aa8)}
-  .card-img.i3{background:linear-gradient(135deg,#1e3a3d,#3a7b6b)}
-  .card-img.i4{background:linear-gradient(135deg,#4a2c1a,#8b5a3c)}
-  .card-img.i5{background:linear-gradient(135deg,#2a1e3d,#5a3a6b)}
-  .card-img.i6{background:linear-gradient(135deg,#1a3d3a,#3a7b6b)}
-  .card-badge{position:absolute;top:10px;left:10px;padding:5px 10px;border-radius:100px;font-size:10px;font-weight:900;letter-spacing:0.5px;text-transform:uppercase;backdrop-filter:blur(10px)}
-  .b-deal{background:rgba(34,197,94,0.95);color:#052e16}
-  .b-normal{background:rgba(59,130,246,0.95);color:#0c1a3d}
-  .b-over{background:rgba(239,68,68,0.95);color:#3d0a0a}
-  .b-new{background:rgba(255,184,0,0.95);color:#0B1836}
-  .card-portal{position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.6);color:#fff;padding:3px 8px;border-radius:100px;font-size:9px;font-weight:700;backdrop-filter:blur(8px)}
-  .card-body{padding:16px}
-  .card-title{font-size:14px;font-weight:800;margin-bottom:4px;color:#fff;line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-  .card-loc{font-size:11px;color:#8ba3d4;margin-bottom:10px}
-  .card-specs{display:flex;gap:10px;font-size:11px;color:#a3b3d1;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.06)}
-  .card-price{display:flex;justify-content:space-between;align-items:baseline}
-  .card-price .p{font-size:18px;font-weight:900;color:#fff}
-  .card-price .pm2{font-size:11px;color:#8ba3d4}
-
-  /* Load more */
-  .load-more{text-align:center;margin-top:32px;padding-bottom:40px}
-  .load-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:14px 32px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.15s}
-  .load-btn:hover{background:rgba(255,184,0,0.1);border-color:#FFB800;color:#FFB800}
-
-  /* Empty state */
-  .empty{text-align:center;padding:60px 20px;color:#8ba3d4}
-  .empty .icon{font-size:48px;margin-bottom:12px}
-
-  /* Mobile */
-  @media(max-width:900px){
-    .search-bar{grid-template-columns:1fr;gap:8px}
-    .main-container{grid-template-columns:1fr;padding:16px}
-    .filters{position:static;order:2}
-    .nav-links{gap:12px;font-size:12px}
-    .nav-links .hide-mob{display:none}
-  }
-</style>
-</head>
-<body>
-
-<!-- Top nav -->
-<nav class="topnav">
-  <div class="nav-inner">
-    <a href="/" class="brand-link">
-      <div class="brand-logo">
-        <svg viewBox="0 0 100 100" fill="none">
-          <path d="M50 20L20 45v35h60V45L50 20z" stroke="#FFB800" stroke-width="6" stroke-linejoin="round" fill="none"/>
-          <circle cx="65" cy="45" r="10" stroke="#FFB800" stroke-width="6" fill="none"/>
-          <path d="M72 52l8 8" stroke="#FFB800" stroke-width="6" stroke-linecap="round"/>
-        </svg>
-      </div>
-      <div class="brand-text">Finder<span class="accent">Dom</span>.pl</div>
-    </a>
-    <div class="nav-links">
-      <a href="/szukaj.html" class="active">Wyszukiwarka</a>
-      <a href="/oferta.html" class="hide-mob">Przykład oferty</a>
-      <a href="/#valuation" class="hide-mob">Wycena</a>
-      <a href="/#newsletter" class="cta-btn">Zapisz się</a>
-    </div>
-  </div>
-</nav>
-
-<!-- Search bar -->
-<div class="search-hero">
-  <div class="search-bar">
-    <input type="text" class="search-input" placeholder="🔍 Miasto, dzielnica lub słowo kluczowe..." id="q">
-    <select class="search-input">
-      <option>🏢 Mieszkanie</option>
-      <option>🏠 Dom</option>
-      <option>🌳 Działka</option>
-      <option>🏪 Lokal użytkowy</option>
-      <option>🏭 Magazyn</option>
-      <option>🅿️ Garaż</option>
-    </select>
-    <select class="search-input">
-      <option>Sprzedaż</option>
-      <option>Wynajem</option>
-    </select>
-    <select class="search-input">
-      <option>Cena do...</option>
-      <option>300 000 zł</option>
-      <option>500 000 zł</option>
-      <option>800 000 zł</option>
-      <option>1 000 000 zł</option>
-      <option>2 000 000 zł</option>
-    </select>
-    <button class="search-btn">SZUKAJ</button>
-  </div>
-</div>
-
-<!-- Main content -->
-<div class="main-container">
-
-  <!-- Sidebar filters -->
-  <aside class="filters">
-    <h3>🎯 Filtry zaawansowane</h3>
-
-    <div class="filter-group">
-      <div class="filter-title">🏘️ Rodzaj nieruchomości</div>
-      <div class="chip-group" id="propertyType">
-        <div class="chip active" data-type="mieszkanie">🏢 Mieszkanie</div>
-        <div class="chip" data-type="dom">🏠 Dom</div>
-        <div class="chip" data-type="dzialka">🌳 Działka</div>
-        <div class="chip" data-type="lokal">🏪 Lokal użytkowy</div>
-        <div class="chip" data-type="magazyn">🏭 Magazyn</div>
-        <div class="chip" data-type="garaz">🅿️ Garaż</div>
-      </div>
-    </div>
-
-    <div class="filter-group" id="subTypeGroup">
-      <div class="filter-title" id="subTypeTitle">🏗️ Typ budynku</div>
-      <div class="chip-group" id="subTypeChips">
-        <div class="chip">Blok</div>
-        <div class="chip">Kamienica</div>
-        <div class="chip">Apartamentowiec</div>
-        <div class="chip">Loft</div>
-      </div>
-    </div>
-
-    <!-- Media/Uzbrojenie - only for działka -->
-    <div class="filter-group" id="mediaGroup" style="display:none">
-      <div class="filter-title">💧 Uzbrojenie działki</div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">💧 Woda</div>
-        <div class="chip-group">
-          <div class="chip active" data-media="woda-w-dzialce">✓ W działce</div>
-          <div class="chip" data-media="woda-w-drodze">🛣️ W drodze</div>
-          <div class="chip" data-media="woda-studnia">⛲ Studnia</div>
-          <div class="chip" data-media="woda-brak">✗ Brak</div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">⚡ Prąd</div>
-        <div class="chip-group">
-          <div class="chip active" data-media="prad-w-dzialce">✓ W działce</div>
-          <div class="chip" data-media="prad-w-drodze">🛣️ W drodze</div>
-          <div class="chip" data-media="prad-brak">✗ Brak</div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">🔥 Gaz</div>
-        <div class="chip-group">
-          <div class="chip" data-media="gaz-w-dzialce">✓ W działce</div>
-          <div class="chip" data-media="gaz-w-drodze">🛣️ W drodze</div>
-          <div class="chip" data-media="gaz-brak">✗ Brak</div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">🚽 Kanalizacja</div>
-        <div class="chip-group">
-          <div class="chip" data-media="kan-miejska">🏙️ Miejska</div>
-          <div class="chip" data-media="kan-w-drodze">🛣️ W drodze</div>
-          <div class="chip" data-media="kan-szambo">🕳️ Szambo</div>
-          <div class="chip" data-media="kan-oczyszczalnia">♻️ Oczyszczalnia</div>
-          <div class="chip" data-media="kan-brak">✗ Brak</div>
-        </div>
-      </div>
-
-      <div>
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">📜 Warunki zabudowy</div>
-        <div class="chip-group">
-          <div class="chip" data-media="wz-mpzp">✓ MPZP (plan miejscowy)</div>
-          <div class="chip" data-media="wz-wydane">✓ WZ wydane</div>
-          <div class="chip" data-media="wz-brak">⏳ Brak / wymagane</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">💰 Cena za m² (zł)</div>
-      <div class="filter-row">
-        <input type="number" placeholder="od" value="">
-        <input type="number" placeholder="do" value="">
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">📐 Powierzchnia (m²)</div>
-      <div class="filter-row">
-        <input type="number" placeholder="od" value="">
-        <input type="number" placeholder="do" value="">
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">🛏️ Liczba pokoi</div>
-      <div class="chip-group">
-        <div class="chip">1</div>
-        <div class="chip active">2</div>
-        <div class="chip active">3</div>
-        <div class="chip">4</div>
-        <div class="chip">5+</div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">🏢 Piętro</div>
-      <div class="chip-group">
-        <div class="chip">Parter</div>
-        <div class="chip">1-3</div>
-        <div class="chip">4-7</div>
-        <div class="chip">8+</div>
-        <div class="chip">Ostatnie</div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">📅 Rok budowy</div>
-      <div class="filter-row">
-        <input type="number" placeholder="od" value="">
-        <input type="number" placeholder="do" value="">
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">📍 Promień od punktu (km)</div>
-      <div class="radius-row">
-        <input type="number" placeholder="np. 5" min="1" max="100">
-        <span class="u">km</span>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">🎨 Standard</div>
-      <div class="chip-group">
-        <div class="chip">Do remontu</div>
-        <div class="chip active">Po remoncie</div>
-        <div class="chip">Developerski</div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">💎 Analiza AI</div>
-      <div class="chip-group">
-        <div class="chip active">🔥 Tylko okazje</div>
-        <div class="chip">W normie</div>
-        <div class="chip">Ukryj zawyżone</div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">✨ Dodatki</div>
-      <div class="chip-group">
-        <div class="chip">Balkon</div>
-        <div class="chip">Garaż</div>
-        <div class="chip">Winda</div>
-        <div class="chip">Ogród</div>
-      </div>
-    </div>
-
-    <div class="filter-actions">
-      <button class="btn-clear">Wyczyść</button>
-      <button class="btn-apply">Zastosuj</button>
-    </div>
-  </aside>
-
-  <!-- Results -->
-  <main>
-    <div class="results-head">
-      <div class="results-count">Znaleziono <strong id="count">6</strong> ofert (przykłady poglądowe)</div>
-      <select class="sort-select">
-        <option>Sortuj: AI - najlepsze okazje</option>
-        <option>Cena rosnąco</option>
-        <option>Cena malejąco</option>
-        <option>Cena za m² rosnąco</option>
-        <option>Najnowsze</option>
-        <option>Największy metraż</option>
-      </select>
-    </div>
-
-    <div class="results-grid" id="grid">
-      <!-- generated by JS below -->
-    </div>
-
-    <div class="load-more">
-      <button class="load-btn" onclick="alert('W pełnej wersji tutaj załaduje się kolejnych 20 ofert z prawdziwych scraperów.\n\nZapisz się na newsletter aby otrzymać powiadomienie o starcie!')">Załaduj więcej ofert ↓</button>
-    </div>
-  </main>
-
-</div>
-
-<script>
-// Mock listings data
-const LISTINGS = [
-  {img:'i1',emoji:'🏢',badge:'deal',badgeText:'🔥 OKAZJA',portal:'Otodom',title:'Mieszkanie 2 pokoje, słoneczne, po remoncie',loc:'📍 Kraków, Podgórze',specs:'📐 48 m² · 🛏️ 2 pok. · 🏢 3 piętro',price:'545 000 zł',ppm:'11 354 zł/m²'},
-  {img:'i2',emoji:'🏠',badge:'normal',badgeText:'✓ W NORMIE',portal:'OLX',title:'3 pokoje z balkonem po generalnym remoncie',loc:'📍 Warszawa, Mokotów',specs:'📐 62 m² · 🛏️ 3 pok. · 🏢 5 piętro',price:'1 240 000 zł',ppm:'20 000 zł/m²'},
-  {img:'i3',emoji:'🏘️',badge:'over',badgeText:'⚠️ ZAWYŻONA',portal:'Morizon',title:'Kawalerka z widokiem na park Południowy',loc:'📍 Wrocław, Śródmieście',specs:'📐 32 m² · 🛏️ 1 pok. · 🏢 2 piętro',price:'520 000 zł',ppm:'16 250 zł/m²'},
-  {img:'i4',emoji:'🏡',badge:'deal',badgeText:'🔥 OKAZJA',portal:'Gratka',title:'Duże 4-pokojowe do własnej aranżacji',loc:'📍 Gdańsk, Zaspa',specs:'📐 76 m² · 🛏️ 4 pok. · 🏢 8 piętro',price:'620 000 zł',ppm:'8 158 zł/m²'},
-  {img:'i5',emoji:'🌆',badge:'new',badgeText:'✨ NOWA (2h)',portal:'Otodom',title:'Apartament w centrum, wykończony',loc:'📍 Poznań, Stare Miasto',specs:'📐 55 m² · 🛏️ 2 pok. · 🏢 6 piętro',price:'890 000 zł',ppm:'16 182 zł/m²'},
-  {img:'i6',emoji:'🏠',badge:'normal',badgeText:'✓ W NORMIE',portal:'Nieruchomosci-online',title:'Dom parterowy, działka 500m²',loc:'📍 Katowice, Ligota',specs:'📐 120 m² · 🛏️ 5 pok. · 🏡 Dom',price:'880 000 zł',ppm:'7 333 zł/m²'},
-];
-
-const grid = document.getElementById('grid');
-grid.innerHTML = LISTINGS.map(l => `
-  <a href="/oferta.html" class="card">
-    <div class="card-img ${l.img}">
-      ${l.emoji}
-      <div class="card-badge b-${l.badge}">${l.badgeText}</div>
-      <div class="card-portal">${l.portal}</div>
-    </div>
-    <div class="card-body">
-      <div class="card-title">${l.title}</div>
-      <div class="card-loc">${l.loc}</div>
-      <div class="card-specs">${l.specs}</div>
-      <div class="card-price">
-        <span class="p">${l.price}</span>
-        <span class="pm2">${l.ppm}</span>
-      </div>
-    </div>
-  </a>
-`).join('');
-
-// Chip toggling (default: multi-select)
-document.querySelectorAll('.chip').forEach(c => {
-  c.addEventListener('click', () => c.classList.toggle('active'));
-});
-
-// Property type = radio (single select) + dynamic sub-type
-const SUB_TYPES = {
-  mieszkanie: {title:'🏗️ Typ budynku', options:['Blok','Kamienica','Apartamentowiec','Loft','Wieżowiec']},
-  dom: {title:'🏡 Typ domu', options:['Wolnostojący','Bliźniak','Szeregowiec','Siedliskowy','Rezydencja','W zabudowie']},
-  dzialka: {title:'🌳 Przeznaczenie działki', options:['🏗️ Budowlana','🌾 Rolna','🌱 Rolno-budowlana','🏭 Przemysłowa','🏕️ Rekreacyjna','🌲 Leśna','🏡 Siedliskowa','🎯 Inwestycyjna']},
-  lokal: {title:'🏪 Typ lokalu', options:['Biurowy','Handlowy','Gastronomia','Usługowy','Medyczny','Fryzjerski','Fitness','Magazynowy']},
-  magazyn: {title:'🏭 Typ magazynu', options:['Hala magazynowa','Powierzchnia chłodnicza','Cross-dock','Logistyczny']},
-  garaz: {title:'🅿️ Typ garażu', options:['Podziemny','Naziemny','Blaszany','Wielostanowiskowy']}
-};
-
-// Filters that are HIDDEN for certain property types (context-aware)
-const HIDDEN_FOR_TYPE = {
-  dzialka: ['Liczba pokoi','Piętro','Rok budowy','Standard'],
-  garaz: ['Liczba pokoi','Piętro','Rok budowy','Standard'],
-  magazyn: ['Liczba pokoi','Piętro','Standard'],
-  lokal: ['Liczba pokoi']
-};
-
-function updateSubType(type){
-  const cfg = SUB_TYPES[type];
-  document.getElementById('subTypeTitle').textContent = cfg.title;
-  document.getElementById('subTypeChips').innerHTML = cfg.options.map(o => `<div class="chip">${o}</div>`).join('');
-  // Re-attach click handlers to new chips
-  document.querySelectorAll('#subTypeChips .chip').forEach(c => {
-    c.addEventListener('click', () => c.classList.toggle('active'));
-  });
-
-  // Show/hide media/uzbrojenie section (only for działka)
-  document.getElementById('mediaGroup').style.display = (type === 'dzialka') ? 'block' : 'none';
-
-  // Show/hide filters based on context
-  const hiddenTitles = HIDDEN_FOR_TYPE[type] || [];
-  document.querySelectorAll('.filter-group').forEach(g => {
-    const title = g.querySelector('.filter-title');
-    if (!title) return;
-    const isMediaGroup = g.id === 'mediaGroup';
-    const isMainType = g.querySelector('#propertyType');
-    const isSubType = g.id === 'subTypeGroup';
-    if (isMediaGroup || isMainType || isSubType) return; // handled separately
-    const titleText = title.textContent;
-    const isHidden = hiddenTitles.some(h => titleText.includes(h));
-    g.style.display = isHidden ? 'none' : 'block';
-  });
+{
+  "generated_at": "2026-08-03T10:17:04.034888+00:00",
+  "count": 30,
+  "sources": [
+    "Otodom",
+    "OLX",
+    "Morizon",
+    "Gratka",
+    "Nieruchomosci-online",
+    "Domy.pl"
+  ],
+  "note": "MOCK DATA - w Sesji D podłączamy prawdziwe scrapery",
+  "listings": [
+    {
+      "id": "finderdom-00019",
+      "type": "dzialka",
+      "title": "Działka rekreacyjna nad wodą",
+      "city": "Gdańsk",
+      "district": "Zaspa",
+      "location": "📍 Gdańsk, Zaspa",
+      "area_m2": 1200,
+      "rooms": 0,
+      "floor": 0,
+      "max_floor": 0,
+      "year_built": 2020,
+      "standard": "",
+      "price": 14904000,
+      "price_pm2": 12420,
+      "price_display": "14 904 000 zł",
+      "price_pm2_display": "12 420 zł/m²",
+      "portal": "Morizon",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-19",
+      "verdict_badge": "deal",
+      "verdict_text": "🔥 OKAZJA",
+      "verdict_full": "OKAZJA · 8% poniżej realnych transakcji",
+      "ai_delta_pct": -8,
+      "ai_offers_pm2": 14200,
+      "ai_rcn_pm2": 13500,
+      "emoji": "🌾",
+      "img_class": "i1",
+      "added_at": "2026-07-31T18:17:04.034788+00:00",
+      "added_display": "2d temu"
+    },
+    {
+      "id": "finderdom-00020",
+      "type": "mieszkanie",
+      "title": "1 pokoje z balkonem, wysoki standard",
+      "city": "Lublin",
+      "district": "Śródmieście",
+      "location": "📍 Lublin, Śródmieście",
+      "area_m2": 32,
+      "rooms": 1,
+      "floor": 3,
+      "max_floor": 4,
+      "year_built": 2020,
+      "standard": "Do remontu",
+      "price": 238000,
+      "price_pm2": 7439,
+      "price_display": "238 000 zł",
+      "price_pm2_display": "7 439 zł/m²",
+      "portal": "Gratka",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-20",
+      "verdict_badge": "deal",
+      "verdict_text": "🔥 OKAZJA",
+      "verdict_full": "OKAZJA · 7% poniżej realnych transakcji",
+      "ai_delta_pct": -7,
+      "ai_offers_pm2": 8500,
+      "ai_rcn_pm2": 8000,
+      "emoji": "🌆",
+      "img_class": "i4",
+      "added_at": "2026-07-25T04:17:04.034797+00:00",
+      "added_display": "9d temu"
+    },
+    {
+      "id": "finderdom-00001",
+      "type": "mieszkanie",
+      "title": "Mieszkanie inwestycyjne, 1 pok.",
+      "city": "Warszawa",
+      "district": "Wola",
+      "location": "📍 Warszawa, Wola",
+      "area_m2": 32,
+      "rooms": 1,
+      "floor": 3,
+      "max_floor": 8,
+      "year_built": 2005,
+      "standard": "Po remoncie",
+      "price": 517000,
+      "price_pm2": 16167,
+      "price_display": "517 000 zł",
+      "price_pm2_display": "16 167 zł/m²",
+      "portal": "Gratka",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-1",
+      "verdict_badge": "deal",
+      "verdict_text": "🔥 OKAZJA",
+      "verdict_full": "OKAZJA · 6% poniżej realnych transakcji",
+      "ai_delta_pct": -6,
+      "ai_offers_pm2": 18500,
+      "ai_rcn_pm2": 17200,
+      "emoji": "🏙️",
+      "img_class": "i3",
+      "added_at": "2026-07-28T03:17:04.034590+00:00",
+      "added_display": "6d temu"
+    },
+    {
+      "id": "finderdom-00007",
+      "type": "dom",
+      "title": "Nowy dom z garażem 2-stanowiskowym",
+      "city": "Łódź",
+      "district": "Górna",
+      "location": "📍 Łódź, Górna",
+      "area_m2": 160,
+      "rooms": 4,
+      "floor": 0,
+      "max_floor": 0,
+      "year_built": 1995,
+      "standard": "",
+      "price": 1098000,
+      "price_pm2": 6862,
+      "price_display": "1 098 000 zł",
+      "price_pm2_display": "6 862 zł/m²",
+      "portal": "Gratka",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-7",
+      "verdict_badge": "deal",
+      "verdict_text": "🔥 OKAZJA",
+      "verdict_full": "OKAZJA · 6% poniżej realnych transakcji",
+      "ai_delta_pct": -6,
+      "ai_offers_pm2": 7800,
+      "ai_rcn_pm2": 7300,
+      "emoji": "🏘️",
+      "img_class": "i2",
+      "added_at": "2026-07-31T14:17:04.034667+00:00",
+      "added_display": "2d temu"
+    },
+    {
+      "id": "finderdom-00013",
+      "type": "mieszkanie",
+      "title": "2 pokoje z balkonem, wysoki standard",
+      "city": "Poznań",
+      "district": "Grunwald",
+      "location": "📍 Poznań, Grunwald",
+      "area_m2": 38,
+      "rooms": 2,
+      "floor": 7,
+      "max_floor": 7,
+      "year_built": 1995,
+      "standard": "Developerski",
+      "price": 389000,
+      "price_pm2": 10246,
+      "price_display": "389 000 zł",
+      "price_pm2_display": "10 246 zł/m²",
+      "portal": "OLX",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-13",
+      "verdict_badge": "deal",
+      "verdict_text": "🔥 OKAZJA",
+      "verdict_full": "OKAZJA · 6% poniżej realnych transakcji",
+      "ai_delta_pct": -6,
+      "ai_offers_pm2": 11500,
+      "ai_rcn_pm2": 10900,
+      "emoji": "🏙️",
+      "img_class": "i5",
+      "added_at": "2026-07-29T08:17:04.034732+00:00",
+      "added_display": "5d temu"
+    },
+    {
+      "id": "finderdom-00023",
+      "type": "dom",
+      "title": "Nowy dom z garażem 2-stanowiskowym",
+      "city": "Warszawa",
+      "district": "Bielany",
+      "location": "📍 Warszawa, Bielany",
+      "area_m2": 120,
+      "rooms": 6,
+      "floor": 0,
+      "max_floor": 0,
+      "year_built": 2005,
+      "standard": "",
+      "price": 1940000,
+      "price_pm2": 16167,
+      "price_display": "1 940 000 zł",
+      "price_pm2_display": "16 167 zł/m²",
+      "portal": "Nieruchomosci-online",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-23",
+      "verdict_badge": "deal",
+      "verdict_text": "🔥 OKAZJA",
+      "verdict_full": "OKAZJA · 6% poniżej realnych transakcji",
+      "ai_delta_pct": -6,
+      "ai_offers_pm2": 18500,
+      "ai_rcn_pm2": 17200,
+      "emoji": "🏠",
+      "img_class": "i5",
+      "added_at": "2026-07-28T05:17:04.034825+00:00",
+      "added_display": "6d temu"
+    },
+    {
+      "id": "finderdom-00009",
+      "type": "dzialka",
+      "title": "Działka rekreacyjna nad wodą",
+      "city": "Kraków",
+      "district": "Bieżanów",
+      "location": "📍 Kraków, Bieżanów",
+      "area_m2": 1200,
+      "rooms": 0,
+      "floor": 0,
+      "max_floor": 0,
+      "year_built": 2018,
+      "standard": "",
+      "price": 13794000,
+      "price_pm2": 11495,
+      "price_display": "13 794 000 zł",
+      "price_pm2_display": "11 495 zł/m²",
+      "portal": "Gratka",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-9",
+      "verdict_badge": "deal",
+      "verdict_text": "🔥 OKAZJA",
+      "verdict_full": "OKAZJA · 5% poniżej realnych transakcji",
+      "ai_delta_pct": -5,
+      "ai_offers_pm2": 12800,
+      "ai_rcn_pm2": 12100,
+      "emoji": "🌳",
+      "img_class": "i4",
+      "added_at": "2026-07-28T01:17:04.034690+00:00",
+      "added_display": "6d temu"
+    },
+    {
+      "id": "finderdom-00016",
+      "type": "mieszkanie",
+      "title": "1-pokojowe do własnej aranżacji",
+      "city": "Gdańsk",
+      "district": "Wrzeszcz",
+      "location": "📍 Gdańsk, Wrzeszcz",
+      "area_m2": 32,
+      "rooms": 1,
+      "floor": 1,
+      "max_floor": 1,
+      "year_built": 2022,
+      "standard": "Do remontu",
+      "price": 410000,
+      "price_pm2": 12825,
+      "price_display": "410 000 zł",
+      "price_pm2_display": "12 825 zł/m²",
+      "portal": "Otodom",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-16",
+      "verdict_badge": "deal",
+      "verdict_text": "🔥 OKAZJA",
+      "verdict_full": "OKAZJA · 5% poniżej realnych transakcji",
+      "ai_delta_pct": -5,
+      "ai_offers_pm2": 14200,
+      "ai_rcn_pm2": 13500,
+      "emoji": "🏛️",
+      "img_class": "i6",
+      "added_at": "2026-07-31T10:17:04.034760+00:00",
+      "added_display": "3d temu"
+    },
+    {
+      "id": "finderdom-00024",
+      "type": "mieszkanie",
+      "title": "3 pokoje w nowym budownictwie",
+      "city": "Kraków",
+      "district": "Bronowice",
+      "location": "📍 Kraków, Bronowice",
+      "area_m2": 72,
+      "rooms": 3,
+      "floor": 8,
+      "max_floor": 10,
+      "year_built": 2015,
+      "standard": "Do remontu",
+      "price": 828000,
+      "price_pm2": 11495,
+      "price_display": "828 000 zł",
+      "price_pm2_display": "11 495 zł/m²",
+      "portal": "OLX",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-24",
+      "verdict_badge": "deal",
+      "verdict_text": "🔥 OKAZJA",
+      "verdict_full": "OKAZJA · 5% poniżej realnych transakcji",
+      "ai_delta_pct": -5,
+      "ai_offers_pm2": 12800,
+      "ai_rcn_pm2": 12100,
+      "emoji": "🏛️",
+      "img_class": "i4",
+      "added_at": "2026-07-31T14:17:04.034834+00:00",
+      "added_display": "2d temu"
+    },
+    {
+      "id": "finderdom-00028",
+      "type": "mieszkanie",
+      "title": "Mieszkanie inwestycyjne, 2 pok.",
+      "city": "Gdańsk",
+      "district": "Przymorze",
+      "location": "📍 Gdańsk, Przymorze",
+      "area_m2": 48,
+      "rooms": 2,
+      "floor": 7,
+      "max_floor": 9,
+      "year_built": 2018,
+      "standard": "Po remoncie",
+      "price": 616000,
+      "price_pm2": 12825,
+      "price_display": "616 000 zł",
+      "price_pm2_display": "12 825 zł/m²",
+      "portal": "Otodom",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-28",
+      "verdict_badge": "deal",
+      "verdict_text": "🔥 OKAZJA",
+      "verdict_full": "OKAZJA · 5% poniżej realnych transakcji",
+      "ai_delta_pct": -5,
+      "ai_offers_pm2": 14200,
+      "ai_rcn_pm2": 13500,
+      "emoji": "🏢",
+      "img_class": "i1",
+      "added_at": "2026-08-02T22:17:04.034872+00:00",
+      "added_display": "12h temu"
+    },
+    {
+      "id": "finderdom-00011",
+      "type": "mieszkanie",
+      "title": "Apartament 4 pok., taras, garaż",
+      "city": "Wrocław",
+      "district": "Psie Pole",
+      "location": "📍 Wrocław, Psie Pole",
+      "area_m2": 85,
+      "rooms": 4,
+      "floor": 8,
+      "max_floor": 9,
+      "year_built": 2012,
+      "standard": "Developerski",
+      "price": 1069000,
+      "price_pm2": 12576,
+      "price_display": "1 069 000 zł",
+      "price_pm2_display": "12 576 zł/m²",
+      "portal": "Otodom",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-11",
+      "verdict_badge": "deal",
+      "verdict_text": "🔥 OKAZJA",
+      "verdict_full": "OKAZJA · 4% poniżej realnych transakcji",
+      "ai_delta_pct": -4,
+      "ai_offers_pm2": 13800,
+      "ai_rcn_pm2": 13100,
+      "emoji": "🏙️",
+      "img_class": "i5",
+      "added_at": "2026-07-29T00:17:04.034713+00:00",
+      "added_display": "5d temu"
+    },
+    {
+      "id": "finderdom-00003",
+      "type": "mieszkanie",
+      "title": "Rozkładowe 4 pokoje przy parku",
+      "city": "Katowice",
+      "district": "Piotrowice",
+      "location": "📍 Katowice, Piotrowice",
+      "area_m2": 85,
+      "rooms": 4,
+      "floor": 8,
+      "max_floor": 8,
+      "year_built": 2022,
+      "standard": "Po remoncie",
+      "price": 700000,
+      "price_pm2": 8232,
+      "price_display": "700 000 zł",
+      "price_pm2_display": "8 232 zł/m²",
+      "portal": "Otodom",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-3",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": -2,
+      "ai_offers_pm2": 8900,
+      "ai_rcn_pm2": 8400,
+      "emoji": "🌆",
+      "img_class": "i6",
+      "added_at": "2026-07-25T13:17:04.034619+00:00",
+      "added_display": "8d temu"
+    },
+    {
+      "id": "finderdom-00004",
+      "type": "mieszkanie",
+      "title": "4-pokojowe do własnej aranżacji",
+      "city": "Katowice",
+      "district": "Ligota",
+      "location": "📍 Katowice, Ligota",
+      "area_m2": 78,
+      "rooms": 4,
+      "floor": 4,
+      "max_floor": 4,
+      "year_built": 2018,
+      "standard": "Po remoncie",
+      "price": 642000,
+      "price_pm2": 8232,
+      "price_display": "642 000 zł",
+      "price_pm2_display": "8 232 zł/m²",
+      "portal": "Otodom",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-4",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": -2,
+      "ai_offers_pm2": 8900,
+      "ai_rcn_pm2": 8400,
+      "emoji": "🏘️",
+      "img_class": "i6",
+      "added_at": "2026-07-29T13:17:04.034630+00:00",
+      "added_display": "4d temu"
+    },
+    {
+      "id": "finderdom-00025",
+      "type": "mieszkanie",
+      "title": "Rozkładowe 1 pokoje przy parku",
+      "city": "Wrocław",
+      "district": "Fabryczna",
+      "location": "📍 Wrocław, Fabryczna",
+      "area_m2": 32,
+      "rooms": 1,
+      "floor": 9,
+      "max_floor": 13,
+      "year_built": 2022,
+      "standard": "Do remontu",
+      "price": 411000,
+      "price_pm2": 12838,
+      "price_display": "411 000 zł",
+      "price_pm2_display": "12 838 zł/m²",
+      "portal": "Otodom",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-25",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": -2,
+      "ai_offers_pm2": 13800,
+      "ai_rcn_pm2": 13100,
+      "emoji": "🏢",
+      "img_class": "i3",
+      "added_at": "2026-07-29T00:17:04.034844+00:00",
+      "added_display": "5d temu"
+    },
+    {
+      "id": "finderdom-00000",
+      "type": "mieszkanie",
+      "title": "Kawalerka w centrum, wykończona",
+      "city": "Warszawa",
+      "district": "Mokotów",
+      "location": "📍 Warszawa, Mokotów",
+      "area_m2": 45,
+      "rooms": 2,
+      "floor": 1,
+      "max_floor": 6,
+      "year_built": 2024,
+      "standard": "Po remoncie",
+      "price": 766000,
+      "price_pm2": 17028,
+      "price_display": "766 000 zł",
+      "price_pm2_display": "17 028 zł/m²",
+      "portal": "Otodom",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-0",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": -1,
+      "ai_offers_pm2": 18500,
+      "ai_rcn_pm2": 17200,
+      "emoji": "🏙️",
+      "img_class": "i1",
+      "added_at": "2026-08-03T01:17:04.034554+00:00",
+      "added_display": "9h temu"
+    },
+    {
+      "id": "finderdom-00005",
+      "type": "mieszkanie",
+      "title": "Apartament 4 pok., taras, garaż",
+      "city": "Katowice",
+      "district": "Ligota",
+      "location": "📍 Katowice, Ligota",
+      "area_m2": 78,
+      "rooms": 4,
+      "floor": 10,
+      "max_floor": 15,
+      "year_built": 1995,
+      "standard": "Developerski",
+      "price": 649000,
+      "price_pm2": 8316,
+      "price_display": "649 000 zł",
+      "price_pm2_display": "8 316 zł/m²",
+      "portal": "Nieruchomosci-online",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-5",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": -1,
+      "ai_offers_pm2": 8900,
+      "ai_rcn_pm2": 8400,
+      "emoji": "🏢",
+      "img_class": "i2",
+      "added_at": "2026-07-26T15:17:04.034640+00:00",
+      "added_display": "7d temu"
+    },
+    {
+      "id": "finderdom-00012",
+      "type": "mieszkanie",
+      "title": "Mieszkanie inwestycyjne, 3 pok.",
+      "city": "Gdańsk",
+      "district": "Zaspa",
+      "location": "📍 Gdańsk, Zaspa",
+      "area_m2": 65,
+      "rooms": 3,
+      "floor": 0,
+      "max_floor": 5,
+      "year_built": 1970,
+      "standard": "Do remontu",
+      "price": 869000,
+      "price_pm2": 13365,
+      "price_display": "869 000 zł",
+      "price_pm2_display": "13 365 zł/m²",
+      "portal": "Gratka",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-12",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": -1,
+      "ai_offers_pm2": 14200,
+      "ai_rcn_pm2": 13500,
+      "emoji": "🏛️",
+      "img_class": "i3",
+      "added_at": "2026-07-24T12:17:04.034722+00:00",
+      "added_display": "9d temu"
+    },
+    {
+      "id": "finderdom-00029",
+      "type": "dzialka",
+      "title": "Działka rekreacyjna nad wodą",
+      "city": "Katowice",
+      "district": "Ligota",
+      "location": "📍 Katowice, Ligota",
+      "area_m2": 1200,
+      "rooms": 0,
+      "floor": 0,
+      "max_floor": 0,
+      "year_built": 1970,
+      "standard": "",
+      "price": 10080000,
+      "price_pm2": 8400,
+      "price_display": "10 080 000 zł",
+      "price_pm2_display": "8 400 zł/m²",
+      "portal": "Nieruchomosci-online",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-29",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": 0,
+      "ai_offers_pm2": 8900,
+      "ai_rcn_pm2": 8400,
+      "emoji": "🏞️",
+      "img_class": "i1",
+      "added_at": "2026-08-02T05:17:04.034880+00:00",
+      "added_display": "29h temu"
+    },
+    {
+      "id": "finderdom-00018",
+      "type": "mieszkanie",
+      "title": "Mieszkanie 4 pok. słoneczne, po remoncie",
+      "city": "Łódź",
+      "district": "Górna",
+      "location": "📍 Łódź, Górna",
+      "area_m2": 85,
+      "rooms": 4,
+      "floor": 10,
+      "max_floor": 15,
+      "year_built": 2018,
+      "standard": "Developerski",
+      "price": 627000,
+      "price_pm2": 7373,
+      "price_display": "627 000 zł",
+      "price_pm2_display": "7 373 zł/m²",
+      "portal": "Otodom",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-18",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": 1,
+      "ai_offers_pm2": 7800,
+      "ai_rcn_pm2": 7300,
+      "emoji": "🏢",
+      "img_class": "i1",
+      "added_at": "2026-07-30T19:17:04.034779+00:00",
+      "added_display": "3d temu"
+    },
+    {
+      "id": "finderdom-00021",
+      "type": "mieszkanie",
+      "title": "Rozkładowe 2 pokoje przy parku",
+      "city": "Kraków",
+      "district": "Zabłocie",
+      "location": "📍 Kraków, Zabłocie",
+      "area_m2": 48,
+      "rooms": 2,
+      "floor": 4,
+      "max_floor": 7,
+      "year_built": 2020,
+      "standard": "Do remontu",
+      "price": 587000,
+      "price_pm2": 12221,
+      "price_display": "587 000 zł",
+      "price_pm2_display": "12 221 zł/m²",
+      "portal": "Domy.pl",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-21",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": 1,
+      "ai_offers_pm2": 12800,
+      "ai_rcn_pm2": 12100,
+      "emoji": "🏙️",
+      "img_class": "i3",
+      "added_at": "2026-08-01T09:17:04.034808+00:00",
+      "added_display": "2d temu"
+    },
+    {
+      "id": "finderdom-00014",
+      "type": "mieszkanie",
+      "title": "3-pokojowe do własnej aranżacji",
+      "city": "Wrocław",
+      "district": "Fabryczna",
+      "location": "📍 Wrocław, Fabryczna",
+      "area_m2": 55,
+      "rooms": 3,
+      "floor": 8,
+      "max_floor": 13,
+      "year_built": 2012,
+      "standard": "Po remoncie",
+      "price": 735000,
+      "price_pm2": 13362,
+      "price_display": "735 000 zł",
+      "price_pm2_display": "13 362 zł/m²",
+      "portal": "Domy.pl",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-14",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": 2,
+      "ai_offers_pm2": 13800,
+      "ai_rcn_pm2": 13100,
+      "emoji": "🏘️",
+      "img_class": "i6",
+      "added_at": "2026-07-27T06:17:04.034741+00:00",
+      "added_display": "7d temu"
+    },
+    {
+      "id": "finderdom-00022",
+      "type": "mieszkanie",
+      "title": "Nowoczesne 1 pokoje po generalnym remoncie",
+      "city": "Gdańsk",
+      "district": "Wrzeszcz",
+      "location": "📍 Gdańsk, Wrzeszcz",
+      "area_m2": 32,
+      "rooms": 1,
+      "floor": 0,
+      "max_floor": 1,
+      "year_built": 2022,
+      "standard": "Developerski",
+      "price": 441000,
+      "price_pm2": 13770,
+      "price_display": "441 000 zł",
+      "price_pm2_display": "13 770 zł/m²",
+      "portal": "Gratka",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-22",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": 2,
+      "ai_offers_pm2": 14200,
+      "ai_rcn_pm2": 13500,
+      "emoji": "🏙️",
+      "img_class": "i1",
+      "added_at": "2026-08-01T17:17:04.034816+00:00",
+      "added_display": "41h temu"
+    },
+    {
+      "id": "finderdom-00006",
+      "type": "mieszkanie",
+      "title": "Mieszkanie inwestycyjne, 4 pok.",
+      "city": "Wrocław",
+      "district": "Psie Pole",
+      "location": "📍 Wrocław, Psie Pole",
+      "area_m2": 85,
+      "rooms": 4,
+      "floor": 3,
+      "max_floor": 8,
+      "year_built": 2005,
+      "standard": "Do remontu",
+      "price": 1147000,
+      "price_pm2": 13493,
+      "price_display": "1 147 000 zł",
+      "price_pm2_display": "13 493 zł/m²",
+      "portal": "Otodom",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-6",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": 3,
+      "ai_offers_pm2": 13800,
+      "ai_rcn_pm2": 13100,
+      "emoji": "🏛️",
+      "img_class": "i3",
+      "added_at": "2026-07-25T19:17:04.034651+00:00",
+      "added_display": "8d temu"
+    },
+    {
+      "id": "finderdom-00008",
+      "type": "mieszkanie",
+      "title": "3 pok. z widokiem, wysokie piętro",
+      "city": "Gdańsk",
+      "district": "Śródmieście",
+      "location": "📍 Gdańsk, Śródmieście",
+      "area_m2": 72,
+      "rooms": 3,
+      "floor": 9,
+      "max_floor": 12,
+      "year_built": 1995,
+      "standard": "Developerski",
+      "price": 1001000,
+      "price_pm2": 13905,
+      "price_display": "1 001 000 zł",
+      "price_pm2_display": "13 905 zł/m²",
+      "portal": "OLX",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-8",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": 3,
+      "ai_offers_pm2": 14200,
+      "ai_rcn_pm2": 13500,
+      "emoji": "🏛️",
+      "img_class": "i1",
+      "added_at": "2026-07-29T03:17:04.034681+00:00",
+      "added_display": "5d temu"
+    },
+    {
+      "id": "finderdom-00017",
+      "type": "mieszkanie",
+      "title": "3 pokoje w nowym budownictwie",
+      "city": "Lublin",
+      "district": "Czuby",
+      "location": "📍 Lublin, Czuby",
+      "area_m2": 72,
+      "rooms": 3,
+      "floor": 7,
+      "max_floor": 8,
+      "year_built": 2005,
+      "standard": "Do remontu",
+      "price": 593000,
+      "price_pm2": 8240,
+      "price_display": "593 000 zł",
+      "price_pm2_display": "8 240 zł/m²",
+      "portal": "Gratka",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-17",
+      "verdict_badge": "normal",
+      "verdict_text": "✓ W NORMIE",
+      "verdict_full": "CENA ZGODNA Z RYNKIEM",
+      "ai_delta_pct": 3,
+      "ai_offers_pm2": 8500,
+      "ai_rcn_pm2": 8000,
+      "emoji": "🌆",
+      "img_class": "i6",
+      "added_at": "2026-08-02T09:17:04.034769+00:00",
+      "added_display": "25h temu"
+    },
+    {
+      "id": "finderdom-00010",
+      "type": "mieszkanie",
+      "title": "4 pokoje z balkonem, wysoki standard",
+      "city": "Poznań",
+      "district": "Nowe Miasto",
+      "location": "📍 Poznań, Nowe Miasto",
+      "area_m2": 78,
+      "rooms": 4,
+      "floor": 10,
+      "max_floor": 14,
+      "year_built": 2015,
+      "standard": "Do remontu",
+      "price": 918000,
+      "price_pm2": 11772,
+      "price_display": "918 000 zł",
+      "price_pm2_display": "11 772 zł/m²",
+      "portal": "Domy.pl",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-10",
+      "verdict_badge": "over",
+      "verdict_text": "⚠️ ZAWYŻONA",
+      "verdict_full": "ZAWYŻONA o 8% powyżej transakcji",
+      "ai_delta_pct": 8,
+      "ai_offers_pm2": 11500,
+      "ai_rcn_pm2": 10900,
+      "emoji": "🏛️",
+      "img_class": "i4",
+      "added_at": "2026-07-31T06:17:04.034702+00:00",
+      "added_display": "3d temu"
+    },
+    {
+      "id": "finderdom-00026",
+      "type": "mieszkanie",
+      "title": "Apartament 2 pok., taras, garaż",
+      "city": "Wrocław",
+      "district": "Fabryczna",
+      "location": "📍 Wrocław, Fabryczna",
+      "area_m2": 52,
+      "rooms": 2,
+      "floor": 2,
+      "max_floor": 5,
+      "year_built": 2012,
+      "standard": "Developerski",
+      "price": 783000,
+      "price_pm2": 15064,
+      "price_display": "783 000 zł",
+      "price_pm2_display": "15 064 zł/m²",
+      "portal": "Domy.pl",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-26",
+      "verdict_badge": "over",
+      "verdict_text": "⚠️ ZAWYŻONA",
+      "verdict_full": "ZAWYŻONA o 15% powyżej transakcji",
+      "ai_delta_pct": 15,
+      "ai_offers_pm2": 13800,
+      "ai_rcn_pm2": 13100,
+      "emoji": "🏙️",
+      "img_class": "i6",
+      "added_at": "2026-07-25T19:17:04.034853+00:00",
+      "added_display": "8d temu"
+    },
+    {
+      "id": "finderdom-00027",
+      "type": "mieszkanie",
+      "title": "4 pokoje z balkonem, wysoki standard",
+      "city": "Kraków",
+      "district": "Prądnik Biały",
+      "location": "📍 Kraków, Prądnik Biały",
+      "area_m2": 78,
+      "rooms": 4,
+      "floor": 2,
+      "max_floor": 4,
+      "year_built": 2022,
+      "standard": "Do remontu",
+      "price": 1104000,
+      "price_pm2": 14157,
+      "price_display": "1 104 000 zł",
+      "price_pm2_display": "14 157 zł/m²",
+      "portal": "Otodom",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-27",
+      "verdict_badge": "over",
+      "verdict_text": "⚠️ ZAWYŻONA",
+      "verdict_full": "ZAWYŻONA o 17% powyżej transakcji",
+      "ai_delta_pct": 17,
+      "ai_offers_pm2": 12800,
+      "ai_rcn_pm2": 12100,
+      "emoji": "🏢",
+      "img_class": "i3",
+      "added_at": "2026-07-31T12:17:04.034862+00:00",
+      "added_display": "2d temu"
+    },
+    {
+      "id": "finderdom-00015",
+      "type": "dom",
+      "title": "Dom wolnostojący, działka 600 m²",
+      "city": "Katowice",
+      "district": "Brynów",
+      "location": "📍 Katowice, Brynów",
+      "area_m2": 120,
+      "rooms": 4,
+      "floor": 0,
+      "max_floor": 0,
+      "year_built": 2024,
+      "standard": "",
+      "price": 1230000,
+      "price_pm2": 10248,
+      "price_display": "1 230 000 zł",
+      "price_pm2_display": "10 248 zł/m²",
+      "portal": "Otodom",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-15",
+      "verdict_badge": "over",
+      "verdict_text": "⚠️ ZAWYŻONA",
+      "verdict_full": "ZAWYŻONA o 22% powyżej transakcji",
+      "ai_delta_pct": 22,
+      "ai_offers_pm2": 8900,
+      "ai_rcn_pm2": 8400,
+      "emoji": "🏡",
+      "img_class": "i2",
+      "added_at": "2026-07-28T12:17:04.034750+00:00",
+      "added_display": "5d temu"
+    },
+    {
+      "id": "finderdom-00002",
+      "type": "mieszkanie",
+      "title": "Nowoczesne 3 pokoje po generalnym remoncie",
+      "city": "Kraków",
+      "district": "Bieżanów",
+      "location": "📍 Kraków, Bieżanów",
+      "area_m2": 55,
+      "rooms": 3,
+      "floor": 4,
+      "max_floor": 5,
+      "year_built": 1985,
+      "standard": "Do remontu",
+      "price": 865000,
+      "price_pm2": 15730,
+      "price_display": "865 000 zł",
+      "price_pm2_display": "15 730 zł/m²",
+      "portal": "Morizon",
+      "source_url": "https://www.otodom.pl/pl/oferta/mock-2",
+      "verdict_badge": "over",
+      "verdict_text": "⚠️ ZAWYŻONA",
+      "verdict_full": "ZAWYŻONA o 30% powyżej transakcji",
+      "ai_delta_pct": 30,
+      "ai_offers_pm2": 12800,
+      "ai_rcn_pm2": 12100,
+      "emoji": "🏘️",
+      "img_class": "i1",
+      "added_at": "2026-07-30T08:17:04.034607+00:00",
+      "added_display": "4d temu"
+    }
+  ]
 }
-
-document.querySelectorAll('#propertyType .chip').forEach(c => {
-  c.addEventListener('click', (e) => {
-    e.stopImmediatePropagation();
-    document.querySelectorAll('#propertyType .chip').forEach(x => x.classList.remove('active'));
-    c.classList.add('active');
-    updateSubType(c.dataset.type);
-  }, true);
-});
-</script>
-
-</body>
-</html>

@@ -337,6 +337,96 @@
       </div>
     </div>
 
+    <!-- Collapsible: More filters (optional) -->
+    <div class="filter-group" style="border-bottom:none;padding-bottom:0">
+      <button id="toggleMore" style="width:100%;padding:12px;background:rgba(255,184,0,0.08);border:1px dashed rgba(255,184,0,0.35);border-radius:10px;color:#FFB800;font-weight:800;font-size:12px;letter-spacing:0.5px;cursor:pointer;text-transform:uppercase;text-align:center;transition:all 0.2s">
+        🔽 Więcej filtrów (opcjonalne)
+      </button>
+    </div>
+
+    <div id="moreFilters" style="display:none">
+      <div class="filter-group">
+        <div class="filter-title">🏗️ Materiał budynku</div>
+        <div class="chip-group">
+          <div class="chip">🧱 Cegła</div>
+          <div class="chip">🏢 Wielka płyta</div>
+          <div class="chip">🏛️ Żelbet</div>
+          <div class="chip">🪵 Drewno</div>
+          <div class="chip">🧊 Silikat</div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">🌡️ Ogrzewanie</div>
+        <div class="chip-group">
+          <div class="chip">🏙️ Miejskie</div>
+          <div class="chip">🔥 Gazowe</div>
+          <div class="chip">♨️ Piec / kominek</div>
+          <div class="chip">⚡ Elektryczne</div>
+          <div class="chip">🌡️ Pompa ciepła</div>
+          <div class="chip">☀️ Solary / fotowoltaika</div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">🚗 Parking</div>
+        <div class="chip-group">
+          <div class="chip">🅿️ Garaż podziemny</div>
+          <div class="chip">🏚️ Garaż naziemny</div>
+          <div class="chip">📍 Miejsce postojowe</div>
+          <div class="chip">🛣️ Na ulicy</div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">🔒 Zabezpieczenia</div>
+        <div class="chip-group">
+          <div class="chip">🔔 Domofon</div>
+          <div class="chip">📹 Wideodomofon</div>
+          <div class="chip">👮 Ochrona 24h</div>
+          <div class="chip">🎥 Monitoring</div>
+          <div class="chip">🚧 Osiedle zamknięte</div>
+          <div class="chip">🚨 Alarm</div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">🌳 Otoczenie</div>
+        <div class="chip-group">
+          <div class="chip">🌳 Park / zieleń</div>
+          <div class="chip">🌲 Las</div>
+          <div class="chip">💧 Jezioro / rzeka</div>
+          <div class="chip">🏙️ Centrum</div>
+          <div class="chip">🏫 Blisko szkoły</div>
+          <div class="chip">🏥 Blisko przychodni</div>
+          <div class="chip">🛒 Blisko sklepów</div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">🚇 Komunikacja</div>
+        <div class="chip-group">
+          <div class="chip">🚇 Metro (do 500m)</div>
+          <div class="chip">🚊 Tramwaj (do 300m)</div>
+          <div class="chip">🚌 Autobus (do 200m)</div>
+          <div class="chip">🚄 Kolej / SKM</div>
+          <div class="chip">🛣️ Autostrada (do 5km)</div>
+          <div class="chip">✈️ Blisko lotniska</div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">📋 Stan prawny</div>
+        <div class="chip-group">
+          <div class="chip">🏛️ Własność</div>
+          <div class="chip">📜 Spółdzielcze własnościowe</div>
+          <div class="chip">📄 Spółdzielcze lokatorskie</div>
+          <div class="chip">✓ Księga wieczysta</div>
+          <div class="chip">🚫 Bez obciążeń</div>
+        </div>
+      </div>
+    </div>
+
     <div class="filter-actions">
       <button class="btn-clear">Wyczyść</button>
       <button class="btn-apply">Zastosuj</button>
@@ -456,6 +546,26 @@ document.querySelector('.sort-select')?.addEventListener('change', (e) => {
 document.querySelectorAll('.chip').forEach(c => {
   c.addEventListener('click', () => c.classList.toggle('active'));
 });
+
+// Toggle "More filters" section
+const toggleBtn = document.getElementById('toggleMore');
+const moreSection = document.getElementById('moreFilters');
+if (toggleBtn && moreSection) {
+  toggleBtn.addEventListener('click', () => {
+    const isOpen = moreSection.style.display === 'block';
+    moreSection.style.display = isOpen ? 'none' : 'block';
+    toggleBtn.innerHTML = isOpen ? '🔽 Więcej filtrów (opcjonalne)' : '🔼 Zwiń dodatkowe filtry';
+    if (!isOpen) {
+      // Re-bind chip handlers for newly-visible chips
+      moreSection.querySelectorAll('.chip').forEach(c => {
+        if (!c.dataset.bound) {
+          c.dataset.bound = '1';
+          c.addEventListener('click', () => c.classList.toggle('active'));
+        }
+      });
+    }
+  });
+}
 
 // Property type = radio (single select) + dynamic sub-type
 const SUB_TYPES = {

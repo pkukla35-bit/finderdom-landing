@@ -87,6 +87,7 @@
   .b-deal{background:rgba(34,197,94,0.95);color:#052e16}
   .b-normal{background:rgba(59,130,246,0.95);color:#0c1a3d}
   .b-over{background:rgba(239,68,68,0.95);color:#3d0a0a}
+  .b-outlier{background:rgba(148,163,184,0.95);color:#0f172a}
   .b-new{background:rgba(255,184,0,0.95);color:#0B1836}
   .card-portal{position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.6);color:#fff;padding:3px 8px;border-radius:100px;font-size:9px;font-weight:700;backdrop-filter:blur(8px)}
   .card-body{padding:16px}
@@ -470,7 +471,7 @@
     </div>
 
     <div class="load-more">
-      <button class="load-btn" onclick="alert('W pełnej wersji tutaj załaduje się kolejnych 20 ofert z prawdziwych scraperów.\n\nZapisz się na newsletter aby otrzymać powiadomienie o starcie!')">Załaduj więcej ofert ↓</button>
+      <button id="loadMoreBtn" class="load-btn" style="display:none">Załaduj więcej ofert ↓</button>
     </div>
   </main>
 
@@ -479,6 +480,9 @@
 <script>
 // Real listings loaded from /data/listings.json (updated daily by scrapers)
 let LISTINGS = [];
+let CURRENT_FILTERED = [];
+const PAGE_SIZE = 60;
+let currentPage = 1;
 
 async function loadListings() {
   const grid = document.getElementById('grid');
@@ -498,23 +502,32 @@ async function loadListings() {
 }
 
 function renderListings(list) {
-  const grid = document.getElementById('grid');
   // Apply "only originals" filter if active
   const onlyOrigActive = document.getElementById('chipOnlyOrig')?.classList.contains('active');
-  const filtered = onlyOrigActive ? list.filter(l => l.is_original !== false) : list;
-  document.getElementById('count').textContent = filtered.length;
-  if (filtered.length === 0) {
+  CURRENT_FILTERED = onlyOrigActive ? list.filter(l => l.is_original !== false) : list;
+  currentPage = 1;
+  document.getElementById('count').textContent = CURRENT_FILTERED.length;
+  renderPage();
+}
+
+function renderPage() {
+  const grid = document.getElementById('grid');
+  const btn = document.getElementById('loadMoreBtn');
+  if (CURRENT_FILTERED.length === 0) {
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Brak wyników</div>Zmień filtry aby zobaczyć więcej ofert</div>';
+    if (btn) btn.style.display = 'none';
     return;
   }
-  grid.innerHTML = filtered.map(l => {
+  const slice = CURRENT_FILTERED.slice(0, currentPage * PAGE_SIZE);
+  grid.innerHTML = slice.map(l => {
     let specs = `📐 ${l.area_m2} m²`;
     if (l.rooms > 0) specs += ` · 🛏️ ${l.rooms} pok.`;
     if (l.floor > 0) specs += ` · 🏢 ${l.floor} piętro`;
     if (l.type === 'dom') specs += ' · 🏡 Dom';
     if (l.type === 'dzialka') specs += ' · 🌳 Działka';
+    const targetUrl = l.source_url || `/oferta.html?id=${l.id}`;
     return `
-      <a href="/oferta.html?id=${l.id}" class="card">
+      <a href="${targetUrl}" ${l.source_url ? 'target="_blank" rel="noopener"' : ''} class="card">
         <div class="card-img ${l.img_class}">
           ${l.emoji}
           <div class="card-badge b-${l.verdict_badge}">${l.verdict_text}</div>
@@ -534,7 +547,25 @@ function renderListings(list) {
       </a>
     `;
   }).join('');
+  // Load more button
+  const remaining = CURRENT_FILTERED.length - slice.length;
+  if (btn) {
+    if (remaining > 0) {
+      btn.style.display = 'inline-block';
+      btn.textContent = `Załaduj więcej ofert ↓ (${remaining.toLocaleString('pl-PL')} pozostało)`;
+    } else {
+      btn.style.display = 'none';
+    }
+  }
 }
+
+// Load more button click
+document.getElementById('loadMoreBtn')?.addEventListener('click', () => {
+  currentPage++;
+  renderPage();
+  // scroll do nowych ofert
+  window.scrollBy({top: 400, behavior: 'smooth'});
+});
 
 // Load on start
 loadListings();

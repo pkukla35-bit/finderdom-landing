@@ -336,15 +336,31 @@ function fmt(n) { return (n||0).toLocaleString('pl-PL'); }
 
 async function loadOffer() {
   const params = new URLSearchParams(location.search);
-  const id = params.get('id');
-  if (!id) { showError(); return; }
+  let id = params.get('id');
 
   try {
     const r = await fetch('/data/listings.json?v=' + Date.now());
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
     const listings = data.listings || [];
-    const offer = listings.find(l => l.id === id);
+    if (!listings.length) { showError(); return; }
+
+    let offer;
+    if (id) {
+      offer = listings.find(l => l.id === id);
+    } else {
+      // Brak ?id= → prezentacja: wybierz losową OKAZJĘ z mieszkania z dobrym zdjęciem
+      const deals = listings.filter(l =>
+        l.verdict_badge === 'deal' &&
+        l.type === 'mieszkanie' &&
+        l.image_url &&
+        l.is_original !== false
+      );
+      offer = deals.length
+        ? deals[Math.floor(Math.random() * Math.min(deals.length, 30))]
+        : listings[0];
+    }
+
     if (!offer) { showError(); return; }
     renderOffer(offer, listings);
   } catch (e) {
@@ -540,7 +556,6 @@ el('alertBtn')?.addEventListener('click', async () => {
 loadOffer();
 </script>
 
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"7f7b0fd8732c4326aae4b9d58d5c514a"}' crossorigin="anonymous"></script>
 </body>
 </html>
 

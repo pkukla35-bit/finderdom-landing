@@ -272,16 +272,16 @@
     <div class="filter-group">
       <div class="filter-title">💰 Cena za m² (zł)</div>
       <div class="filter-row">
-        <input type="number" placeholder="od" value="">
-        <input type="number" placeholder="do" value="">
+        <input type="number" id="fPpm2From" placeholder="od" value="">
+        <input type="number" id="fPpm2To" placeholder="do" value="">
       </div>
     </div>
 
     <div class="filter-group">
       <div class="filter-title">📐 Powierzchnia (m²)</div>
       <div class="filter-row">
-        <input type="number" placeholder="od" value="">
-        <input type="number" placeholder="do" value="">
+        <input type="number" id="fAreaFrom" placeholder="od" value="">
+        <input type="number" id="fAreaTo" placeholder="do" value="">
       </div>
     </div>
 
@@ -502,7 +502,9 @@ async function loadListings() {
     const data = await res.json();
     LISTINGS = data.listings || [];
     count.textContent = LISTINGS.length;
-    renderListings(LISTINGS);
+    // Zastosuj domyślne filtry od razu (hero: Mieszkanie + Sprzedaż, sidebar: Prywatna+Pośrednik, Tylko oryginały)
+    if (typeof applyAllFilters === 'function') applyAllFilters();
+    else renderListings(LISTINGS);
   } catch (err) {
     console.error('Fetch listings failed:', err);
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#f87171">❌ Błąd ładowania. Odśwież stronę.</div>';
@@ -610,8 +612,12 @@ document.querySelector('.sort-select')?.addEventListener('change', (e) => {
   renderListings(sorted);
 });
 
-// Chip toggling (default: multi-select)
+// Chip toggling (default: multi-select) — pomija chipy z dedykowanymi handlerami
 document.querySelectorAll('.chip').forEach(c => {
+  // Skip: chipy sellera (własny handler), chip onlyOrig (własny), chipy typu (radio w propertyType)
+  if (c.hasAttribute('data-seller')) return;
+  if (c.id === 'chipOnlyOrig') return;
+  if (c.closest('#propertyType')) return;
   c.addEventListener('click', () => c.classList.toggle('active'));
 });
 
@@ -692,19 +698,29 @@ document.querySelectorAll('#propertyType .chip').forEach(c => {
   }, true);
 });
 
-// Apply button
+// Apply / Clear buttons (sidebar)
 document.querySelector('.btn-apply')?.addEventListener('click', () => {
-  const activeType = document.querySelector('#propertyType .chip.active');
-  const typeKey = activeType?.dataset.type;
-  const filtered = LISTINGS.filter(l => !typeKey || l.type === typeKey);
-  renderListings(filtered);
+  applyAllFilters();
 });
 document.querySelector('.btn-clear')?.addEventListener('click', () => {
-  renderListings(LISTINGS);
+  // Reset hero
+  const q = document.getElementById('q'); if (q) q.value = '';
+  const ht = document.getElementById('heroType'); if (ht) ht.value = 'mieszkanie';
+  const htr = document.getElementById('heroTrans'); if (htr) htr.value = 'sprzedaz';
+  const hp = document.getElementById('heroPrice'); if (hp) hp.value = '';
+  // Reset sidebar inputs
+  ['fPpm2From','fPpm2To','fAreaFrom','fAreaTo'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  // Reset seller chips (aktywuj wszystkie 4)
+  document.querySelectorAll('.chip[data-seller]').forEach(c => c.classList.add('active'));
+  // Reset onlyOrig (aktywne = pokazuj tylko oryginały)
+  document.getElementById('chipOnlyOrig')?.classList.add('active');
+  applyAllFilters();
 });
 
 // ============================================================================
-// HERO SEARCH BAR — filtracja po tekście + typ + transakcja + max cena
+// UNIVERSAL FILTER — łączy hero search + chipy sellera + inputy ceny/powierzchni
 // ============================================================================
 function normalizeText(s) {
   if (!s) return '';
@@ -713,52 +729,103 @@ function normalizeText(s) {
   return s.toLowerCase().replace(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, c => map[c] || c);
 }
 
-function applyHeroSearch() {
+function collectFilterState() {
   const q = normalizeText(document.getElementById('q')?.value.trim() || '');
   const type = document.getElementById('heroType')?.value || '';
   const trans = document.getElementById('heroTrans')?.value || '';
   const priceMax = parseInt(document.getElementById('heroPrice')?.value || '0', 10);
 
+  // Sellers — multi-select z chipów [data-seller]
+  const activeSellers = Array.from(document.querySelectorAll('.chip.active[data-seller]'))
+    .map(c => c.dataset.seller);
+
+  const onlyOrig = document.getElementById('chipOnlyOrig')?.classList.contains('active');
+
+  const ppm2From = parseInt(document.getElementById('fPpm2From')?.value || '0', 10);
+  const ppm2To   = parseInt(document.getElementById('fPpm2To')?.value   || '0', 10);
+  const areaFrom = parseFloat(document.getElementById('fAreaFrom')?.value || '0');
+  const areaTo   = parseFloat(document.getElementById('fAreaTo')?.value   || '0');
+
+  return { q, type, trans, priceMax, activeSellers, onlyOrig, ppm2From, ppm2To, areaFrom, areaTo };
+}
+
+function applyAllFilters() {
+  const f = collectFilterState();
+
   const filtered = LISTINGS.filter(l => {
-    if (type && l.type !== type) return false;
-    if (trans && l.transaction !== trans) return false;
-    if (priceMax && l.price > priceMax) return false;
-    if (q) {
+    if (f.type && l.type !== f.type) return false;
+    if (f.trans && l.transaction !== f.trans) return false;
+    if (f.priceMax && l.price > f.priceMax) return false;
+    if (f.q) {
       const hay = normalizeText((l.city || '') + ' ' + (l.district || '') + ' ' + (l.title || ''));
-      // Wspiera wiele słów — wszystkie muszą pasować
-      const words = q.split(/\s+/).filter(Boolean);
+      const words = f.q.split(/\s+/).filter(Boolean);
       if (!words.every(w => hay.includes(w))) return false;
     }
+    if (f.activeSellers.length > 0 && !f.activeSellers.includes(l.seller_type)) return false;
+    if (f.onlyOrig && l.is_original === false) return false;
+    if (f.ppm2From && l.price_pm2 < f.ppm2From) return false;
+    if (f.ppm2To   && l.price_pm2 > f.ppm2To)   return false;
+    if (f.areaFrom && l.area_m2   < f.areaFrom) return false;
+    if (f.areaTo   && l.area_m2   > f.areaTo)   return false;
     return true;
   });
 
-  // Aktualizacja chipa typu w sidebarze (żeby UI był spójny)
-  if (type) {
+  // Sync sidebar chip typu (jeśli hero-select zmienił typ)
+  if (f.type) {
     document.querySelectorAll('#propertyType .chip').forEach(c => {
-      c.classList.toggle('active', c.dataset.type === type);
+      c.classList.toggle('active', c.dataset.type === f.type);
     });
-    if (typeof updateSubType === 'function') updateSubType(type);
+    if (typeof updateSubType === 'function') updateSubType(f.type);
   }
 
-  renderListings(filtered);
+  // Bezpieczne renderowanie: bypass onlyOrig filter w renderListings (już zastosowany)
+  const grid = document.getElementById('grid');
+  CURRENT_FILTERED = filtered;
+  currentPage = 1;
+  document.getElementById('count').textContent = filtered.length;
+  renderPage();
 }
 
-// Debounce dla live-search w input
-let heroSearchTimer = null;
-function heroSearchDebounced() {
-  clearTimeout(heroSearchTimer);
-  heroSearchTimer = setTimeout(applyHeroSearch, 250);
+// Alias backward-compat (stary hero-search wywołuje applyHeroSearch)
+function applyHeroSearch() { applyAllFilters(); }
+
+// Debounce dla live-search
+let filterTimer = null;
+function applyAllFiltersDebounced() {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(applyAllFilters, 250);
 }
 
-// Podpięcie eventów
-document.getElementById('q')?.addEventListener('input', heroSearchDebounced);
+// Podpięcie eventów HERO
+document.getElementById('q')?.addEventListener('input', applyAllFiltersDebounced);
 document.getElementById('q')?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); applyHeroSearch(); }
+  if (e.key === 'Enter') { e.preventDefault(); applyAllFilters(); }
 });
-document.getElementById('heroType')?.addEventListener('change', applyHeroSearch);
-document.getElementById('heroTrans')?.addEventListener('change', applyHeroSearch);
-document.getElementById('heroPrice')?.addEventListener('change', applyHeroSearch);
-document.getElementById('heroSearchBtn')?.addEventListener('click', applyHeroSearch);
+document.getElementById('heroType')?.addEventListener('change', applyAllFilters);
+document.getElementById('heroTrans')?.addEventListener('change', applyAllFilters);
+document.getElementById('heroPrice')?.addEventListener('change', applyAllFilters);
+document.getElementById('heroSearchBtn')?.addEventListener('click', applyAllFilters);
+
+// Podpięcie eventów SIDEBAR — chipy sellera (multi-select)
+document.querySelectorAll('.chip[data-seller]').forEach(c => {
+  c.addEventListener('click', (e) => {
+    e.stopImmediatePropagation();
+    c.classList.toggle('active');
+    applyAllFilters();
+  }, true);
+});
+
+// Chip "Tylko oryginały" — trigger filtracji
+document.getElementById('chipOnlyOrig')?.addEventListener('click', (e) => {
+  e.stopImmediatePropagation();
+  e.currentTarget.classList.toggle('active');
+  applyAllFilters();
+}, false);
+
+// Inputy cena/powierzchnia — live
+['fPpm2From','fPpm2To','fAreaFrom','fAreaTo'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', applyAllFiltersDebounced);
+});
 
 </script>
 

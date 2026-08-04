@@ -692,9 +692,15 @@ document.querySelectorAll('#propertyType .chip').forEach(c => {
     document.querySelectorAll('#propertyType .chip').forEach(x => x.classList.remove('active'));
     c.classList.add('active');
     updateSubType(c.dataset.type);
-    // Filter listings by type
-    const filtered = LISTINGS.filter(l => l.type === c.dataset.type);
-    renderListings(filtered);
+    // SYNC z hero-select + wywołaj wspólną filtrację (uwzględnia sellera, cenę, itp.)
+    const heroType = document.getElementById('heroType');
+    if (heroType) heroType.value = c.dataset.type;
+    if (typeof applyAllFilters === 'function') {
+      applyAllFilters();
+    } else {
+      const filtered = LISTINGS.filter(l => l.type === c.dataset.type);
+      renderListings(filtered);
+    }
   }, true);
 });
 

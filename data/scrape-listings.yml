@@ -1,0 +1,97 @@
+name: Scrape Otodom Listings
+
+# ┌────────────────────────────────────────────────────────────────
+# │ FinderDom.pl — automatyczny scraper Otodom
+# │
+# │ Tryby uruchamiania:
+# │   1) Manual: zakładka „Actions" → „Scrape Otodom Listings" → „Run workflow"
+# │   2) Cron:   codziennie o 04:15 UTC (06:15 czasu polskiego)
+# │              — WYŁĄCZONY do czasu potwierdzenia stabilności.
+# │              Aby włączyć: odkomentuj sekcję `schedule` poniżej.
+# │
+# │ Efekt: aktualizacja pliku data/listings.json + auto-commit do repo.
+# │        Vercel automatycznie zdeployuje nową wersję strony.
+# │
+# │ Safe-fail: jeśli scrape zwróci < 100 ofert (lub padnie), skrypt
+# │            NIE nadpisze listings.json i workflow zakończy się błędem.
+# └────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_pages:
+        description: "Ilość stron per kombinacja (typ×transakcja). 5 = ~3000 ofert."
+        required: true
+        default: "5"
+        type: string
+      max_listings:
+        description: "Górny limit ofert w JSON."
+        required: true
+        default: "4000"
+        type: string
+  # schedule:
+  #   - cron: "15 4 * * *"   # codziennie 04:15 UTC (06:15 Warsaw)
+
+# Uprawnienia: workflow musi móc commitować do repo
+permissions:
+  contents: write
+
+concurrency:
+  group: scraper-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scrape:
+    name: Scrape Otodom → data/listings.json
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scripts/requirements.txt
+
+      - name: Run scraper
+        env:
+          MAX_PAGES: ${{ github.event.inputs.max_pages || '5' }}
+          MAX_LISTINGS: ${{ github.event.inputs.max_listings || '4000' }}
+          MIN_LISTINGS: "100"
+          DELAY_MIN: "1.5"
+          DELAY_MAX: "3.0"
+        run: |
+          python scripts/otodom_scraper.py
+
+      - name: Show summary
+        if: always()
+        run: |
+          if [ -f data/listings.json ]; then
+            echo "===== listings.json summary ====="
+            python -c "import json; d=json.load(open('data/listings.json')); print('generated_at:', d.get('generated_at')); print('count:', d.get('count')); print('originals:', d.get('originals')); print('duplicates:', d.get('duplicates')); print('verdicts:', d.get('verdicts')); print('per_combo:', d.get('per_combo'))"
+            echo "size: $(du -h data/listings.json | cut -f1)"
+          else
+            echo "❌ data/listings.json nie istnieje"
+          fi
+
+      - name: Commit & push updated listings
+        run: |
+          if git diff --quiet data/listings.json; then
+            echo "ℹ️  Brak zmian w data/listings.json — nie commituję."
+            exit 0
+          fi
+          git config user.name  "FinderDom Bot"
+          git config user.email "bot@finderdom.pl"
+          git add data/listings.json
+          COUNT=$(python -c "import json; print(json.load(open('data/listings.json'))['count'])")
+          git commit -m "chore(data): scrape Otodom — ${COUNT} listings [skip ci]"
+          git push

@@ -145,27 +145,29 @@
 <div class="search-hero">
   <div class="search-bar">
     <input type="text" class="search-input" placeholder="🔍 Miasto, dzielnica lub słowo kluczowe..." id="q">
-    <select class="search-input">
-      <option>🏢 Mieszkanie</option>
-      <option>🏠 Dom</option>
-      <option>🌳 Działka</option>
-      <option>🏪 Lokal użytkowy</option>
-      <option>🏭 Magazyn</option>
-      <option>🅿️ Garaż</option>
+    <select class="search-input" id="heroType">
+      <option value="mieszkanie">🏢 Mieszkanie</option>
+      <option value="dom">🏠 Dom</option>
+      <option value="dzialka">🌳 Działka</option>
+      <option value="lokal">🏪 Lokal użytkowy</option>
+      <option value="garaz">🅿️ Garaż</option>
+      <option value="pokoj">🚪 Pokój</option>
+      <option value="">Wszystkie typy</option>
     </select>
-    <select class="search-input">
-      <option>Sprzedaż</option>
-      <option>Wynajem</option>
+    <select class="search-input" id="heroTrans">
+      <option value="sprzedaz">Sprzedaż</option>
+      <option value="wynajem">Wynajem</option>
+      <option value="">Sprzedaż + Wynajem</option>
     </select>
-    <select class="search-input">
-      <option>Cena do...</option>
-      <option>300 000 zł</option>
-      <option>500 000 zł</option>
-      <option>800 000 zł</option>
-      <option>1 000 000 zł</option>
-      <option>2 000 000 zł</option>
+    <select class="search-input" id="heroPrice">
+      <option value="">Cena do...</option>
+      <option value="300000">300 000 zł</option>
+      <option value="500000">500 000 zł</option>
+      <option value="800000">800 000 zł</option>
+      <option value="1000000">1 000 000 zł</option>
+      <option value="2000000">2 000 000 zł</option>
     </select>
-    <button class="search-btn">SZUKAJ</button>
+    <button class="search-btn" id="heroSearchBtn">SZUKAJ</button>
   </div>
 </div>
 
@@ -688,6 +690,64 @@ document.querySelector('.btn-apply')?.addEventListener('click', () => {
 document.querySelector('.btn-clear')?.addEventListener('click', () => {
   renderListings(LISTINGS);
 });
+
+// ============================================================================
+// HERO SEARCH BAR — filtracja po tekście + typ + transakcja + max cena
+// ============================================================================
+function normalizeText(s) {
+  if (!s) return '';
+  const map = {'ą':'a','ć':'c','ę':'e','ł':'l','ń':'n','ó':'o','ś':'s','ź':'z','ż':'z',
+               'Ą':'a','Ć':'c','Ę':'e','Ł':'l','Ń':'n','Ó':'o','Ś':'s','Ź':'z','Ż':'z'};
+  return s.toLowerCase().replace(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, c => map[c] || c);
+}
+
+function applyHeroSearch() {
+  const q = normalizeText(document.getElementById('q')?.value.trim() || '');
+  const type = document.getElementById('heroType')?.value || '';
+  const trans = document.getElementById('heroTrans')?.value || '';
+  const priceMax = parseInt(document.getElementById('heroPrice')?.value || '0', 10);
+
+  const filtered = LISTINGS.filter(l => {
+    if (type && l.type !== type) return false;
+    if (trans && l.transaction !== trans) return false;
+    if (priceMax && l.price > priceMax) return false;
+    if (q) {
+      const hay = normalizeText((l.city || '') + ' ' + (l.district || '') + ' ' + (l.title || ''));
+      // Wspiera wiele słów — wszystkie muszą pasować
+      const words = q.split(/\s+/).filter(Boolean);
+      if (!words.every(w => hay.includes(w))) return false;
+    }
+    return true;
+  });
+
+  // Aktualizacja chipa typu w sidebarze (żeby UI był spójny)
+  if (type) {
+    document.querySelectorAll('#propertyType .chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.type === type);
+    });
+    if (typeof updateSubType === 'function') updateSubType(type);
+  }
+
+  renderListings(filtered);
+}
+
+// Debounce dla live-search w input
+let heroSearchTimer = null;
+function heroSearchDebounced() {
+  clearTimeout(heroSearchTimer);
+  heroSearchTimer = setTimeout(applyHeroSearch, 250);
+}
+
+// Podpięcie eventów
+document.getElementById('q')?.addEventListener('input', heroSearchDebounced);
+document.getElementById('q')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); applyHeroSearch(); }
+});
+document.getElementById('heroType')?.addEventListener('change', applyHeroSearch);
+document.getElementById('heroTrans')?.addEventListener('change', applyHeroSearch);
+document.getElementById('heroPrice')?.addEventListener('change', applyHeroSearch);
+document.getElementById('heroSearchBtn')?.addEventListener('click', applyHeroSearch);
+
 </script>
 
 </body>

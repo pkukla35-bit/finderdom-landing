@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mieszkanie 2 pokoje Kraków Podgórze — 545 000 zł — FinderDom.pl</title>
-<meta name="description" content="Mieszkanie 2 pokoje, słoneczne, po remoncie. Kraków Podgórze. 48 m² · 3 piętro. AI Analiza ceny: OKAZJA - 6% poniżej realnych transakcji z RCN.">
+<title id="pageTitle">Oferta — FinderDom.pl</title>
+<meta name="description" content="Szczegółowa analiza AI oferty nieruchomości. Wyliczamy czy cena jest okazją, w normie, czy zawyżona.">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 
 <!-- GA4 -->
@@ -168,176 +168,381 @@
 </nav>
 
 <!-- Breadcrumb -->
-<div class="breadcrumb">
-  <a href="/">Strona główna</a> › <a href="/szukaj.html">Mieszkania</a> › <a href="#">Kraków</a> › Podgórze
+<div class="breadcrumb" id="breadcrumb">
+  <a href="/">Strona główna</a> › <a href="/szukaj.html">Wyszukiwarka</a> › <span id="bcType">Oferta</span>
 </div>
 
-<!-- Main content -->
-<div class="offer-container">
+<!-- Loading state -->
+<div id="loadingState" style="max-width:1400px;margin:0 auto;padding:80px 24px;text-align:center;color:#8ba3d4">
+  <div style="font-size:48px;margin-bottom:16px">⏳</div>
+  <div style="font-size:18px;font-weight:700;color:#fff">Wczytuję ofertę…</div>
+</div>
+
+<!-- Error state -->
+<div id="errorState" style="display:none;max-width:1400px;margin:0 auto;padding:80px 24px;text-align:center">
+  <div style="font-size:48px;margin-bottom:16px">😔</div>
+  <div style="font-size:20px;font-weight:800;color:#fff;margin-bottom:8px">Nie znaleziono oferty</div>
+  <div style="color:#8ba3d4;margin-bottom:20px">Oferta mogła zostać usunięta z bazy albo link jest niepoprawny.</div>
+  <a href="/szukaj.html" style="display:inline-block;background:#FFB800;color:#0B1836;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:800">Wróć do wyszukiwarki →</a>
+</div>
+
+<!-- Main content (dynamic) -->
+<div class="offer-container" id="offerContainer" style="display:none">
 
   <!-- Left: Gallery + Info -->
   <div>
     <!-- Gallery -->
     <div class="gallery">
-      <div class="gallery-main">
-        🏢
+      <div class="gallery-main" id="galleryMain">
+        <span id="galleryEmoji">🏢</span>
+        <img id="galleryPhoto" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
         <div class="gallery-badges">
-          <span class="b b-deal">🔥 Okazja · 6% poniżej RCN</span>
-          <span class="b b-portal">📷 12 zdjęć</span>
+          <span class="b" id="verdictBadge">🔥 Okazja</span>
+          <span class="b b-portal" id="portalBadge">Otodom</span>
         </div>
-        <a href="#" class="b-source" onclick="alert('W pełnej wersji ten link poprowadzi na oryginalne ogłoszenie w Otodom.\n\nAgregator FinderDom.pl NIE przechowuje zdjęć — linkujemy do źródła (respect praw autorskich portalu).');return false">Zobacz na Otodom ↗</a>
-      </div>
-      <div class="gallery-thumbs">
-        <div class="thumb active">🏢</div>
-        <div class="thumb">🛋️</div>
-        <div class="thumb">🛏️</div>
-        <div class="thumb">🍳</div>
-        <div class="thumb">🚿</div>
-        <div class="thumb">🌆</div>
+        <a id="sourceLink" href="#" target="_blank" rel="noopener" class="b-source">Zobacz na Otodom ↗</a>
       </div>
     </div>
 
     <!-- Title -->
     <div class="title-block">
-      <h1 class="offer-title">Mieszkanie 2 pokoje, słoneczne, po remoncie</h1>
-      <div class="offer-loc">📍 Kraków, Podgórze · ul. Kalwaryjska (przybliżona lokalizacja)</div>
+      <h1 class="offer-title" id="offerTitle">…</h1>
+      <div class="offer-loc" id="offerLoc">…</div>
       <div class="price-block">
-        <div class="price-main">545 000 zł</div>
-        <div class="price-m2">11 354 zł/m²</div>
+        <div class="price-main" id="priceMain">…</div>
+        <div class="price-m2" id="priceM2">…</div>
       </div>
     </div>
 
     <!-- AI Analysis -->
-    <div class="ai-analysis">
+    <div class="ai-analysis" id="aiAnalysis">
       <div class="ai-header">
         <span class="ai-tag">🧠 AI Analiza Ceny</span>
         <span class="ai-tag" style="background:rgba(255,184,0,0.15);color:#FFB800;border-color:rgba(255,184,0,0.4)">📊 Dane z RCN</span>
       </div>
-      <div class="ai-verdict">🔥 OKAZJA · 6% poniżej realnych transakcji</div>
-      <p class="ai-subtitle">Ta oferta jest o <strong style="color:#4ade80">746 zł/m²</strong> tańsza od średniej ceny transakcyjnej z aktów notarialnych w promieniu 1 km z ostatnich 90 dni.</p>
+      <div class="ai-verdict" id="aiVerdict">…</div>
+      <p class="ai-subtitle" id="aiSubtitle">…</p>
 
-      <div class="comparison">
+      <div class="comparison" id="comparison">
         <div class="comp-row">
           <div class="comp-label highlight">Ta oferta</div>
-          <div class="comp-bar"><div class="comp-fill this"></div></div>
-          <div class="comp-val highlight">11 354 zł/m²</div>
+          <div class="comp-bar"><div class="comp-fill this" id="barThis"></div></div>
+          <div class="comp-val highlight" id="valThis">…</div>
         </div>
         <div class="comp-row">
           <div class="comp-label">Śr. oferty w okolicy</div>
-          <div class="comp-bar"><div class="comp-fill offers"></div></div>
-          <div class="comp-val">12 800 zł/m²</div>
+          <div class="comp-bar"><div class="comp-fill offers" id="barOffers"></div></div>
+          <div class="comp-val" id="valOffers">…</div>
         </div>
         <div class="comp-row">
           <div class="comp-label">⭐ RCN — realne transakcje</div>
-          <div class="comp-bar"><div class="comp-fill rcn"></div></div>
-          <div class="comp-val">12 100 zł/m²</div>
+          <div class="comp-bar"><div class="comp-fill rcn" id="barRcn"></div></div>
+          <div class="comp-val" id="valRcn">…</div>
         </div>
       </div>
 
-      <div class="rcn-info">
-        📊 Analiza oparta na <strong>47 aktach notarialnych</strong> z Rejestru Cen Nieruchomości (RCN) w promieniu 1 km z ostatnich 6 miesięcy.
+      <div class="rcn-info" id="rcnInfo">
+        📊 Analiza AI porównuje cenę z medianą ofert w Twoim mieście dla tego typu nieruchomości.
       </div>
     </div>
 
     <!-- Specs -->
-    <div class="specs-grid">
-      <div class="spec"><div class="spec-label">Powierzchnia</div><div class="spec-val">48 m²</div></div>
-      <div class="spec"><div class="spec-label">Pokoje</div><div class="spec-val">2 pokoje</div></div>
-      <div class="spec"><div class="spec-label">Piętro</div><div class="spec-val">3 / 4</div></div>
-      <div class="spec"><div class="spec-label">Rok budowy</div><div class="spec-val">2015</div></div>
-      <div class="spec"><div class="spec-label">Standard</div><div class="spec-val">Po remoncie</div></div>
-      <div class="spec"><div class="spec-label">Typ budynku</div><div class="spec-val">Blok</div></div>
-      <div class="spec"><div class="spec-label">Ogrzewanie</div><div class="spec-val">Miejskie</div></div>
-      <div class="spec"><div class="spec-label">Winda</div><div class="spec-val">✓ Tak</div></div>
-      <div class="spec"><div class="spec-label">Balkon</div><div class="spec-val">✓ Tak</div></div>
-      <div class="spec"><div class="spec-label">Piwnica</div><div class="spec-val">✓ Tak</div></div>
-      <div class="spec"><div class="spec-label">Miejsce postojowe</div><div class="spec-val">Podziemne</div></div>
-      <div class="spec"><div class="spec-label">Data dodania</div><div class="spec-val">Dziś, 14:30</div></div>
+    <div class="specs-grid" id="specsGrid">
+      <!-- generated by JS -->
     </div>
 
     <!-- Description -->
     <div class="description">
-      <h3>📝 Opis oferty (z portalu Otodom)</h3>
-      <p>Oferuję do sprzedaży słoneczne, 2-pokojowe mieszkanie o powierzchni 48 m² w prestiżowej dzielnicy Podgórze. Lokal znajduje się na 3 piętrze 4-piętrowego bloku z windą, zbudowanego w 2015 roku.</p>
-      <p style="margin-top:12px">Mieszkanie zostało w pełni wyremontowane w 2023 roku — nowe instalacje, podłogi, kuchnia w zabudowie, łazienka wyłożona wysokiej jakości płytkami. Idealne dla pary lub singla, w bardzo dobrej lokalizacji z pełną infrastrukturą (sklepy, przystanki, park Bednarskiego).</p>
-      <p style="margin-top:12px;color:#8ba3d4;font-style:italic;font-size:12px">⚡ To jest przykładowa treść — w pełnej aplikacji opis pochodzi automatycznie z portalu źródłowego.</p>
+      <h3>📝 Opis oferty</h3>
+      <p id="offerDesc">…</p>
+      <p style="margin-top:12px;color:#8ba3d4;font-style:italic;font-size:12px">
+        📌 Aby zobaczyć pełny opis, dodatkowe zdjęcia i skontaktować się ze sprzedającym — kliknij „Zobacz na Otodom ↗" powyżej.
+      </p>
     </div>
   </div>
 
   <!-- Right: Sidebar -->
   <aside class="sidebar">
     <div class="contact-card">
-      <div class="contact-title">📞 Kontakt z ogłoszeniodawcą</div>
-      <a href="#" class="contact-btn" onclick="alert('W pełnej wersji tutaj wyświetli się numer telefonu z portalu źródłowego.\n\nAgregator FinderDom.pl nie pośredniczy w transakcjach — dostajesz bezpośredni link do sprzedającego.');return false">📱 Pokaż numer</a>
-      <a href="#" class="contact-btn secondary" onclick="alert('Przekierowanie na oryginalne ogłoszenie w Otodom (w nowej karcie).\n\nMożesz tam napisać wiadomość, zadzwonić lub sprawdzić więcej informacji.');return false">🔗 Zobacz na Otodom</a>
-      <div class="contact-mini">
-        <strong>💡 Wskazówka:</strong> Skontaktuj się z propozycją <strong style="color:#4ade80">640 000 zł</strong> — AI wykryła że sprzedawca prawdopodobnie zgodzi się na cenę bliższą realnej wartości rynkowej.
+      <div class="contact-title">📞 Kontakt ze sprzedającym</div>
+      <a id="ctaOtodom" href="#" target="_blank" rel="noopener" class="contact-btn">🔗 Otwórz w Otodom</a>
+      <a href="/#valuation" class="contact-btn secondary">💎 Wycena Premium (49 zł)</a>
+      <div class="contact-mini" id="ctaHint">
+        <strong>💡 Wskazówka:</strong> Kliknij „Otwórz w Otodom" żeby zobaczyć numer telefonu, pełny opis i wszystkie zdjęcia.
       </div>
     </div>
 
     <div class="alert-card">
       <h4>🔔 Powiadomienie o podobnych ofertach</h4>
-      <p>Ustaw alert i dostaniesz email gdy pojawi się podobna oferta (Kraków, Podgórze, 2 pok., do 600k zł).</p>
-      <input type="email" class="alert-input" placeholder="twoj@email.pl">
-      <button class="alert-btn" onclick="alert('W pełnej wersji stworzymy Twój alert i będziemy wysyłać powiadomienia. Zapisz się teraz na newsletter aby dostać dostęp gdy startujemy!')">Ustaw alert</button>
+      <p id="alertDesc">Ustaw alert i dostaniesz email gdy pojawi się podobna oferta.</p>
+      <input type="email" class="alert-input" placeholder="twoj@email.pl" id="alertEmail">
+      <button class="alert-btn" id="alertBtn">Ustaw alert</button>
     </div>
   </aside>
 
 </div>
 
-<!-- Similar offers -->
-<div class="similar-section">
+<!-- Similar offers (dynamic) -->
+<div class="similar-section" id="similarSection" style="display:none">
   <div class="similar-header">
     <div>
-      <div class="similar-title">📍 Podobne oferty w okolicy</div>
-      <div class="similar-sub">2-pokojowe mieszkania, promień 2 km · z ostatnich 30 dni</div>
+      <div class="similar-title">📍 Podobne oferty</div>
+      <div class="similar-sub" id="similarSub">Ten sam typ, podobna cena i miasto</div>
     </div>
     <a href="/szukaj.html" style="color:#FFB800;text-decoration:none;font-weight:700;font-size:13px">Zobacz wszystkie →</a>
   </div>
-  <div class="similar-grid">
-    <a href="/oferta.html" class="sim-card">
-      <div class="sim-img sim-i1">🏢</div>
-      <div class="sim-body">
-        <div class="sim-title">2 pokoje z balkonem</div>
-        <div class="sim-loc">📍 Kraków, Płaszów · 0.8 km</div>
-        <div class="sim-price"><span class="p">570 000 zł</span><span class="pm">11 400 /m²</span></div>
-      </div>
-    </a>
-    <a href="/oferta.html" class="sim-card">
-      <div class="sim-img sim-i2">🏘️</div>
-      <div class="sim-body">
-        <div class="sim-title">2 pok. po remoncie, 3 piętro</div>
-        <div class="sim-loc">📍 Kraków, Podgórze · 1.2 km</div>
-        <div class="sim-price"><span class="p">625 000 zł</span><span class="pm">12 500 /m²</span></div>
-      </div>
-    </a>
-    <a href="/oferta.html" class="sim-card">
-      <div class="sim-img sim-i3">🌆</div>
-      <div class="sim-body">
-        <div class="sim-title">Kompaktowe 2 pokoje</div>
-        <div class="sim-loc">📍 Kraków, Zabłocie · 1.5 km</div>
-        <div class="sim-price"><span class="p">510 000 zł</span><span class="pm">11 862 /m²</span></div>
-      </div>
-    </a>
-    <a href="/oferta.html" class="sim-card">
-      <div class="sim-img sim-i4">🏠</div>
-      <div class="sim-body">
-        <div class="sim-title">2 pokoje, słoneczne</div>
-        <div class="sim-loc">📍 Kraków, Krzemionki · 1.9 km</div>
-        <div class="sim-price"><span class="p">590 000 zł</span><span class="pm">12 042 /m²</span></div>
-      </div>
-    </a>
+  <div class="similar-grid" id="similarGrid">
+    <!-- generated by JS -->
   </div>
 </div>
 
 <script>
-document.querySelectorAll('.thumb').forEach(t => {
-  t.addEventListener('click', () => {
-    document.querySelectorAll('.thumb').forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-  });
+// ============================================================================
+// FinderDom — dynamic offer page (reads ?id=xxx from URL, fetches listings.json)
+// ============================================================================
+const VERDICT_MAP = {
+  deal:    { badgeCls: 'b-deal',    text: '🔥 Okazja' },
+  normal:  { badgeCls: 'b-normal',  text: '✓ W normie' },
+  over:    { badgeCls: 'b-over',    text: '⚠️ Zawyżona' },
+  outlier: { badgeCls: 'b-outlier', text: '❓ Sprawdź' },
+};
+
+const TYPE_LABEL = {
+  mieszkanie: 'Mieszkanie', dom: 'Dom', dzialka: 'Działka',
+  lokal: 'Lokal', garaz: 'Garaż', pokoj: 'Pokój'
+};
+const TRANS_LABEL = { sprzedaz: 'Sprzedaż', wynajem: 'Wynajem' };
+const BUILD_LABEL = {
+  blok: 'Blok', kamienica: 'Kamienica', apartamentowiec: 'Apartamentowiec',
+  loft: 'Loft', wiezowiec: 'Wieżowiec', wolnostojacy: 'Wolnostojący',
+  blizniak: 'Bliźniak', szeregowiec: 'Szeregowiec', siedliskowy: 'Siedliskowy',
+  rezydencja: 'Rezydencja', letniskowy: 'Letniskowy'
+};
+const STANDARD_LABEL = {
+  gotowe: 'Gotowe / po remoncie', do_wykonczenia: 'Do wykończenia', do_remontu: 'Do remontu'
+};
+const HEATING_LABEL = {
+  miejskie: 'Miejskie', gazowe: 'Gazowe', kotlownia: 'Kotłownia',
+  elektryczne: 'Elektryczne', kaflowy: 'Piec kaflowy', inne: 'Inne'
+};
+const MATERIAL_LABEL = {
+  cegla: 'Cegła', wielka_plyta: 'Wielka płyta', beton: 'Beton',
+  drewno: 'Drewno', pustak: 'Pustak', silikat: 'Silikat', gazobeton: 'Gazobeton', inne: 'Inne'
+};
+const MARKET_LABEL = { pierwotny: 'Pierwotny (deweloper)', wtorny: 'Wtórny' };
+
+function el(id) { return document.getElementById(id); }
+function fmt(n) { return (n||0).toLocaleString('pl-PL'); }
+
+async function loadOffer() {
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id');
+  if (!id) { showError(); return; }
+
+  try {
+    const r = await fetch('/data/listings.json?v=' + Date.now());
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    const listings = data.listings || [];
+    const offer = listings.find(l => l.id === id);
+    if (!offer) { showError(); return; }
+    renderOffer(offer, listings);
+  } catch (e) {
+    console.error(e);
+    showError();
+  }
+}
+
+function showError() {
+  el('loadingState').style.display = 'none';
+  el('errorState').style.display = 'block';
+}
+
+function renderOffer(l, all) {
+  el('loadingState').style.display = 'none';
+  el('offerContainer').style.display = 'grid';
+
+  // Meta / title
+  document.title = `${l.title} — ${l.price_display} — FinderDom.pl`;
+  el('pageTitle').textContent = document.title;
+  el('bcType').textContent = TYPE_LABEL[l.type] || 'Oferta';
+
+  // Photo
+  if (l.image_url) {
+    el('galleryPhoto').src = l.image_url;
+    el('galleryPhoto').style.display = 'block';
+    el('galleryEmoji').style.display = 'none';
+    el('galleryPhoto').onerror = () => {
+      el('galleryPhoto').style.display = 'none';
+      el('galleryEmoji').style.display = 'block';
+    };
+  } else {
+    el('galleryEmoji').textContent = l.emoji || '🏢';
+  }
+
+  // Verdict badge
+  const v = VERDICT_MAP[l.verdict_badge] || VERDICT_MAP.normal;
+  el('verdictBadge').className = 'b ' + v.badgeCls;
+  el('verdictBadge').textContent = l.verdict_text || v.text;
+  el('portalBadge').textContent = l.portal || 'Otodom';
+
+  // Source link
+  if (l.source_url) {
+    el('sourceLink').href = l.source_url;
+    el('ctaOtodom').href = l.source_url;
+    el('ctaOtodom').textContent = `🔗 Otwórz w ${l.portal || 'Otodom'}`;
+  } else {
+    el('sourceLink').style.display = 'none';
+    el('ctaOtodom').style.display = 'none';
+  }
+
+  // Title + location + price
+  el('offerTitle').textContent = l.title;
+  el('offerLoc').textContent = l.location || `📍 ${l.city}${l.district ? ', ' + l.district : ''}`;
+  el('priceMain').textContent = l.price_display;
+  el('priceM2').textContent = l.price_pm2_display;
+
+  // AI Analysis
+  el('aiVerdict').textContent = l.verdict_full || v.text;
+  const delta = l.ai_delta_pct || 0;
+  const offersPpm2 = l.ai_offers_pm2 || 0;
+  const rcnPpm2 = l.ai_rcn_pm2 || 0;
+  const thisPpm2 = l.price_pm2 || 0;
+
+  if (offersPpm2 && rcnPpm2) {
+    let subtitle = '';
+    if (l.verdict_badge === 'deal') {
+      const diff = rcnPpm2 - thisPpm2;
+      subtitle = `Ta oferta jest o <strong style="color:#4ade80">${fmt(diff)} zł/m²</strong> tańsza od realnych cen transakcyjnych (RCN) w tym mieście.`;
+    } else if (l.verdict_badge === 'over') {
+      const diff = thisPpm2 - rcnPpm2;
+      subtitle = `Ta oferta jest o <strong style="color:#f87171">${fmt(diff)} zł/m²</strong> droższa od realnych cen transakcyjnych (RCN) w tym mieście.`;
+    } else if (l.verdict_badge === 'outlier') {
+      subtitle = `Ta oferta ma nietypową cenę — zweryfikuj czy nie chodzi o udział we współwłasności, odstępne albo cena w innej walucie.`;
+    } else {
+      subtitle = `Cena w tej ofercie jest zgodna z medianą ofert i realnych transakcji w tym mieście.`;
+    }
+    el('aiSubtitle').innerHTML = subtitle;
+
+    // Bar widths (skala do maksimum z 3 wartości)
+    const maxV = Math.max(thisPpm2, offersPpm2, rcnPpm2);
+    el('barThis').style.width   = (thisPpm2   / maxV * 100) + '%';
+    el('barOffers').style.width = (offersPpm2 / maxV * 100) + '%';
+    el('barRcn').style.width    = (rcnPpm2    / maxV * 100) + '%';
+    el('valThis').textContent   = fmt(thisPpm2)   + ' zł/m²';
+    el('valOffers').textContent = fmt(offersPpm2) + ' zł/m²';
+    el('valRcn').textContent    = fmt(rcnPpm2)    + ' zł/m²';
+
+    // Sample size
+    const sameGroup = all.filter(x => x.city === l.city && x.type === l.type && x.transaction === l.transaction).length;
+    el('rcnInfo').innerHTML = `📊 Analiza oparta na <strong>${sameGroup} ofertach</strong> tego samego typu (${TYPE_LABEL[l.type]}) w mieście ${l.city}.`;
+  } else {
+    el('aiAnalysis').style.display = 'none';
+  }
+
+  // Specs grid
+  const specs = [];
+  specs.push({label:'Powierzchnia', val: l.area_m2 + ' m²'});
+  if (l.rooms > 0) specs.push({label:'Pokoje', val: l.rooms + (l.rooms === 1 ? ' pokój' : (l.rooms < 5 ? ' pokoje' : ' pokoi'))});
+  if (l.floor > 0 || l.max_floor > 0) {
+    const flStr = l.floor === 0 ? 'Parter' : (l.floor || '?');
+    specs.push({label:'Piętro', val: l.max_floor ? `${flStr} / ${l.max_floor}` : String(flStr)});
+  }
+  if (l.build_year) specs.push({label:'Rok budowy', val: l.build_year});
+  if (l.standard) specs.push({label:'Standard', val: STANDARD_LABEL[l.standard] || l.standard});
+  if (l.building_type && BUILD_LABEL[l.building_type]) specs.push({label:'Typ budynku', val: BUILD_LABEL[l.building_type]});
+  if (l.market_type) specs.push({label:'Rynek', val: MARKET_LABEL[l.market_type] || l.market_type});
+  if (l.heating) specs.push({label:'Ogrzewanie', val: HEATING_LABEL[l.heating] || l.heating});
+  if (l.material) specs.push({label:'Materiał', val: MATERIAL_LABEL[l.material] || l.material});
+  if (l.has_lift) specs.push({label:'Winda', val: '✓ Tak'});
+  if (l.has_balcony) specs.push({label:'Balkon', val: '✓ Tak'});
+  if (l.has_terrace) specs.push({label:'Taras', val: '✓ Tak'});
+  if (l.has_garden) specs.push({label:'Ogród', val: '✓ Tak'});
+  if (l.has_basement) specs.push({label:'Piwnica', val: '✓ Tak'});
+  if (l.has_garage) specs.push({label:'Garaż', val: '✓ Tak'});
+  if (l.has_parking) specs.push({label:'Parking', val: '✓ Tak'});
+  if (l.has_ac) specs.push({label:'Klimatyzacja', val: '✓ Tak'});
+  specs.push({label:'Sprzedający', val: l.seller_label || '—'});
+  specs.push({label:'Portal', val: l.portal || 'Otodom'});
+  specs.push({label:'Dodane', val: l.added_display || '—'});
+  if (l.is_original === false) {
+    specs.push({label:'Status', val: '📋 KOPIA (zobacz oryginał)'});
+  } else {
+    specs.push({label:'Status', val: '✨ ORYGINALNA'});
+  }
+  el('specsGrid').innerHTML = specs.map(s =>
+    `<div class="spec"><div class="spec-label">${s.label}</div><div class="spec-val">${s.val}</div></div>`
+  ).join('');
+
+  // Description (jeśli nie ma opisu, wpisujemy fragment tytułu i info)
+  el('offerDesc').textContent = l.title + '. ' +
+    `Nieruchomość położona w ${l.city}${l.district ? ', ' + l.district : ''}, o powierzchni ${l.area_m2} m². ` +
+    (l.rooms > 0 ? `Liczba pokoi: ${l.rooms}. ` : '') +
+    (l.build_year ? `Rok budowy: ${l.build_year}. ` : '') +
+    `Cena: ${l.price_display} (${l.price_pm2_display}).`;
+
+  // Alert desc
+  el('alertDesc').textContent = `Ustaw alert i dostaniesz email gdy pojawi się podobna oferta (${TYPE_LABEL[l.type]}, ${l.city}, do ${fmt(Math.round(l.price * 1.1))} zł).`;
+
+  // Similar offers — same type + transaction + same city (or type+range if empty)
+  let similar = all.filter(x =>
+    x.id !== l.id &&
+    x.type === l.type &&
+    x.transaction === l.transaction &&
+    x.city === l.city &&
+    x.is_original !== false
+  );
+  if (similar.length < 4) {
+    // Fallback: same type, similar price ±30%
+    const priceLo = l.price * 0.7, priceHi = l.price * 1.3;
+    similar = all.filter(x =>
+      x.id !== l.id && x.type === l.type && x.transaction === l.transaction &&
+      x.price >= priceLo && x.price <= priceHi && x.is_original !== false
+    );
+  }
+  similar = similar.slice(0, 4);
+  if (similar.length) {
+    el('similarSection').style.display = 'block';
+    el('similarSub').textContent = `${TYPE_LABEL[l.type]}, ${l.city} · zbliżony metraż i cena`;
+    el('similarGrid').innerHTML = similar.map((s, i) => {
+      const img = s.image_url
+        ? `<img src="${s.image_url}" alt="" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0" loading="lazy">`
+        : (s.emoji || '🏢');
+      return `
+        <a href="/oferta.html?id=${s.id}" class="sim-card">
+          <div class="sim-img sim-i${(i%4)+1}" style="position:relative;overflow:hidden">${img}</div>
+          <div class="sim-body">
+            <div class="sim-title">${s.title}</div>
+            <div class="sim-loc">${s.location || '📍 ' + s.city}</div>
+            <div class="sim-price"><span class="p">${s.price_display}</span><span class="pm">${s.price_pm2_display}</span></div>
+          </div>
+        </a>`;
+    }).join('');
+  }
+}
+
+// Alert button — simple newsletter subscription
+el('alertBtn')?.addEventListener('click', async () => {
+  const email = el('alertEmail').value.trim();
+  if (!email || !email.includes('@')) { alert('Podaj poprawny email 📧'); return; }
+  try {
+    await fetch('/api/subscribe', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, source: 'oferta-alert' })
+    });
+    alert('✓ Zapisano! Powiadomienia będą wysyłane gdy startujemy z alertami.');
+    el('alertEmail').value = '';
+  } catch (e) {
+    alert('Coś poszło nie tak, spróbuj ponownie.');
+  }
 });
+
+loadOffer();
 </script>
+
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"7f7b0fd8732c4326aae4b9d58d5c514a"}' crossorigin="anonymous"></script>
+</body>
+</html>
 
 </body>
 </html>

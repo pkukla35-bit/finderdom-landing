@@ -76,13 +76,19 @@
   .results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
   .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;overflow:hidden;transition:all 0.25s;cursor:pointer;text-decoration:none;color:inherit;display:block}
   .card:hover{transform:translateY(-3px);border-color:rgba(255,184,0,0.35);box-shadow:0 12px 32px rgba(0,0,0,0.4)}
-  .card-img{width:100%;height:180px;position:relative;display:flex;align-items:center;justify-content:center;font-size:56px}
+  .card-img{width:100%;height:180px;position:relative;display:flex;align-items:center;justify-content:center;font-size:56px;background-size:cover;background-position:center;background-color:#0d1233}
   .card-img.i1{background:linear-gradient(135deg,#1a2e5c,#2d4a8a)}
   .card-img.i2{background:linear-gradient(135deg,#3d1e6b,#6b3aa8)}
   .card-img.i3{background:linear-gradient(135deg,#1e3a3d,#3a7b6b)}
   .card-img.i4{background:linear-gradient(135deg,#4a2c1a,#8b5a3c)}
   .card-img.i5{background:linear-gradient(135deg,#2a1e3d,#5a3a6b)}
   .card-img.i6{background:linear-gradient(135deg,#1a3d3a,#3a7b6b)}
+  .card-img.has-photo{background-image:none;background-color:#0d1233}
+  .card-img.has-photo .placeholder-emoji{display:none}
+  .card-img img.photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#0d1233;transition:opacity 0.2s}
+  .card-img img.photo:not([src]),.card-img img.photo[src=""]{opacity:0}
+  .card-img::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 40%,rgba(0,0,0,0.55));pointer-events:none;z-index:1}
+  .card-img > *{position:relative;z-index:2}
   .card-badge{position:absolute;top:10px;left:10px;padding:5px 10px;border-radius:100px;font-size:10px;font-weight:900;letter-spacing:0.5px;text-transform:uppercase;backdrop-filter:blur(10px)}
   .b-deal{background:rgba(34,197,94,0.95);color:#052e16}
   .b-normal{background:rgba(59,130,246,0.95);color:#0c1a3d}
@@ -528,10 +534,16 @@ function renderPage() {
     if (l.type === 'dom') specs += ' · 🏡 Dom';
     if (l.type === 'dzialka') specs += ' · 🌳 Działka';
     const targetUrl = l.source_url || `/oferta.html?id=${l.id}`;
+    const hasPhoto = !!l.image_url;
+    const photoHtml = hasPhoto
+      ? `<img class="photo" src="${l.image_url}" alt="" loading="lazy" decoding="async" onerror="this.remove();this.parentElement.classList.remove('has-photo')">`
+      : '';
+    const emojiHtml = hasPhoto ? '' : `<span class="placeholder-emoji">${l.emoji}</span>`;
     return `
       <a href="${targetUrl}" ${l.source_url ? 'target="_blank" rel="noopener"' : ''} class="card">
-        <div class="card-img ${l.img_class}">
-          ${l.emoji}
+        <div class="card-img ${l.img_class}${hasPhoto ? ' has-photo' : ''}">
+          ${photoHtml}
+          ${emojiHtml}
           <div class="card-badge b-${l.verdict_badge}">${l.verdict_text}</div>
           <div class="card-portal">${l.portal}</div>
           ${l.seller_label ? `<div style="position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,0.75);color:#FFB800;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:800;backdrop-filter:blur(8px)">${l.seller_label}</div>` : ''}

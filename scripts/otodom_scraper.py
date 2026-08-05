@@ -44,7 +44,7 @@ except ImportError:
 # CONFIG
 # --------------------------------------------------------------------------
 MAX_PAGES = int(os.getenv("MAX_PAGES", "5"))          # 5 stron × 72 items × 9 komb = ~3200 max
-MAX_LISTINGS = int(os.getenv("MAX_LISTINGS", "4000")) # hard cap na output JSON
+MAX_LISTINGS = int(os.getenv("MAX_LISTINGS", "8000")) # hard cap na output JSON
 MIN_LISTINGS = int(os.getenv("MIN_LISTINGS", "100"))  # safe-fail: mniej = nie zapisujemy
 DELAY_MIN = float(os.getenv("DELAY_MIN", "1.5"))
 DELAY_MAX = float(os.getenv("DELAY_MAX", "3.0"))
@@ -59,6 +59,40 @@ DETAIL_ONLY_ORIGINALS = os.getenv("DETAIL_ONLY_ORIGINALS", "1") == "1"  # tylko 
 DETAIL_MAX = int(os.getenv("DETAIL_MAX", "800"))          # max ofert do fetch (ochrona przed banem)
 DETAIL_DELAY = float(os.getenv("DETAIL_DELAY", "0.6"))    # delay per worker per request
 DETAIL_MAX_RETRIES = int(os.getenv("DETAIL_MAX_RETRIES", "2"))
+
+# Per-city scraping (Faza 1b — po ogólnym LATEST)
+SCRAPE_TOP_CITIES = os.getenv("SCRAPE_TOP_CITIES", "1") == "1"
+CITY_MAX_PAGES = int(os.getenv("CITY_MAX_PAGES", "3"))    # 3 strony × 72 = ~215 ofert per (miasto×typ×trans)
+
+# TOP miasta Polski (URL path na Otodom = województwo/powiat/gmina/miasto)
+# Dla miast na prawach powiatu (Warszawa, Kraków, Wrocław...) URL to /woj/miasto/miasto/miasto
+TOP_CITIES_URL = [
+    ("mazowieckie", "warszawa", "warszawa", "warszawa"),
+    ("malopolskie", "krakow", "krakow", "krakow"),
+    ("dolnoslaskie", "wroclaw", "wroclaw", "wroclaw"),
+    ("wielkopolskie", "poznan", "poznan", "poznan"),
+    ("pomorskie", "gdansk", "gdansk", "gdansk"),
+    ("lodzkie", "lodz", "lodz", "lodz"),
+    ("slaskie", "katowice", "katowice", "katowice"),
+    ("lubelskie", "lublin", "lublin", "lublin"),
+    ("podlaskie", "bialystok", "bialystok", "bialystok"),
+    ("zachodniopomorskie", "szczecin", "szczecin", "szczecin"),
+    ("kujawsko-pomorskie", "bydgoszcz", "bydgoszcz", "bydgoszcz"),
+    ("podkarpackie", "rzeszow", "rzeszow", "rzeszow"),
+    ("kujawsko-pomorskie", "torun", "torun", "torun"),
+    ("swietokrzyskie", "kielce", "kielce", "kielce"),
+    ("warminsko-mazurskie", "olsztyn", "olsztyn", "olsztyn"),
+    ("lubuskie", "gorzow-wielkopolski", "gorzow-wielkopolski", "gorzow-wielkopolski"),
+    ("lubuskie", "zielona-gora", "zielona-gora", "zielona-gora"),
+    ("mazowieckie", "radom", "radom", "radom"),
+    ("slaskie", "czestochowa", "czestochowa", "czestochowa"),
+    ("pomorskie", "gdynia", "gdynia", "gdynia"),
+]
+# Dla per-city robimy tylko najważniejsze kombinacje (mieszkanie sprzedaz + wynajem)
+CITY_COMBOS = [
+    ("sprzedaz", "mieszkanie", "mieszkanie"),
+    ("wynajem", "mieszkanie", "mieszkanie"),
+]
 
 OUT_DIR = Path(os.getenv(
     "OUT_DIR",
@@ -348,6 +382,49 @@ def scrape_combo(transaction: str, otodom_type: str, out_type: str) -> list[dict
             time.sleep(random.uniform(DELAY_MIN, DELAY_MAX))
     print(f"  → {transaction}/{otodom_type}: {len(listings)} listings")
     return listings
+
+
+def scrape_city_combo(transaction: str, otodom_type: str, out_type: str,
+                       woj: str, powiat: str, gmina: str, miasto: str) -> list[dict]:
+    """Pobiera oferty per-miasto (URL /woj/powiat/gmina/miasto)."""
+    listings = []
+    base = f"https://www.otodom.pl/pl/wyniki/{transaction}/{otodom_type}/{woj}/{powiat}/{gmina}/{miasto}"
+    for page in range(1, CITY_MAX_PAGES + 1):
+        url = f"{base}?limit=72&by=LATEST&direction=DESC&page={page}"
+        data = fetch_page(url)
+        if not data:
+            break
+        try:
+            items = data["props"]["pageProps"]["data"]["searchAds"]["items"] or []
+        except (KeyError, TypeError):
+            items = []
+        if not items:
+            break
+        for it in items:
+            t = transform(it, transaction, out_type)
+            if t:
+                listings.append(t)
+        if page < CITY_MAX_PAGES:
+            time.sleep(random.uniform(DELAY_MIN, DELAY_MAX))
+    return listings
+
+
+def scrape_top_cities() -> list[dict]:
+    """Iteruje po TOP miastach × kluczowych kombinacjach — zapewnia że każde duże
+    miasto ma solidną reprezentację (tysiące ofert)."""
+    all_city_listings = []
+    total = len(TOP_CITIES_URL) * len(CITY_COMBOS)
+    idx = 0
+    for city_url in TOP_CITIES_URL:
+        woj, powiat, gmina, miasto = city_url
+        for transaction, otodom_type, out_type in CITY_COMBOS:
+            idx += 1
+            print(f"  🌆 [{idx}/{total}] {miasto}/{transaction}/{otodom_type}", end=" ")
+            got = scrape_city_combo(transaction, otodom_type, out_type,
+                                     woj, powiat, gmina, miasto)
+            print(f"→ {len(got)}")
+            all_city_listings.extend(got)
+    return all_city_listings
 
 
 # --------------------------------------------------------------------------
@@ -647,6 +724,20 @@ def main() -> int:
     # Trim to MAX_LISTINGS
     if len(all_listings) > MAX_LISTINGS:
         all_listings = all_listings[:MAX_LISTINGS]
+
+    print(f"\n📊 Faza 1 (LATEST cała PL): {len(all_listings)} ofert")
+
+    # -------- FAZA 1b: TOP MIASTA (dużo ofert per miasto) -----------
+    if SCRAPE_TOP_CITIES:
+        print(f"\n🌆 Faza 1b: Top {len(TOP_CITIES_URL)} miast × {len(CITY_COMBOS)} kombinacji")
+        city_listings = scrape_top_cities()
+        print(f"   → {len(city_listings)} ofert z top miast")
+        # Merge — deduplikacja przez fingerprint zajmie się dublami
+        all_listings.extend(city_listings)
+        # Trim again (miasta mogą wygenerować dużo — trzymamy się limitu)
+        if len(all_listings) > MAX_LISTINGS:
+            print(f"   ⚠️  Powyżej MAX_LISTINGS={MAX_LISTINGS}, obcinam do limitu")
+            all_listings = all_listings[:MAX_LISTINGS]
 
     print(f"\n📊 Zescrapowano łącznie: {len(all_listings)} ofert")
     print(f"    Breakdown: {stats_per_combo}")

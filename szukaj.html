@@ -218,8 +218,8 @@
     <div class="filter-group">
       <div class="filter-title">👤 Kto oferuje</div>
       <div class="chip-group">
-        <div class="chip active" data-seller="prywatna">👨‍👩‍👧 Prywatna (bez prowizji)</div>
-        <div class="chip active" data-seller="posrednik">🏢 Pośrednik</div>
+        <div class="chip" data-seller="prywatna">👨‍👩‍👧 Prywatna (bez prowizji)</div>
+        <div class="chip" data-seller="posrednik">🏢 Pośrednik</div>
         <div class="chip" data-seller="deweloper">🏗️ Deweloper (rynek pierwotny)</div>
         <div class="chip" data-seller="fliper">💼 Fliper (po flipie)</div>
       </div>
@@ -232,7 +232,7 @@
       <div style="margin-bottom:14px">
         <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">💧 Woda</div>
         <div class="chip-group">
-          <div class="chip active" data-media="woda-w-dzialce">✓ W działce</div>
+          <div class="chip" data-media="woda-w-dzialce">✓ W działce</div>
           <div class="chip" data-media="woda-w-drodze">🛣️ W drodze</div>
           <div class="chip" data-media="woda-studnia">⛲ Studnia</div>
           <div class="chip" data-media="woda-brak">✗ Brak</div>
@@ -242,7 +242,7 @@
       <div style="margin-bottom:14px">
         <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">⚡ Prąd</div>
         <div class="chip-group">
-          <div class="chip active" data-media="prad-w-dzialce">✓ W działce</div>
+          <div class="chip" data-media="prad-w-dzialce">✓ W działce</div>
           <div class="chip" data-media="prad-w-drodze">🛣️ W drodze</div>
           <div class="chip" data-media="prad-brak">✗ Brak</div>
         </div>
@@ -298,8 +298,8 @@
       <div class="filter-title">🛏️ Liczba pokoi</div>
       <div class="chip-group">
         <div class="chip">1</div>
-        <div class="chip active">2</div>
-        <div class="chip active">3</div>
+        <div class="chip">2</div>
+        <div class="chip">3</div>
         <div class="chip">4</div>
         <div class="chip">5+</div>
       </div>
@@ -366,7 +366,7 @@
     <div class="filter-group">
       <div class="filter-title">💎 Analiza AI</div>
       <div class="chip-group">
-        <div class="chip active">🔥 Tylko okazje</div>
+        <div class="chip">🔥 Tylko okazje</div>
         <div class="chip">W normie</div>
         <div class="chip">Ukryj zawyżone</div>
       </div>
@@ -375,7 +375,7 @@
     <div class="filter-group">
       <div class="filter-title">🔁 Duplikaty</div>
       <div class="chip-group">
-        <div class="chip active" id="chipOnlyOrig">✨ Tylko oryginały</div>
+        <div class="chip" id="chipOnlyOrig">✨ Tylko oryginały</div>
         <div class="chip">📋 Pokaż wszystko (z kopiami)</div>
       </div>
     </div>
@@ -796,13 +796,19 @@ document.querySelector('.btn-clear')?.addEventListener('click', () => {
   const htr = document.getElementById('heroTrans'); if (htr) htr.value = 'sprzedaz';
   const hp = document.getElementById('heroPrice'); if (hp) hp.value = '';
   // Reset sidebar inputs
-  ['fPpm2From','fPpm2To','fAreaFrom','fAreaTo'].forEach(id => {
+  ['fPpm2From','fPpm2To','fAreaFrom','fAreaTo','fYearFrom','fYearTo'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
-  // Reset seller chips (aktywuj wszystkie 4)
-  document.querySelectorAll('.chip[data-seller]').forEach(c => c.classList.add('active'));
-  // Reset onlyOrig (aktywne = pokazuj tylko oryginały)
-  document.getElementById('chipOnlyOrig')?.classList.add('active');
+  // Reset chipów: WSZYSTKIE odznaczone (user wybiera sam czego chce)
+  document.querySelectorAll('.chip[data-seller]').forEach(c => c.classList.remove('active'));
+  document.getElementById('chipOnlyOrig')?.classList.remove('active');
+  document.querySelectorAll('.chip[data-filter][data-value]').forEach(c => c.classList.remove('active'));
+  // Reset chipów sub-typu
+  document.querySelectorAll('#subTypeChips .chip').forEach(c => c.classList.remove('active'));
+  // Reset date chip → "Wszystkie"
+  document.querySelectorAll('.date-chip').forEach(c => c.classList.remove('active'));
+  document.querySelector('.date-chip[data-date="all"]')?.classList.add('active');
+  document.getElementById('dateCustom').style.display = 'none';
   applyAllFilters();
 });
 
@@ -1012,5 +1018,5 @@ document.getElementById('sortSelect')?.addEventListener('change', applyAllFilter
 
 </script>
 
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2647216feafdf72',t:'MTc4NTkxODY4Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a264c0c2be19f978',t:'MTc4NTkyMTkxMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

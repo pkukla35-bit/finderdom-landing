@@ -51,6 +51,15 @@ DELAY_MAX = float(os.getenv("DELAY_MAX", "3.0"))
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "25"))
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 
+# Detail fetching (Faza 2)
+FETCH_DETAILS = os.getenv("FETCH_DETAILS", "1") == "1"   # 1 = pobieraj szczegóły z każdej oferty
+DETAIL_WORKERS = int(os.getenv("DETAIL_WORKERS", "3"))    # ile wątków równolegle (ostrożnie z anti-bot)
+DETAIL_TIMEOUT = int(os.getenv("DETAIL_TIMEOUT", "15"))
+DETAIL_ONLY_ORIGINALS = os.getenv("DETAIL_ONLY_ORIGINALS", "1") == "1"  # tylko oryginały
+DETAIL_MAX = int(os.getenv("DETAIL_MAX", "800"))          # max ofert do fetch (ochrona przed banem)
+DETAIL_DELAY = float(os.getenv("DETAIL_DELAY", "0.6"))    # delay per worker per request
+DETAIL_MAX_RETRIES = int(os.getenv("DETAIL_MAX_RETRIES", "2"))
+
 OUT_DIR = Path(os.getenv(
     "OUT_DIR",
     str(Path(__file__).resolve().parent.parent / "data"),
@@ -342,6 +351,181 @@ def scrape_combo(transaction: str, otodom_type: str, out_type: str) -> list[dict
 
 
 # --------------------------------------------------------------------------
+# DETAIL FETCH — pobiera pełne parametry oferty (typ budynku, rok, itd.)
+# --------------------------------------------------------------------------
+# Mapowanie kluczy Otodom → schema FinderDom
+BUILDING_TYPE_MAP = {
+    "block": "blok",
+    "tenement": "kamienica",
+    "apartment": "apartamentowiec",
+    "loft": "loft",
+    "highrise": "wiezowiec",
+    "detached": "wolnostojacy",
+    "semi_detached": "blizniak",
+    "terraced": "szeregowiec",
+    "ribbon": "szeregowiec",
+    "chalet": "letniskowy",
+    "farm": "siedliskowy",
+    "residence": "rezydencja",
+}
+HEATING_MAP = {"urban": "miejskie", "gas": "gazowe", "electrical": "elektryczne",
+               "boiler_room": "kotlownia", "tiled_stove": "kaflowy", "other": "inne"}
+MATERIAL_MAP = {"brick": "cegla", "concrete_plate": "wielka_plyta", "wood": "drewno",
+                "breezeblock": "pustak", "concrete": "beton", "cellular_concrete": "gazobeton",
+                "silikat": "silikat", "other": "inne"}
+STANDARD_MAP = {"ready_to_use": "gotowe", "to_completion": "do_wykonczenia",
+                "to_renovation": "do_remontu"}
+MARKET_MAP = {"primary": "pierwotny", "secondary": "wtorny"}
+
+
+def _parse_target_field(target: dict, key: str) -> str:
+    """Zwraca pierwszą wartość z listy w `target[key]` (albo pustą stringową)."""
+    v = target.get(key)
+    if isinstance(v, list) and v:
+        return str(v[0])
+    if isinstance(v, (str, int)):
+        return str(v)
+    return ""
+
+
+def fetch_detail(slug_or_url: str) -> dict:
+    """Pobiera pełne dane oferty z /pl/oferta/{slug}. Zwraca dict z polami detail_*.
+    Retry z exponential backoff dla 403/429. Delay wewnątrz — anti-bot friendly.
+    """
+    if slug_or_url.startswith("http"):
+        url = slug_or_url
+    else:
+        url = f"https://www.otodom.pl/pl/oferta/{slug_or_url}"
+
+    # Rate-limit safe delay przed każdym requestem
+    time.sleep(DETAIL_DELAY + random.uniform(0, 0.4))
+
+    for attempt in range(1, DETAIL_MAX_RETRIES + 2):
+        headers = {
+            "User-Agent": random.choice(USER_AGENTS),
+            "Accept-Language": "pl-PL,pl;q=0.9",
+            "Referer": "https://www.otodom.pl/",
+            "Accept": "text/html,application/xhtml+xml",
+        }
+        try:
+            r = requests.get(url, headers=headers, timeout=DETAIL_TIMEOUT)
+            if r.status_code == 200:
+                start = r.text.find(NEXT_MARKER)
+                if start == -1:
+                    return {}
+                start += len(NEXT_MARKER)
+                end = r.text.find("</script>", start)
+                if end == -1:
+                    return {}
+                data = json.loads(r.text[start:end])
+                ad = data.get("props", {}).get("pageProps", {}).get("ad", {})
+                if not ad:
+                    return {}
+                target = ad.get("target", {}) or {}
+                bt_raw = _parse_target_field(target, "Building_type")
+                extras = target.get("Extras_types") or []
+                if not isinstance(extras, list):
+                    extras = []
+                detail = {
+                    "building_type": BUILDING_TYPE_MAP.get(bt_raw, bt_raw),
+                    "building_type_raw": bt_raw,
+                    "build_year": int(_parse_target_field(target, "Build_year") or 0) or None,
+                    "building_floors": int(target.get("Building_floors_num") or 0) or None,
+                    "material": MATERIAL_MAP.get(_parse_target_field(target, "Building_material"), ""),
+                    "heating": HEATING_MAP.get(_parse_target_field(target, "Heating"), ""),
+                    "standard": STANDARD_MAP.get(_parse_target_field(target, "Construction_status"), ""),
+                    "market_type": MARKET_MAP.get(target.get("MarketType", ""), ""),
+                    "has_balcony": "balcony" in extras,
+                    "has_terrace": "terrace" in extras,
+                    "has_garden": "garden" in extras,
+                    "has_lift": "lift" in extras,
+                    "has_basement": "basement" in extras,
+                    "has_garage": "garage" in extras or "garage_space" in extras,
+                    "has_parking": "parking" in extras or "outdoor_parking_space" in extras,
+                    "has_ac": "airconditioning" in extras or "air_conditioning" in extras,
+                    "security": target.get("Security_types") or [],
+                    "media": target.get("Media_types") or [],
+                    "vicinity": target.get("Vicinity_types") or [],
+                }
+                floor_str = _parse_target_field(target, "Floor_no")
+                if floor_str:
+                    fm = re.search(r"(\d+)", floor_str)
+                    if fm:
+                        detail["floor_no"] = int(fm.group(1))
+                    elif "ground" in floor_str or "parter" in floor_str.lower():
+                        detail["floor_no"] = 0
+                    elif "cellar" in floor_str or "basement" in floor_str:
+                        detail["floor_no"] = -1
+                return detail
+            elif r.status_code in (403, 429, 503):
+                # Rate limit — exp backoff
+                if attempt < DETAIL_MAX_RETRIES + 1:
+                    time.sleep(4 * attempt + random.uniform(1, 3))
+                    continue
+                return {}
+            else:
+                return {}
+        except (requests.RequestException, json.JSONDecodeError, ValueError, TypeError, KeyError):
+            if attempt < DETAIL_MAX_RETRIES + 1:
+                time.sleep(2 * attempt)
+                continue
+            return {}
+    return {}
+
+
+def fetch_details_parallel(listings: list[dict]) -> int:
+    """Dla każdej oferty pobiera szczegóły równolegle. Modyfikuje `listings` in-place.
+    Zwraca liczbę udanych pobrań.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    targets = [l for l in listings if l.get("source_url")]
+    if DETAIL_ONLY_ORIGINALS:
+        targets = [l for l in targets if l.get("is_original", True)]
+    # Limit — chroni przed banem IP + mieści się w GH Actions
+    if len(targets) > DETAIL_MAX:
+        # bierzemy najświeższe (są już posortowane po dacie DESC z Otodom)
+        targets = targets[:DETAIL_MAX]
+    total = len(targets)
+    if not total:
+        return 0
+    print(f"  🔍 Fetch details: {total} ofert × {DETAIL_WORKERS} wątków (delay ~{DETAIL_DELAY}s/req)…")
+    success = 0
+    consecutive_fails = 0
+    with ThreadPoolExecutor(max_workers=DETAIL_WORKERS) as ex:
+        futures = {ex.submit(fetch_detail, l["source_url"]): l for l in targets}
+        for i, fut in enumerate(as_completed(futures), 1):
+            l = futures[fut]
+            try:
+                detail = fut.result()
+            except Exception:
+                detail = {}
+            if detail:
+                l.update(detail)
+                if "floor_no" in detail and detail["floor_no"] is not None:
+                    l["floor"] = detail["floor_no"]
+                if detail.get("building_floors"):
+                    l["max_floor"] = detail["building_floors"]
+                if detail.get("build_year") and not l.get("year_built"):
+                    l["year_built"] = detail["build_year"]
+                success += 1
+                consecutive_fails = 0
+            else:
+                consecutive_fails += 1
+            if i % 100 == 0:
+                pct = success * 100 // i
+                print(f"    · {i}/{total} ({success} OK, {pct}%)")
+            # Circuit breaker — jeśli 50 requestów pod rząd padło, prawdopodobnie ban
+            if consecutive_fails >= 50:
+                print(f"    ⚠️  50 kolejnych failów — przerywam (rate limit / ban)")
+                # anulujemy resztę
+                for f in futures:
+                    f.cancel()
+                break
+    print(f"  ✅ Details fetched: {success}/{total} ({success * 100 // max(total,1)}%)")
+    return success
+
+
+# --------------------------------------------------------------------------
 # AI VERDICT (mediana cena/m² per miasto + typ)
 # --------------------------------------------------------------------------
 def analyze_prices(listings: list[dict]) -> None:
@@ -480,6 +664,12 @@ def main() -> int:
     originals, dupes = deduplicate(all_listings)
     print(f"    → {originals} oryginałów, {dupes} kopii")
 
+    # -------- DETAIL FETCH (Faza 2) --
+    detail_count = 0
+    if FETCH_DETAILS:
+        print("\n🔬 Pobieranie szczegółów ofert (rok, typ budynku, standard, ogrzewanie, ...)")
+        detail_count = fetch_details_parallel(all_listings)
+
     # -------- SORT: originals first, then by verdict (deal → normal → over → outlier) ---
     order = {"deal": 0, "normal": 1, "over": 2, "outlier": 3}
     all_listings.sort(key=lambda x: (
@@ -515,6 +705,7 @@ def main() -> int:
         "sources": ["Otodom"],
         "verdicts": dict(verdict_counts),
         "per_combo": stats_per_combo,
+        "details_fetched": detail_count,
         "note": "REAL DATA — scraped from Otodom.pl by GitHub Actions",
         "listings": all_listings,
     }

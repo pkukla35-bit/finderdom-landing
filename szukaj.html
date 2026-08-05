@@ -70,6 +70,15 @@
   .results-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px}
   .results-count{font-size:14px;color:#c5d0e6}
   .results-count strong{color:#fff;font-weight:900}
+  .date-filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:10px 14px;margin-bottom:14px}
+  .date-filter-label{font-size:13px;color:#c5d0e6;font-weight:700;white-space:nowrap}
+  .date-chips{display:flex;gap:6px;flex-wrap:wrap}
+  .date-chip{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#c5d0e6;padding:7px 12px;border-radius:100px;font-size:12px;font-weight:700;cursor:pointer;transition:.15s;user-select:none}
+  .date-chip:hover{background:rgba(255,184,0,0.1);border-color:rgba(255,184,0,0.4)}
+  .date-chip.active{background:#FFB800;color:#0B1836;border-color:#FFB800}
+  .date-custom{display:flex;align-items:center;gap:8px;margin-left:auto}
+  .date-custom input[type="date"]{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:6px 10px;border-radius:8px;font-size:12px;font-family:inherit}
+  @media(max-width:768px){.date-custom{margin-left:0;width:100%;justify-content:center}}
   .sort-select{padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:#fff;font-size:13px;outline:none;cursor:pointer;font-weight:600}
 
   /* Listing cards */
@@ -480,15 +489,33 @@
 
   <!-- Results -->
   <main>
+    <div class="date-filter-bar">
+      <div class="date-filter-label">📅 Data dodania:</div>
+      <div class="date-chips">
+        <div class="date-chip active" data-date="all">Wszystkie</div>
+        <div class="date-chip" data-date="today">Dziś</div>
+        <div class="date-chip" data-date="3d">Ostatnie 3 dni</div>
+        <div class="date-chip" data-date="7d">Ostatnie 7 dni</div>
+        <div class="date-chip" data-date="30d">Ostatnie 30 dni</div>
+        <div class="date-chip" data-date="custom">📆 Zakres…</div>
+      </div>
+      <div class="date-custom" id="dateCustom" style="display:none">
+        <input type="date" id="dateFrom">
+        <span style="color:#8ba3d4">–</span>
+        <input type="date" id="dateTo">
+      </div>
+    </div>
+
     <div class="results-head">
-      <div class="results-count">Znaleziono <strong id="count">6</strong> ofert (przykłady poglądowe)</div>
-      <select class="sort-select">
-        <option>Sortuj: AI - najlepsze okazje</option>
-        <option>Cena rosnąco</option>
-        <option>Cena malejąco</option>
-        <option>Cena za m² rosnąco</option>
-        <option>Najnowsze</option>
-        <option>Największy metraż</option>
+      <div class="results-count">Znaleziono <strong id="count">6</strong> ofert</div>
+      <select class="sort-select" id="sortSelect">
+        <option value="ai">Sortuj: AI - najlepsze okazje</option>
+        <option value="newest">Najnowsze</option>
+        <option value="price_asc">Cena rosnąco</option>
+        <option value="price_desc">Cena malejąco</option>
+        <option value="ppm2_asc">Cena za m² rosnąco</option>
+        <option value="ppm2_desc">Cena za m² malejąco</option>
+        <option value="area_desc">Największy metraż</option>
       </select>
     </div>
 
@@ -801,6 +828,25 @@ function collectFilterState() {
 
   const onlyOrig = document.getElementById('chipOnlyOrig')?.classList.contains('active');
 
+  // Data dodania: chip active OR custom range
+  const activeDateChip = document.querySelector('.date-chip.active');
+  const dateMode = activeDateChip?.dataset.date || 'all';
+  const dateFrom = document.getElementById('dateFrom')?.value || '';
+  const dateTo   = document.getElementById('dateTo')?.value || '';
+  // Compute cutoff timestamp (ms)
+  let dateFromMs = 0, dateToMs = 0;
+  if (dateMode === 'today')      dateFromMs = Date.now() - 24*3600*1000;
+  else if (dateMode === '3d')    dateFromMs = Date.now() - 3*24*3600*1000;
+  else if (dateMode === '7d')    dateFromMs = Date.now() - 7*24*3600*1000;
+  else if (dateMode === '30d')   dateFromMs = Date.now() - 30*24*3600*1000;
+  else if (dateMode === 'custom') {
+    if (dateFrom) dateFromMs = new Date(dateFrom).getTime();
+    if (dateTo)   dateToMs   = new Date(dateTo).getTime() + 24*3600*1000; // inclusive end of day
+  }
+
+  // Sortowanie
+  const sortMode = document.getElementById('sortSelect')?.value || 'ai';
+
   const ppm2From = parseInt(document.getElementById('fPpm2From')?.value || '0', 10);
   const ppm2To   = parseInt(document.getElementById('fPpm2To')?.value   || '0', 10);
   const areaFrom = parseFloat(document.getElementById('fAreaFrom')?.value || '0');
@@ -817,7 +863,8 @@ function collectFilterState() {
   });
 
   return { q, type, trans, priceMax, activeSellers, onlyOrig,
-           ppm2From, ppm2To, areaFrom, areaTo, yearFrom, yearTo, dynamic };
+           ppm2From, ppm2To, areaFrom, areaTo, yearFrom, yearTo, dynamic,
+           dateFromMs, dateToMs, sortMode };
 }
 
 function applyAllFilters() {
@@ -852,8 +899,34 @@ function applyAllFilters() {
       if (v == null || v === '') return false;
       if (!allowed.has(String(v))) return false;
     }
+
+    // Data dodania
+    if (f.dateFromMs || f.dateToMs) {
+      const t = l.added_at ? new Date(l.added_at).getTime() : 0;
+      if (!t) return false;
+      if (f.dateFromMs && t < f.dateFromMs) return false;
+      if (f.dateToMs   && t > f.dateToMs)   return false;
+    }
     return true;
   });
+
+  // Sortowanie
+  const sortFuncs = {
+    ai: (a, b) => {
+      const order = { deal: 0, normal: 1, over: 2, outlier: 3 };
+      const oa = order[a.verdict_badge] ?? 1, ob = order[b.verdict_badge] ?? 1;
+      if (oa !== ob) return oa - ob;
+      return (a.ai_delta_pct || 0) - (b.ai_delta_pct || 0);
+    },
+    newest: (a, b) => (b.added_at || '').localeCompare(a.added_at || ''),
+    price_asc:  (a, b) => a.price - b.price,
+    price_desc: (a, b) => b.price - a.price,
+    ppm2_asc:   (a, b) => a.price_pm2 - b.price_pm2,
+    ppm2_desc:  (a, b) => b.price_pm2 - a.price_pm2,
+    area_desc:  (a, b) => b.area_m2 - a.area_m2,
+  };
+  const sortFn = sortFuncs[f.sortMode] || sortFuncs.ai;
+  filtered.sort(sortFn);
 
   // Sync sidebar chip typu (jeśli hero-select zmienił typ)
   if (f.type) {
@@ -921,7 +994,23 @@ document.querySelectorAll('.chip[data-filter][data-value]').forEach(c => {
   }, true);
 });
 
+// Date chips — radio (jeden aktywny na raz)
+document.querySelectorAll('.date-chip').forEach(c => {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.date-chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    const isCustom = c.dataset.date === 'custom';
+    document.getElementById('dateCustom').style.display = isCustom ? 'flex' : 'none';
+    applyAllFilters();
+  });
+});
+document.getElementById('dateFrom')?.addEventListener('change', applyAllFilters);
+document.getElementById('dateTo')?.addEventListener('change', applyAllFilters);
+
+// Sortowanie
+document.getElementById('sortSelect')?.addEventListener('change', applyAllFilters);
+
 </script>
 
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2647216feafdf72',t:'MTc4NTkxODY4Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

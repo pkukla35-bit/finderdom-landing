@@ -43,11 +43,11 @@ except ImportError:
 # --------------------------------------------------------------------------
 # CONFIG
 # --------------------------------------------------------------------------
-MAX_PAGES = int(os.getenv("MAX_PAGES", "5"))          # 5 stron × 72 items × 9 komb = ~3200 max
-MAX_LISTINGS = int(os.getenv("MAX_LISTINGS", "8000")) # hard cap na output JSON
+MAX_PAGES = int(os.getenv("MAX_PAGES", "8"))          # 8 stron × 72 × 9 komb = ~5200 z LATEST
+MAX_LISTINGS = int(os.getenv("MAX_LISTINGS", "60000")) # hard cap na output JSON (~40MB)
 MIN_LISTINGS = int(os.getenv("MIN_LISTINGS", "100"))  # safe-fail: mniej = nie zapisujemy
-DELAY_MIN = float(os.getenv("DELAY_MIN", "1.5"))
-DELAY_MAX = float(os.getenv("DELAY_MAX", "3.0"))
+DELAY_MIN = float(os.getenv("DELAY_MIN", "1.2"))
+DELAY_MAX = float(os.getenv("DELAY_MAX", "2.5"))
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "25"))
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 
@@ -56,42 +56,43 @@ FETCH_DETAILS = os.getenv("FETCH_DETAILS", "1") == "1"   # 1 = pobieraj szczegó
 DETAIL_WORKERS = int(os.getenv("DETAIL_WORKERS", "3"))    # ile wątków równolegle (ostrożnie z anti-bot)
 DETAIL_TIMEOUT = int(os.getenv("DETAIL_TIMEOUT", "15"))
 DETAIL_ONLY_ORIGINALS = os.getenv("DETAIL_ONLY_ORIGINALS", "1") == "1"  # tylko oryginały
-DETAIL_MAX = int(os.getenv("DETAIL_MAX", "800"))          # max ofert do fetch (ochrona przed banem)
+DETAIL_MAX = int(os.getenv("DETAIL_MAX", "500"))          # max ofert do fetch (ochrona przed banem/timeout)
 DETAIL_DELAY = float(os.getenv("DETAIL_DELAY", "0.6"))    # delay per worker per request
 DETAIL_MAX_RETRIES = int(os.getenv("DETAIL_MAX_RETRIES", "2"))
 
-# Per-city scraping (Faza 1b — po ogólnym LATEST)
-SCRAPE_TOP_CITIES = os.getenv("SCRAPE_TOP_CITIES", "1") == "1"
-CITY_MAX_PAGES = int(os.getenv("CITY_MAX_PAGES", "3"))    # 3 strony × 72 = ~215 ofert per (miasto×typ×trans)
+# Per-voivodeship scraping (Faza 1b — pokrycie WSZYSTKICH miast poprzez skan na poziomie województw)
+SCRAPE_VOIVODESHIPS = os.getenv("SCRAPE_VOIVODESHIPS", "1") == "1"
+VOJ_MAX_PAGES = int(os.getenv("VOJ_MAX_PAGES", "20"))     # 20 stron × 72 = ~1440 ofert per (woj×typ×trans)
 
-# TOP miasta Polski (URL path na Otodom = województwo/powiat/gmina/miasto)
-# Dla miast na prawach powiatu (Warszawa, Kraków, Wrocław...) URL to /woj/miasto/miasto/miasto
-TOP_CITIES_URL = [
-    ("mazowieckie", "warszawa", "warszawa", "warszawa"),
-    ("malopolskie", "krakow", "krakow", "krakow"),
-    ("dolnoslaskie", "wroclaw", "wroclaw", "wroclaw"),
-    ("wielkopolskie", "poznan", "poznan", "poznan"),
-    ("pomorskie", "gdansk", "gdansk", "gdansk"),
-    ("lodzkie", "lodz", "lodz", "lodz"),
-    ("slaskie", "katowice", "katowice", "katowice"),
-    ("lubelskie", "lublin", "lublin", "lublin"),
-    ("podlaskie", "bialystok", "bialystok", "bialystok"),
-    ("zachodniopomorskie", "szczecin", "szczecin", "szczecin"),
-    ("kujawsko-pomorskie", "bydgoszcz", "bydgoszcz", "bydgoszcz"),
-    ("podkarpackie", "rzeszow", "rzeszow", "rzeszow"),
-    ("kujawsko-pomorskie", "torun", "torun", "torun"),
-    ("swietokrzyskie", "kielce", "kielce", "kielce"),
-    ("warminsko-mazurskie", "olsztyn", "olsztyn", "olsztyn"),
-    ("lubuskie", "gorzow-wielkopolski", "gorzow-wielkopolski", "gorzow-wielkopolski"),
-    ("lubuskie", "zielona-gora", "zielona-gora", "zielona-gora"),
-    ("mazowieckie", "radom", "radom", "radom"),
-    ("slaskie", "czestochowa", "czestochowa", "czestochowa"),
-    ("pomorskie", "gdynia", "gdynia", "gdynia"),
+# 16 województw Polski — pokrywa WSZYSTKIE miasta i gminy w kraju.
+# URL Otodom: /pl/wyniki/{transaction}/{type}/{voivodeship}
+VOIVODESHIPS = [
+    "dolnoslaskie",
+    "kujawsko-pomorskie",
+    "lubelskie",
+    "lubuskie",
+    "lodzkie",
+    "malopolskie",
+    "mazowieckie",
+    "opolskie",
+    "podkarpackie",
+    "podlaskie",
+    "pomorskie",
+    "slaskie",
+    "swietokrzyskie",
+    "warminsko-mazurskie",
+    "wielkopolskie",
+    "zachodniopomorskie",
 ]
-# Dla per-city robimy tylko najważniejsze kombinacje (mieszkanie sprzedaz + wynajem)
-CITY_COMBOS = [
+
+# Kombinacje per województwo — pełne pokrycie: 4 typy sprzedaży + 2 wynajmu
+VOJ_COMBOS = [
     ("sprzedaz", "mieszkanie", "mieszkanie"),
+    ("sprzedaz", "dom", "dom"),
+    ("sprzedaz", "dzialka", "dzialka"),
+    ("sprzedaz", "lokal", "lokal"),
     ("wynajem", "mieszkanie", "mieszkanie"),
+    ("wynajem", "dom", "dom"),
 ]
 
 OUT_DIR = Path(os.getenv(
@@ -384,47 +385,50 @@ def scrape_combo(transaction: str, otodom_type: str, out_type: str) -> list[dict
     return listings
 
 
-def scrape_city_combo(transaction: str, otodom_type: str, out_type: str,
-                       woj: str, powiat: str, gmina: str, miasto: str) -> list[dict]:
-    """Pobiera oferty per-miasto (URL /woj/powiat/gmina/miasto)."""
+def scrape_voj_combo(transaction: str, otodom_type: str, out_type: str,
+                     voj: str) -> list[dict]:
+    """Pobiera oferty per-województwo (URL /pl/wyniki/{trans}/{typ}/{woj}).
+    Break tylko gdy Otodom zwróci pustą stronę (koniec paginacji)."""
     listings = []
-    base = f"https://www.otodom.pl/pl/wyniki/{transaction}/{otodom_type}/{woj}/{powiat}/{gmina}/{miasto}"
-    for page in range(1, CITY_MAX_PAGES + 1):
+    base = f"https://www.otodom.pl/pl/wyniki/{transaction}/{otodom_type}/{voj}"
+    empty_streak = 0
+    for page in range(1, VOJ_MAX_PAGES + 1):
         url = f"{base}?limit=72&by=LATEST&direction=DESC&page={page}"
         data = fetch_page(url)
         if not data:
-            break
+            empty_streak += 1
+            if empty_streak >= 2:
+                break
+            continue
         try:
             items = data["props"]["pageProps"]["data"]["searchAds"]["items"] or []
         except (KeyError, TypeError):
             items = []
         if not items:
             break
+        empty_streak = 0
         for it in items:
             t = transform(it, transaction, out_type)
             if t:
                 listings.append(t)
-        if page < CITY_MAX_PAGES:
+        if page < VOJ_MAX_PAGES:
             time.sleep(random.uniform(DELAY_MIN, DELAY_MAX))
     return listings
 
 
-def scrape_top_cities() -> list[dict]:
-    """Iteruje po TOP miastach × kluczowych kombinacjach — zapewnia że każde duże
-    miasto ma solidną reprezentację (tysiące ofert)."""
-    all_city_listings = []
-    total = len(TOP_CITIES_URL) * len(CITY_COMBOS)
+def scrape_voivodeships() -> list[dict]:
+    """Iteruje po WSZYSTKICH 16 województwach × 6 kombinacjach = pełne pokrycie kraju."""
+    all_voj_listings = []
+    total = len(VOIVODESHIPS) * len(VOJ_COMBOS)
     idx = 0
-    for city_url in TOP_CITIES_URL:
-        woj, powiat, gmina, miasto = city_url
-        for transaction, otodom_type, out_type in CITY_COMBOS:
+    for voj in VOIVODESHIPS:
+        for transaction, otodom_type, out_type in VOJ_COMBOS:
             idx += 1
-            print(f"  🌆 [{idx}/{total}] {miasto}/{transaction}/{otodom_type}", end=" ")
-            got = scrape_city_combo(transaction, otodom_type, out_type,
-                                     woj, powiat, gmina, miasto)
+            print(f"  🗺️  [{idx}/{total}] {voj}/{transaction}/{otodom_type}", end=" ", flush=True)
+            got = scrape_voj_combo(transaction, otodom_type, out_type, voj)
             print(f"→ {len(got)}")
-            all_city_listings.extend(got)
-    return all_city_listings
+            all_voj_listings.extend(got)
+    return all_voj_listings
 
 
 # --------------------------------------------------------------------------
@@ -727,14 +731,15 @@ def main() -> int:
 
     print(f"\n📊 Faza 1 (LATEST cała PL): {len(all_listings)} ofert")
 
-    # -------- FAZA 1b: TOP MIASTA (dużo ofert per miasto) -----------
-    if SCRAPE_TOP_CITIES:
-        print(f"\n🌆 Faza 1b: Top {len(TOP_CITIES_URL)} miast × {len(CITY_COMBOS)} kombinacji")
-        city_listings = scrape_top_cities()
-        print(f"   → {len(city_listings)} ofert z top miast")
+    # -------- FAZA 1b: WSZYSTKIE 16 WOJEWÓDZTW × 6 KOMBINACJI = pełne pokrycie kraju -----------
+    if SCRAPE_VOIVODESHIPS:
+        print(f"\n🗺️  Faza 1b: {len(VOIVODESHIPS)} województw × {len(VOJ_COMBOS)} kombinacji "
+              f"(max {VOJ_MAX_PAGES} stron each)")
+        voj_listings = scrape_voivodeships()
+        print(f"   → {len(voj_listings)} ofert ze wszystkich województw")
         # Merge — deduplikacja przez fingerprint zajmie się dublami
-        all_listings.extend(city_listings)
-        # Trim again (miasta mogą wygenerować dużo — trzymamy się limitu)
+        all_listings.extend(voj_listings)
+        # Trim again (może wygenerować dużo — trzymamy się limitu)
         if len(all_listings) > MAX_LISTINGS:
             print(f"   ⚠️  Powyżej MAX_LISTINGS={MAX_LISTINGS}, obcinam do limitu")
             all_listings = all_listings[:MAX_LISTINGS]

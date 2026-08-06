@@ -66,9 +66,10 @@ VOJ_MAX_PAGES = int(os.getenv("VOJ_MAX_PAGES", "20"))     # 20 stron × 72 = ~14
 
 # 16 województw Polski — pokrywa WSZYSTKIE miasta i gminy w kraju.
 # URL Otodom: /pl/wyniki/{transaction}/{type}/{voivodeship}
+# UWAGA: Otodom używa PODWÓJNEGO myślnika dla nazw dwuczłonowych!
 VOIVODESHIPS = [
     "dolnoslaskie",
-    "kujawsko-pomorskie",
+    "kujawsko--pomorskie",       # podwójny myślnik!
     "lubelskie",
     "lubuskie",
     "lodzkie",
@@ -80,7 +81,7 @@ VOIVODESHIPS = [
     "pomorskie",
     "slaskie",
     "swietokrzyskie",
-    "warminsko-mazurskie",
+    "warminsko--mazurskie",      # podwójny myślnik!
     "wielkopolskie",
     "zachodniopomorskie",
 ]

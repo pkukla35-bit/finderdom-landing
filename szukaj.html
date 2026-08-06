@@ -176,7 +176,6 @@
     <select class="search-input" id="heroTrans">
       <option value="sprzedaz">Sprzedaż</option>
       <option value="wynajem">Wynajem</option>
-      <option value="">Sprzedaż + Wynajem</option>
     </select>
     <select class="search-input" id="heroPrice">
       <option value="">Cena do...</option>
@@ -214,10 +213,10 @@
     <div class="filter-group" id="subTypeGroup">
       <div class="filter-title" id="subTypeTitle">🏗️ Typ budynku</div>
       <div class="chip-group" id="subTypeChips">
-        <div class="chip">Blok</div>
-        <div class="chip">Kamienica</div>
-        <div class="chip">Apartamentowiec</div>
-        <div class="chip">Loft</div>
+        <div class="chip" data-filter="building_type" data-value="blok">Blok</div>
+        <div class="chip" data-filter="building_type" data-value="kamienica">Kamienica</div>
+        <div class="chip" data-filter="building_type" data-value="apartamentowiec">Apartamentowiec</div>
+        <div class="chip" data-filter="building_type" data-value="loft">Loft</div>
       </div>
     </div>
 
@@ -310,22 +309,21 @@
     <div class="filter-group">
       <div class="filter-title">🛏️ Liczba pokoi</div>
       <div class="chip-group">
-        <div class="chip">1</div>
-        <div class="chip">2</div>
-        <div class="chip">3</div>
-        <div class="chip">4</div>
-        <div class="chip">5+</div>
+        <div class="chip" data-rooms="1">1</div>
+        <div class="chip" data-rooms="2">2</div>
+        <div class="chip" data-rooms="3">3</div>
+        <div class="chip" data-rooms="4">4</div>
+        <div class="chip" data-rooms="5+">5+</div>
       </div>
     </div>
 
     <div class="filter-group">
       <div class="filter-title">🏢 Piętro</div>
       <div class="chip-group">
-        <div class="chip">Parter</div>
-        <div class="chip">1-3</div>
-        <div class="chip">4-7</div>
-        <div class="chip">8+</div>
-        <div class="chip">Ostatnie</div>
+        <div class="chip" data-floor="0">Parter</div>
+        <div class="chip" data-floor="1-3">1-3</div>
+        <div class="chip" data-floor="4-7">4-7</div>
+        <div class="chip" data-floor="8+">8+</div>
       </div>
     </div>
 
@@ -379,9 +377,9 @@
     <div class="filter-group">
       <div class="filter-title">💎 Analiza AI</div>
       <div class="chip-group">
-        <div class="chip">🔥 Tylko okazje</div>
-        <div class="chip">W normie</div>
-        <div class="chip">Ukryj zawyżone</div>
+        <div class="chip" data-verdict="deal">🔥 Tylko okazje</div>
+        <div class="chip" data-verdict="normal">✓ W normie</div>
+        <div class="chip" data-verdict="hide-over">🚫 Ukryj zawyżone</div>
       </div>
     </div>
 
@@ -389,17 +387,7 @@
       <div class="filter-title">🔁 Duplikaty</div>
       <div class="chip-group">
         <div class="chip" id="chipOnlyOrig">✨ Tylko oryginały</div>
-        <div class="chip">📋 Pokaż wszystko (z kopiami)</div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">✨ Dodatki</div>
-      <div class="chip-group">
-        <div class="chip">Balkon</div>
-        <div class="chip">Garaż</div>
-        <div class="chip">Winda</div>
-        <div class="chip">Ogród</div>
+        <div class="chip" id="chipShowAll">📋 Pokaż wszystko (z kopiami)</div>
       </div>
     </div>
 
@@ -878,6 +866,16 @@ function collectFilterState() {
   const yearFrom = parseInt(document.getElementById('fYearFrom')?.value || '0', 10);
   const yearTo   = parseInt(document.getElementById('fYearTo')?.value   || '0', 10);
 
+  // Rooms (multi-select z chipów [data-rooms])
+  const activeRooms = Array.from(document.querySelectorAll('.chip.active[data-rooms]'))
+    .map(c => c.dataset.rooms);
+  // Floor bands (multi-select z chipów [data-floor])
+  const activeFloors = Array.from(document.querySelectorAll('.chip.active[data-floor]'))
+    .map(c => c.dataset.floor);
+  // AI verdict filters (multi-select z chipów [data-verdict])
+  const activeVerdicts = Array.from(document.querySelectorAll('.chip.active[data-verdict]'))
+    .map(c => c.dataset.verdict);
+
   // Dynamic filters: chipy z [data-filter][data-value] — grupujemy po data-filter (multi-select w grupie)
   const dynamic = {};
   document.querySelectorAll('.chip.active[data-filter][data-value]').forEach(c => {
@@ -888,6 +886,7 @@ function collectFilterState() {
 
   return { q, type, trans, priceMax, priceFrom, priceTo, activeSellers, onlyOrig,
            ppm2From, ppm2To, areaFrom, areaTo, yearFrom, yearTo, dynamic,
+           activeRooms, activeFloors, activeVerdicts,
            dateFromMs, dateToMs, sortMode };
 }
 
@@ -924,6 +923,40 @@ function applyAllFilters() {
       }
       if (v == null || v === '') return false;
       if (!allowed.has(String(v))) return false;
+    }
+
+    // Rooms filter (multi-select)
+    if (f.activeRooms.length > 0) {
+      const r = l.rooms || 0;
+      const match = f.activeRooms.some(spec => {
+        if (spec === '5+') return r >= 5;
+        return r === parseInt(spec, 10);
+      });
+      if (!match) return false;
+    }
+
+    // Floor filter (multi-select)
+    if (f.activeFloors.length > 0) {
+      const fl = l.floor;
+      if (fl == null) return false;
+      const match = f.activeFloors.some(spec => {
+        if (spec === '0')    return fl === 0;
+        if (spec === '1-3')  return fl >= 1 && fl <= 3;
+        if (spec === '4-7')  return fl >= 4 && fl <= 7;
+        if (spec === '8+')   return fl >= 8;
+        return false;
+      });
+      if (!match) return false;
+    }
+
+    // AI verdict filter
+    if (f.activeVerdicts.length > 0) {
+      const v = l.verdict_badge || 'normal';
+      // "hide-over" oznacza ukryj zawyżone → wtedy wszystkie oprócz over
+      const wantHideOver = f.activeVerdicts.includes('hide-over');
+      const explicitVerdicts = f.activeVerdicts.filter(x => x !== 'hide-over');
+      if (wantHideOver && v === 'over') return false;
+      if (explicitVerdicts.length > 0 && !explicitVerdicts.includes(v)) return false;
     }
 
     // Data dodania
@@ -1020,6 +1053,41 @@ document.querySelectorAll('.chip[data-filter][data-value]').forEach(c => {
   }, true);
 });
 
+// Chipy pokoi — multi-select
+document.querySelectorAll('.chip[data-rooms]').forEach(c => {
+  c.addEventListener('click', (e) => {
+    e.stopImmediatePropagation();
+    c.classList.toggle('active');
+    applyAllFilters();
+  }, true);
+});
+
+// Chipy piętra — multi-select
+document.querySelectorAll('.chip[data-floor]').forEach(c => {
+  c.addEventListener('click', (e) => {
+    e.stopImmediatePropagation();
+    c.classList.toggle('active');
+    applyAllFilters();
+  }, true);
+});
+
+// Chipy AI verdict — multi-select
+document.querySelectorAll('.chip[data-verdict]').forEach(c => {
+  c.addEventListener('click', (e) => {
+    e.stopImmediatePropagation();
+    c.classList.toggle('active');
+    applyAllFilters();
+  }, true);
+});
+
+// "Pokaż wszystko" — odznacza "Tylko oryginały"
+document.getElementById('chipShowAll')?.addEventListener('click', (e) => {
+  e.stopImmediatePropagation();
+  document.getElementById('chipOnlyOrig')?.classList.remove('active');
+  e.currentTarget.classList.toggle('active');
+  applyAllFilters();
+}, false);
+
 // Date chips — radio (jeden aktywny na raz)
 document.querySelectorAll('.date-chip').forEach(c => {
   c.addEventListener('click', () => {
@@ -1038,5 +1106,5 @@ document.getElementById('sortSelect')?.addEventListener('change', applyAllFilter
 
 </script>
 
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a271225e3d39d51d',t:'MTc4NjA1MTczNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a27140b2cd0ef998',t:'MTc4NjA1Mjk3OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

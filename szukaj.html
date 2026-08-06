@@ -135,6 +135,7 @@
     .nav-links .hide-mob{display:none}
   }
 </style>
+<script src="/scripts/city-coords.js"></script>
 </head>
 <body>
 
@@ -338,9 +339,12 @@
     <div class="filter-group">
       <div class="filter-title">📍 Promień od punktu (km)</div>
       <div class="radius-row">
-        <input type="number" placeholder="np. 5" min="1" max="100">
+        <input type="text" id="fRadiusCity" placeholder="np. Kraków" list="cityList" style="flex:2">
+        <input type="number" id="fRadiusKm" placeholder="km" min="1" max="200" style="flex:1;max-width:70px">
         <span class="u">km</span>
       </div>
+      <datalist id="cityList"></datalist>
+      <div style="font-size:10px;color:#8ba3d4;margin-top:6px">💡 Wpisz miasto centralne (autouzupełnianie) + km. Znajdzie oferty w promieniu.</div>
     </div>
 
     <div class="filter-group">
@@ -826,6 +830,20 @@ function normalizeText(s) {
   return s.toLowerCase().replace(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, c => map[c] || c);
 }
 
+// Klucz miasta do lookupa w CITY_COORDS (lowercase, bez PL znaków, spacje→myślnik)
+function normalizeCity(s) {
+  return normalizeText(s).trim().replace(/\s+/g, '-');
+}
+
+// Haversine — dystans w km między dwoma punktami (lat/lon w stopniach)
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 function collectFilterState() {
   const q = normalizeText(document.getElementById('q')?.value.trim() || '');
   const type = document.getElementById('heroType')?.value || '';
@@ -876,6 +894,17 @@ function collectFilterState() {
   const activeVerdicts = Array.from(document.querySelectorAll('.chip.active[data-verdict]'))
     .map(c => c.dataset.verdict);
 
+  // Radius filter (km od wybranego miasta)
+  const radiusCityRaw = document.getElementById('fRadiusCity')?.value?.trim() || '';
+  const radiusKm = parseFloat(document.getElementById('fRadiusKm')?.value || '0');
+  let radiusCenter = null;
+  if (radiusCityRaw && radiusKm > 0) {
+    const key = normalizeCity(radiusCityRaw);
+    if (window.CITY_COORDS && window.CITY_COORDS[key]) {
+      radiusCenter = window.CITY_COORDS[key];
+    }
+  }
+
   // Dynamic filters: chipy z [data-filter][data-value] — grupujemy po data-filter (multi-select w grupie)
   const dynamic = {};
   document.querySelectorAll('.chip.active[data-filter][data-value]').forEach(c => {
@@ -887,6 +916,7 @@ function collectFilterState() {
   return { q, type, trans, priceMax, priceFrom, priceTo, activeSellers, onlyOrig,
            ppm2From, ppm2To, areaFrom, areaTo, yearFrom, yearTo, dynamic,
            activeRooms, activeFloors, activeVerdicts,
+           radiusCenter, radiusKm,
            dateFromMs, dateToMs, sortMode };
 }
 
@@ -957,6 +987,15 @@ function applyAllFilters() {
       const explicitVerdicts = f.activeVerdicts.filter(x => x !== 'hide-over');
       if (wantHideOver && v === 'over') return false;
       if (explicitVerdicts.length > 0 && !explicitVerdicts.includes(v)) return false;
+    }
+
+    // Promień od miasta centralnego (haversine city→city)
+    if (f.radiusCenter && f.radiusKm > 0) {
+      const key = normalizeCity(l.city || '');
+      const c = window.CITY_COORDS?.[key];
+      if (!c) return false;  // miasto oferty nie ma w słowniku → ukrywamy
+      const d = haversineKm(f.radiusCenter[0], f.radiusCenter[1], c[0], c[1]);
+      if (d > f.radiusKm) return false;
     }
 
     // Data dodania
@@ -1039,10 +1078,33 @@ document.getElementById('chipOnlyOrig')?.addEventListener('click', (e) => {
   applyAllFilters();
 }, false);
 
-// Inputy cena/powierzchnia/rok — live
-['fPpm2From','fPpm2To','fPriceFrom','fPriceTo','fAreaFrom','fAreaTo','fYearFrom','fYearTo'].forEach(id => {
+// Inputy cena/powierzchnia/rok/promień — live
+['fPpm2From','fPpm2To','fPriceFrom','fPriceTo','fAreaFrom','fAreaTo','fYearFrom','fYearTo','fRadiusCity','fRadiusKm'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', applyAllFiltersDebounced);
 });
+
+// Wypełnij datalist z listą miast (nazwa z wielkiej litery)
+(function initCityDatalist(){
+  const dl = document.getElementById('cityList');
+  if (!dl || !window.CITY_COORDS) return;
+  const displayNames = {
+    "krakow":"Kraków","lodz":"Łódź","wroclaw":"Wrocław","poznan":"Poznań","gdansk":"Gdańsk",
+    "bialystok":"Białystok","gdynia":"Gdynia","czestochowa":"Częstochowa","radom":"Radom",
+    "torun":"Toruń","kielce":"Kielce","rzeszow":"Rzeszów","gliwice":"Gliwice","zabrze":"Zabrze",
+    "olsztyn":"Olsztyn","bielsko-biala":"Bielsko-Biała","bytom":"Bytom","zielona-gora":"Zielona Góra",
+    "rybnik":"Rybnik","opole":"Opole","gorzow-wielkopolski":"Gorzów Wielkopolski",
+    "walbrzych":"Wałbrzych","tarnow":"Tarnów","kalisz":"Kalisz","legnica":"Legnica",
+    "grudziadz":"Grudziądz","slupsk":"Słupsk","jelenia-gora":"Jelenia Góra","nowy-sacz":"Nowy Sącz",
+    "sopot":"Sopot","zakopane":"Zakopane","wieliczka":"Wieliczka","niepolomice":"Niepołomice",
+    "piaseczno":"Piaseczno","pruszkow":"Pruszków","legionowo":"Legionowo","otwock":"Otwock"
+  };
+  const html = Object.keys(window.CITY_COORDS)
+    .map(k => {
+      const nice = displayNames[k] || k.split('-').map(w => w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+      return `<option value="${nice}">`;
+    }).join('');
+  dl.innerHTML = html;
+})();
 
 // Chipy z data-filter (standard, market_type, has_*) — multi-select w grupie
 document.querySelectorAll('.chip[data-filter][data-value]').forEach(c => {
@@ -1106,5 +1168,5 @@ document.getElementById('sortSelect')?.addEventListener('change', applyAllFilter
 
 </script>
 
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a27140b2cd0ef998',t:'MTc4NjA1Mjk3OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>

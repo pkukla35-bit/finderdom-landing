@@ -185,6 +185,8 @@
       <option value="800000">800 000 zł</option>
       <option value="1000000">1 000 000 zł</option>
       <option value="2000000">2 000 000 zł</option>
+      <option value="3000000">3 000 000 zł</option>
+      <option value="5000000">5 000 000 zł</option>
     </select>
     <button class="search-btn" id="heroSearchBtn">SZUKAJ</button>
   </div>
@@ -278,6 +280,14 @@
           <div class="chip" data-media="wz-wydane">✓ WZ wydane</div>
           <div class="chip" data-media="wz-brak">⏳ Brak / wymagane</div>
         </div>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-title">💰 Cena całkowita (zł)</div>
+      <div class="filter-row">
+        <input type="number" id="fPriceFrom" placeholder="od" value="" step="10000" min="0">
+        <input type="number" id="fPriceTo" placeholder="do" value="" step="10000" min="0">
       </div>
     </div>
 
@@ -802,7 +812,7 @@ document.querySelector('.btn-clear')?.addEventListener('click', () => {
   const htr = document.getElementById('heroTrans'); if (htr) htr.value = 'sprzedaz';
   const hp = document.getElementById('heroPrice'); if (hp) hp.value = '';
   // Reset sidebar inputs
-  ['fPpm2From','fPpm2To','fAreaFrom','fAreaTo','fYearFrom','fYearTo'].forEach(id => {
+  ['fPpm2From','fPpm2To','fPriceFrom','fPriceTo','fAreaFrom','fAreaTo','fYearFrom','fYearTo'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   // Reset chipów: WSZYSTKIE odznaczone (user wybiera sam czego chce)
@@ -861,6 +871,8 @@ function collectFilterState() {
 
   const ppm2From = parseInt(document.getElementById('fPpm2From')?.value || '0', 10);
   const ppm2To   = parseInt(document.getElementById('fPpm2To')?.value   || '0', 10);
+  const priceFrom = parseInt(document.getElementById('fPriceFrom')?.value || '0', 10);
+  const priceTo   = parseInt(document.getElementById('fPriceTo')?.value   || '0', 10);
   const areaFrom = parseFloat(document.getElementById('fAreaFrom')?.value || '0');
   const areaTo   = parseFloat(document.getElementById('fAreaTo')?.value   || '0');
   const yearFrom = parseInt(document.getElementById('fYearFrom')?.value || '0', 10);
@@ -874,7 +886,7 @@ function collectFilterState() {
     dynamic[k].add(v);
   });
 
-  return { q, type, trans, priceMax, activeSellers, onlyOrig,
+  return { q, type, trans, priceMax, priceFrom, priceTo, activeSellers, onlyOrig,
            ppm2From, ppm2To, areaFrom, areaTo, yearFrom, yearTo, dynamic,
            dateFromMs, dateToMs, sortMode };
 }
@@ -886,6 +898,8 @@ function applyAllFilters() {
     if (f.type && l.type !== f.type) return false;
     if (f.trans && l.transaction !== f.trans) return false;
     if (f.priceMax && l.price > f.priceMax) return false;
+    if (f.priceFrom && l.price < f.priceFrom) return false;
+    if (f.priceTo   && l.price > f.priceTo)   return false;
     if (f.q) {
       const hay = normalizeText((l.city || '') + ' ' + (l.district || '') + ' ' + (l.title || ''));
       const words = f.q.split(/\s+/).filter(Boolean);
@@ -993,7 +1007,7 @@ document.getElementById('chipOnlyOrig')?.addEventListener('click', (e) => {
 }, false);
 
 // Inputy cena/powierzchnia/rok — live
-['fPpm2From','fPpm2To','fAreaFrom','fAreaTo','fYearFrom','fYearTo'].forEach(id => {
+['fPpm2From','fPpm2To','fPriceFrom','fPriceTo','fAreaFrom','fAreaTo','fYearFrom','fYearTo'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', applyAllFiltersDebounced);
 });
 
@@ -1024,5 +1038,5 @@ document.getElementById('sortSelect')?.addEventListener('change', applyAllFilter
 
 </script>
 
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a26d49b558ea876f',t:'MTc4NjAxMTQwNQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a271225e3d39d51d',t:'MTc4NjA1MTczNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

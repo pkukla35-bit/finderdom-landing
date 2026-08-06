@@ -56,7 +56,7 @@ FETCH_DETAILS = os.getenv("FETCH_DETAILS", "1") == "1"   # 1 = pobieraj szczegó
 DETAIL_WORKERS = int(os.getenv("DETAIL_WORKERS", "3"))    # ile wątków równolegle (ostrożnie z anti-bot)
 DETAIL_TIMEOUT = int(os.getenv("DETAIL_TIMEOUT", "15"))
 DETAIL_ONLY_ORIGINALS = os.getenv("DETAIL_ONLY_ORIGINALS", "1") == "1"  # tylko oryginały
-DETAIL_MAX = int(os.getenv("DETAIL_MAX", "500"))          # max ofert do fetch (ochrona przed banem/timeout)
+DETAIL_MAX = int(os.getenv("DETAIL_MAX", "5000"))         # max ofert do fetch (pełne szczegóły: rynek, standard, balkon, ...)
 DETAIL_DELAY = float(os.getenv("DETAIL_DELAY", "0.6"))    # delay per worker per request
 DETAIL_MAX_RETRIES = int(os.getenv("DETAIL_MAX_RETRIES", "2"))
 
@@ -820,4 +820,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-  

@@ -638,6 +638,10 @@ def analyze_prices(listings: list[dict]) -> None:
             continue
         # symulacja RCN (transakcyjne) — ok. 6% poniżej ofertowej mediany
         rcn = int(median * 0.94)
+        # Guard: rcn może być 0 przy małych medianach (np. działki za 100 zł/m²).
+        # Bez tego → ZeroDivisionError kilka linii niżej.
+        if rcn <= 0:
+            continue
         l["ai_offers_pm2"] = median
         l["ai_rcn_pm2"] = rcn
         delta_pct = round((l["price_pm2"] - rcn) / rcn * 100)

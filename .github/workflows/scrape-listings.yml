@@ -20,14 +20,19 @@ on:
   workflow_dispatch:
     inputs:
       max_pages:
-        description: "Ilość stron per kombinacja (typ×transakcja). 5 = ~3000 ofert."
+        description: "Ilość stron per kombinacja (LATEST cała PL). 8 = ~5000 najnowszych."
         required: true
-        default: "5"
+        default: "8"
         type: string
       max_listings:
-        description: "Górny limit ofert w JSON."
+        description: "Górny limit ofert w JSON (~60k = pełne pokrycie kraju)."
         required: true
-        default: "8000"
+        default: "60000"
+        type: string
+      voj_max_pages:
+        description: "Ile stron per województwo × typ. 20 = ~1440 ofert każde."
+        required: true
+        default: "20"
         type: string
   # schedule:
   #   - cron: "15 4 * * *"   # codziennie 04:15 UTC (06:15 Warsaw)
@@ -44,7 +49,7 @@ jobs:
   scrape:
     name: Scrape Otodom → data/listings.json
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 300
 
     steps:
       - name: Checkout repo
@@ -64,11 +69,13 @@ jobs:
 
       - name: Run scraper
         env:
-          MAX_PAGES: ${{ github.event.inputs.max_pages || '5' }}
-          MAX_LISTINGS: ${{ github.event.inputs.max_listings || '8000' }}
+          MAX_PAGES: ${{ github.event.inputs.max_pages || '8' }}
+          MAX_LISTINGS: ${{ github.event.inputs.max_listings || '60000' }}
+          VOJ_MAX_PAGES: ${{ github.event.inputs.voj_max_pages || '20' }}
           MIN_LISTINGS: "100"
-          DELAY_MIN: "1.5"
-          DELAY_MAX: "3.0"
+          DELAY_MIN: "1.2"
+          DELAY_MAX: "2.5"
+          SCRAPE_VOIVODESHIPS: "1"
         run: |
           python scripts/otodom_scraper.py
 

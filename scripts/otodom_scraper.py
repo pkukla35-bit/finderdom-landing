@@ -56,7 +56,7 @@ FETCH_DETAILS = os.getenv("FETCH_DETAILS", "1") == "1"   # 1 = pobieraj szczegó
 DETAIL_WORKERS = int(os.getenv("DETAIL_WORKERS", "3"))    # ile wątków równolegle (ostrożnie z anti-bot)
 DETAIL_TIMEOUT = int(os.getenv("DETAIL_TIMEOUT", "15"))
 DETAIL_ONLY_ORIGINALS = os.getenv("DETAIL_ONLY_ORIGINALS", "1") == "1"  # tylko oryginały
-DETAIL_MAX = int(os.getenv("DETAIL_MAX", "5000"))         # max ofert do fetch (pełne szczegóły: rynek, standard, balkon, ...)
+DETAIL_MAX = int(os.getenv("DETAIL_MAX", "3000"))         # max ofert do Fazy 2 (standard, balkon, itd. — market już z URL)
 DETAIL_DELAY = float(os.getenv("DETAIL_DELAY", "0.6"))    # delay per worker per request
 DETAIL_MAX_RETRIES = int(os.getenv("DETAIL_MAX_RETRIES", "2"))
 
@@ -87,13 +87,18 @@ VOIVODESHIPS = [
 ]
 
 # Kombinacje per województwo — pełne pokrycie: 4 typy sprzedaży + 2 wynajmu
+# Dla SPRZEDAŻY dzielimy na PRIMARY/SECONDARY → market_type znany dla WSZYSTKICH ofert.
+# Format: (transaction, otodom_type, out_type, market_slug_pl, otodom_market_param)
 VOJ_COMBOS = [
-    ("sprzedaz", "mieszkanie", "mieszkanie"),
-    ("sprzedaz", "dom", "dom"),
-    ("sprzedaz", "dzialka", "dzialka"),
-    ("sprzedaz", "lokal", "lokal"),
-    ("wynajem", "mieszkanie", "mieszkanie"),
-    ("wynajem", "dom", "dom"),
+    ("sprzedaz", "mieszkanie", "mieszkanie", "pierwotny", "PRIMARY"),
+    ("sprzedaz", "mieszkanie", "mieszkanie", "wtorny",    "SECONDARY"),
+    ("sprzedaz", "dom",        "dom",        "pierwotny", "PRIMARY"),
+    ("sprzedaz", "dom",        "dom",        "wtorny",    "SECONDARY"),
+    ("sprzedaz", "dzialka",    "dzialka",    "",          ""),         # brak market dla działek
+    ("sprzedaz", "lokal",      "lokal",      "pierwotny", "PRIMARY"),
+    ("sprzedaz", "lokal",      "lokal",      "wtorny",    "SECONDARY"),
+    ("wynajem",  "mieszkanie", "mieszkanie", "",          ""),         # brak market dla wynajmu
+    ("wynajem",  "dom",        "dom",        "",          ""),
 ]
 
 OUT_DIR = Path(os.getenv(
@@ -387,14 +392,16 @@ def scrape_combo(transaction: str, otodom_type: str, out_type: str) -> list[dict
 
 
 def scrape_voj_combo(transaction: str, otodom_type: str, out_type: str,
-                     voj: str) -> list[dict]:
+                     voj: str, market_slug: str = "", market_param: str = "") -> list[dict]:
     """Pobiera oferty per-województwo (URL /pl/wyniki/{trans}/{typ}/{woj}).
-    Break tylko gdy Otodom zwróci pustą stronę (koniec paginacji)."""
+    Jeśli podano `market_param` (PRIMARY/SECONDARY), scraper doda &market=... do URL
+    i oznaczy WSZYSTKIE oferty jako `market_slug` (pierwotny/wtorny)."""
     listings = []
     base = f"https://www.otodom.pl/pl/wyniki/{transaction}/{otodom_type}/{voj}"
+    market_qs = f"&market={market_param}" if market_param else ""
     empty_streak = 0
     for page in range(1, VOJ_MAX_PAGES + 1):
-        url = f"{base}?limit=72&by=LATEST&direction=DESC&page={page}"
+        url = f"{base}?limit=72&by=LATEST&direction=DESC{market_qs}&page={page}"
         data = fetch_page(url)
         if not data:
             empty_streak += 1
@@ -411,6 +418,9 @@ def scrape_voj_combo(transaction: str, otodom_type: str, out_type: str,
         for it in items:
             t = transform(it, transaction, out_type)
             if t:
+                # Oznacz market_type z URL param (100% pokrycie dla sprzedaży)
+                if market_slug:
+                    t["market_type"] = market_slug
                 listings.append(t)
         if page < VOJ_MAX_PAGES:
             time.sleep(random.uniform(DELAY_MIN, DELAY_MAX))
@@ -418,15 +428,18 @@ def scrape_voj_combo(transaction: str, otodom_type: str, out_type: str,
 
 
 def scrape_voivodeships() -> list[dict]:
-    """Iteruje po WSZYSTKICH 16 województwach × 6 kombinacjach = pełne pokrycie kraju."""
+    """Iteruje po WSZYSTKICH 16 województwach × 9 kombinacjach = pełne pokrycie kraju.
+    Sprzedaż jest podzielona na PRIMARY/SECONDARY → market_type znany dla WSZYSTKICH sprzedażowych ofert."""
     all_voj_listings = []
     total = len(VOIVODESHIPS) * len(VOJ_COMBOS)
     idx = 0
     for voj in VOIVODESHIPS:
-        for transaction, otodom_type, out_type in VOJ_COMBOS:
+        for combo in VOJ_COMBOS:
+            transaction, otodom_type, out_type, market_slug, market_param = combo
             idx += 1
-            print(f"  🗺️  [{idx}/{total}] {voj}/{transaction}/{otodom_type}", end=" ", flush=True)
-            got = scrape_voj_combo(transaction, otodom_type, out_type, voj)
+            mk = f"/{market_slug}" if market_slug else ""
+            print(f"  🗺️  [{idx}/{total}] {voj}/{transaction}/{otodom_type}{mk}", end=" ", flush=True)
+            got = scrape_voj_combo(transaction, otodom_type, out_type, voj, market_slug, market_param)
             print(f"→ {len(got)}")
             all_voj_listings.extend(got)
     return all_voj_listings

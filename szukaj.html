@@ -164,8 +164,8 @@
 <!-- Search bar -->
 <div class="search-hero">
   <div class="search-bar">
-    <input type="text" class="search-input" placeholder="🔍 Miasto, dzielnica lub słowo kluczowe..." id="q">
-    <select class="search-input" id="heroType">
+    <input type="text" class="search-input" placeholder="🔍 Miasto..." id="q" style="flex:1.2;min-width:140px">
+    <select class="search-input" id="heroType" style="flex:0.9">
       <option value="mieszkanie">🏢 Mieszkanie</option>
       <option value="dom">🏠 Dom</option>
       <option value="dzialka">🌳 Działka</option>
@@ -174,11 +174,16 @@
       <option value="pokoj">🚪 Pokój</option>
       <option value="">Wszystkie typy</option>
     </select>
-    <select class="search-input" id="heroTrans">
+    <select class="search-input" id="heroTrans" style="flex:0.7">
       <option value="sprzedaz">Sprzedaż</option>
       <option value="wynajem">Wynajem</option>
     </select>
-    <input type="number" class="search-input" id="heroPrice" placeholder="Cena do... (np. 800000)" min="0" step="10000" list="priceHints">
+    <select class="search-input" id="heroMarket" style="flex:0.8">
+      <option value="">Rynek (dowolny)</option>
+      <option value="pierwotny">🏛️ Pierwotny</option>
+      <option value="wtorny">🏢 Wtórny</option>
+    </select>
+    <input type="number" class="search-input" id="heroPrice" placeholder="Cena do... (np. 800000)" min="0" step="10000" list="priceHints" style="flex:0.9;min-width:110px">
     <datalist id="priceHints">
       <option value="300000">300 000 zł</option>
       <option value="500000">500 000 zł</option>
@@ -818,6 +823,7 @@ function collectFilterState() {
   const type = document.getElementById('heroType')?.value || '';
   const trans = document.getElementById('heroTrans')?.value || '';
   const priceMax = parseInt(document.getElementById('heroPrice')?.value || '0', 10);
+  const heroMarket = document.getElementById('heroMarket')?.value || '';
 
   // Sellers — multi-select z chipów [data-seller]
   const activeSellers = Array.from(document.querySelectorAll('.chip.active[data-seller]'))
@@ -882,7 +888,7 @@ function collectFilterState() {
     dynamic[k].add(v);
   });
 
-  return { q, type, trans, priceMax, priceFrom, priceTo, activeSellers, onlyOrig,
+  return { q, type, trans, priceMax, priceFrom, priceTo, heroMarket, activeSellers, onlyOrig,
            ppm2From, ppm2To, areaFrom, areaTo, yearFrom, yearTo, dynamic,
            activeRooms, activeFloors, activeVerdicts,
            radiusCenter, radiusKm,
@@ -896,6 +902,7 @@ function applyAllFilters() {
     if (f.type && l.type !== f.type) return false;
     if (f.trans && l.transaction !== f.trans) return false;
     if (f.priceMax && l.price > f.priceMax) return false;
+    if (f.heroMarket && l.market_type !== f.heroMarket) return false;
     if (f.priceFrom && l.price < f.priceFrom) return false;
     if (f.priceTo   && l.price > f.priceTo)   return false;
     if (f.q) {
@@ -1030,6 +1037,7 @@ document.getElementById('heroType')?.addEventListener('change', applyAllFilters)
 document.getElementById('heroTrans')?.addEventListener('change', applyAllFilters);
 document.getElementById('heroPrice')?.addEventListener('input', applyAllFiltersDebounced);
 document.getElementById('heroPrice')?.addEventListener('change', applyAllFilters);
+document.getElementById('heroMarket')?.addEventListener('change', applyAllFilters);
 document.getElementById('heroSearchBtn')?.addEventListener('click', applyAllFilters);
 
 // Podpięcie eventów SIDEBAR — chipy sellera (multi-select)
@@ -1136,5 +1144,5 @@ document.getElementById('sortSelect')?.addEventListener('change', applyAllFilter
 
 </script>
 
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a27e467799ec8c98',t:'MTc4NjE4OTUzMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

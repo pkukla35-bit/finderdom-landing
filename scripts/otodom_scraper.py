@@ -53,6 +53,8 @@ MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 
 # Detail fetching (Faza 2)
 FETCH_DETAILS = os.getenv("FETCH_DETAILS", "1") == "1"   # 1 = pobieraj szczegóły z każdej oferty
+SKIP_DETAILS = os.getenv("SKIP_DETAILS", "0") == "1"     # 1 = pomiń Fazę 2 całkowicie (dla split workflow)
+DETAILS_ONLY = os.getenv("DETAILS_ONLY", "0") == "1"     # 1 = tylko Faza 2 (wczytaj istniejący listings.json)
 DETAIL_WORKERS = int(os.getenv("DETAIL_WORKERS", "6"))    # ile wątków równolegle (6 = agresywnie ale kontrolnie)
 DETAIL_TIMEOUT = int(os.getenv("DETAIL_TIMEOUT", "15"))
 DETAIL_ONLY_ORIGINALS = os.getenv("DETAIL_ONLY_ORIGINALS", "1") == "1"  # tylko oryginały (bez kopii)
@@ -787,7 +789,43 @@ def main() -> int:
     started = datetime.now(timezone.utc)
     print(f"🕷️  FinderDom Otodom scraper — start {started.isoformat()}")
     print(f"    MAX_PAGES={MAX_PAGES}  MAX_LISTINGS={MAX_LISTINGS}  DELAY={DELAY_MIN}-{DELAY_MAX}s")
-    print(f"    OUT_FILE={OUT_FILE}")
+    print(f"    OUT_FILE={OUT_FILE}  SKIP_DETAILS={SKIP_DETAILS}  DETAILS_ONLY={DETAILS_ONLY}")
+
+    # ========== DETAILS_ONLY MODE — wczytaj istniejący JSON i tylko wzbogać detalami ==========
+    if DETAILS_ONLY:
+        if not os.path.exists(OUT_FILE):
+            print(f"❌ DETAILS_ONLY=1 ale brak pliku {OUT_FILE} — najpierw uruchom scrape!")
+            return 1
+        with open(OUT_FILE, encoding="utf-8") as f:
+            existing = json.load(f)
+        all_listings = existing.get("listings", [])
+        print(f"📂 Wczytano {len(all_listings)} ofert z {OUT_FILE}")
+
+        # Faza 2 (details) + 2.5 (title parsing)
+        detail_count = 0
+        if FETCH_DETAILS and all_listings:
+            print(f"\n🔬 Pobieranie szczegółów ofert (max {DETAIL_MAX})…")
+            detail_count = fetch_details_parallel(all_listings)
+        print("\n📝 Title parsing — inferuje z tytułów…")
+        for l in all_listings:
+            parse_title_hints(l)
+
+        # Zapisz z zachowaniem count/originals/duplicates z poprzedniego runa
+        out = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "count": len(all_listings),
+            "originals": existing.get("originals", 0),
+            "duplicates": existing.get("duplicates", 0),
+            "verdicts": existing.get("verdicts", {}),
+            "per_combo": existing.get("per_combo", {}),
+            "details_enriched": detail_count,
+            "listings": all_listings,
+        }
+        os.makedirs(os.path.dirname(OUT_FILE) or ".", exist_ok=True)
+        with open(OUT_FILE, "w", encoding="utf-8") as f:
+            json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
+        print(f"\n✅ Zapisano {OUT_FILE} (details_enriched={detail_count})")
+        return 0
 
     all_listings: list[dict] = []
     stats_per_combo: dict[str, int] = {}
@@ -840,9 +878,11 @@ def main() -> int:
 
     # -------- DETAIL FETCH (Faza 2) --
     detail_count = 0
-    if FETCH_DETAILS:
+    if FETCH_DETAILS and not SKIP_DETAILS:
         print("\n🔬 Pobieranie szczegółów ofert (rok, typ budynku, standard, ogrzewanie, ...)")
         detail_count = fetch_details_parallel(all_listings)
+    elif SKIP_DETAILS:
+        print("\n⏭️  SKIP_DETAILS=1 — pomijam Fazę 2 (uruchom osobny workflow details-only)")
 
     # -------- TITLE PARSING (Faza 2.5) — fallback dla ofert bez detali --
     print("\n📝 Title parsing — inferuje building_type/standard/features z tytułów…")

@@ -1,4 +1,4 @@
-ame: Scrape Otodom Details (Phase 2)
+name: Scrape Otodom Details (Phase 2)
 
 on:
   workflow_dispatch:

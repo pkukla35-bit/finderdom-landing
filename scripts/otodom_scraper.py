@@ -139,6 +139,11 @@ def scraper_get(url, timeout=REQUEST_TIMEOUT):
         "Referer": "https://www.otodom.pl/",
     }
     try:
+        if ZENROWS_ENABLED:
+            params = {"apikey": ZENROWS_API_KEY, "url": url, "premium_proxy": "true", "proxy_country": "pl"}
+            if ZENROWS_ANTIBOT:
+                params["antibot"] = "true"
+            return requests.get(ZENROWS_ENDPOINT, params=params, timeout=max(timeout, 90))
         if SCRAPER_API_ENABLED:
             params = {"api_key": SCRAPER_API_KEY, "url": url, "country_code": SCRAPER_API_COUNTRY, "keep_headers": "true"}
             if SCRAPER_API_PREMIUM:
@@ -146,6 +151,7 @@ def scraper_get(url, timeout=REQUEST_TIMEOUT):
             return requests.get(SCRAPER_API_ENDPOINT, params=params, headers=headers, timeout=max(timeout, 70))
         return requests.get(url, headers=headers, timeout=timeout)
     except requests.RequestException:
+        return None
         return None
 
 

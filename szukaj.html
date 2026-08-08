@@ -178,16 +178,17 @@
       <option value="sprzedaz">Sprzedaż</option>
       <option value="wynajem">Wynajem</option>
     </select>
-    <select class="search-input" id="heroPrice">
-      <option value="">Cena do...</option>
+    <input type="number" class="search-input" id="heroPrice" placeholder="Cena do... (np. 800000)" min="0" step="10000" list="priceHints">
+    <datalist id="priceHints">
       <option value="300000">300 000 zł</option>
       <option value="500000">500 000 zł</option>
       <option value="800000">800 000 zł</option>
       <option value="1000000">1 000 000 zł</option>
+      <option value="1500000">1 500 000 zł</option>
       <option value="2000000">2 000 000 zł</option>
       <option value="3000000">3 000 000 zł</option>
       <option value="5000000">5 000 000 zł</option>
-    </select>
+    </datalist>
     <button class="search-btn" id="heroSearchBtn">SZUKAJ</button>
   </div>
 </div>
@@ -280,14 +281,6 @@
           <div class="chip" data-media="wz-wydane">✓ WZ wydane</div>
           <div class="chip" data-media="wz-brak">⏳ Brak / wymagane</div>
         </div>
-      </div>
-    </div>
-
-    <div class="filter-group">
-      <div class="filter-title">💰 Cena całkowita (zł)</div>
-      <div class="filter-row">
-        <input type="number" id="fPriceFrom" placeholder="od" value="" step="10000" min="0">
-        <input type="number" id="fPriceTo" placeholder="do" value="" step="10000" min="0">
       </div>
     </div>
 
@@ -1035,6 +1028,7 @@ document.getElementById('q')?.addEventListener('keydown', (e) => {
 });
 document.getElementById('heroType')?.addEventListener('change', applyAllFilters);
 document.getElementById('heroTrans')?.addEventListener('change', applyAllFilters);
+document.getElementById('heroPrice')?.addEventListener('input', applyAllFiltersDebounced);
 document.getElementById('heroPrice')?.addEventListener('change', applyAllFilters);
 document.getElementById('heroSearchBtn')?.addEventListener('click', applyAllFilters);
 

@@ -53,11 +53,11 @@ MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 
 # Detail fetching (Faza 2)
 FETCH_DETAILS = os.getenv("FETCH_DETAILS", "1") == "1"   # 1 = pobieraj szczegóły z każdej oferty
-DETAIL_WORKERS = int(os.getenv("DETAIL_WORKERS", "5"))    # ile wątków równolegle (5 = szybciej, kontrolowany ban risk)
+DETAIL_WORKERS = int(os.getenv("DETAIL_WORKERS", "6"))    # ile wątków równolegle (6 = agresywnie ale kontrolnie)
 DETAIL_TIMEOUT = int(os.getenv("DETAIL_TIMEOUT", "15"))
-DETAIL_ONLY_ORIGINALS = os.getenv("DETAIL_ONLY_ORIGINALS", "1") == "1"  # tylko oryginały
-DETAIL_MAX = int(os.getenv("DETAIL_MAX", "20000"))        # max ofert do Fazy 2 — dla pełnego pokrycia building_type/standard
-DETAIL_DELAY = float(os.getenv("DETAIL_DELAY", "0.35"))   # delay per worker per request (0.35 × 5 wątków = ~14 req/s)
+DETAIL_ONLY_ORIGINALS = os.getenv("DETAIL_ONLY_ORIGINALS", "1") == "1"  # tylko oryginały (bez kopii)
+DETAIL_MAX = int(os.getenv("DETAIL_MAX", "60000"))        # max ofert do Fazy 2 (wszystkie oryginały)
+DETAIL_DELAY = float(os.getenv("DETAIL_DELAY", "0.3"))    # delay per worker per request (6 × 0.3 = ~20 req/s)
 DETAIL_MAX_RETRIES = int(os.getenv("DETAIL_MAX_RETRIES", "2"))
 
 # Per-voivodeship scraping (Faza 1b — pokrycie WSZYSTKICH miast poprzez skan na poziomie województw)
@@ -358,6 +358,66 @@ def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
 
 
 # --------------------------------------------------------------------------
+# TITLE PARSING — inferuje building_type i standard z tytułu (fallback do Fazy 2)
+# --------------------------------------------------------------------------
+BUILDING_TYPE_KEYWORDS = [
+    # (regex, out_value) — kolejność ważna (najbardziej specyficzne najpierw)
+    (re.compile(r"\b(bli[żz]niak|pol[oó]w[ka]?\s+dom)", re.I), "blizniak"),
+    (re.compile(r"\b(szeregow|segment|w\s+szereg|zabudowa\s+szer|zabudowie\s+szer)", re.I), "szeregowiec"),
+    (re.compile(r"\b(siedlisk|gospodarstw|zagrod|d[wr]orek)", re.I), "siedliskowy"),
+    (re.compile(r"\b(letnisk|weekend|ca[łl]oroczn|domek\s+let|dzia[łl]k[oa]wy)", re.I), "letniskowy"),
+    (re.compile(r"\b(rezydencj|pa[łl]ac|posiad[łl]o|willa|villa)", re.I), "rezydencja"),
+    (re.compile(r"\bwolnostoj|wolno.?stoj|osobno\s+stoj", re.I), "wolnostojacy"),
+    # mieszkania
+    (re.compile(r"\bapartament(?!ow)", re.I), "apartamentowiec"),
+    (re.compile(r"\bkamienic", re.I), "kamienica"),
+    (re.compile(r"\bloft\b", re.I), "loft"),
+    (re.compile(r"\bblok\b|w\s+bloku|z\s+wielkiej\s+p[łl]yty", re.I), "blok"),
+]
+
+STANDARD_KEYWORDS = [
+    (re.compile(r"\bdo\s+remontu|generalnego\s+remontu|wymaga\s+remontu", re.I), "do_remontu"),
+    (re.compile(r"\bdo\s+wyko[nń]czenia|deweloperski|stan\s+deweloper", re.I), "do_wykonczenia"),
+    (re.compile(r"\bgotow[ea]?\s+do\s+zam|do\s+zamieszkania|wyko[nń]czone|po\s+remoncie|urz[aą]dzone", re.I), "gotowe"),
+]
+
+# Boolean features z tytułu
+BOOL_KEYWORDS = {
+    "has_balcony": re.compile(r"\bbalkon", re.I),
+    "has_terrace": re.compile(r"\btaras", re.I),
+    "has_garden": re.compile(r"\bogr[oó]d|ogr[oó]dek", re.I),
+    "has_lift": re.compile(r"\bwinda|wind[ąa]|z\s+wind", re.I),
+    "has_garage": re.compile(r"\bgara[żz]|z\s+gara|miejsce\s+w\s+gara", re.I),
+    "has_basement": re.compile(r"\bpiwnic", re.I),
+    "has_parking": re.compile(r"\bparking|miejsce\s+posto|miejsce\s+park", re.I),
+}
+
+
+def parse_title_hints(listing: dict) -> None:
+    """Wzbogaca listing polami inferowanymi z title/description.
+    NIE nadpisuje wartości ustawionych z detali (Faza 2)."""
+    text = f"{listing.get('title','')} {listing.get('description','')}"
+    if not text.strip():
+        return
+    # building_type (jeśli nie ustawione)
+    if not listing.get("building_type"):
+        for pat, val in BUILDING_TYPE_KEYWORDS:
+            if pat.search(text):
+                listing["building_type"] = val
+                break
+    # standard (jeśli nie ustawione)
+    if not listing.get("standard"):
+        for pat, val in STANDARD_KEYWORDS:
+            if pat.search(text):
+                listing["standard"] = val
+                break
+    # Boolean features (jeśli nie ustawione)
+    for key, pat in BOOL_KEYWORDS.items():
+        if not listing.get(key) and pat.search(text):
+            listing[key] = True
+
+
+# --------------------------------------------------------------------------
 # SCRAPE
 # --------------------------------------------------------------------------
 def scrape_combo(transaction: str, otodom_type: str, out_type: str) -> list[dict]:
@@ -609,9 +669,9 @@ def fetch_details_parallel(listings: list[dict]) -> int:
             if i % 100 == 0:
                 pct = success * 100 // i
                 print(f"    · {i}/{total} ({success} OK, {pct}%)")
-            # Circuit breaker — jeśli 50 requestów pod rząd padło, prawdopodobnie ban
-            if consecutive_fails >= 50:
-                print(f"    ⚠️  50 kolejnych failów — przerywam (rate limit / ban)")
+            # Circuit breaker — jeśli 100 requestów pod rząd padło, prawdopodobnie ban
+            if consecutive_fails >= 100:
+                print(f"    ⚠️  100 kolejnych failów — przerywam (rate limit / ban)")
                 # anulujemy resztę
                 for f in futures:
                     f.cancel()
@@ -783,6 +843,14 @@ def main() -> int:
     if FETCH_DETAILS:
         print("\n🔬 Pobieranie szczegółów ofert (rok, typ budynku, standard, ogrzewanie, ...)")
         detail_count = fetch_details_parallel(all_listings)
+
+    # -------- TITLE PARSING (Faza 2.5) — fallback dla ofert bez detali --
+    print("\n📝 Title parsing — inferuje building_type/standard/features z tytułów…")
+    hint_before = sum(1 for l in all_listings if l.get("building_type"))
+    for l in all_listings:
+        parse_title_hints(l)
+    hint_after = sum(1 for l in all_listings if l.get("building_type"))
+    print(f"   → building_type: {hint_before} (z detali) → {hint_after} (z tytułów) = +{hint_after - hint_before}")
 
     # -------- SORT: originals first, then by verdict (deal → normal → over → outlier) ---
     order = {"deal": 0, "normal": 1, "over": 2, "outlier": 3}

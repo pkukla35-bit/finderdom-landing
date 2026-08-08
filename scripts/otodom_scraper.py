@@ -135,7 +135,7 @@ def scraper_get(url, timeout=REQUEST_TIMEOUT):
         if SCRAPER_API_ENABLED:
             params = {"api_key": SCRAPER_API_KEY, "url": url, "country_code": SCRAPER_API_COUNTRY, "keep_headers": "true"}
             if SCRAPER_API_PREMIUM:
-                params["premium"] = "true"
+                params["ultra_premium"] = "true"
             return requests.get(SCRAPER_API_ENDPOINT, params=params, headers=headers, timeout=max(timeout, 70))
         return requests.get(url, headers=headers, timeout=timeout)
     except requests.RequestException:

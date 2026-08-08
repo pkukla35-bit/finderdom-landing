@@ -178,12 +178,7 @@
       <option value="sprzedaz">Sprzedaż</option>
       <option value="wynajem">Wynajem</option>
     </select>
-    <select class="search-input" id="heroMarket" style="flex:0.8">
-      <option value="">Rynek (dowolny)</option>
-      <option value="pierwotny">🏛️ Pierwotny</option>
-      <option value="wtorny">🏢 Wtórny</option>
-    </select>
-    <input type="number" class="search-input" id="heroPrice" placeholder="Cena do... (np. 800000)" min="0" step="10000" list="priceHints" style="flex:0.9;min-width:110px">
+    <input type="number" class="search-input" id="heroPrice" placeholder="Cena do... (np. 800000)" min="0" step="10000" list="priceHints" style="flex:1;min-width:130px">
     <datalist id="priceHints">
       <option value="300000">300 000 zł</option>
       <option value="500000">500 000 zł</option>
@@ -335,9 +330,9 @@
       <div style="font-size:10px;color:#8ba3d4;margin-top:6px">💡 Wpisz miasto centralne (autouzupełnianie) + km. Znajdzie oferty w promieniu.</div>
     </div>
 
-    <div class="filter-group">
-      <div class="filter-title">🏛️ Rynek</div>
-      <div class="chip-group">
+    <div class="filter-group" id="marketOrPurposeGroup">
+      <div class="filter-title" id="marketOrPurposeTitle">🏛️ Rynek</div>
+      <div class="chip-group" id="marketOrPurposeChips">
         <div class="chip" data-filter="market_type" data-value="pierwotny">🏗️ Pierwotny (deweloper)</div>
         <div class="chip" data-filter="market_type" data-value="wtorny">🏘️ Wtórny</div>
       </div>
@@ -721,6 +716,43 @@ function updateSubType(type){
     const attrs = (val && filter) ? `data-filter="${filter}" data-value="${val}"` : '';
     return `<div class="chip" ${attrs}>${o.label}</div>`;
   }).join('');
+
+  // Dynamiczna sekcja: Rynek (dla mieszkania/dom) vs Przeznaczenie działki
+  const mpTitle = document.getElementById('marketOrPurposeTitle');
+  const mpChips = document.getElementById('marketOrPurposeChips');
+  const mpGroup = document.getElementById('marketOrPurposeGroup');
+  if (mpTitle && mpChips && mpGroup) {
+    if (type === 'dzialka') {
+      mpTitle.textContent = '🌳 Przeznaczenie działki';
+      mpChips.innerHTML = `
+        <div class="chip" data-filter="land_purpose" data-value="budowlana">🏗️ Budowlana</div>
+        <div class="chip" data-filter="land_purpose" data-value="rolna">🌾 Rolna</div>
+        <div class="chip" data-filter="land_purpose" data-value="rekreacyjna">🏖️ Rekreacyjna</div>
+        <div class="chip" data-filter="land_purpose" data-value="lesna">🌲 Leśna</div>
+        <div class="chip" data-filter="land_purpose" data-value="inwestycyjna">💼 Inwestycyjna</div>
+      `;
+      mpGroup.style.display = '';
+    } else if (type === 'garaz' || type === 'magazyn' || type === 'pokoj') {
+      // Dla tych typów rynek nie ma sensu — chowamy sekcję
+      mpGroup.style.display = 'none';
+      mpChips.innerHTML = '';
+    } else {
+      // mieszkanie / dom / lokal — Rynek pierwotny/wtórny
+      mpTitle.textContent = '🏛️ Rynek';
+      mpChips.innerHTML = `
+        <div class="chip" data-filter="market_type" data-value="pierwotny">🏗️ Pierwotny (deweloper)</div>
+        <div class="chip" data-filter="market_type" data-value="wtorny">🏘️ Wtórny</div>
+      `;
+      mpGroup.style.display = '';
+    }
+    // Podepnij handlery
+    mpChips.querySelectorAll('.chip').forEach(c => {
+      c.addEventListener('click', () => {
+        c.classList.toggle('active');
+        applyAllFilters();
+      });
+    });
+  }
   // Podpięcie handlerów: chipy z data-filter wywołują applyAllFilters, reszta tylko toggle
   document.querySelectorAll('#subTypeChips .chip').forEach(c => {
     c.addEventListener('click', () => {
@@ -1144,5 +1176,5 @@ document.getElementById('sortSelect')?.addEventListener('change', applyAllFilter
 
 </script>
 
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a27e467799ec8c98',t:'MTc4NjE4OTUzMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>

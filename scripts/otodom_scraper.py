@@ -152,8 +152,7 @@ def scraper_get(url, timeout=REQUEST_TIMEOUT):
         return requests.get(url, headers=headers, timeout=timeout)
     except requests.RequestException:
         return None
-        return None
-
+   
 
 def fetch_page(url):
     for attempt in range(1, MAX_RETRIES + 1):

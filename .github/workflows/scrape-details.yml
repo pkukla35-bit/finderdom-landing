@@ -49,6 +49,10 @@ jobs:
           DETAIL_MAX: ${{ github.event.inputs.detail_max || '15000' }}
           DETAIL_WORKERS: "4"
           DETAIL_DELAY: "0.4"
+          # ScraperAPI (proxy pool + anti-bot bypass) — dodaj Secret w Settings → Secrets → Actions
+          SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
+          SCRAPER_API_PREMIUM: "1"
+          SCRAPER_API_COUNTRY: "pl"
         run: |
           python scripts/otodom_scraper.py
 
@@ -70,5 +74,4 @@ jobs:
           git config user.email "bot@finderdom.pl"
           git add data/listings.json
           ENRICHED=$(python -c "import json; print(json.load(open('data/listings.json')).get('details_enriched', 0))")
-          git commit -m "chore(data): enrich Otodom details — ${ENRICHED} enriched [skip ci]"
-          git push
+          git commit -m "chore(data): enrich Otodom details — ${ENRICHED} enriched [s

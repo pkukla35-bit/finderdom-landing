@@ -905,3 +905,5 @@ def main() -> int:
     print(f"   Werdykty: {dict(verdict_counts)}")
     print(f"   Czas: {duration_s}s")
     return 0
+  if __name__ == "__main__":
+    sys.exit(main())

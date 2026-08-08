@@ -77,13 +77,14 @@ jobs:
           MAX_PAGES: ${{ github.event.inputs.max_pages || '8' }}
           MAX_LISTINGS: ${{ github.event.inputs.max_listings || '60000' }}
           VOJ_MAX_PAGES: ${{ github.event.inputs.voj_max_pages || '15' }}
-          DETAIL_MAX: ${{ github.event.inputs.detail_max || '60000' }}
+          DETAIL_MAX: ${{ github.event.inputs.detail_max || '20000' }}
           DETAIL_WORKERS: "6"
           DETAIL_DELAY: "0.3"
           MIN_LISTINGS: "100"
           DELAY_MIN: "1.2"
           DELAY_MAX: "2.5"
           SCRAPE_VOIVODESHIPS: "1"
+          SKIP_DETAILS: "1"
         run: |
           python scripts/otodom_scraper.py
 

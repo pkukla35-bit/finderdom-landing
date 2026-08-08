@@ -1,4 +1,4 @@
-name: Scrape Otodom Details (Phase 2)
+ame: Scrape Otodom Details (Phase 2)
 
 on:
   workflow_dispatch:
@@ -36,6 +36,8 @@ jobs:
           DETAIL_MAX: ${{ github.event.inputs.detail_max || '15000' }}
           DETAIL_WORKERS: "4"
           DETAIL_DELAY: "0.4"
+          ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
+          ZENROWS_ANTIBOT: "1"
           SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
           SCRAPER_API_PREMIUM: "1"
           SCRAPER_API_COUNTRY: "pl"

@@ -1,12 +1,6 @@
-"""FinderDom — Otodom scraper produkcyjny (v2) z ScraperAPI."""
+"""FinderDom — Otodom scraper z ZenRows + ScraperAPI fallback + filtr po typie."""
 from __future__ import annotations
-import json
-import os
-import random
-import re
-import statistics
-import sys
-import time
+import json, os, random, re, statistics, sys, time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,9 +28,7 @@ SCRAPER_API_ENDPOINT = "http://api.scraperapi.com/"
 ZENROWS_API_KEY = os.getenv("ZENROWS_API_KEY", "").strip()
 ZENROWS_ENABLED = bool(ZENROWS_API_KEY)
 ZENROWS_ENDPOINT = "https://api.zenrows.com/v1/"
-ZENROWS_ANTIBOT = True
-
-
+ZENROWS_ANTIBOT = os.getenv("ZENROWS_ANTIBOT", "1") == "1"
 
 FETCH_DETAILS = os.getenv("FETCH_DETAILS", "1") == "1"
 SKIP_DETAILS = os.getenv("SKIP_DETAILS", "0") == "1"
@@ -44,6 +36,8 @@ DETAILS_ONLY = os.getenv("DETAILS_ONLY", "0") == "1"
 DETAIL_WORKERS = int(os.getenv("DETAIL_WORKERS", "6"))
 DETAIL_TIMEOUT = int(os.getenv("DETAIL_TIMEOUT", "15"))
 DETAIL_ONLY_ORIGINALS = os.getenv("DETAIL_ONLY_ORIGINALS", "1") == "1"
+DETAIL_ONLY_TYPE = os.getenv("DETAIL_ONLY_TYPE", "").strip()
+DETAIL_SKIP_ENRICHED = os.getenv("DETAIL_SKIP_ENRICHED", "1") == "1"
 DETAIL_MAX = int(os.getenv("DETAIL_MAX", "60000"))
 DETAIL_DELAY = float(os.getenv("DETAIL_DELAY", "0.3"))
 DETAIL_MAX_RETRIES = int(os.getenv("DETAIL_MAX_RETRIES", "2"))
@@ -51,23 +45,18 @@ DETAIL_MAX_RETRIES = int(os.getenv("DETAIL_MAX_RETRIES", "2"))
 SCRAPE_VOIVODESHIPS = os.getenv("SCRAPE_VOIVODESHIPS", "1") == "1"
 VOJ_MAX_PAGES = int(os.getenv("VOJ_MAX_PAGES", "20"))
 
-VOIVODESHIPS = [
-    "dolnoslaskie", "kujawsko--pomorskie", "lubelskie", "lubuskie",
-    "lodzkie", "malopolskie", "mazowieckie", "opolskie", "podkarpackie",
-    "podlaskie", "pomorskie", "slaskie", "swietokrzyskie",
-    "warminsko--mazurskie", "wielkopolskie", "zachodniopomorskie",
-]
+VOIVODESHIPS = ["dolnoslaskie","kujawsko--pomorskie","lubelskie","lubuskie","lodzkie","malopolskie","mazowieckie","opolskie","podkarpackie","podlaskie","pomorskie","slaskie","swietokrzyskie","warminsko--mazurskie","wielkopolskie","zachodniopomorskie"]
 
 VOJ_COMBOS = [
-    ("sprzedaz", "mieszkanie", "mieszkanie", "pierwotny", "PRIMARY"),
-    ("sprzedaz", "mieszkanie", "mieszkanie", "wtorny",    "SECONDARY"),
-    ("sprzedaz", "dom",        "dom",        "pierwotny", "PRIMARY"),
-    ("sprzedaz", "dom",        "dom",        "wtorny",    "SECONDARY"),
-    ("sprzedaz", "dzialka",    "dzialka",    "",          ""),
-    ("sprzedaz", "lokal",      "lokal",      "pierwotny", "PRIMARY"),
-    ("sprzedaz", "lokal",      "lokal",      "wtorny",    "SECONDARY"),
-    ("wynajem",  "mieszkanie", "mieszkanie", "",          ""),
-    ("wynajem",  "dom",        "dom",        "",          ""),
+    ("sprzedaz","mieszkanie","mieszkanie","pierwotny","PRIMARY"),
+    ("sprzedaz","mieszkanie","mieszkanie","wtorny","SECONDARY"),
+    ("sprzedaz","dom","dom","pierwotny","PRIMARY"),
+    ("sprzedaz","dom","dom","wtorny","SECONDARY"),
+    ("sprzedaz","dzialka","dzialka","",""),
+    ("sprzedaz","lokal","lokal","pierwotny","PRIMARY"),
+    ("sprzedaz","lokal","lokal","wtorny","SECONDARY"),
+    ("wynajem","mieszkanie","mieszkanie","",""),
+    ("wynajem","dom","dom","",""),
 ]
 
 OUT_DIR = Path(os.getenv("OUT_DIR", str(Path(__file__).resolve().parent.parent / "data")))
@@ -76,23 +65,21 @@ BACKUP_FILE = OUT_DIR / "listings.backup.json"
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
 ]
 
 COMBOS = [
-    ("sprzedaz", "mieszkanie", "mieszkanie"),
-    ("sprzedaz", "dom", "dom"),
-    ("sprzedaz", "dzialka", "dzialka"),
-    ("sprzedaz", "lokal", "lokal"),
-    ("sprzedaz", "garaz", "garaz"),
-    ("wynajem", "mieszkanie", "mieszkanie"),
-    ("wynajem", "dom", "dom"),
-    ("wynajem", "pokoj", "pokoj"),
-    ("wynajem", "lokal", "lokal"),
+    ("sprzedaz","mieszkanie","mieszkanie"),
+    ("sprzedaz","dom","dom"),
+    ("sprzedaz","dzialka","dzialka"),
+    ("sprzedaz","lokal","lokal"),
+    ("sprzedaz","garaz","garaz"),
+    ("wynajem","mieszkanie","mieszkanie"),
+    ("wynajem","dom","dom"),
+    ("wynajem","pokoj","pokoj"),
+    ("wynajem","lokal","lokal"),
 ]
 
 ROOMS_ENUM = {"ONE":1,"TWO":2,"THREE":3,"FOUR":4,"FIVE":5,"SIX":6,"SEVEN":7,"EIGHT":8,"NINE":9,"MORE":10,"TEN_AND_MORE":10}
@@ -152,7 +139,7 @@ def scraper_get(url, timeout=REQUEST_TIMEOUT):
         return requests.get(url, headers=headers, timeout=timeout)
     except requests.RequestException:
         return None
-   
+
 
 def fetch_page(url):
     for attempt in range(1, MAX_RETRIES + 1):
@@ -198,15 +185,15 @@ def extract_city_district(item):
 
 def detect_seller(item):
     if item.get("isPrivateOwner"):
-        return "prywatna", "👨‍👩‍👧 Prywatna"
+        return "prywatna", "Prywatna"
     if item.get("isDeveloperOwner"):
-        return "deweloper", "🏗️ Deweloper"
+        return "deweloper", "Deweloper"
     adv = (item.get("extendedAdvertiserType") or "").upper()
     if adv == "PRIVATE":
-        return "prywatna", "👨‍👩‍👧 Prywatna"
+        return "prywatna", "Prywatna"
     if adv == "DEVELOPER":
-        return "deweloper", "🏗️ Deweloper"
-    return "posrednik", "🏢 Pośrednik"
+        return "deweloper", "Deweloper"
+    return "posrednik", "Posrednik"
 
 
 def transform(item, transaction, typ_out):
@@ -238,17 +225,17 @@ def transform(item, transaction, typ_out):
             "id": f"otodom-{item.get('id')}",
             "type": typ_out, "transaction": transaction, "title": title,
             "city": city, "district": district,
-            "location": f"📍 {city}{', ' + district if district else ''}",
+            "location": f"{city}{', ' + district if district else ''}",
             "area_m2": round(float(area), 1), "rooms": rooms, "floor": 0, "max_floor": 0,
             "year_built": 0, "standard": "", "price": int(price), "price_pm2": ppm2,
-            "price_display": f"{int(price):,} zł".replace(",", " "),
-            "price_pm2_display": f"{ppm2:,} zł/m²".replace(",", " "),
+            "price_display": f"{int(price):,} zl".replace(",", " "),
+            "price_pm2_display": f"{ppm2:,} zl/m2".replace(",", " "),
             "portal": "Otodom", "seller_type": seller_type, "seller_label": seller_label,
             "source_url": source_url, "image_url": img_url or "",
             "emoji": random.choice(TYPE_EMOJI.get(typ_out, ["🏢"])),
             "img_class": random.choice(IMG_CLASSES),
             "added_at": item.get("dateCreated", ""), "added_display": "",
-            "verdict_badge": "normal", "verdict_text": "✓ W NORMIE",
+            "verdict_badge": "normal", "verdict_text": "W NORMIE",
             "verdict_full": "CENA ZGODNA Z RYNKIEM",
             "ai_delta_pct": 0, "ai_offers_pm2": 0, "ai_rcn_pm2": 0,
             "is_original": True, "duplicate_of": None,
@@ -277,7 +264,7 @@ def parse_title_hints(listing):
 
 
 def scrape_combo(transaction, otodom_type, out_type):
-    print(f"  🔎 {transaction}/{otodom_type}")
+    print(f"  {transaction}/{otodom_type}")
     listings = []
     base = f"https://www.otodom.pl/pl/wyniki/{transaction}/{otodom_type}/cala-polska"
     for page in range(1, MAX_PAGES + 1):
@@ -334,9 +321,9 @@ def scrape_voivodeships():
         for combo in VOJ_COMBOS:
             transaction, otodom_type, out_type, market_slug, market_param = combo
             idx += 1
-            print(f"  🗺️ [{idx}/{total}] {voj}/{transaction}/{otodom_type}", end=" ", flush=True)
+            print(f"  [{idx}/{total}] {voj}/{transaction}/{otodom_type}", end=" ", flush=True)
             got = scrape_voj_combo(transaction, otodom_type, out_type, voj, market_slug, market_param)
-            print(f"→ {len(got)}")
+            print(f"-> {len(got)}")
             out.extend(got)
     return out
 
@@ -412,12 +399,19 @@ def fetch_details_parallel(listings):
     targets = [l for l in listings if l.get("source_url")]
     if DETAIL_ONLY_ORIGINALS:
         targets = [l for l in targets if l.get("is_original", True)]
+    if DETAIL_ONLY_TYPE:
+        targets = [l for l in targets if l.get("type") == DETAIL_ONLY_TYPE]
+        print(f"  Filter: only type={DETAIL_ONLY_TYPE} ({len(targets)} pasujacych)")
+    if DETAIL_SKIP_ENRICHED:
+        targets = [l for l in targets if not l.get("material") and not l.get("heating")]
+        print(f"  Skip enriched: {len(targets)} pozostalo (bez material/heating)")
     if len(targets) > DETAIL_MAX:
         targets = targets[:DETAIL_MAX]
     total = len(targets)
     if not total:
+        print("  Brak ofert do wzbogacenia")
         return 0
-    print(f"  🔍 Fetch details: {total} ofert × {DETAIL_WORKERS} wątków")
+    print(f"  Fetch details: {total} ofert x {DETAIL_WORKERS} watkow")
     success = 0
     fails = 0
     with ThreadPoolExecutor(max_workers=DETAIL_WORKERS) as ex:
@@ -437,13 +431,13 @@ def fetch_details_parallel(listings):
             else:
                 fails += 1
             if i % 50 == 0:
-                print(f"    · {i}/{total} ({success} OK)")
+                print(f"    {i}/{total} ({success} OK)")
             if fails >= 100:
-                print(f"    ⚠️ 100 kolejnych failów — przerywam")
+                print(f"    100 kolejnych failow - przerywam")
                 for f in futures:
                     f.cancel()
                 break
-    print(f"  ✅ Details: {success}/{total}")
+    print(f"  Details: {success}/{total}")
     return success
 
 
@@ -472,18 +466,18 @@ def analyze_prices(listings):
         if d <= -35 or d >= 80:
             l["ai_delta_pct"] = d
             l["verdict_badge"] = "outlier"
-            l["verdict_text"] = "❓ SPRAWDŹ"
+            l["verdict_text"] = "SPRAWDZ"
             l["verdict_full"] = "Cena nietypowa"
             continue
         l["ai_delta_pct"] = d
         if d <= -8:
             l["verdict_badge"] = "deal"
-            l["verdict_text"] = "🔥 OKAZJA"
-            l["verdict_full"] = f"{abs(d)}% poniżej rynku"
+            l["verdict_text"] = "OKAZJA"
+            l["verdict_full"] = f"{abs(d)}% ponizej rynku"
         elif d >= 10:
             l["verdict_badge"] = "over"
-            l["verdict_text"] = "⚠️ ZAWYŻONA"
-            l["verdict_full"] = f"{d}% powyżej rynku"
+            l["verdict_text"] = "ZAWYZONA"
+            l["verdict_full"] = f"{d}% powyzej rynku"
 
 
 def deduplicate(listings):
@@ -509,37 +503,39 @@ def deduplicate(listings):
 
 def main():
     started = datetime.now(timezone.utc)
-    print(f"🕷️ Otodom scraper start {started.isoformat()}")
-    print(f"    DETAILS_ONLY={DETAILS_ONLY} DETAIL_MAX={DETAIL_MAX}")
-    if SCRAPER_API_ENABLED:
-        print(f"    🌐 ScraperAPI: ENABLED  country={SCRAPER_API_COUNTRY}  premium={SCRAPER_API_PREMIUM}")
+    print(f"Otodom scraper start {started.isoformat()}")
+    print(f"    DETAILS_ONLY={DETAILS_ONLY} DETAIL_MAX={DETAIL_MAX} ONLY_TYPE={DETAIL_ONLY_TYPE!r}")
+    if ZENROWS_ENABLED:
+        print(f"    ZenRows: ENABLED antibot={ZENROWS_ANTIBOT}")
+    elif SCRAPER_API_ENABLED:
+        print(f"    ScraperAPI: ENABLED country={SCRAPER_API_COUNTRY}")
     else:
-        print(f"    ⚠️ ScraperAPI: DISABLED — brak SCRAPER_API_KEY")
+        print(f"    Proxy: DISABLED")
 
     if DETAILS_ONLY:
         if not os.path.exists(OUT_FILE):
-            print(f"❌ Brak {OUT_FILE}")
+            print(f"Brak {OUT_FILE}")
             return 1
         with open(OUT_FILE, encoding="utf-8") as f:
             existing = json.load(f)
         all_listings = existing.get("listings", [])
-        print(f"📂 Wczytano {len(all_listings)} ofert")
+        print(f"Wczytano {len(all_listings)} ofert")
         dc = 0
         if FETCH_DETAILS and all_listings:
             dc = fetch_details_parallel(all_listings)
         for l in all_listings:
             parse_title_hints(l)
         out = {**existing, "generated_at": datetime.now(timezone.utc).isoformat(),
-               "details_enriched": dc, "listings": all_listings}
+               "details_enriched": (existing.get("details_enriched") or 0) + dc, "listings": all_listings}
         with open(OUT_FILE, "w", encoding="utf-8") as f:
             json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
-        print(f"✅ Zapisano (enriched={dc})")
+        print(f"Zapisano (nowo_enriched={dc})")
         return 0
 
     all_listings = []
     stats = {}
     for i, (t, ot, out_t) in enumerate(COMBOS, 1):
-        print(f"\n[{i}/{len(COMBOS)}] {t}/{ot}")
+        print(f"[{i}/{len(COMBOS)}] {t}/{ot}")
         got = scrape_combo(t, ot, out_t)
         stats[f"{t}/{ot}"] = len(got)
         all_listings.extend(got)
@@ -550,23 +546,20 @@ def main():
 
     if len(all_listings) > MAX_LISTINGS:
         all_listings = all_listings[:MAX_LISTINGS]
-    print(f"\n📊 Faza 1: {len(all_listings)} ofert")
 
     if SCRAPE_VOIVODESHIPS:
-        print(f"\n🗺️ Faza 1b: {len(VOIVODESHIPS)} × {len(VOJ_COMBOS)}")
         voj = scrape_voivodeships()
         all_listings.extend(voj)
         if len(all_listings) > MAX_LISTINGS:
             all_listings = all_listings[:MAX_LISTINGS]
 
-    print(f"\n📊 Łącznie: {len(all_listings)}")
     if len(all_listings) < MIN_LISTINGS:
-        print(f"❌ Za mało ({len(all_listings)} < {MIN_LISTINGS})")
+        print(f"Za malo ({len(all_listings)} < {MIN_LISTINGS})")
         return 1
 
     analyze_prices(all_listings)
     orig, dup = deduplicate(all_listings)
-    print(f"    → {orig} oryginałów, {dup} kopii")
+    print(f"{orig} oryginalow, {dup} kopii")
 
     dc = 0
     if FETCH_DETAILS and not SKIP_DETAILS:
@@ -592,14 +585,14 @@ def main():
         vc[l["verdict_badge"]] += 1
 
     output = {
-        "generated_at": finished.isoformat(), "generated_by": "otodom_scraper_v3",
+        "generated_at": finished.isoformat(), "generated_by": "otodom_scraper_v5",
         "duration_seconds": duration_s, "count": len(all_listings),
         "originals": orig, "duplicates": dup, "sources": ["Otodom"],
         "verdicts": dict(vc), "per_combo": stats, "details_fetched": dc,
         "listings": all_listings,
     }
     OUT_FILE.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n✅ Zapisano {len(all_listings)} → {OUT_FILE}")
+    print(f"Zapisano {len(all_listings)}")
     return 0
 
 

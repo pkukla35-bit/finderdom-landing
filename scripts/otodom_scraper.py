@@ -53,11 +53,11 @@ MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 
 # Detail fetching (Faza 2)
 FETCH_DETAILS = os.getenv("FETCH_DETAILS", "1") == "1"   # 1 = pobieraj szczegóły z każdej oferty
-DETAIL_WORKERS = int(os.getenv("DETAIL_WORKERS", "3"))    # ile wątków równolegle (ostrożnie z anti-bot)
+DETAIL_WORKERS = int(os.getenv("DETAIL_WORKERS", "5"))    # ile wątków równolegle (5 = szybciej, kontrolowany ban risk)
 DETAIL_TIMEOUT = int(os.getenv("DETAIL_TIMEOUT", "15"))
 DETAIL_ONLY_ORIGINALS = os.getenv("DETAIL_ONLY_ORIGINALS", "1") == "1"  # tylko oryginały
-DETAIL_MAX = int(os.getenv("DETAIL_MAX", "3000"))         # max ofert do Fazy 2 (standard, balkon, itd. — market już z URL)
-DETAIL_DELAY = float(os.getenv("DETAIL_DELAY", "0.6"))    # delay per worker per request
+DETAIL_MAX = int(os.getenv("DETAIL_MAX", "20000"))        # max ofert do Fazy 2 — dla pełnego pokrycia building_type/standard
+DETAIL_DELAY = float(os.getenv("DETAIL_DELAY", "0.35"))   # delay per worker per request (0.35 × 5 wątków = ~14 req/s)
 DETAIL_MAX_RETRIES = int(os.getenv("DETAIL_MAX_RETRIES", "2"))
 
 # Per-voivodeship scraping (Faza 1b — pokrycie WSZYSTKICH miast poprzez skan na poziomie województw)

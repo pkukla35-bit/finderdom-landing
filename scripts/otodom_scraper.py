@@ -9,6 +9,7 @@ Strategia:
 Anti-bot:
   - Rotacja User-Agent, opóźnienia 1.5-3s, retry z exp backoff.
   - Pobiera JSON z `<script id="__NEXT_DATA__">` – szybko i stabilnie.
+  - ScraperAPI (residential proxy pool) — automatyczny bypass anti-bot.
 
 Safe-fail:
   - Jeśli scrape < MIN_LISTINGS (100) → NIE nadpisuje listings.json.
@@ -16,9 +17,9 @@ Safe-fail:
   - Wypisuje jasny błąd i wychodzi z kodem != 0 (widoczne w GH Actions).
 
 Uruchomienie lokalne:
-  python3 otodom_scraper_v2.py
-  MAX_PAGES=3 python3 otodom_scraper_v2.py         # szybki test
-  MAX_LISTINGS=1000 python3 otodom_scraper_v2.py   # limit output
+  python3 otodom_scraper.py
+  MAX_PAGES=3 python3 otodom_scraper.py         # szybki test
+  MAX_LISTINGS=1000 python3 otodom_scraper.py   # limit output
 """
 from __future__ import annotations
 
@@ -43,35 +44,39 @@ except ImportError:
 # --------------------------------------------------------------------------
 # CONFIG
 # --------------------------------------------------------------------------
-MAX_PAGES = int(os.getenv("MAX_PAGES", "8"))          # 8 stron × 72 × 9 komb = ~5200 z LATEST
-MAX_LISTINGS = int(os.getenv("MAX_LISTINGS", "60000")) # hard cap na output JSON (~40MB)
-MIN_LISTINGS = int(os.getenv("MIN_LISTINGS", "100"))  # safe-fail: mniej = nie zapisujemy
+MAX_PAGES = int(os.getenv("MAX_PAGES", "8"))
+MAX_LISTINGS = int(os.getenv("MAX_LISTINGS", "60000"))
+MIN_LISTINGS = int(os.getenv("MIN_LISTINGS", "100"))
 DELAY_MIN = float(os.getenv("DELAY_MIN", "1.2"))
 DELAY_MAX = float(os.getenv("DELAY_MAX", "2.5"))
-REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "25"))
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "60"))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "4"))
+
+# ---- ScraperAPI (residential proxy pool + anti-bot bypass) ----
+SCRAPER_API_KEY = os.getenv("SCRAPER_API_KEY", "").strip()
+SCRAPER_API_ENABLED = bool(SCRAPER_API_KEY)
+SCRAPER_API_PREMIUM = os.getenv("SCRAPER_API_PREMIUM", "1") == "1"
+SCRAPER_API_COUNTRY = os.getenv("SCRAPER_API_COUNTRY", "pl")
+SCRAPER_API_ENDPOINT = "http://api.scraperapi.com/"
 
 # Detail fetching (Faza 2)
-FETCH_DETAILS = os.getenv("FETCH_DETAILS", "1") == "1"   # 1 = pobieraj szczegóły z każdej oferty
-SKIP_DETAILS = os.getenv("SKIP_DETAILS", "0") == "1"     # 1 = pomiń Fazę 2 całkowicie (dla split workflow)
-DETAILS_ONLY = os.getenv("DETAILS_ONLY", "0") == "1"     # 1 = tylko Faza 2 (wczytaj istniejący listings.json)
-DETAIL_WORKERS = int(os.getenv("DETAIL_WORKERS", "6"))    # ile wątków równolegle (6 = agresywnie ale kontrolnie)
+FETCH_DETAILS = os.getenv("FETCH_DETAILS", "1") == "1"
+SKIP_DETAILS = os.getenv("SKIP_DETAILS", "0") == "1"
+DETAILS_ONLY = os.getenv("DETAILS_ONLY", "0") == "1"
+DETAIL_WORKERS = int(os.getenv("DETAIL_WORKERS", "6"))
 DETAIL_TIMEOUT = int(os.getenv("DETAIL_TIMEOUT", "15"))
-DETAIL_ONLY_ORIGINALS = os.getenv("DETAIL_ONLY_ORIGINALS", "1") == "1"  # tylko oryginały (bez kopii)
-DETAIL_MAX = int(os.getenv("DETAIL_MAX", "60000"))        # max ofert do Fazy 2 (wszystkie oryginały)
-DETAIL_DELAY = float(os.getenv("DETAIL_DELAY", "0.3"))    # delay per worker per request (6 × 0.3 = ~20 req/s)
+DETAIL_ONLY_ORIGINALS = os.getenv("DETAIL_ONLY_ORIGINALS", "1") == "1"
+DETAIL_MAX = int(os.getenv("DETAIL_MAX", "60000"))
+DETAIL_DELAY = float(os.getenv("DETAIL_DELAY", "0.3"))
 DETAIL_MAX_RETRIES = int(os.getenv("DETAIL_MAX_RETRIES", "2"))
 
-# Per-voivodeship scraping (Faza 1b — pokrycie WSZYSTKICH miast poprzez skan na poziomie województw)
+# Per-voivodeship scraping
 SCRAPE_VOIVODESHIPS = os.getenv("SCRAPE_VOIVODESHIPS", "1") == "1"
-VOJ_MAX_PAGES = int(os.getenv("VOJ_MAX_PAGES", "20"))     # 20 stron × 72 = ~1440 ofert per (woj×typ×trans)
+VOJ_MAX_PAGES = int(os.getenv("VOJ_MAX_PAGES", "20"))
 
-# 16 województw Polski — pokrywa WSZYSTKIE miasta i gminy w kraju.
-# URL Otodom: /pl/wyniki/{transaction}/{type}/{voivodeship}
-# UWAGA: Otodom używa PODWÓJNEGO myślnika dla nazw dwuczłonowych!
 VOIVODESHIPS = [
     "dolnoslaskie",
-    "kujawsko--pomorskie",       # podwójny myślnik!
+    "kujawsko--pomorskie",
     "lubelskie",
     "lubuskie",
     "lodzkie",
@@ -83,23 +88,20 @@ VOIVODESHIPS = [
     "pomorskie",
     "slaskie",
     "swietokrzyskie",
-    "warminsko--mazurskie",      # podwójny myślnik!
+    "warminsko--mazurskie",
     "wielkopolskie",
     "zachodniopomorskie",
 ]
 
-# Kombinacje per województwo — pełne pokrycie: 4 typy sprzedaży + 2 wynajmu
-# Dla SPRZEDAŻY dzielimy na PRIMARY/SECONDARY → market_type znany dla WSZYSTKICH ofert.
-# Format: (transaction, otodom_type, out_type, market_slug_pl, otodom_market_param)
 VOJ_COMBOS = [
     ("sprzedaz", "mieszkanie", "mieszkanie", "pierwotny", "PRIMARY"),
     ("sprzedaz", "mieszkanie", "mieszkanie", "wtorny",    "SECONDARY"),
     ("sprzedaz", "dom",        "dom",        "pierwotny", "PRIMARY"),
     ("sprzedaz", "dom",        "dom",        "wtorny",    "SECONDARY"),
-    ("sprzedaz", "dzialka",    "dzialka",    "",          ""),         # brak market dla działek
+    ("sprzedaz", "dzialka",    "dzialka",    "",          ""),
     ("sprzedaz", "lokal",      "lokal",      "pierwotny", "PRIMARY"),
     ("sprzedaz", "lokal",      "lokal",      "wtorny",    "SECONDARY"),
-    ("wynajem",  "mieszkanie", "mieszkanie", "",          ""),         # brak market dla wynajmu
+    ("wynajem",  "mieszkanie", "mieszkanie", "",          ""),
     ("wynajem",  "dom",        "dom",        "",          ""),
 ]
 
@@ -111,14 +113,20 @@ OUT_FILE = OUT_DIR / "listings.json"
 BACKUP_FILE = OUT_DIR / "listings.backup.json"
 
 USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.5; rv:126.0) Gecko/20100101 Firefox/126.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0",
 ]
 
-# 9 kombinacji obsługiwanych przez Otodom
 COMBOS = [
     ("sprzedaz", "mieszkanie", "mieszkanie"),
     ("sprzedaz", "dom", "dom"),
@@ -131,7 +139,6 @@ COMBOS = [
     ("wynajem", "lokal", "lokal"),
 ]
 
-# Mapowanie roomsNumber (enum Otodom → int)
 ROOMS_ENUM = {
     "ONE": 1, "TWO": 2, "THREE": 3, "FOUR": 4,
     "FIVE": 5, "SIX": 6, "SEVEN": 7, "EIGHT": 8, "NINE": 9,
@@ -154,42 +161,68 @@ NEXT_MARKER = '<script id="__NEXT_DATA__" type="application/json" crossorigin="a
 # --------------------------------------------------------------------------
 # HTTP
 # --------------------------------------------------------------------------
-def fetch_page(url: str) -> dict | None:
+def scraper_get(url: str, timeout: int = REQUEST_TIMEOUT):
+    """Uniwersalny wrapper HTTP:
+       - Jeśli ustawione SCRAPER_API_KEY → routing przez ScraperAPI (proxy pool + anti-bot).
+       - Inaczej → bezpośredni requests.get (dev/local).
+    """
+    headers = {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.8",
+        "Cache-Control": "no-cache",
+        "Referer": "https://www.otodom.pl/",
+    }
+    try:
+        if SCRAPER_API_ENABLED:
+            params = {
+                "api_key": SCRAPER_API_KEY,
+                "url": url,
+                "country_code": SCRAPER_API_COUNTRY,
+                "keep_headers": "true",
+            }
+            if SCRAPER_API_PREMIUM:
+                params["premium"] = "true"
+            return requests.get(
+                SCRAPER_API_ENDPOINT,
+                params=params,
+                headers=headers,
+                timeout=max(timeout, 70),
+            )
+        else:
+            return requests.get(url, headers=headers, timeout=timeout)
+    except requests.RequestException:
+        return None
+
+
+def fetch_page(url: str):
     """Pobierz stronę Otodom + wyciągnij __NEXT_DATA__. Retry z backoffem."""
     last_err = None
     for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            headers = {
-                "User-Agent": random.choice(USER_AGENTS),
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.8",
-                "Cache-Control": "no-cache",
-                "Referer": "https://www.otodom.pl/",
-            }
-            r = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-            if r.status_code == 200:
-                start = r.text.find(NEXT_MARKER)
-                if start == -1:
-                    last_err = "__NEXT_DATA__ not found"
-                else:
-                    start += len(NEXT_MARKER)
-                    end = r.text.find("</script>", start)
-                    if end == -1:
-                        last_err = "closing </script> not found"
-                    else:
-                        try:
-                            return json.loads(r.text[start:end])
-                        except json.JSONDecodeError as e:
-                            last_err = f"JSON decode: {e}"
-            elif r.status_code in (403, 429, 503):
-                last_err = f"HTTP {r.status_code} (bot detection)"
-                time.sleep(5 + attempt * 3)  # backoff dłużej
+        r = scraper_get(url, timeout=REQUEST_TIMEOUT)
+        if r is None:
+            last_err = "network error"
+        elif r.status_code == 200:
+            start = r.text.find(NEXT_MARKER)
+            if start == -1:
+                last_err = "__NEXT_DATA__ not found (possibly bot page)"
             else:
-                last_err = f"HTTP {r.status_code}"
-        except requests.RequestException as e:
-            last_err = f"{type(e).__name__}: {e}"
+                start += len(NEXT_MARKER)
+                end = r.text.find("</script>", start)
+                if end == -1:
+                    last_err = "closing </script> not found"
+                else:
+                    try:
+                        return json.loads(r.text[start:end])
+                    except json.JSONDecodeError as e:
+                        last_err = f"JSON decode: {e}"
+        elif r.status_code in (403, 429, 503, 500, 502, 504):
+            last_err = f"HTTP {r.status_code}"
+            time.sleep(min(4 * (2 ** (attempt - 1)), 32) + random.uniform(0, 2))
+        else:
+            last_err = f"HTTP {r.status_code}"
         if attempt < MAX_RETRIES:
-            time.sleep(2 * attempt)
+            time.sleep(2 * attempt + random.uniform(0, 1))
     print(f"    [retry x{MAX_RETRIES} FAILED] {last_err}")
     return None
 
@@ -198,7 +231,6 @@ def fetch_page(url: str) -> dict | None:
 # TRANSFORM
 # --------------------------------------------------------------------------
 def normalize_city(name: str) -> str:
-    """Normalizacja nazwy miasta dla deduplikacji (lower, bez PL znaków, bez spacji)."""
     if not name:
         return ""
     s = name.lower().strip()
@@ -206,8 +238,7 @@ def normalize_city(name: str) -> str:
     return re.sub(r"\s+", "-", s.translate(trans))
 
 
-def extract_city_district(item: dict) -> tuple[str, str]:
-    """Zwraca (miasto, dzielnica) z location.reverseGeocoding.locations."""
+def extract_city_district(item: dict):
     city, district = "", ""
     try:
         locs = item.get("location", {}).get("reverseGeocoding", {}).get("locations", [])
@@ -224,8 +255,7 @@ def extract_city_district(item: dict) -> tuple[str, str]:
     return city, district
 
 
-def detect_seller(item: dict) -> tuple[str, str]:
-    """Zwraca (seller_type, seller_label) dla oferty Otodom."""
+def detect_seller(item: dict):
     if item.get("isPrivateOwner"):
         return "prywatna", "👨‍👩‍👧 Prywatna"
     if item.get("isDeveloperOwner"):
@@ -240,23 +270,20 @@ def detect_seller(item: dict) -> tuple[str, str]:
     return "posrednik", "🏢 Pośrednik"
 
 
-def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
-    """Transformacja jednego item-a Otodom → schema FinderDom."""
+def transform(item: dict, transaction: str, typ_out: str):
     try:
-        # Cena — dla wynajmu totalPrice może być None, wtedy rentPrice
         tp = item.get("totalPrice") or {}
         rp = item.get("rentPrice") or {}
         price = tp.get("value") if tp else None
         if not price:
             price = rp.get("value") if rp else None
-        if not price or price < 1000:  # sanity check
+        if not price or price < 1000:
             return None
 
         area = item.get("areaInSquareMeters") or item.get("terrainAreaInSquareMeters") or 0
         if not area or area < 1:
             return None
 
-        # ppm2 — z Otodom albo obliczone
         pm2_field = item.get("pricePerSquareMeter") or {}
         ppm2 = int(pm2_field.get("value") or 0) if pm2_field else 0
         if not ppm2 and area > 0:
@@ -283,7 +310,6 @@ def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
 
         seller_type, seller_label = detect_seller(item)
 
-        # Data
         date_str = item.get("dateCreated") or item.get("createdAtFirst") or ""
         added_iso = date_str
         added_display = ""
@@ -307,7 +333,6 @@ def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
 
         title = (item.get("title") or "")[:120]
 
-        # Obrazek — pierwsze zdjęcie z Otodom (URL do CDN)
         images = item.get("images") or []
         img_url = ""
         if images and isinstance(images[0], dict):
@@ -318,7 +343,7 @@ def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
         return {
             "id": f"otodom-{item.get('id')}",
             "type": typ_out,
-            "transaction": transaction,  # sprzedaz | wynajem
+            "transaction": transaction,
             "title": title,
             "city": city,
             "district": district,
@@ -342,35 +367,30 @@ def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
             "img_class": random.choice(IMG_CLASSES),
             "added_at": added_iso,
             "added_display": added_display,
-            # placeholdery — wypełni analyze_prices
             "verdict_badge": "normal",
             "verdict_text": "✓ W NORMIE",
             "verdict_full": "CENA ZGODNA Z RYNKIEM",
             "ai_delta_pct": 0,
             "ai_offers_pm2": 0,
             "ai_rcn_pm2": 0,
-            # dedup — wypełni deduplicate
             "is_original": True,
             "duplicate_of": None,
-            "_fingerprint": "",  # temp
+            "_fingerprint": "",
         }
-    except (KeyError, TypeError, ValueError, AttributeError) as e:
-        # nie hałasujemy — pojedyncze złe itemy mogą być
+    except (KeyError, TypeError, ValueError, AttributeError):
         return None
 
 
 # --------------------------------------------------------------------------
-# TITLE PARSING — inferuje building_type i standard z tytułu (fallback do Fazy 2)
+# TITLE PARSING
 # --------------------------------------------------------------------------
 BUILDING_TYPE_KEYWORDS = [
-    # (regex, out_value) — kolejność ważna (najbardziej specyficzne najpierw)
     (re.compile(r"\b(bli[żz]niak|pol[oó]w[ka]?\s+dom)", re.I), "blizniak"),
     (re.compile(r"\b(szeregow|segment|w\s+szereg|zabudowa\s+szer|zabudowie\s+szer)", re.I), "szeregowiec"),
     (re.compile(r"\b(siedlisk|gospodarstw|zagrod|d[wr]orek)", re.I), "siedliskowy"),
     (re.compile(r"\b(letnisk|weekend|ca[łl]oroczn|domek\s+let|dzia[łl]k[oa]wy)", re.I), "letniskowy"),
     (re.compile(r"\b(rezydencj|pa[łl]ac|posiad[łl]o|willa|villa)", re.I), "rezydencja"),
     (re.compile(r"\bwolnostoj|wolno.?stoj|osobno\s+stoj", re.I), "wolnostojacy"),
-    # mieszkania
     (re.compile(r"\bapartament(?!ow)", re.I), "apartamentowiec"),
     (re.compile(r"\bkamienic", re.I), "kamienica"),
     (re.compile(r"\bloft\b", re.I), "loft"),
@@ -383,7 +403,6 @@ STANDARD_KEYWORDS = [
     (re.compile(r"\bgotow[ea]?\s+do\s+zam|do\s+zamieszkania|wyko[nń]czone|po\s+remoncie|urz[aą]dzone", re.I), "gotowe"),
 ]
 
-# Boolean features z tytułu
 BOOL_KEYWORDS = {
     "has_balcony": re.compile(r"\bbalkon", re.I),
     "has_terrace": re.compile(r"\btaras", re.I),
@@ -396,24 +415,19 @@ BOOL_KEYWORDS = {
 
 
 def parse_title_hints(listing: dict) -> None:
-    """Wzbogaca listing polami inferowanymi z title/description.
-    NIE nadpisuje wartości ustawionych z detali (Faza 2)."""
     text = f"{listing.get('title','')} {listing.get('description','')}"
     if not text.strip():
         return
-    # building_type (jeśli nie ustawione)
     if not listing.get("building_type"):
         for pat, val in BUILDING_TYPE_KEYWORDS:
             if pat.search(text):
                 listing["building_type"] = val
                 break
-    # standard (jeśli nie ustawione)
     if not listing.get("standard"):
         for pat, val in STANDARD_KEYWORDS:
             if pat.search(text):
                 listing["standard"] = val
                 break
-    # Boolean features (jeśli nie ustawione)
     for key, pat in BOOL_KEYWORDS.items():
         if not listing.get(key) and pat.search(text):
             listing[key] = True
@@ -422,8 +436,7 @@ def parse_title_hints(listing: dict) -> None:
 # --------------------------------------------------------------------------
 # SCRAPE
 # --------------------------------------------------------------------------
-def scrape_combo(transaction: str, otodom_type: str, out_type: str) -> list[dict]:
-    """Pobierz N stron dla jednej kombinacji (typ × transakcja)."""
+def scrape_combo(transaction: str, otodom_type: str, out_type: str):
     print(f"  🔎 {transaction}/{otodom_type} …")
     listings = []
     base = f"https://www.otodom.pl/pl/wyniki/{transaction}/{otodom_type}/cala-polska"
@@ -454,10 +467,7 @@ def scrape_combo(transaction: str, otodom_type: str, out_type: str) -> list[dict
 
 
 def scrape_voj_combo(transaction: str, otodom_type: str, out_type: str,
-                     voj: str, market_slug: str = "", market_param: str = "") -> list[dict]:
-    """Pobiera oferty per-województwo (URL /pl/wyniki/{trans}/{typ}/{woj}).
-    Jeśli podano `market_param` (PRIMARY/SECONDARY), scraper doda &market=... do URL
-    i oznaczy WSZYSTKIE oferty jako `market_slug` (pierwotny/wtorny)."""
+                     voj: str, market_slug: str = "", market_param: str = ""):
     listings = []
     base = f"https://www.otodom.pl/pl/wyniki/{transaction}/{otodom_type}/{voj}"
     market_qs = f"&market={market_param}" if market_param else ""
@@ -480,7 +490,6 @@ def scrape_voj_combo(transaction: str, otodom_type: str, out_type: str,
         for it in items:
             t = transform(it, transaction, out_type)
             if t:
-                # Oznacz market_type z URL param (100% pokrycie dla sprzedaży)
                 if market_slug:
                     t["market_type"] = market_slug
                 listings.append(t)
@@ -489,9 +498,7 @@ def scrape_voj_combo(transaction: str, otodom_type: str, out_type: str,
     return listings
 
 
-def scrape_voivodeships() -> list[dict]:
-    """Iteruje po WSZYSTKICH 16 województwach × 9 kombinacjach = pełne pokrycie kraju.
-    Sprzedaż jest podzielona na PRIMARY/SECONDARY → market_type znany dla WSZYSTKICH sprzedażowych ofert."""
+def scrape_voivodeships():
     all_voj_listings = []
     total = len(VOIVODESHIPS) * len(VOJ_COMBOS)
     idx = 0
@@ -508,9 +515,8 @@ def scrape_voivodeships() -> list[dict]:
 
 
 # --------------------------------------------------------------------------
-# DETAIL FETCH — pobiera pełne parametry oferty (typ budynku, rok, itd.)
+# DETAIL FETCH
 # --------------------------------------------------------------------------
-# Mapowanie kluczy Otodom → schema FinderDom
 BUILDING_TYPE_MAP = {
     "block": "blok",
     "tenement": "kamienica",
@@ -536,7 +542,6 @@ MARKET_MAP = {"primary": "pierwotny", "secondary": "wtorny"}
 
 
 def _parse_target_field(target: dict, key: str) -> str:
-    """Zwraca pierwszą wartość z listy w `target[key]` (albo pustą stringową)."""
     v = target.get(key)
     if isinstance(v, list) and v:
         return str(v[0])
@@ -546,26 +551,21 @@ def _parse_target_field(target: dict, key: str) -> str:
 
 
 def fetch_detail(slug_or_url: str) -> dict:
-    """Pobiera pełne dane oferty z /pl/oferta/{slug}. Zwraca dict z polami detail_*.
-    Retry z exponential backoff dla 403/429. Delay wewnątrz — anti-bot friendly.
-    """
     if slug_or_url.startswith("http"):
         url = slug_or_url
     else:
         url = f"https://www.otodom.pl/pl/oferta/{slug_or_url}"
 
-    # Rate-limit safe delay przed każdym requestem
     time.sleep(DETAIL_DELAY + random.uniform(0, 0.4))
 
     for attempt in range(1, DETAIL_MAX_RETRIES + 2):
-        headers = {
-            "User-Agent": random.choice(USER_AGENTS),
-            "Accept-Language": "pl-PL,pl;q=0.9",
-            "Referer": "https://www.otodom.pl/",
-            "Accept": "text/html,application/xhtml+xml",
-        }
+        r = scraper_get(url, timeout=DETAIL_TIMEOUT)
+        if r is None:
+            if attempt < DETAIL_MAX_RETRIES + 1:
+                time.sleep(2 * attempt + random.uniform(0, 1))
+                continue
+            return {}
         try:
-            r = requests.get(url, headers=headers, timeout=DETAIL_TIMEOUT)
             if r.status_code == 200:
                 start = r.text.find(NEXT_MARKER)
                 if start == -1:
@@ -614,15 +614,14 @@ def fetch_detail(slug_or_url: str) -> dict:
                     elif "cellar" in floor_str or "basement" in floor_str:
                         detail["floor_no"] = -1
                 return detail
-            elif r.status_code in (403, 429, 503):
-                # Rate limit — exp backoff
+            elif r.status_code in (403, 429, 503, 500, 502, 504):
                 if attempt < DETAIL_MAX_RETRIES + 1:
-                    time.sleep(4 * attempt + random.uniform(1, 3))
+                    time.sleep(min(4 * (2 ** (attempt - 1)), 20) + random.uniform(1, 3))
                     continue
                 return {}
             else:
                 return {}
-        except (requests.RequestException, json.JSONDecodeError, ValueError, TypeError, KeyError):
+        except (json.JSONDecodeError, ValueError, TypeError, KeyError):
             if attempt < DETAIL_MAX_RETRIES + 1:
                 time.sleep(2 * attempt)
                 continue
@@ -630,17 +629,12 @@ def fetch_detail(slug_or_url: str) -> dict:
     return {}
 
 
-def fetch_details_parallel(listings: list[dict]) -> int:
-    """Dla każdej oferty pobiera szczegóły równolegle. Modyfikuje `listings` in-place.
-    Zwraca liczbę udanych pobrań.
-    """
+def fetch_details_parallel(listings):
     from concurrent.futures import ThreadPoolExecutor, as_completed
     targets = [l for l in listings if l.get("source_url")]
     if DETAIL_ONLY_ORIGINALS:
         targets = [l for l in targets if l.get("is_original", True)]
-    # Limit — chroni przed banem IP + mieści się w GH Actions
     if len(targets) > DETAIL_MAX:
-        # bierzemy najświeższe (są już posortowane po dacie DESC z Otodom)
         targets = targets[:DETAIL_MAX]
     total = len(targets)
     if not total:
@@ -671,10 +665,8 @@ def fetch_details_parallel(listings: list[dict]) -> int:
             if i % 100 == 0:
                 pct = success * 100 // i
                 print(f"    · {i}/{total} ({success} OK, {pct}%)")
-            # Circuit breaker — jeśli 100 requestów pod rząd padło, prawdopodobnie ban
             if consecutive_fails >= 100:
                 print(f"    ⚠️  100 kolejnych failów — przerywam (rate limit / ban)")
-                # anulujemy resztę
                 for f in futures:
                     f.cancel()
                 break
@@ -683,22 +675,18 @@ def fetch_details_parallel(listings: list[dict]) -> int:
 
 
 # --------------------------------------------------------------------------
-# AI VERDICT (mediana cena/m² per miasto + typ)
+# AI VERDICT
 # --------------------------------------------------------------------------
-def analyze_prices(listings: list[dict]) -> None:
-    """Nadaje verdict_badge / ai_delta_pct każdej ofercie na podstawie mediany cena/m²
-    w grupie (miasto + typ + transakcja).
-    """
-    groups: dict[tuple[str, str, str], list[int]] = defaultdict(list)
+def analyze_prices(listings) -> None:
+    groups = defaultdict(list)
     for l in listings:
         key = (normalize_city(l["city"]), l["type"], l["transaction"])
         if l["price_pm2"] > 0:
             groups[key].append(l["price_pm2"])
 
     medians = {k: int(statistics.median(v)) for k, v in groups.items() if len(v) >= 3}
-    # dla małych grup: fallback do mediany globalnej per typ+transakcja
-    global_med: dict[tuple[str, str], int] = {}
-    global_groups: dict[tuple[str, str], list[int]] = defaultdict(list)
+    global_med = {}
+    global_groups = defaultdict(list)
     for l in listings:
         if l["price_pm2"] > 0:
             global_groups[(l["type"], l["transaction"])].append(l["price_pm2"])
@@ -711,21 +699,15 @@ def analyze_prices(listings: list[dict]) -> None:
         median = medians.get(key) or global_med.get((l["type"], l["transaction"]))
         if not median or l["price_pm2"] == 0:
             continue
-        # symulacja RCN (transakcyjne) — ok. 6% poniżej ofertowej mediany
         rcn = int(median * 0.94)
-        # Guard: rcn może być 0 przy małych medianach (np. działki za 100 zł/m²).
-        # Bez tego → ZeroDivisionError kilka linii niżej.
         if rcn <= 0:
             continue
         l["ai_offers_pm2"] = median
         l["ai_rcn_pm2"] = rcn
         delta_pct = round((l["price_pm2"] - rcn) / rcn * 100)
 
-        # Outlier guard: jeśli delta jest ekstremalna, prawie na pewno to błąd danych,
-        # scam listing albo nieporównywalny obiekt (kamienica, luksus, itp.).
-        # NIE promujemy takich jako OKAZJA i NIE straszymy jako ZAWYŻONA.
         if delta_pct <= -35 or delta_pct >= 80:
-            l["ai_delta_pct"] = delta_pct  # zachowujemy dla debug
+            l["ai_delta_pct"] = delta_pct
             l["verdict_badge"] = "outlier"
             l["verdict_text"] = "❓ SPRAWDŹ"
             l["verdict_full"] = "Cena nietypowa — zweryfikuj ogłoszenie ręcznie"
@@ -747,13 +729,11 @@ def analyze_prices(listings: list[dict]) -> None:
 
 
 # --------------------------------------------------------------------------
-# DEDUPLICATE (fingerprint: cena + metraż + miasto + pokoje)
+# DEDUPLICATE
 # --------------------------------------------------------------------------
-def deduplicate(listings: list[dict]) -> tuple[int, int]:
-    """Wyznacza fingerprint i oznacza duplikaty (is_original=False, duplicate_of=<id>)."""
-    groups: dict[str, list[dict]] = defaultdict(list)
+def deduplicate(listings):
+    groups = defaultdict(list)
     for l in listings:
-        # +/- 2% ceny toleranci nie robimy (na Otodom = ta sama oferta = ta sama cena)
         fp = f"{normalize_city(l['city'])}|{l['type']}|{l['transaction']}|{int(l['price']/1000)*1000}|{int(l['area_m2'])}|{l['rooms']}"
         l["_fingerprint"] = fp
         groups[fp].append(l)
@@ -766,7 +746,6 @@ def deduplicate(listings: list[dict]) -> tuple[int, int]:
             group[0]["duplicate_of"] = None
             originals += 1
             continue
-        # wybierz oryginał: najstarsze added_at (albo najwięcej danych)
         group.sort(key=lambda x: (x.get("added_at") or "9999", -len(x.get("title") or "")))
         orig = group[0]
         orig["is_original"] = True
@@ -776,7 +755,6 @@ def deduplicate(listings: list[dict]) -> tuple[int, int]:
             dup["is_original"] = False
             dup["duplicate_of"] = orig["id"]
             duplicates += 1
-    # cleanup temp
     for l in listings:
         l.pop("_fingerprint", None)
     return originals, duplicates
@@ -790,8 +768,12 @@ def main() -> int:
     print(f"🕷️  FinderDom Otodom scraper — start {started.isoformat()}")
     print(f"    MAX_PAGES={MAX_PAGES}  MAX_LISTINGS={MAX_LISTINGS}  DELAY={DELAY_MIN}-{DELAY_MAX}s")
     print(f"    OUT_FILE={OUT_FILE}  SKIP_DETAILS={SKIP_DETAILS}  DETAILS_ONLY={DETAILS_ONLY}")
+    if SCRAPER_API_ENABLED:
+        masked = SCRAPER_API_KEY[:6] + "…" + SCRAPER_API_KEY[-4:] if len(SCRAPER_API_KEY) > 12 else "***"
+        print(f"    🌐 ScraperAPI: ENABLED  key={masked}  country={SCRAPER_API_COUNTRY}  premium={SCRAPER_API_PREMIUM}")
+    else:
+        print(f"    ⚠️  ScraperAPI: DISABLED (brak SCRAPER_API_KEY) — używam bezpośrednich requestów (ryzyko banu)")
 
-    # ========== DETAILS_ONLY MODE — wczytaj istniejący JSON i tylko wzbogać detalami ==========
     if DETAILS_ONLY:
         if not os.path.exists(OUT_FILE):
             print(f"❌ DETAILS_ONLY=1 ale brak pliku {OUT_FILE} — najpierw uruchom scrape!")
@@ -801,7 +783,6 @@ def main() -> int:
         all_listings = existing.get("listings", [])
         print(f"📂 Wczytano {len(all_listings)} ofert z {OUT_FILE}")
 
-        # Faza 2 (details) + 2.5 (title parsing)
         detail_count = 0
         if FETCH_DETAILS and all_listings:
             print(f"\n🔬 Pobieranie szczegółów ofert (max {DETAIL_MAX})…")
@@ -810,7 +791,6 @@ def main() -> int:
         for l in all_listings:
             parse_title_hints(l)
 
-        # Zapisz z zachowaniem count/originals/duplicates z poprzedniego runa
         out = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "count": len(all_listings),
@@ -827,8 +807,8 @@ def main() -> int:
         print(f"\n✅ Zapisano {OUT_FILE} (details_enriched={detail_count})")
         return 0
 
-    all_listings: list[dict] = []
-    stats_per_combo: dict[str, int] = {}
+    all_listings = []
+    stats_per_combo = {}
     for i, (transaction, otodom_type, out_type) in enumerate(COMBOS, 1):
         print(f"\n[{i}/{len(COMBOS)}] {transaction} / {otodom_type}")
         got = scrape_combo(transaction, otodom_type, out_type)
@@ -837,25 +817,20 @@ def main() -> int:
         if len(all_listings) >= MAX_LISTINGS:
             print(f"  ⚠️  hit MAX_LISTINGS={MAX_LISTINGS} — przerywam")
             break
-        # delay między kombinacjami
         if i < len(COMBOS):
             time.sleep(random.uniform(DELAY_MIN, DELAY_MAX))
 
-    # Trim to MAX_LISTINGS
     if len(all_listings) > MAX_LISTINGS:
         all_listings = all_listings[:MAX_LISTINGS]
 
     print(f"\n📊 Faza 1 (LATEST cała PL): {len(all_listings)} ofert")
 
-    # -------- FAZA 1b: WSZYSTKIE 16 WOJEWÓDZTW × 6 KOMBINACJI = pełne pokrycie kraju -----------
     if SCRAPE_VOIVODESHIPS:
         print(f"\n🗺️  Faza 1b: {len(VOIVODESHIPS)} województw × {len(VOJ_COMBOS)} kombinacji "
               f"(max {VOJ_MAX_PAGES} stron each)")
         voj_listings = scrape_voivodeships()
         print(f"   → {len(voj_listings)} ofert ze wszystkich województw")
-        # Merge — deduplikacja przez fingerprint zajmie się dublami
         all_listings.extend(voj_listings)
-        # Trim again (może wygenerować dużo — trzymamy się limitu)
         if len(all_listings) > MAX_LISTINGS:
             print(f"   ⚠️  Powyżej MAX_LISTINGS={MAX_LISTINGS}, obcinam do limitu")
             all_listings = all_listings[:MAX_LISTINGS]
@@ -863,20 +838,17 @@ def main() -> int:
     print(f"\n📊 Zescrapowano łącznie: {len(all_listings)} ofert")
     print(f"    Breakdown: {stats_per_combo}")
 
-    # -------- SAFE-FAIL -----------
     if len(all_listings) < MIN_LISTINGS:
         print(f"\n❌ Za mało ofert ({len(all_listings)} < {MIN_LISTINGS}). "
               f"NIE nadpisuję listings.json.")
         return 1
 
-    # -------- ANALIZA CEN + DEDUP --
     print("\n🧮 Analiza cen (AI verdict)…")
     analyze_prices(all_listings)
     print("🔁 Deduplikacja…")
     originals, dupes = deduplicate(all_listings)
     print(f"    → {originals} oryginałów, {dupes} kopii")
 
-    # -------- DETAIL FETCH (Faza 2) --
     detail_count = 0
     if FETCH_DETAILS and not SKIP_DETAILS:
         print("\n🔬 Pobieranie szczegółów ofert (rok, typ budynku, standard, ogrzewanie, ...)")
@@ -884,7 +856,6 @@ def main() -> int:
     elif SKIP_DETAILS:
         print("\n⏭️  SKIP_DETAILS=1 — pomijam Fazę 2 (uruchom osobny workflow details-only)")
 
-    # -------- TITLE PARSING (Faza 2.5) — fallback dla ofert bez detali --
     print("\n📝 Title parsing — inferuje building_type/standard/features z tytułów…")
     hint_before = sum(1 for l in all_listings if l.get("building_type"))
     for l in all_listings:
@@ -892,7 +863,6 @@ def main() -> int:
     hint_after = sum(1 for l in all_listings if l.get("building_type"))
     print(f"   → building_type: {hint_before} (z detali) → {hint_after} (z tytułów) = +{hint_after - hint_before}")
 
-    # -------- SORT: originals first, then by verdict (deal → normal → over → outlier) ---
     order = {"deal": 0, "normal": 1, "over": 2, "outlier": 3}
     all_listings.sort(key=lambda x: (
         not x.get("is_original", True),
@@ -900,7 +870,6 @@ def main() -> int:
         x.get("ai_delta_pct", 0),
     ))
 
-    # -------- BACKUP -----------
     if OUT_FILE.exists():
         try:
             BACKUP_FILE.write_bytes(OUT_FILE.read_bytes())
@@ -908,12 +877,11 @@ def main() -> int:
         except OSError as e:
             print(f"⚠️  Nie zapisano backupu: {e}")
 
-    # -------- SAVE -----------
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     finished = datetime.now(timezone.utc)
     duration_s = int((finished - started).total_seconds())
 
-    verdict_counts: dict[str, int] = defaultdict(int)
+    verdict_counts = defaultdict(int)
     for l in all_listings:
         verdict_counts[l["verdict_badge"]] += 1
 
@@ -937,7 +905,3 @@ def main() -> int:
     print(f"   Werdykty: {dict(verdict_counts)}")
     print(f"   Czas: {duration_s}s")
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -31,6 +31,13 @@ SCRAPER_API_PREMIUM = os.getenv("SCRAPER_API_PREMIUM", "1") == "1"
 SCRAPER_API_COUNTRY = os.getenv("SCRAPER_API_COUNTRY", "pl")
 SCRAPER_API_ENDPOINT = "http://api.scraperapi.com/"
 
+ZENROWS_API_KEY = os.getenv("ZENROWS_API_KEY", "").strip()
+ZENROWS_ENABLED = bool(ZENROWS_API_KEY)
+ZENROWS_ENDPOINT = "https://api.zenrows.com/v1/"
+ZENROWS_ANTIBOT = True
+
+
+
 FETCH_DETAILS = os.getenv("FETCH_DETAILS", "1") == "1"
 SKIP_DETAILS = os.getenv("SKIP_DETAILS", "0") == "1"
 DETAILS_ONLY = os.getenv("DETAILS_ONLY", "0") == "1"

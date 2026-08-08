@@ -35,9 +35,9 @@ on:
         default: "20"
         type: string
       detail_max:
-        description: "Ile ofert dostanie pełne szczegóły (rynek, standard, balkon). 5000 = ~30 min extra."
+        description: "Ile ofert dostanie pełne szczegóły (building_type, standard, balkon). 20000 = pokrycie ~30-40%."
         required: true
-        default: "5000"
+        default: "20000"
         type: string
   # schedule:
   #   - cron: "15 4 * * *"   # codziennie 04:15 UTC (06:15 Warsaw)
@@ -76,8 +76,10 @@ jobs:
         env:
           MAX_PAGES: ${{ github.event.inputs.max_pages || '8' }}
           MAX_LISTINGS: ${{ github.event.inputs.max_listings || '60000' }}
-          VOJ_MAX_PAGES: ${{ github.event.inputs.voj_max_pages || '20' }}
-          DETAIL_MAX: ${{ github.event.inputs.detail_max || '5000' }}
+          VOJ_MAX_PAGES: ${{ github.event.inputs.voj_max_pages || '15' }}
+          DETAIL_MAX: ${{ github.event.inputs.detail_max || '20000' }}
+          DETAIL_WORKERS: "5"
+          DETAIL_DELAY: "0.35"
           MIN_LISTINGS: "100"
           DELAY_MIN: "1.2"
           DELAY_MAX: "2.5"

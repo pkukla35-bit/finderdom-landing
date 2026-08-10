@@ -1005,11 +1005,15 @@ function applyAllFilters() {
     }
 
     // Promień od miasta centralnego (haversine city→city)
-    if (f.radiusCenter && f.radiusKm > 0) {
-      const key = normalizeCity(l.city || '');
-      const c = window.CITY_COORDS?.[key];
-      if (!c) return true;  // miasto oferty nie ma w słowniku → ukrywamy
-      const d = haversineKm(f.radiusCenter[0], f.radiusCenter[1], c[0], c[1]);
+   if (f.radiusCenter && f.radiusKm > 0) {
+      let lat = l.lat, lon = l.lon;
+      if (lat == null || lon == null) {
+        const key = normalizeCity(l.city || '');
+        const c = window.CITY_COORDS?.[key];
+        if (!c) return false;
+        lat = c[0]; lon = c[1];
+      }
+      const d = haversineKm(f.radiusCenter[0], f.radiusCenter[1], lat, lon);
       if (d > f.radiusKm) return false;
     }
 

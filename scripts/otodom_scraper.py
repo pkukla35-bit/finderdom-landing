@@ -216,6 +216,10 @@ def transform(item, transaction, typ_out):
         if not city:
             return None
         seller_type, seller_label = detect_seller(item)
+        _loc = item.get("location") or {}
+        _coords = _loc.get("coordinates") or {}
+        _lat = _coords.get("latitude")
+        _lon = _coords.get("longitude")
         slug = item.get("slug", "")
         source_url = f"https://www.otodom.pl/pl/oferta/{slug}" if slug else ""
         title = (item.get("title") or "")[:120]
@@ -239,6 +243,7 @@ def transform(item, transaction, typ_out):
             "verdict_full": "CENA ZGODNA Z RYNKIEM",
             "ai_delta_pct": 0, "ai_offers_pm2": 0, "ai_rcn_pm2": 0,
             "is_original": True, "duplicate_of": None,
+             "lat": _lat, "lon": _lon,
         }
     except (KeyError, TypeError, ValueError, AttributeError):
         return None

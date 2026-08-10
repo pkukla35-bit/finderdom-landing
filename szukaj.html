@@ -1008,7 +1008,7 @@ function applyAllFilters() {
     if (f.radiusCenter && f.radiusKm > 0) {
       const key = normalizeCity(l.city || '');
       const c = window.CITY_COORDS?.[key];
-      if (!c) return false;  // miasto oferty nie ma w słowniku → ukrywamy
+      if (!c) return true;  // miasto oferty nie ma w słowniku → ukrywamy
       const d = haversineKm(f.radiusCenter[0], f.radiusCenter[1], c[0], c[1]);
       if (d > f.radiusKm) return false;
     }

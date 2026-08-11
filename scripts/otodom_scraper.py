@@ -378,6 +378,8 @@ def fetch_detail(slug_or_url):
                     "heating": HEATING_MAP.get(_parse_target_field(target, "Heating"), ""),
                     "standard": STANDARD_MAP.get(_parse_target_field(target, "Construction_status"), ""),
                     "market_type": MARKET_MAP.get(target.get("MarketType", ""), ""),
+                    "lat": (ad.get("location") or {}).get("coordinates", {}).get("latitude"),
+                    "lon": (ad.get("location") or {}).get("coordinates", {}).get("longitude"),
                     "has_balcony": "balcony" in extras,
                     "has_terrace": "terrace" in extras,
                     "has_garden": "garden" in extras,

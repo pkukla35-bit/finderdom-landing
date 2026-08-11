@@ -117,3 +117,4 @@ jobs:
           COUNT=$(python -c "import json; print(json.load(open('data/listings.json'))['count'])")
           git commit -m "chore(data): scrape Otodom — ${COUNT} listings [skip ci]"
           git push
+          

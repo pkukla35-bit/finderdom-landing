@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       detail_max:
-        description: "Ile ofert dostanie szczegoly"
+        description: "Gorny limit ofert (scraper i tak zatrzyma sie po MAX_RUN_TIME)."
         required: true
-        default: "15000"
+        default: "10000"
         type: string
 
 permissions:
@@ -18,46 +18,60 @@ concurrency:
 
 jobs:
   details:
+    name: Scrape Otodom Details
     runs-on: ubuntu-latest
     timeout-minutes: 180
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
           cache-dependency-path: scripts/requirements.txt
-      - run: |
+
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install -r scripts/requirements.txt
+
       - name: Run details fetch
         env:
           DETAILS_ONLY: "1"
-          DETAIL_MAX: ${{ github.event.inputs.detail_max || '15000' }}
-          DETAIL_WORKERS: "4"
-          DETAIL_DELAY: "0.4"
+          DETAIL_MAX: ${{ github.event.inputs.detail_max || '10000' }}
+          DETAIL_WORKERS: "6"
+          DETAIL_DELAY: "0.3"
+          MAX_RUN_TIME: "9000"
           DETAIL_ONLY_TYPE: "dom"
-          ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
-          ZENROWS_ANTIBOT: "1"
+          SKIP_ENRICHED: "1"
           SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
           SCRAPER_API_PREMIUM: "1"
           SCRAPER_API_COUNTRY: "pl"
-        run: python scripts/otodom_scraper.py
+          ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
+        run: |
+          python scripts/otodom_scraper.py
+
       - name: Show summary
         if: always()
         run: |
           if [ -f data/listings.json ]; then
-            python -c "import json; d=json.load(open('data/listings.json')); print('count:', d.get('count')); print('enriched:', d.get('details_enriched'))"
-            du -h data/listings.json
+            python -c "import json; d=json.load(open('data/listings.json')); print('count:', d.get('count')); print('details_enriched:', d.get('details_enriched')); print('details_enriched_this_run:', d.get('details_enriched_this_run'))"
+            echo "size: $(du -h data/listings.json | cut -f1)"
           fi
-      - name: Commit and push
+
+      - name: Commit & push enriched listings
         run: |
           if git diff --quiet data/listings.json; then
-            echo "Brak zmian"
+            echo "Brak zmian - nie commituje."
             exit 0
           fi
-          git config user.name "FinderDom Bot"
+          git config user.name  "FinderDom Bot"
           git config user.email "bot@finderdom.pl"
           git add data/listings.json
-          git commit -m "chore(data): enrich Otodom details"
+          ENRICHED=$(python -c "import json; d=json.load(open('data/listings.json')); print(d.get('details_enriched', 0))")
+          THIS_RUN=$(python -c "import json; d=json.load(open('data/listings.json')); print(d.get('details_enriched_this_run', 0))")
+          git commit -m "chore(data): enrich Otodom details - +${THIS_RUN} (total ${ENRICHED}) [skip ci]"
           git push

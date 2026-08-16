@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title id="pageTitle">Oferta — FinderDom.pl</title>
+<meta name="description" content="Szczegółowa analiza AI oferty nieruchomości. Wyliczamy czy cena jest okazją, w normie, czy zawyżona.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+<!-- GA4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-8BX5DVXPDV"></script>
+<script>
+  window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}
+  gtag('js',new Date());gtag('config','G-8BX5DVXPDV');
+</script>
+
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0B1836;color:#fff;-webkit-font-smoothing:antialiased}
+
+  /* Reuse top nav */
+  .topnav{background:rgba(11,24,54,0.95);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.08);padding:14px 24px;position:sticky;top:0;z-index:100}
+  .nav-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .brand-link{display:flex;align-items:center;gap:10px;text-decoration:none;color:#fff}
+  .brand-logo{width:36px;height:36px;background:linear-gradient(135deg,#1a2e5c,#2d4a8a);border-radius:10px;display:flex;align-items:center;justify-content:center}
+  .brand-logo svg{width:22px;height:22px}
+  .brand-text{font-size:17px;font-weight:900;letter-spacing:-0.5px}
+  .brand-text .accent{color:#FFB800}
+  .nav-links{display:flex;gap:20px;align-items:center;font-size:14px}
+  .nav-links a{color:#c5d0e6;text-decoration:none;font-weight:600}
+  .nav-links a:hover,.nav-links a.active{color:#FFB800}
+  .cta-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:10px 18px;border-radius:10px;text-decoration:none;font-size:13px;text-transform:uppercase}
+
+  /* Breadcrumb */
+  .breadcrumb{max-width:1400px;margin:0 auto;padding:16px 24px;color:#8ba3d4;font-size:13px}
+  .breadcrumb a{color:#8ba3d4;text-decoration:none}
+  .breadcrumb a:hover{color:#FFB800}
+
+  /* Main layout */
+  .offer-container{max-width:1400px;margin:0 auto;padding:0 24px 40px;display:grid;grid-template-columns:1fr 380px;gap:32px}
+
+  /* Photos */
+  .gallery{background:rgba(255,255,255,0.03);border-radius:20px;overflow:hidden}
+  .gallery-main{width:100%;height:480px;background:linear-gradient(135deg,#1a2e5c,#2d4a8a);display:flex;align-items:center;justify-content:center;font-size:120px;position:relative}
+  .gallery-badges{position:absolute;top:16px;left:16px;display:flex;gap:8px;flex-wrap:wrap}
+  .gallery-badges .b{padding:6px 12px;border-radius:100px;font-size:11px;font-weight:900;letter-spacing:0.5px;text-transform:uppercase;backdrop-filter:blur(10px)}
+  .b-deal{background:rgba(34,197,94,0.95);color:#052e16}
+  .b-portal{background:rgba(0,0,0,0.7);color:#fff}
+  .b-source{position:absolute !important;top:16px;right:16px;background:rgba(0,0,0,0.7);color:#FFB800 !important;padding:8px 14px;border-radius:10px;font-size:11px;font-weight:800;letter-spacing:0.5px;text-decoration:none !important;text-transform:uppercase;backdrop-filter:blur(10px);z-index:5}
+  .b-source:hover{background:#FFB800;color:#0B1836 !important}
+  .gallery-thumbs{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;padding:8px}
+  .thumb{aspect-ratio:1;background:linear-gradient(135deg,#2d4a8a,#1a2e5c);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;transition:opacity 0.2s;opacity:0.7}
+  .thumb:hover,.thumb.active{opacity:1;box-shadow:0 0 0 2px #FFB800}
+
+  /* Title bar */
+  .title-block{margin-top:24px;padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.08)}
+  .offer-title{font-size:clamp(24px,3vw,32px);font-weight:900;line-height:1.15;letter-spacing:-0.5px;margin-bottom:8px}
+  .offer-loc{color:#8ba3d4;font-size:15px;margin-bottom:16px}
+  .price-block{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:16px}
+  .price-main{font-size:36px;font-weight:900;color:#FFB800;line-height:1}
+  .price-m2{color:#c5d0e6;font-size:16px;font-weight:700}
+
+  /* AI Analysis - BIG feature */
+  .ai-analysis{margin-top:32px;background:linear-gradient(135deg,rgba(34,197,94,0.08),rgba(255,255,255,0.02));border:2px solid rgba(34,197,94,0.35);border-radius:24px;padding:32px;position:relative;overflow:hidden}
+  .ai-analysis::before{content:'';position:absolute;top:-40px;right:-40px;width:200px;height:200px;background:radial-gradient(circle,rgba(34,197,94,0.15),transparent 70%);pointer-events:none}
+  .ai-header{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+  .ai-tag{background:rgba(34,197,94,0.2);color:#4ade80;padding:5px 12px;border-radius:100px;font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;border:1px solid rgba(34,197,94,0.4)}
+  .ai-verdict{font-size:clamp(24px,3vw,32px);font-weight:900;color:#4ade80;line-height:1.1;letter-spacing:-0.5px;margin-bottom:8px}
+  .ai-subtitle{color:#c5d0e6;font-size:14px;margin-bottom:24px}
+
+  /* Comparison bars */
+  .comparison{display:flex;flex-direction:column;gap:14px;margin-bottom:20px}
+  .comp-row{display:grid;grid-template-columns:140px 1fr 100px;gap:12px;align-items:center;font-size:13px}
+  .comp-label{color:#8ba3d4;font-weight:600}
+  .comp-label.highlight{color:#FFB800;font-weight:800}
+  .comp-bar{background:rgba(0,0,0,0.3);border-radius:8px;height:20px;position:relative;overflow:hidden}
+  .comp-fill{height:100%;border-radius:8px;transition:width 0.8s ease}
+  .comp-fill.this{background:linear-gradient(90deg,#4ade80,#22c55e);width:75%}
+  .comp-fill.offers{background:linear-gradient(90deg,#60a5fa,#3b82f6);width:88%}
+  .comp-fill.rcn{background:linear-gradient(90deg,#FFB800,#FFA200);width:83%}
+  .comp-val{color:#e6edf3;font-weight:800;text-align:right}
+  .comp-val.highlight{color:#FFB800}
+
+  .rcn-info{background:rgba(0,0,0,0.3);border-radius:12px;padding:14px;font-size:12px;color:#8ba3d4;display:flex;align-items:center;gap:8px}
+  .rcn-info strong{color:#FFB800}
+
+  /* Specs */
+  .specs-grid{margin-top:32px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}
+  .spec{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px}
+  .spec-label{font-size:11px;color:#8ba3d4;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px}
+  .spec-val{font-size:15px;color:#fff;font-weight:800}
+
+  /* Description */
+  .description{margin-top:32px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px;line-height:1.7;color:#c5d0e6;font-size:14px}
+  .description h3{color:#fff;font-size:16px;font-weight:900;margin-bottom:12px}
+
+  /* Sidebar */
+  .sidebar{position:sticky;top:88px;height:fit-content}
+  .contact-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:24px;margin-bottom:16px}
+  .contact-title{font-size:12px;color:#FFB800;text-transform:uppercase;letter-spacing:1.5px;font-weight:800;margin-bottom:14px}
+  .contact-btn{display:block;width:100%;padding:16px;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;border:none;border-radius:12px;font-size:15px;cursor:pointer;text-decoration:none;text-align:center;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;transition:all 0.15s}
+  .contact-btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(255,184,0,0.35)}
+  .contact-btn.secondary{background:rgba(255,255,255,0.05);color:#fff;border:1px solid rgba(255,255,255,0.15)}
+  .contact-btn.secondary:hover{border-color:#FFB800;color:#FFB800;box-shadow:none;transform:none}
+  .contact-mini{margin-top:14px;font-size:12px;color:#8ba3d4;line-height:1.6}
+  .contact-mini strong{color:#e6edf3}
+
+  /* Alert card */
+  .alert-card{background:linear-gradient(135deg,rgba(255,184,0,0.1),rgba(255,255,255,0.02));border:1px solid rgba(255,184,0,0.3);border-radius:16px;padding:20px}
+  .alert-card h4{color:#FFB800;font-size:14px;font-weight:900;margin-bottom:8px}
+  .alert-card p{color:#c5d0e6;font-size:13px;line-height:1.5;margin-bottom:12px}
+  .alert-input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:#fff;font-size:13px;outline:none;margin-bottom:8px}
+  .alert-input:focus{border-color:#FFB800}
+  .alert-btn{width:100%;padding:12px;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;border:none;border-radius:10px;font-size:13px;cursor:pointer;text-transform:uppercase;letter-spacing:0.3px}
+
+  /* Similar offers */
+  .similar-section{max-width:1400px;margin:0 auto;padding:40px 24px 60px;border-top:1px solid rgba(255,255,255,0.08)}
+  .similar-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+  .similar-title{font-size:24px;font-weight:900;color:#fff;letter-spacing:-0.5px}
+  .similar-sub{color:#8ba3d4;font-size:13px}
+  .similar-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .sim-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;overflow:hidden;text-decoration:none;color:inherit;transition:all 0.2s;cursor:pointer;display:block}
+  .sim-card:hover{border-color:rgba(255,184,0,0.35);transform:translateY(-3px)}
+  .sim-img{width:100%;height:130px;position:relative;display:flex;align-items:center;justify-content:center;font-size:44px}
+  .sim-i1{background:linear-gradient(135deg,#1a2e5c,#2d4a8a)}
+  .sim-i2{background:linear-gradient(135deg,#3d1e6b,#6b3aa8)}
+  .sim-i3{background:linear-gradient(135deg,#1e3a3d,#3a7b6b)}
+  .sim-i4{background:linear-gradient(135deg,#4a2c1a,#8b5a3c)}
+  .sim-body{padding:12px}
+  .sim-title{font-size:12px;font-weight:700;color:#fff;line-height:1.3;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sim-loc{font-size:11px;color:#8ba3d4;margin-bottom:8px}
+  .sim-price{display:flex;justify-content:space-between;align-items:baseline}
+  .sim-price .p{font-size:15px;font-weight:900;color:#FFB800}
+  .sim-price .pm{font-size:10px;color:#8ba3d4}
+
+  @media(max-width:900px){
+    .offer-container{grid-template-columns:1fr}
+    .sidebar{position:static;order:2}
+    .gallery-main{height:280px;font-size:80px}
+    .price-main{font-size:28px}
+    .comp-row{grid-template-columns:100px 1fr 80px;font-size:12px}
+    .nav-links a:not(.cta-btn){display:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- Top nav -->
+<nav class="topnav">
+  <div class="nav-inner">
+    <a href="/" class="brand-link">
+      <div class="brand-logo">
+        <svg viewBox="0 0 100 100" fill="none">
+          <path d="M50 20L20 45v35h60V45L50 20z" stroke="#FFB800" stroke-width="6" stroke-linejoin="round" fill="none"/>
+          <circle cx="65" cy="45" r="10" stroke="#FFB800" stroke-width="6" fill="none"/>
+          <path d="M72 52l8 8" stroke="#FFB800" stroke-width="6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="brand-text">Finder<span class="accent">Dom</span>.pl</div>
+    </a>
+    <div class="nav-links">
+      <a href="/szukaj.html">Wyszukiwarka</a>
+      <a href="/oferta.html" class="active">Przykład oferty</a>
+      <a href="/#valuation">Wycena</a>
+      <a href="/#newsletter" class="cta-btn">Zapisz się</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Breadcrumb -->
+<div class="breadcrumb" id="breadcrumb">
+  <a href="/">Strona główna</a> › <a href="/szukaj.html">Wyszukiwarka</a> › <span id="bcType">Oferta</span>
+</div>
+
+<!-- Loading state -->
+<div id="loadingState" style="max-width:1400px;margin:0 auto;padding:80px 24px;text-align:center;color:#8ba3d4">
+  <div style="font-size:48px;margin-bottom:16px">⏳</div>
+  <div style="font-size:18px;font-weight:700;color:#fff">Wczytuję ofertę…</div>
+</div>
+
+<!-- Error state -->
+<div id="errorState" style="display:none;max-width:1400px;margin:0 auto;padding:80px 24px;text-align:center">
+  <div style="font-size:48px;margin-bottom:16px">😔</div>
+  <div style="font-size:20px;font-weight:800;color:#fff;margin-bottom:8px">Nie znaleziono oferty</div>
+  <div style="color:#8ba3d4;margin-bottom:20px">Oferta mogła zostać usunięta z bazy albo link jest niepoprawny.</div>
+  <a href="/szukaj.html" style="display:inline-block;background:#FFB800;color:#0B1836;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:800">Wróć do wyszukiwarki →</a>
+</div>
+
+<!-- Main content (dynamic) -->
+<div class="offer-container" id="offerContainer" style="display:none">
+
+  <!-- Left: Gallery + Info -->
+  <div>
+    <!-- Gallery -->
+    <div class="gallery">
+      <div class="gallery-main" id="galleryMain">
+        <span id="galleryEmoji">🏢</span>
+        <img id="galleryPhoto" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+        <div class="gallery-badges">
+          <span class="b" id="verdictBadge">🔥 Okazja</span>
+          <span class="b b-portal" id="portalBadge">Otodom</span>
+        </div>
+        <a id="sourceLink" href="#" target="_blank" rel="noopener" class="b-source">Zobacz na Otodom ↗</a>
+      </div>
+    </div>
+
+    <!-- Title -->
+    <div class="title-block">
+      <h1 class="offer-title" id="offerTitle">…</h1>
+      <div class="offer-loc" id="offerLoc">…</div>
+      <div class="price-block">
+        <div class="price-main" id="priceMain">…</div>
+        <div class="price-m2" id="priceM2">…</div>
+      </div>
+    </div>
+
+    <!-- AI Analysis -->
+    <div class="ai-analysis" id="aiAnalysis">
+      <div class="ai-header">
+        <span class="ai-tag">🧠 AI Analiza Ceny</span>
+        <span class="ai-tag" style="background:rgba(255,184,0,0.15);color:#FFB800;border-color:rgba(255,184,0,0.4)">📊 Dane z RCN</span>
+      </div>
+      <div class="ai-verdict" id="aiVerdict">…</div>
+      <p class="ai-subtitle" id="aiSubtitle">…</p>
+
+      <div class="comparison" id="comparison">
+        <div class="comp-row">
+          <div class="comp-label highlight">Ta oferta</div>
+          <div class="comp-bar"><div class="comp-fill this" id="barThis"></div></div>
+          <div class="comp-val highlight" id="valThis">…</div>
+        </div>
+        <div class="comp-row">
+          <div class="comp-label">Śr. oferty w okolicy</div>
+          <div class="comp-bar"><div class="comp-fill offers" id="barOffers"></div></div>
+          <div class="comp-val" id="valOffers">…</div>
+        </div>
+        <div class="comp-row">
+          <div class="comp-label">⭐ RCN — realne transakcje</div>
+          <div class="comp-bar"><div class="comp-fill rcn" id="barRcn"></div></div>
+          <div class="comp-val" id="valRcn">…</div>
+        </div>
+      </div>
+
+      <div class="rcn-info" id="rcnInfo">
+        📊 Analiza AI porównuje cenę z medianą ofert w Twoim mieście dla tego typu nieruchomości.
+      </div>
+
+      <!-- 🔗 Oferty w promieniu 5km użyte w analizie (widoczne tylko gdy analiza radius aktywna) -->
+      <div id="localOffersSection" style="display:none;margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08)">
+        <div style="font-size:13px;font-weight:900;color:#c5d0e6;margin-bottom:12px;letter-spacing:0.3px" id="localOffersTitle">
+          🔗 Oferty w okolicy użyte w analizie
+        </div>
+        <div id="localOffersList" style="display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <!-- Specs -->
+    <div class="specs-grid" id="specsGrid">
+      <!-- generated by JS -->
+    </div>
+
+    <!-- Description -->
+    <div class="description">
+      <h3>📝 Opis oferty</h3>
+      <p id="offerDesc">…</p>
+      <p style="margin-top:12px;color:#8ba3d4;font-style:italic;font-size:12px">
+        📌 Aby zobaczyć pełny opis, dodatkowe zdjęcia i skontaktować się ze sprzedającym — kliknij „Zobacz na Otodom ↗" powyżej.
+      </p>
+    </div>
+  </div>
+
+  <!-- Right: Sidebar -->
+  <aside class="sidebar">
+    <div class="contact-card">
+      <div class="contact-title">📞 Kontakt ze sprzedającym</div>
+      <a id="ctaOtodom" href="#" target="_blank" rel="noopener" class="contact-btn">🔗 Otwórz w Otodom</a>
+      <a href="/#valuation" class="contact-btn secondary">💎 Wycena Premium (49 zł)</a>
+      <div class="contact-mini" id="ctaHint">
+        <strong>💡 Wskazówka:</strong> Kliknij „Otwórz w Otodom" żeby zobaczyć numer telefonu, pełny opis i wszystkie zdjęcia.
+      </div>
+    </div>
+
+    <div class="alert-card">
+      <h4>🔔 Powiadomienie o podobnych ofertach</h4>
+      <p id="alertDesc">Ustaw alert i dostaniesz email gdy pojawi się podobna oferta.</p>
+      <input type="email" class="alert-input" placeholder="twoj@email.pl" id="alertEmail">
+      <button class="alert-btn" id="alertBtn">Ustaw alert</button>
+    </div>
+  </aside>
+
+</div>
+
+<!-- Similar offers (dynamic) -->
+<div class="similar-section" id="similarSection" style="display:none">
+  <div class="similar-header">
+    <div>
+      <div class="similar-title">📍 Podobne oferty</div>
+      <div class="similar-sub" id="similarSub">Ten sam typ, podobna cena i miasto</div>
+    </div>
+    <a href="/szukaj.html" style="color:#FFB800;text-decoration:none;font-weight:700;font-size:13px">Zobacz wszystkie →</a>
+  </div>
+  <div class="similar-grid" id="similarGrid">
+    <!-- generated by JS -->
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// FinderDom — dynamic offer page (reads ?id=xxx from URL, fetches listings.json)
+// ============================================================================
+const VERDICT_MAP = {
+  deal:    { badgeCls: 'b-deal',    text: '🔥 Okazja' },
+  normal:  { badgeCls: 'b-normal',  text: '✓ W normie' },
+  over:    { badgeCls: 'b-over',    text: '⚠️ Zawyżona' },
+  outlier: { badgeCls: 'b-outlier', text: '❓ Sprawdź' },
+};
+
+const TYPE_LABEL = {
+  mieszkanie: 'Mieszkanie', dom: 'Dom', dzialka: 'Działka',
+  lokal: 'Lokal', garaz: 'Garaż', pokoj: 'Pokój'
+};
+const TRANS_LABEL = { sprzedaz: 'Sprzedaż', wynajem: 'Wynajem' };
+const BUILD_LABEL = {
+  blok: 'Blok', kamienica: 'Kamienica', apartamentowiec: 'Apartamentowiec',
+  loft: 'Loft', wiezowiec: 'Wieżowiec', wolnostojacy: 'Wolnostojący',
+  blizniak: 'Bliźniak', szeregowiec: 'Szeregowiec', siedliskowy: 'Siedliskowy',
+  rezydencja: 'Rezydencja', letniskowy: 'Letniskowy'
+};
+const STANDARD_LABEL = {
+  gotowe: 'Gotowe / po remoncie', do_wykonczenia: 'Do wykończenia', do_remontu: 'Do remontu'
+};
+const HEATING_LABEL = {
+  miejskie: 'Miejskie', gazowe: 'Gazowe', kotlownia: 'Kotłownia',
+  elektryczne: 'Elektryczne', kaflowy: 'Piec kaflowy', inne: 'Inne'
+};
+const MATERIAL_LABEL = {
+  cegla: 'Cegła', wielka_plyta: 'Wielka płyta', beton: 'Beton',
+  drewno: 'Drewno', pustak: 'Pustak', silikat: 'Silikat', gazobeton: 'Gazobeton', inne: 'Inne'
+};
+const MARKET_LABEL = { pierwotny: 'Pierwotny (deweloper)', wtorny: 'Wtórny' };
+
+function el(id) { return document.getElementById(id); }
+function fmt(n) { return (n||0).toLocaleString('pl-PL'); }
+
+// Haversine — dystans w km między dwoma punktami geograficznymi
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth radius km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Mediana z tablicy liczb
+function median(arr) {
+  if (!arr.length) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid-1] + sorted[mid]) / 2);
+}
+
+// Renderuj listę klikalnych ofert użytych w analizie promienia
+function renderLocalOffersList(offers, radiusKm, thisPpm2, marketType) {
+  const section = el('localOffersSection');
+  const titleEl = el('localOffersTitle');
+  const listEl = el('localOffersList');
+  if (!section || !listEl) return;
+
+  // Sortuj po dystansie rosnąco, max 30 ofert
+  const sorted = [...offers].sort((a, b) => a._dist - b._dist).slice(0, 30);
+
+  const marketLabel = marketType === 'pierwotny' ? ' (rynek pierwotny)'
+                    : marketType === 'wtorny' ? ' (rynek wtórny)'
+                    : '';
+  titleEl.innerHTML = `🔗 <strong>${offers.length} ofert</strong> w promieniu <strong>${radiusKm} km</strong>${marketLabel} użytych w analizie (pokazano najbliższe ${sorted.length}):`;
+
+  listEl.innerHTML = sorted.map(o => {
+    const diff = o.price_pm2 - thisPpm2;
+    const diffPct = thisPpm2 > 0 ? Math.round((diff / thisPpm2) * 100) : 0;
+    const color = diff > 0 ? '#f87171' : (diff < 0 ? '#4ade80' : '#8ba3d4');
+    const sign = diff > 0 ? '+' : '';
+    const title = (o.title || '').substring(0, 70);
+    const loc = `${o.city}${o.district ? ', ' + o.district : ''}`;
+    return `
+      <a href="/oferta?id=${o.id}" target="_blank" style="display:flex;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;text-decoration:none;color:inherit;transition:all 0.15s" onmouseover="this.style.background='rgba(255,184,0,0.08)';this.style.borderColor='rgba(255,184,0,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.03)';this.style.borderColor='rgba(255,255,255,0.06)'">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</div>
+          <div style="font-size:11px;color:#8ba3d4;margin-top:2px">📍 ${loc} · ${o._dist.toFixed(1)} km · ${o.area_m2 || '?'} m² · ${o.rooms || '?'} pok.</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:13px;font-weight:900;color:#FFB800">${fmt(o.price_pm2)} zł/m²</div>
+          <div style="font-size:10px;color:${color};font-weight:800">${sign}${fmt(diff)} zł/m² (${sign}${diffPct}%)</div>
+        </div>
+      </a>
+    `;
+  }).join('');
+
+  section.style.display = 'block';
+}
+
+async function loadOffer() {
+  const params = new URLSearchParams(location.search);
+  let id = params.get('id');
+
+  try {
+    const r = await fetch('/data/listings.json?v=' + Date.now());
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    const listings = data.listings || [];
+    if (!listings.length) { showError(); return; }
+
+    let offer;
+    if (id) {
+      offer = listings.find(l => l.id === id);
+    } else {
+      // Brak ?id= → prezentacja: wybierz losową OKAZJĘ z mieszkania na SPRZEDAŻ z dobrym zdjęciem
+      const deals = listings.filter(l =>
+        l.verdict_badge === 'deal' &&
+        l.type === 'mieszkanie' &&
+        l.transaction === 'sprzedaz' &&
+        l.image_url &&
+        l.is_original !== false &&
+        l.price >= 100000  // sensowna cena sprzedaży
+      );
+      offer = deals.length
+        ? deals[Math.floor(Math.random() * Math.min(deals.length, 30))]
+        : listings[0];
+    }
+
+    if (!offer) { showError(); return; }
+    renderOffer(offer, listings);
+  } catch (e) {
+    console.error(e);
+    showError();
+  }
+}
+
+function showError() {
+  el('loadingState').style.display = 'none';
+  el('errorState').style.display = 'block';
+}
+
+function renderOffer(l, all) {
+  el('loadingState').style.display = 'none';
+  el('offerContainer').style.display = 'grid';
+
+  // Meta / title
+  document.title = `${l.title} — ${l.price_display} — FinderDom.pl`;
+  el('pageTitle').textContent = document.title;
+  el('bcType').textContent = TYPE_LABEL[l.type] || 'Oferta';
+
+  // Photo
+  if (l.image_url) {
+    el('galleryPhoto').src = l.image_url;
+    el('galleryPhoto').style.display = 'block';
+    el('galleryEmoji').style.display = 'none';
+    el('galleryPhoto').onerror = () => {
+      el('galleryPhoto').style.display = 'none';
+      el('galleryEmoji').style.display = 'block';
+    };
+  } else {
+    el('galleryEmoji').textContent = l.emoji || '🏢';
+  }
+
+  // Verdict badge
+  const v = VERDICT_MAP[l.verdict_badge] || VERDICT_MAP.normal;
+  el('verdictBadge').className = 'b ' + v.badgeCls;
+  el('verdictBadge').textContent = l.verdict_text || v.text;
+  el('portalBadge').textContent = l.portal || 'Otodom';
+
+  // Source link
+  if (l.source_url) {
+    el('sourceLink').href = l.source_url;
+    el('ctaOtodom').href = l.source_url;
+    el('ctaOtodom').textContent = `🔗 Otwórz w ${l.portal || 'Otodom'}`;
+  } else {
+    el('sourceLink').style.display = 'none';
+    el('ctaOtodom').style.display = 'none';
+  }
+
+  // Title + location + price
+  el('offerTitle').textContent = l.title;
+  el('offerLoc').textContent = l.location || `📍 ${l.city}${l.district ? ', ' + l.district : ''}`;
+  el('priceMain').textContent = l.price_display;
+  el('priceM2').textContent = l.price_pm2_display;
+
+  // AI Analysis
+  el('aiVerdict').textContent = l.verdict_full || v.text;
+  let rcnPpm2 = l.ai_rcn_pm2 || 0;  // fallback: RCN z całego miasta (~94% mediany ofertowej)
+  const thisPpm2 = l.price_pm2 || 0;
+
+  // 🎯 LOCAL ANALYSIS (5km) — dla mieszkań z lat/lon liczy medianę z okolicy zamiast miejskiej
+  let offersPpm2 = l.ai_offers_pm2 || 0;
+  let localOffers = []; // oferty użyte w analizie 5km (do wyświetlenia)
+  let usedRadiusKm = 0;
+  let scopeLabel = `w mieście ${l.city}`;
+
+  const canUseRadius = (l.type === 'mieszkanie' || l.type === 'dom' || l.type === 'dzialka')
+    && l.lat != null && l.lon != null;
+
+  if (canUseRadius) {
+    // Różne promienie dla różnych typów:
+    // - Mieszkania: 5 km (gęstsza urbanizacja, ceny mocno lokalne)
+    // - Domy/działki: 8 km (rzadziej rozsiane, potrzeba szerszej okolicy)
+    const radiusSteps = l.type === 'mieszkanie'
+      ? [5, 10, 15]
+      : [8, 16, 24];
+
+    for (const km of radiusSteps) {
+      const nearby = all.filter(x =>
+        x.id !== l.id &&
+        x.type === l.type &&
+        x.transaction === l.transaction &&
+        // 🎯 Ten sam rynek (pierwotny vs wtórny) — bo ceny są bardzo różne
+        (l.market_type ? x.market_type === l.market_type : true) &&
+        x.lat != null && x.lon != null &&
+        x.price_pm2 > 0 &&
+        haversineKm(l.lat, l.lon, x.lat, x.lon) <= km
+      );
+      if (nearby.length >= 8) {
+        localOffers = nearby.map(x => ({
+          ...x,
+          _dist: haversineKm(l.lat, l.lon, x.lat, x.lon)
+        }));
+        offersPpm2 = median(localOffers.map(x => x.price_pm2));
+        // 🎯 RCN też przeliczamy lokalnie — z tej samej próbki (ten sam promień + rynek).
+        // RCN = ~94% mediany ofertowej (aproksymacja realnych transakcji, ~6% niżej).
+        rcnPpm2 = Math.round(offersPpm2 * 0.94);
+        usedRadiusKm = km;
+        const marketLabel = l.market_type === 'pierwotny' ? ' (rynek pierwotny)'
+                          : l.market_type === 'wtorny' ? ' (rynek wtórny)'
+                          : '';
+        scopeLabel = `w promieniu <strong>${km} km</strong>${marketLabel}`;
+        break;
+      }
+    }
+  }
+
+  if (offersPpm2 && rcnPpm2) {
+    let subtitle = '';
+    const scopeText = usedRadiusKm ? `w promieniu ${usedRadiusKm} km` : 'w tym mieście';
+    if (l.verdict_badge === 'deal') {
+      const diff = rcnPpm2 - thisPpm2;
+      subtitle = `Ta oferta jest o <strong style="color:#4ade80">${fmt(diff)} zł/m²</strong> tańsza od realnych cen transakcyjnych (RCN) ${scopeText}.`;
+    } else if (l.verdict_badge === 'over') {
+      const diff = thisPpm2 - rcnPpm2;
+      subtitle = `Ta oferta jest o <strong style="color:#f87171">${fmt(diff)} zł/m²</strong> droższa od realnych cen transakcyjnych (RCN) ${scopeText}.`;
+    } else if (l.verdict_badge === 'outlier') {
+      subtitle = `Ta oferta ma nietypową cenę — zweryfikuj czy nie chodzi o udział we współwłasności, odstępne albo cena w innej walucie.`;
+    } else {
+      subtitle = `Cena w tej ofercie jest zgodna z medianą ofert i realnych transakcji ${scopeText}.`;
+    }
+    el('aiSubtitle').innerHTML = subtitle;
+
+    // Bar widths (skala do maksimum z 3 wartości)
+    const maxV = Math.max(thisPpm2, offersPpm2, rcnPpm2);
+    el('barThis').style.width   = (thisPpm2   / maxV * 100) + '%';
+    el('barOffers').style.width = (offersPpm2 / maxV * 100) + '%';
+    el('barRcn').style.width    = (rcnPpm2    / maxV * 100) + '%';
+    el('valThis').textContent   = fmt(thisPpm2)   + ' zł/m²';
+    el('valOffers').textContent = fmt(offersPpm2) + ' zł/m²';
+    el('valRcn').textContent    = fmt(rcnPpm2)    + ' zł/m²';
+
+    // Sample size
+    let sampleN, scopeMsg;
+    const marketSuffix = usedRadiusKm && l.market_type
+      ? (l.market_type === 'pierwotny' ? ' · <strong>rynek pierwotny</strong>' : ' · <strong>rynek wtórny</strong>')
+      : '';
+    if (usedRadiusKm) {
+      sampleN = localOffers.length;
+      scopeMsg = `w promieniu <strong>${usedRadiusKm} km</strong> od tej oferty${marketSuffix}`;
+    } else {
+      sampleN = all.filter(x => x.city === l.city && x.type === l.type && x.transaction === l.transaction).length;
+      scopeMsg = `w mieście <strong>${l.city}</strong>`;
+    }
+    el('rcnInfo').innerHTML = `📊 Analiza oparta na <strong>${sampleN} ofertach</strong> tego samego typu (${TYPE_LABEL[l.type]}) ${scopeMsg}.`;
+
+    // 🔗 Lista klikalnych ofert użytych w analizie 5km
+    if (usedRadiusKm && localOffers.length > 0) {
+      renderLocalOffersList(localOffers, usedRadiusKm, thisPpm2, l.market_type);
+    }
+  } else {
+    el('aiAnalysis').style.display = 'none';
+  }
+
+  // Specs grid
+  const specs = [];
+  specs.push({label:'Powierzchnia', val: l.area_m2 + ' m²'});
+  if (l.rooms > 0) specs.push({label:'Pokoje', val: l.rooms + (l.rooms === 1 ? ' pokój' : (l.rooms < 5 ? ' pokoje' : ' pokoi'))});
+  if (l.floor > 0 || l.max_floor > 0) {
+    const flStr = l.floor === 0 ? 'Parter' : (l.floor || '?');
+    specs.push({label:'Piętro', val: l.max_floor ? `${flStr} / ${l.max_floor}` : String(flStr)});
+  }
+  if (l.build_year) specs.push({label:'Rok budowy', val: l.build_year});
+  if (l.standard) specs.push({label:'Standard', val: STANDARD_LABEL[l.standard] || l.standard});
+  if (l.building_type && BUILD_LABEL[l.building_type]) specs.push({label:'Typ budynku', val: BUILD_LABEL[l.building_type]});
+  if (l.market_type) specs.push({label:'Rynek', val: MARKET_LABEL[l.market_type] || l.market_type});
+  if (l.heating) specs.push({label:'Ogrzewanie', val: HEATING_LABEL[l.heating] || l.heating});
+  if (l.material) specs.push({label:'Materiał', val: MATERIAL_LABEL[l.material] || l.material});
+  if (l.has_lift) specs.push({label:'Winda', val: '✓ Tak'});
+  if (l.has_balcony) specs.push({label:'Balkon', val: '✓ Tak'});
+  if (l.has_terrace) specs.push({label:'Taras', val: '✓ Tak'});
+  if (l.has_garden) specs.push({label:'Ogród', val: '✓ Tak'});
+  if (l.has_basement) specs.push({label:'Piwnica', val: '✓ Tak'});
+  if (l.has_garage) specs.push({label:'Garaż', val: '✓ Tak'});
+  if (l.has_parking) specs.push({label:'Parking', val: '✓ Tak'});
+  if (l.has_ac) specs.push({label:'Klimatyzacja', val: '✓ Tak'});
+  specs.push({label:'Sprzedający', val: l.seller_label || '—'});
+  specs.push({label:'Portal', val: l.portal || 'Otodom'});
+  specs.push({label:'Dodane', val: l.added_display || '—'});
+  if (l.is_original === false) {
+    specs.push({label:'Status', val: '📋 KOPIA (zobacz oryginał)'});
+  } else {
+    specs.push({label:'Status', val: '✨ ORYGINALNA'});
+  }
+  el('specsGrid').innerHTML = specs.map(s =>
+    `<div class="spec"><div class="spec-label">${s.label}</div><div class="spec-val">${s.val}</div></div>`
+  ).join('');
+
+  // Description (jeśli nie ma opisu, wpisujemy fragment tytułu i info)
+  el('offerDesc').textContent = l.title + '. ' +
+    `Nieruchomość położona w ${l.city}${l.district ? ', ' + l.district : ''}, o powierzchni ${l.area_m2} m². ` +
+    (l.rooms > 0 ? `Liczba pokoi: ${l.rooms}. ` : '') +
+    (l.build_year ? `Rok budowy: ${l.build_year}. ` : '') +
+    `Cena: ${l.price_display} (${l.price_pm2_display}).`;
+
+  // Alert desc
+  el('alertDesc').textContent = `Ustaw alert i dostaniesz email gdy pojawi się podobna oferta (${TYPE_LABEL[l.type]}, ${l.city}, do ${fmt(Math.round(l.price * 1.1))} zł).`;
+
+  // Similar offers — same type + transaction + same city (or type+range if empty)
+  let similar = all.filter(x =>
+    x.id !== l.id &&
+    x.type === l.type &&
+    x.transaction === l.transaction &&
+    x.city === l.city &&
+    x.is_original !== false
+  );
+  if (similar.length < 4) {
+    // Fallback: same type, similar price ±30%
+    const priceLo = l.price * 0.7, priceHi = l.price * 1.3;
+    similar = all.filter(x =>
+      x.id !== l.id && x.type === l.type && x.transaction === l.transaction &&
+      x.price >= priceLo && x.price <= priceHi && x.is_original !== false
+    );
+  }
+  similar = similar.slice(0, 4);
+  if (similar.length) {
+    el('similarSection').style.display = 'block';
+    el('similarSub').textContent = `${TYPE_LABEL[l.type]}, ${l.city} · zbliżony metraż i cena`;
+    el('similarGrid').innerHTML = similar.map((s, i) => {
+      const img = s.image_url
+        ? `<img src="${s.image_url}" alt="" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0" loading="lazy">`
+        : (s.emoji || '🏢');
+      return `
+        <a href="/oferta.html?id=${s.id}" class="sim-card">
+          <div class="sim-img sim-i${(i%4)+1}" style="position:relative;overflow:hidden">${img}</div>
+          <div class="sim-body">
+            <div class="sim-title">${s.title}</div>
+            <div class="sim-loc">${s.location || '📍 ' + s.city}</div>
+            <div class="sim-price"><span class="p">${s.price_display}</span><span class="pm">${s.price_pm2_display}</span></div>
+          </div>
+        </a>`;
+    }).join('');
+  }
+}
+
+// Alert button — simple newsletter subscription
+el('alertBtn')?.addEventListener('click', async () => {
+  const email = el('alertEmail').value.trim();
+  if (!email || !email.includes('@')) { alert('Podaj poprawny email 📧'); return; }
+  try {
+    await fetch('/api/subscribe', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, source: 'oferta-alert' })
+    });
+    alert('✓ Zapisano! Powiadomienia będą wysyłane gdy startujemy z alertami.');
+    el('alertEmail').value = '';
+  } catch (e) {
+    alert('Coś poszło nie tak, spróbuj ponownie.');
+  }
+});
+
+loadOffer();
+</script>
+
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"7f7b0fd8732c4326aae4b9d58d5c514a"}' crossorigin="anonymous"></script>
+</body>
+</html>
+
+</body>
+</html>

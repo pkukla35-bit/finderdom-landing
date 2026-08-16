@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wyszukiwarka ogłoszeń — FinderDom.pl</title>
+<meta name="description" content="Wyszukaj mieszkania i domy ze wszystkich portali w Polsce. AI analiza cen, filtry zaawansowane, powiadomienia.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+<!-- Google Analytics 4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-8BX5DVXPDV"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-8BX5DVXPDV');
+</script>
+
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0B1836;color:#fff;-webkit-font-smoothing:antialiased}
+
+  /* Top nav */
+  .topnav{background:rgba(11,24,54,0.95);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.08);padding:14px 24px;position:sticky;top:0;z-index:100}
+  .nav-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .brand-link{display:flex;align-items:center;gap:10px;text-decoration:none;color:#fff}
+  .brand-logo{width:36px;height:36px;background:linear-gradient(135deg,#1a2e5c,#2d4a8a);border-radius:10px;display:flex;align-items:center;justify-content:center}
+  .brand-logo svg{width:22px;height:22px}
+  .brand-text{font-size:17px;font-weight:900;letter-spacing:-0.5px}
+  .brand-text .accent{color:#FFB800}
+  .nav-links{display:flex;gap:20px;align-items:center;font-size:14px}
+  .nav-links a{color:#c5d0e6;text-decoration:none;font-weight:600;transition:color 0.15s}
+  .nav-links a:hover,.nav-links a.active{color:#FFB800}
+  .cta-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:10px 18px;border-radius:10px;text-decoration:none;font-size:13px;letter-spacing:0.3px;text-transform:uppercase}
+
+  /* Layout */
+  .search-hero{background:linear-gradient(180deg,#1a2e5c 0%,#0B1836 100%);padding:32px 24px}
+  .search-bar{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px}
+  .search-input{padding:14px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:#fff;font-size:14px;outline:none;transition:all 0.2s}
+  .search-input:focus{border-color:#FFB800;background:rgba(0,0,0,0.6)}
+  .search-input::placeholder{color:#5e7099}
+  select.search-input{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238ba3d4' d='M6 8L0 0h12z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+  .search-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:14px 24px;border-radius:12px;border:none;font-size:13px;letter-spacing:0.5px;cursor:pointer;text-transform:uppercase;transition:all 0.15s}
+  .search-btn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(255,184,0,0.3)}
+
+  .main-container{max-width:1400px;margin:0 auto;padding:24px;display:grid;grid-template-columns:280px 1fr;gap:24px}
+
+  /* Sidebar filters */
+  .filters{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;position:sticky;top:88px;max-height:calc(100vh - 108px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#FFB800 rgba(255,255,255,0.05)}
+  .filters::-webkit-scrollbar{width:8px}
+  .filters::-webkit-scrollbar-track{background:rgba(255,255,255,0.03);border-radius:4px}
+  .filters::-webkit-scrollbar-thumb{background:rgba(255,184,0,0.4);border-radius:4px}
+  .filters::-webkit-scrollbar-thumb:hover{background:#FFB800}
+  .filters h3{font-size:11px;color:#FFB800;letter-spacing:2px;text-transform:uppercase;font-weight:800;margin-bottom:16px}
+  .filter-group{margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid rgba(255,255,255,0.05)}
+  .filter-group:last-child{border-bottom:none;margin-bottom:0}
+  .filter-title{font-size:13px;font-weight:800;color:#e6edf3;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+  .filter-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .filter-row input{padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;outline:none;width:100%}
+  .filter-row input:focus{border-color:#FFB800}
+  .chip-group{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{padding:6px 10px;border-radius:100px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#c5d0e6;font-size:11px;cursor:pointer;transition:all 0.15s;font-weight:600;user-select:none}
+  .chip:hover{border-color:rgba(255,184,0,0.5)}
+  .chip.active{background:rgba(255,184,0,0.15);border-color:#FFB800;color:#FFB800}
+  .radius-row{display:flex;align-items:center;gap:8px}
+  .radius-row input[type=number]{flex:1;padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;outline:none}
+  .radius-row .u{color:#8ba3d4;font-size:12px;font-weight:700}
+  .filter-actions{display:flex;gap:8px;margin-top:8px}
+  .filter-actions button{flex:1;padding:10px;border-radius:10px;border:none;cursor:pointer;font-size:12px;font-weight:800;letter-spacing:0.3px}
+  .btn-clear{background:rgba(255,255,255,0.05);color:#c5d0e6;border:1px solid rgba(255,255,255,0.1) !important}
+  .btn-apply{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836}
+
+  /* Results */
+  .results-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+  .results-count{font-size:14px;color:#c5d0e6}
+  .results-count strong{color:#fff;font-weight:900}
+  .date-filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:10px 14px;margin-bottom:14px}
+  .date-filter-label{font-size:13px;color:#c5d0e6;font-weight:700;white-space:nowrap}
+  .date-chips{display:flex;gap:6px;flex-wrap:wrap}
+  .date-chip{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#c5d0e6;padding:7px 12px;border-radius:100px;font-size:12px;font-weight:700;cursor:pointer;transition:.15s;user-select:none}
+  .date-chip:hover{background:rgba(255,184,0,0.1);border-color:rgba(255,184,0,0.4)}
+  .date-chip.active{background:#FFB800;color:#0B1836;border-color:#FFB800}
+  .date-custom{display:flex;align-items:center;gap:8px;margin-left:auto}
+  .date-custom input[type="date"]{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:6px 10px;border-radius:8px;font-size:12px;font-family:inherit}
+  @media(max-width:768px){.date-custom{margin-left:0;width:100%;justify-content:center}}
+  .sort-select{padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:#fff;font-size:13px;outline:none;cursor:pointer;font-weight:600}
+
+  /* Listing cards */
+  .results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+  .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;overflow:hidden;transition:all 0.25s;cursor:pointer;text-decoration:none;color:inherit;display:block}
+  .card:hover{transform:translateY(-3px);border-color:rgba(255,184,0,0.35);box-shadow:0 12px 32px rgba(0,0,0,0.4)}
+  .card-img{width:100%;height:180px;position:relative;display:flex;align-items:center;justify-content:center;font-size:56px;background-size:cover;background-position:center;background-color:#0d1233}
+  .card-img.i1{background:linear-gradient(135deg,#1a2e5c,#2d4a8a)}
+  .card-img.i2{background:linear-gradient(135deg,#3d1e6b,#6b3aa8)}
+  .card-img.i3{background:linear-gradient(135deg,#1e3a3d,#3a7b6b)}
+  .card-img.i4{background:linear-gradient(135deg,#4a2c1a,#8b5a3c)}
+  .card-img.i5{background:linear-gradient(135deg,#2a1e3d,#5a3a6b)}
+  .card-img.i6{background:linear-gradient(135deg,#1a3d3a,#3a7b6b)}
+  .card-img.has-photo{background-image:none;background-color:#0d1233}
+  .card-img.has-photo .placeholder-emoji{display:none}
+  .card-img img.photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#0d1233;transition:opacity 0.2s}
+  .card-img img.photo:not([src]),.card-img img.photo[src=""]{opacity:0}
+  .card-img::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 40%,rgba(0,0,0,0.55));pointer-events:none;z-index:1}
+  .card-img > *{position:relative;z-index:2}
+  .card-badge{position:absolute;top:10px;left:10px;padding:5px 10px;border-radius:100px;font-size:10px;font-weight:900;letter-spacing:0.5px;text-transform:uppercase;backdrop-filter:blur(10px)}
+  .b-deal{background:rgba(34,197,94,0.95);color:#052e16}
+  .b-normal{background:rgba(59,130,246,0.95);color:#0c1a3d}
+  .b-over{background:rgba(239,68,68,0.95);color:#3d0a0a}
+  .b-outlier{background:rgba(148,163,184,0.95);color:#0f172a}
+  .b-new{background:rgba(255,184,0,0.95);color:#0B1836}
+  .card-portal{position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.6);color:#fff;padding:3px 8px;border-radius:100px;font-size:9px;font-weight:700;backdrop-filter:blur(8px)}
+  .card-body{padding:16px}
+  .card-title{font-size:14px;font-weight:800;margin-bottom:4px;color:#fff;line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .card-loc{font-size:11px;color:#8ba3d4;margin-bottom:10px}
+  .card-specs{display:flex;gap:10px;font-size:11px;color:#a3b3d1;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.06)}
+  .card-price{display:flex;justify-content:space-between;align-items:baseline}
+  .card-price .p{font-size:18px;font-weight:900;color:#fff}
+  .card-price .pm2{font-size:11px;color:#8ba3d4}
+
+  /* Load more */
+  .load-more{text-align:center;margin-top:32px;padding-bottom:40px}
+  .load-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:14px 32px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.15s}
+  .load-btn:hover{background:rgba(255,184,0,0.1);border-color:#FFB800;color:#FFB800}
+
+  /* Empty state */
+  .empty{text-align:center;padding:60px 20px;color:#8ba3d4}
+  .empty .icon{font-size:48px;margin-bottom:12px}
+
+  /* Mobile */
+  @media(max-width:900px){
+    .search-bar{grid-template-columns:1fr;gap:8px}
+    .main-container{grid-template-columns:1fr;padding:16px}
+    .filters{position:static;order:2}
+    .nav-links{gap:12px;font-size:12px}
+    .nav-links .hide-mob{display:none}
+  }
+</style>
+<script src="/scripts/city-coords.js"></script>
+</head>
+<body>
+
+<!-- Top nav -->
+<nav class="topnav">
+  <div class="nav-inner">
+    <a href="/" class="brand-link">
+      <div class="brand-logo">
+        <svg viewBox="0 0 100 100" fill="none">
+          <path d="M50 20L20 45v35h60V45L50 20z" stroke="#FFB800" stroke-width="6" stroke-linejoin="round" fill="none"/>
+          <circle cx="65" cy="45" r="10" stroke="#FFB800" stroke-width="6" fill="none"/>
+          <path d="M72 52l8 8" stroke="#FFB800" stroke-width="6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="brand-text">Finder<span class="accent">Dom</span>.pl</div>
+    </a>
+    <div class="nav-links">
+      <a href="/szukaj.html" class="active">Wyszukiwarka</a>
+      <a href="/oferta.html" class="hide-mob">Przykład oferty</a>
+      <a href="/#valuation" class="hide-mob">Wycena</a>
+      <a href="/#newsletter" class="cta-btn">Zapisz się</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Search bar -->
+<div class="search-hero">
+  <div class="search-bar">
+    <input type="text" class="search-input" placeholder="🔍 Miasto..." id="q" list="cityList" autocomplete="off" style="flex:1.2;min-width:140px">
+    <input type="number" class="search-input" id="heroRadiusKm" placeholder="+km" min="1" max="200" style="flex:0.5;min-width:70px;max-width:90px" title="Promień od miasta (km)">
+    <select class="search-input" id="heroType" style="flex:0.9">
+      <option value="mieszkanie">🏢 Mieszkanie</option>
+      <option value="dom">🏠 Dom</option>
+      <option value="dzialka">🌳 Działka</option>
+      <option value="lokal">🏪 Lokal użytkowy</option>
+      <option value="garaz">🅿️ Garaż</option>
+      <option value="pokoj">🚪 Pokój</option>
+      <option value="">Wszystkie typy</option>
+    </select>
+    <select class="search-input" id="heroTrans" style="flex:0.7">
+      <option value="sprzedaz">Sprzedaż</option>
+      <option value="wynajem">Wynajem</option>
+    </select>
+    <input type="number" class="search-input" id="heroPrice" placeholder="Cena do... (np. 800000)" min="0" step="10000" list="priceHints" style="flex:1;min-width:130px">
+    <datalist id="priceHints">
+      <option value="300000">300 000 zł</option>
+      <option value="500000">500 000 zł</option>
+      <option value="800000">800 000 zł</option>
+      <option value="1000000">1 000 000 zł</option>
+      <option value="1500000">1 500 000 zł</option>
+      <option value="2000000">2 000 000 zł</option>
+      <option value="3000000">3 000 000 zł</option>
+      <option value="5000000">5 000 000 zł</option>
+    </datalist>
+    <button class="search-btn" id="heroSearchBtn">SZUKAJ</button>
+  </div>
+</div>
+
+<!-- Main content -->
+<div class="main-container">
+
+  <!-- Sidebar filters -->
+  <aside class="filters">
+    <h3>🎯 Filtry zaawansowane</h3>
+
+    <div class="filter-group" id="radiusSidebarGroup" style="display:none">
+      <div class="filter-title" style="color:#FFB800">📍 Miasto + promień (km)</div>
+      <div class="radius-row">
+        <input type="text" id="fRadiusCity" placeholder="np. Kraków" list="cityList" style="flex:2">
+        <input type="number" id="fRadiusKm" placeholder="km" min="1" max="200" style="flex:1;max-width:70px">
+        <span class="u">km</span>
+      </div>
+      <datalist id="cityList"></datalist>
+      <div style="font-size:10px;color:#c5d0e6;margin-top:6px">💡 Wpisz miasto (autouzupełnianie) + km. Znajdzie oferty w promieniu.</div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-title">🏘️ Rodzaj nieruchomości</div>
+      <div class="chip-group" id="propertyType">
+        <div class="chip active" data-type="mieszkanie">🏢 Mieszkanie</div>
+        <div class="chip" data-type="dom">🏠 Dom</div>
+        <div class="chip" data-type="dzialka">🌳 Działka</div>
+        <div class="chip" data-type="lokal">🏪 Lokal użytkowy</div>
+        <div class="chip" data-type="magazyn">🏭 Magazyn</div>
+        <div class="chip" data-type="garaz">🅿️ Garaż</div>
+      </div>
+    </div>
+
+    <div class="filter-group" id="subTypeGroup">
+      <div class="filter-title" id="subTypeTitle">🏗️ Typ budynku</div>
+      <div class="chip-group" id="subTypeChips">
+        <div class="chip" data-filter="building_type" data-value="blok">Blok</div>
+        <div class="chip" data-filter="building_type" data-value="kamienica">Kamienica</div>
+        <div class="chip" data-filter="building_type" data-value="apartamentowiec">Apartamentowiec</div>
+        <div class="chip" data-filter="building_type" data-value="loft">Loft</div>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-title">👤 Kto oferuje</div>
+      <div class="chip-group">
+        <div class="chip" data-seller="prywatna">👨‍👩‍👧 Prywatna (bez prowizji)</div>
+        <div class="chip" data-seller="posrednik">🏢 Pośrednik</div>
+      </div>
+    </div>
+
+    <!-- Media/Uzbrojenie - only for działka -->
+    <div class="filter-group" id="mediaGroup" style="display:none">
+      <div class="filter-title">💧 Uzbrojenie działki</div>
+
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">💧 Woda</div>
+        <div class="chip-group">
+          <div class="chip" data-media="woda-w-dzialce">✓ W działce</div>
+          <div class="chip" data-media="woda-w-drodze">🛣️ W drodze</div>
+          <div class="chip" data-media="woda-studnia">⛲ Studnia</div>
+          <div class="chip" data-media="woda-brak">✗ Brak</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">⚡ Prąd</div>
+        <div class="chip-group">
+          <div class="chip" data-media="prad-w-dzialce">✓ W działce</div>
+          <div class="chip" data-media="prad-w-drodze">🛣️ W drodze</div>
+          <div class="chip" data-media="prad-brak">✗ Brak</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">🔥 Gaz</div>
+        <div class="chip-group">
+          <div class="chip" data-media="gaz-w-dzialce">✓ W działce</div>
+          <div class="chip" data-media="gaz-w-drodze">🛣️ W drodze</div>
+          <div class="chip" data-media="gaz-brak">✗ Brak</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">🚽 Kanalizacja</div>
+        <div class="chip-group">
+          <div class="chip" data-media="kan-miejska">🏙️ Miejska</div>
+          <div class="chip" data-media="kan-w-drodze">🛣️ W drodze</div>
+          <div class="chip" data-media="kan-szambo">🕳️ Szambo</div>
+          <div class="chip" data-media="kan-oczyszczalnia">♻️ Oczyszczalnia</div>
+          <div class="chip" data-media="kan-brak">✗ Brak</div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">📜 Warunki zabudowy</div>
+        <div class="chip-group">
+          <div class="chip" data-media="wz-mpzp">✓ MPZP (plan miejscowy)</div>
+          <div class="chip" data-media="wz-wydane">✓ WZ wydane</div>
+          <div class="chip" data-media="wz-brak">⏳ Brak / wymagane</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-title">💰 Cena za m² (zł)</div>
+      <div class="filter-row">
+        <input type="number" id="fPpm2From" placeholder="od" value="">
+        <input type="number" id="fPpm2To" placeholder="do" value="">
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-title">📐 Powierzchnia (m²)</div>
+      <div class="filter-row">
+        <input type="number" id="fAreaFrom" placeholder="od" value="">
+        <input type="number" id="fAreaTo" placeholder="do" value="">
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-title">🛏️ Liczba pokoi</div>
+      <div class="chip-group">
+        <div class="chip" data-rooms="1">1</div>
+        <div class="chip" data-rooms="2">2</div>
+        <div class="chip" data-rooms="3">3</div>
+        <div class="chip" data-rooms="4">4</div>
+        <div class="chip" data-rooms="5+">5+</div>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-title">📅 Rok budowy</div>
+      <div class="filter-row">
+        <input type="number" id="fYearFrom" placeholder="od" value="">
+        <input type="number" id="fYearTo" placeholder="do" value="">
+      </div>
+    </div>
+
+    <div class="filter-group" id="marketOrPurposeGroup">
+      <div class="filter-title" id="marketOrPurposeTitle">🏛️ Rynek</div>
+      <div class="chip-group" id="marketOrPurposeChips">
+        <div class="chip" data-filter="market_type" data-value="pierwotny">🏗️ Pierwotny (deweloper)</div>
+        <div class="chip" data-filter="market_type" data-value="wtorny">🏘️ Wtórny</div>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-title">💎 Analiza AI</div>
+      <div class="chip-group">
+        <div class="chip" data-verdict="deal">🔥 Tylko okazje</div>
+        <div class="chip" data-verdict="normal">✓ W normie</div>
+        <div class="chip" data-verdict="hide-over">🚫 Ukryj zawyżone</div>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-title">🔁 Duplikaty</div>
+      <div class="chip-group">
+        <div class="chip" id="chipOnlyOrig">✨ Tylko oryginały</div>
+        <div class="chip" id="chipShowAll">📋 Pokaż wszystko (z kopiami)</div>
+      </div>
+    </div>
+
+    <!-- Collapsible: More filters (optional) -->
+    <div class="filter-group" style="border-bottom:none;padding-bottom:0">
+      <button id="toggleMore" style="width:100%;padding:12px;background:rgba(255,184,0,0.08);border:1px dashed rgba(255,184,0,0.35);border-radius:10px;color:#FFB800;font-weight:800;font-size:12px;letter-spacing:0.5px;cursor:pointer;text-transform:uppercase;text-align:center;transition:all 0.2s">
+        🔽 Więcej filtrów (opcjonalne)
+      </button>
+    </div>
+
+    <div id="moreFilters" style="display:none">
+      <div class="filter-group">
+        <div class="filter-title">🏗️ Materiał budynku</div>
+        <div class="chip-group">
+          <div class="chip" data-filter="material" data-value="cegla">🧱 Cegła</div>
+          <div class="chip" data-filter="material" data-value="wielka_plyta">🏢 Wielka płyta</div>
+          <div class="chip" data-filter="material" data-value="beton">🏛️ Żelbet / beton</div>
+          <div class="chip" data-filter="material" data-value="drewno">🪵 Drewno</div>
+          <div class="chip" data-filter="material" data-value="silikat">🧊 Silikat</div>
+          <div class="chip" data-filter="material" data-value="pustak">🧱 Pustak</div>
+          <div class="chip" data-filter="material" data-value="gazobeton">🪨 Gazobeton</div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">🌡️ Ogrzewanie</div>
+        <div class="chip-group">
+          <div class="chip" data-filter="heating" data-value="miejskie">🏙️ Miejskie</div>
+          <div class="chip" data-filter="heating" data-value="gazowe">🔥 Gazowe</div>
+          <div class="chip" data-filter="heating" data-value="kotlownia">♨️ Kotłownia</div>
+          <div class="chip" data-filter="heating" data-value="elektryczne">⚡ Elektryczne</div>
+          <div class="chip" data-filter="heating" data-value="kaflowy">🔥 Piec kaflowy</div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">🚗 Parking</div>
+        <div class="chip-group">
+          <div class="chip">🅿️ Garaż podziemny</div>
+          <div class="chip">🏚️ Garaż naziemny</div>
+          <div class="chip">📍 Miejsce postojowe</div>
+          <div class="chip">🛣️ Na ulicy</div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">🔒 Zabezpieczenia</div>
+        <div class="chip-group">
+          <div class="chip">🔔 Domofon</div>
+          <div class="chip">📹 Wideodomofon</div>
+          <div class="chip">👮 Ochrona 24h</div>
+          <div class="chip">🎥 Monitoring</div>
+          <div class="chip">🚧 Osiedle zamknięte</div>
+          <div class="chip">🚨 Alarm</div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">🌳 Otoczenie</div>
+        <div class="chip-group">
+          <div class="chip">🌳 Park / zieleń</div>
+          <div class="chip">🌲 Las</div>
+          <div class="chip">💧 Jezioro / rzeka</div>
+          <div class="chip">🏙️ Centrum</div>
+          <div class="chip">🏫 Blisko szkoły</div>
+          <div class="chip">🏥 Blisko przychodni</div>
+          <div class="chip">🛒 Blisko sklepów</div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">🚇 Komunikacja</div>
+        <div class="chip-group">
+          <div class="chip">🚇 Metro (do 500m)</div>
+          <div class="chip">🚊 Tramwaj (do 300m)</div>
+          <div class="chip">🚌 Autobus (do 200m)</div>
+          <div class="chip">🚄 Kolej / SKM</div>
+          <div class="chip">🛣️ Autostrada (do 5km)</div>
+          <div class="chip">✈️ Blisko lotniska</div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">📋 Stan prawny</div>
+        <div class="chip-group">
+          <div class="chip">🏛️ Własność</div>
+          <div class="chip">📜 Spółdzielcze własnościowe</div>
+          <div class="chip">📄 Spółdzielcze lokatorskie</div>
+          <div class="chip">✓ Księga wieczysta</div>
+          <div class="chip">🚫 Bez obciążeń</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-actions">
+      <button class="btn-clear">Wyczyść</button>
+      <button class="btn-apply">Zastosuj</button>
+    </div>
+  </aside>
+
+  <!-- Results -->
+  <main>
+    <div class="date-filter-bar">
+      <div class="date-filter-label">📅 Data dodania:</div>
+      <div class="date-chips">
+        <div class="date-chip active" data-date="all">Wszystkie</div>
+        <div class="date-chip" data-date="today">Dziś</div>
+        <div class="date-chip" data-date="3d">Ostatnie 3 dni</div>
+        <div class="date-chip" data-date="7d">Ostatnie 7 dni</div>
+        <div class="date-chip" data-date="30d">Ostatnie 30 dni</div>
+        <div class="date-chip" data-date="custom">📆 Zakres…</div>
+      </div>
+      <div class="date-custom" id="dateCustom" style="display:none">
+        <input type="date" id="dateFrom">
+        <span style="color:#8ba3d4">–</span>
+        <input type="date" id="dateTo">
+      </div>
+    </div>
+
+    <div class="results-head">
+      <div class="results-count">Znaleziono <strong id="count">6</strong> ofert</div>
+      <select class="sort-select" id="sortSelect">
+        <option value="ai">Sortuj: AI - najlepsze okazje</option>
+        <option value="newest">Najnowsze</option>
+        <option value="price_asc">Cena rosnąco</option>
+        <option value="price_desc">Cena malejąco</option>
+        <option value="ppm2_asc">Cena za m² rosnąco</option>
+        <option value="ppm2_desc">Cena za m² malejąco</option>
+        <option value="area_desc">Największy metraż</option>
+      </select>
+    </div>
+
+    <div class="results-grid" id="grid">
+      <!-- generated by JS below -->
+    </div>
+
+    <div class="load-more">
+      <button id="loadMoreBtn" class="load-btn" style="display:none">Załaduj więcej ofert ↓</button>
+    </div>
+  </main>
+
+</div>
+
+<script>
+// Real listings loaded from /data/listings.json (updated daily by scrapers)
+let LISTINGS = [];
+let CURRENT_FILTERED = [];
+const PAGE_SIZE = 60;
+let currentPage = 1;
+
+async function loadListings() {
+  const grid = document.getElementById('grid');
+  const count = document.getElementById('count');
+  try {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8ba3d4">⏳ Wczytuję oferty...</div>';
+    const res = await fetch('/data/listings.json?v=' + Date.now());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    LISTINGS = data.listings || [];
+    count.textContent = LISTINGS.length;
+    // Zastosuj domyślne filtry od razu (hero: Mieszkanie + Sprzedaż, sidebar: Prywatna+Pośrednik, Tylko oryginały)
+    if (typeof applyAllFilters === 'function') applyAllFilters();
+    else renderListings(LISTINGS);
+  } catch (err) {
+    console.error('Fetch listings failed:', err);
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#f87171">❌ Błąd ładowania. Odśwież stronę.</div>';
+  }
+}
+
+function renderListings(list) {
+  // Apply "only originals" filter if active
+  const onlyOrigActive = document.getElementById('chipOnlyOrig')?.classList.contains('active');
+  CURRENT_FILTERED = onlyOrigActive ? list.filter(l => l.is_original !== false) : list;
+  currentPage = 1;
+  document.getElementById('count').textContent = CURRENT_FILTERED.length;
+  renderPage();
+}
+
+function renderPage() {
+  const grid = document.getElementById('grid');
+  const btn = document.getElementById('loadMoreBtn');
+  if (CURRENT_FILTERED.length === 0) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Brak wyników</div>Zmień filtry aby zobaczyć więcej ofert</div>';
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+  const slice = CURRENT_FILTERED.slice(0, currentPage * PAGE_SIZE);
+  grid.innerHTML = slice.map(l => {
+    let specs = `📐 ${l.area_m2} m²`;
+    if (l.rooms > 0) specs += ` · 🛏️ ${l.rooms} pok.`;
+    if (l.floor > 0) specs += ` · 🏢 ${l.floor} piętro`;
+    if (l.type === 'dom') specs += ' · 🏡 Dom';
+    if (l.type === 'dzialka') specs += ' · 🌳 Działka';
+    const targetUrl = `/oferta.html?id=${l.id}`;
+    const hasPhoto = !!l.image_url;
+    const photoHtml = hasPhoto
+      ? `<img class="photo" src="${l.image_url}" alt="" loading="lazy" decoding="async" onerror="this.remove();this.parentElement.classList.remove('has-photo')">`
+      : '';
+    const emojiHtml = hasPhoto ? '' : `<span class="placeholder-emoji">${l.emoji}</span>`;
+    return `
+      <a href="${targetUrl}" class="card">
+        <div class="card-img ${l.img_class}${hasPhoto ? ' has-photo' : ''}">
+          ${photoHtml}
+          ${emojiHtml}
+          <div class="card-badge b-${l.verdict_badge}">${l.verdict_text}</div>
+          <div class="card-portal">${l.portal}</div>
+          ${l.seller_label ? `<div style="position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,0.75);color:#FFB800;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:800;backdrop-filter:blur(8px)">${l.seller_label}</div>` : ''}
+          ${l.is_original === false ? '<div style="position:absolute;bottom:10px;right:10px;background:rgba(251,146,60,0.95);color:#3d1a0a;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px">📋 Kopia</div>' : '<div style="position:absolute;bottom:10px;right:10px;background:rgba(34,197,94,0.95);color:#052e16;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px">✨ Oryginalna</div>'}
+        </div>
+        <div class="card-body">
+          <div class="card-title">${l.title}</div>
+          <div class="card-loc">${l.location}</div>
+          <div class="card-specs">${specs}</div>
+          <div class="card-price">
+            <span class="p">${l.price_display}</span>
+            <span class="pm2">${l.price_pm2_display}</span>
+          </div>
+        </div>
+      </a>
+    `;
+  }).join('');
+  // Load more button
+  const remaining = CURRENT_FILTERED.length - slice.length;
+  if (btn) {
+    if (remaining > 0) {
+      btn.style.display = 'inline-block';
+      btn.textContent = `Załaduj więcej ofert ↓ (${remaining.toLocaleString('pl-PL')} pozostało)`;
+    } else {
+      btn.style.display = 'none';
+    }
+  }
+}
+
+// Load more button click
+document.getElementById('loadMoreBtn')?.addEventListener('click', () => {
+  currentPage++;
+  renderPage();
+  // scroll do nowych ofert
+  window.scrollBy({top: 400, behavior: 'smooth'});
+});
+
+// Load on start
+loadListings();
+
+// Client-side filtering (basic - by property type + verdict)
+function applyFilters() {
+  const activeType = document.querySelector('#propertyType .chip.active');
+  const typeKey = activeType?.dataset.type || 'mieszkanie';
+  const dealsOnly = document.querySelector('.filter-group:last-child')?.querySelector('.chip.active')?.textContent.includes('okazje');
+
+  let filtered = LISTINGS.filter(l => {
+    if (typeKey && l.type !== typeKey) return false;
+    return true;
+  });
+  renderListings(filtered);
+}
+
+// Sorting
+document.querySelector('.sort-select')?.addEventListener('change', (e) => {
+  const val = e.target.value;
+  let sorted = [...LISTINGS];
+  if (val.includes('AI')) sorted.sort((a,b) => a.ai_delta_pct - b.ai_delta_pct);
+  else if (val.includes('rosnąco') && val.includes('m²')) sorted.sort((a,b) => a.price_pm2 - b.price_pm2);
+  else if (val.includes('rosnąco')) sorted.sort((a,b) => a.price - b.price);
+  else if (val.includes('malejąco')) sorted.sort((a,b) => b.price - a.price);
+  else if (val.includes('metraż')) sorted.sort((a,b) => b.area_m2 - a.area_m2);
+  else if (val.includes('Najnowsze')) sorted.sort((a,b) => b.added_at.localeCompare(a.added_at));
+  renderListings(sorted);
+});
+
+// Chip toggling (default: multi-select) — pomija chipy z dedykowanymi handlerami
+document.querySelectorAll('.chip').forEach(c => {
+  if (c.hasAttribute('data-seller')) return;
+  if (c.hasAttribute('data-filter')) return;
+  if (c.id === 'chipOnlyOrig') return;
+  if (c.closest('#propertyType')) return;
+  c.addEventListener('click', () => c.classList.toggle('active'));
+});
+
+// Toggle "More filters" section
+const toggleBtn = document.getElementById('toggleMore');
+const moreSection = document.getElementById('moreFilters');
+if (toggleBtn && moreSection) {
+  toggleBtn.addEventListener('click', () => {
+    const isOpen = moreSection.style.display === 'block';
+    moreSection.style.display = isOpen ? 'none' : 'block';
+    toggleBtn.innerHTML = isOpen ? '🔽 Więcej filtrów (opcjonalne)' : '🔼 Zwiń dodatkowe filtry';
+    if (!isOpen) {
+      // Re-bind chip handlers for newly-visible chips
+      moreSection.querySelectorAll('.chip').forEach(c => {
+        if (!c.dataset.bound) {
+          c.dataset.bound = '1';
+          c.addEventListener('click', () => c.classList.toggle('active'));
+        }
+      });
+    }
+  });
+}
+
+// Property type = radio (single select) + dynamic sub-type
+const SUB_TYPES = {
+  mieszkanie: {title:'🏗️ Typ budynku', filter:'building_type', options:[
+    {label:'🏢 Blok', value:'blok'},
+    {label:'🏛️ Kamienica', value:'kamienica'},
+    {label:'🏘️ Apartamentowiec', value:'apartamentowiec'},
+    {label:'🌆 Loft', value:'loft'},
+    {label:'🏙️ Wieżowiec', value:'wiezowiec'},
+  ]},
+  dom: {title:'🏡 Typ domu', filter:'building_type', options:[
+    {label:'🏠 Wolnostojący', value:'wolnostojacy'},
+    {label:'🏘️ Bliźniak', value:'blizniak'},
+    {label:'🏘️ Szeregowiec', value:'szeregowiec'},
+    {label:'🌾 Siedliskowy', value:'siedliskowy'},
+    {label:'🏰 Rezydencja', value:'rezydencja'},
+    {label:'🏡 Letniskowy', value:'letniskowy'},
+  ]},
+  dzialka: {title:'🌳 Przeznaczenie działki', filter:'', options:[
+    {label:'🏗️ Budowlana', value:''},
+    {label:'🌾 Rolna', value:''},
+    {label:'🏕️ Rekreacyjna', value:''},
+  ]},
+  lokal: {title:'🏪 Typ lokalu', filter:'', options:[
+    {label:'Biurowy', value:''},
+    {label:'Handlowy', value:''},
+    {label:'Gastronomia', value:''},
+  ]},
+  magazyn: {title:'🏭 Typ magazynu', filter:'', options:[
+    {label:'Hala magazynowa', value:''},
+  ]},
+  garaz: {title:'🅿️ Typ garażu', filter:'', options:[
+    {label:'Podziemny', value:''},
+    {label:'Naziemny', value:''},
+  ]}
+};
+
+// Filters that are HIDDEN for certain property types (context-aware)
+const HIDDEN_FOR_TYPE = {
+  dzialka: ['Liczba pokoi','Piętro','Rok budowy','Standard'],
+  garaz: ['Liczba pokoi','Piętro','Rok budowy','Standard'],
+  magazyn: ['Liczba pokoi','Piętro','Standard'],
+  lokal: ['Liczba pokoi']
+};
+
+let CURRENT_SUBTYPE_KEY = '';
+function updateSubType(type){
+  if (CURRENT_SUBTYPE_KEY === type) return;  // już wyrenderowane dla tego typu — nie ruszaj active state
+  CURRENT_SUBTYPE_KEY = type;
+  const cfg = SUB_TYPES[type];
+  const stGroup = document.getElementById('subTypeGroup');
+  // Ukryj sekcję "Typ budynku" dla typów gdzie nie ma sensu:
+  // - mieszkanie (user nie chce)
+  // - dzialka (Przeznaczenie działki jest już w sekcji marketOrPurpose niżej — duplikacja)
+  if ((type === 'mieszkanie' || type === 'dzialka') && stGroup) {
+    stGroup.style.display = 'none';
+  } else if (stGroup) {
+    stGroup.style.display = '';
+  }
+  document.getElementById('subTypeTitle').textContent = cfg.title;
+  document.getElementById('subTypeChips').innerHTML = cfg.options.map(o => {
+    const val = o.value || '';
+    const filter = cfg.filter || '';
+    const attrs = (val && filter) ? `data-filter="${filter}" data-value="${val}"` : '';
+    return `<div class="chip" ${attrs}>${o.label}</div>`;
+  }).join('');
+
+  // Dynamiczna sekcja: Rynek (dla mieszkania/dom) vs Przeznaczenie działki
+  const mpTitle = document.getElementById('marketOrPurposeTitle');
+  const mpChips = document.getElementById('marketOrPurposeChips');
+  const mpGroup = document.getElementById('marketOrPurposeGroup');
+  if (mpTitle && mpChips && mpGroup) {
+    if (type === 'dzialka') {
+      mpTitle.textContent = '🌳 Przeznaczenie działki';
+      mpChips.innerHTML = `
+        <div class="chip" data-filter="land_purpose" data-value="budowlana">🏗️ Budowlana</div>
+        <div class="chip" data-filter="land_purpose" data-value="rolna">🌾 Rolna</div>
+        <div class="chip" data-filter="land_purpose" data-value="rekreacyjna">🏖️ Rekreacyjna</div>
+        <div class="chip" data-filter="land_purpose" data-value="lesna">🌲 Leśna</div>
+        <div class="chip" data-filter="land_purpose" data-value="inwestycyjna">💼 Inwestycyjna</div>
+      `;
+      mpGroup.style.display = '';
+    } else if (type === 'garaz' || type === 'magazyn' || type === 'pokoj') {
+      // Dla tych typów rynek nie ma sensu — chowamy sekcję
+      mpGroup.style.display = 'none';
+      mpChips.innerHTML = '';
+    } else {
+      // mieszkanie / dom / lokal — Rynek pierwotny/wtórny
+      mpTitle.textContent = '🏛️ Rynek';
+      mpChips.innerHTML = `
+        <div class="chip" data-filter="market_type" data-value="pierwotny">🏗️ Pierwotny (deweloper)</div>
+        <div class="chip" data-filter="market_type" data-value="wtorny">🏘️ Wtórny</div>
+      `;
+      mpGroup.style.display = '';
+    }
+    // Podepnij handlery
+    mpChips.querySelectorAll('.chip').forEach(c => {
+      c.addEventListener('click', () => {
+        c.classList.toggle('active');
+        applyAllFilters();
+      });
+    });
+  }
+  // Podpięcie handlerów: chipy z data-filter wywołują applyAllFilters, reszta tylko toggle
+  document.querySelectorAll('#subTypeChips .chip').forEach(c => {
+    c.addEventListener('click', () => {
+      c.classList.toggle('active');
+      if (c.hasAttribute('data-filter') && typeof applyAllFilters === 'function') {
+        applyAllFilters();
+      }
+    });
+  });
+
+  // Show/hide media/uzbrojenie section (only for działka)
+  document.getElementById('mediaGroup').style.display = (type === 'dzialka') ? 'block' : 'none';
+
+  // Show/hide filters based on context
+  const hiddenTitles = HIDDEN_FOR_TYPE[type] || [];
+  document.querySelectorAll('.filter-group').forEach(g => {
+    const title = g.querySelector('.filter-title');
+    if (!title) return;
+    const isMediaGroup = g.id === 'mediaGroup';
+    const isMainType = g.querySelector('#propertyType');
+    const isSubType = g.id === 'subTypeGroup';
+    if (isMediaGroup || isMainType || isSubType) return; // handled separately
+    const titleText = title.textContent;
+    const isHidden = hiddenTitles.some(h => titleText.includes(h));
+    g.style.display = isHidden ? 'none' : 'block';
+  });
+}
+
+document.querySelectorAll('#propertyType .chip').forEach(c => {
+  c.addEventListener('click', (e) => {
+    e.stopImmediatePropagation();
+    document.querySelectorAll('#propertyType .chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    updateSubType(c.dataset.type);
+    // SYNC z hero-select + wywołaj wspólną filtrację (uwzględnia sellera, cenę, itp.)
+    const heroType = document.getElementById('heroType');
+    if (heroType) heroType.value = c.dataset.type;
+    if (typeof applyAllFilters === 'function') {
+      applyAllFilters();
+    } else {
+      const filtered = LISTINGS.filter(l => l.type === c.dataset.type);
+      renderListings(filtered);
+    }
+  }, true);
+});
+
+// Apply / Clear buttons (sidebar)
+document.querySelector('.btn-apply')?.addEventListener('click', () => {
+  applyAllFilters();
+});
+document.querySelector('.btn-clear')?.addEventListener('click', () => {
+  // Reset hero
+  const q = document.getElementById('q'); if (q) q.value = '';
+  const ht = document.getElementById('heroType'); if (ht) ht.value = 'mieszkanie';
+  const htr = document.getElementById('heroTrans'); if (htr) htr.value = 'sprzedaz';
+  const hp = document.getElementById('heroPrice'); if (hp) hp.value = '';
+  // Reset sidebar inputs
+  ['fPpm2From','fPpm2To','fPriceFrom','fPriceTo','fAreaFrom','fAreaTo','fYearFrom','fYearTo'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  // Reset chipów: WSZYSTKIE odznaczone (user wybiera sam czego chce)
+  document.querySelectorAll('.chip[data-seller]').forEach(c => c.classList.remove('active'));
+  document.getElementById('chipOnlyOrig')?.classList.remove('active');
+  document.querySelectorAll('.chip[data-filter][data-value]').forEach(c => c.classList.remove('active'));
+  // Reset chipów sub-typu
+  document.querySelectorAll('#subTypeChips .chip').forEach(c => c.classList.remove('active'));
+  // Reset date chip → "Wszystkie"
+  document.querySelectorAll('.date-chip').forEach(c => c.classList.remove('active'));
+  document.querySelector('.date-chip[data-date="all"]')?.classList.add('active');
+  document.getElementById('dateCustom').style.display = 'none';
+  applyAllFilters();
+});
+
+// ============================================================================
+// UNIVERSAL FILTER — łączy hero search + chipy sellera + inputy ceny/powierzchni
+// ============================================================================
+function normalizeText(s) {
+  if (!s) return '';
+  const map = {'ą':'a','ć':'c','ę':'e','ł':'l','ń':'n','ó':'o','ś':'s','ź':'z','ż':'z',
+               'Ą':'a','Ć':'c','Ę':'e','Ł':'l','Ń':'n','Ó':'o','Ś':'s','Ź':'z','Ż':'z'};
+  return s.toLowerCase().replace(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, c => map[c] || c);
+}
+
+// Klucz miasta do lookupa w CITY_COORDS (lowercase, bez PL znaków, spacje→myślnik)
+function normalizeCity(s) {
+  return normalizeText(s).trim().replace(/\s+/g, '-');
+}
+
+// Haversine — dystans w km między dwoma punktami (lat/lon w stopniach)
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function collectFilterState() {
+  const q = normalizeText(document.getElementById('q')?.value.trim() || '');
+  const type = document.getElementById('heroType')?.value || '';
+  const trans = document.getElementById('heroTrans')?.value || '';
+  const priceMax = parseInt(document.getElementById('heroPrice')?.value || '0', 10);
+  const heroMarket = document.getElementById('heroMarket')?.value || '';
+
+  // Sellers — multi-select z chipów [data-seller]
+  const activeSellers = Array.from(document.querySelectorAll('.chip.active[data-seller]'))
+    .map(c => c.dataset.seller);
+
+  const onlyOrig = document.getElementById('chipOnlyOrig')?.classList.contains('active');
+
+  // Data dodania: chip active OR custom range
+  const activeDateChip = document.querySelector('.date-chip.active');
+  const dateMode = activeDateChip?.dataset.date || 'all';
+  const dateFrom = document.getElementById('dateFrom')?.value || '';
+  const dateTo   = document.getElementById('dateTo')?.value || '';
+  // Compute cutoff timestamp (ms)
+  let dateFromMs = 0, dateToMs = 0;
+  if (dateMode === 'today')      dateFromMs = Date.now() - 24*3600*1000;
+  else if (dateMode === '3d')    dateFromMs = Date.now() - 3*24*3600*1000;
+  else if (dateMode === '7d')    dateFromMs = Date.now() - 7*24*3600*1000;
+  else if (dateMode === '30d')   dateFromMs = Date.now() - 30*24*3600*1000;
+  else if (dateMode === 'custom') {
+    if (dateFrom) dateFromMs = new Date(dateFrom).getTime();
+    if (dateTo)   dateToMs   = new Date(dateTo).getTime() + 24*3600*1000; // inclusive end of day
+  }
+
+  // Sortowanie
+  const sortMode = document.getElementById('sortSelect')?.value || 'ai';
+
+  const ppm2From = parseInt(document.getElementById('fPpm2From')?.value || '0', 10);
+  const ppm2To   = parseInt(document.getElementById('fPpm2To')?.value   || '0', 10);
+  const priceFrom = parseInt(document.getElementById('fPriceFrom')?.value || '0', 10);
+  const priceTo   = parseInt(document.getElementById('fPriceTo')?.value   || '0', 10);
+  const areaFrom = parseFloat(document.getElementById('fAreaFrom')?.value || '0');
+  const areaTo   = parseFloat(document.getElementById('fAreaTo')?.value   || '0');
+  const yearFrom = parseInt(document.getElementById('fYearFrom')?.value || '0', 10);
+  const yearTo   = parseInt(document.getElementById('fYearTo')?.value   || '0', 10);
+
+  // Rooms (multi-select z chipów [data-rooms])
+  const activeRooms = Array.from(document.querySelectorAll('.chip.active[data-rooms]'))
+    .map(c => c.dataset.rooms);
+  // Floor bands (multi-select z chipów [data-floor])
+  const activeFloors = Array.from(document.querySelectorAll('.chip.active[data-floor]'))
+    .map(c => c.dataset.floor);
+  // AI verdict filters (multi-select z chipów [data-verdict])
+  const activeVerdicts = Array.from(document.querySelectorAll('.chip.active[data-verdict]'))
+    .map(c => c.dataset.verdict);
+
+  // Radius filter (km od wybranego miasta)
+  const radiusCityRaw = document.getElementById('fRadiusCity')?.value?.trim() || '';
+  const radiusKm = parseFloat(document.getElementById('fRadiusKm')?.value || '0');
+  let radiusCenter = null;
+  if (radiusCityRaw && radiusKm > 0) {
+    const key = normalizeCity(radiusCityRaw);
+    if (window.CITY_COORDS && window.CITY_COORDS[key]) {
+      radiusCenter = window.CITY_COORDS[key];
+    }
+  }
+
+  // Dynamic filters: chipy z [data-filter][data-value] — grupujemy po data-filter (multi-select w grupie)
+  const dynamic = {};
+  document.querySelectorAll('.chip.active[data-filter][data-value]').forEach(c => {
+    const k = c.dataset.filter, v = c.dataset.value;
+    if (!dynamic[k]) dynamic[k] = new Set();
+    dynamic[k].add(v);
+  });
+
+  return { q, type, trans, priceMax, priceFrom, priceTo, heroMarket, activeSellers, onlyOrig,
+           ppm2From, ppm2To, areaFrom, areaTo, yearFrom, yearTo, dynamic,
+           activeRooms, activeFloors, activeVerdicts,
+           radiusCenter, radiusKm,
+           dateFromMs, dateToMs, sortMode };
+}
+
+function applyAllFilters() {
+  const f = collectFilterState();
+
+  const filtered = LISTINGS.filter(l => {
+    if (f.type && l.type !== f.type) return false;
+    if (f.trans && l.transaction !== f.trans) return false;
+    if (f.priceMax && l.price > f.priceMax) return false;
+    if (f.heroMarket && l.market_type !== f.heroMarket) return false;
+    if (f.priceFrom && l.price < f.priceFrom) return false;
+    if (f.priceTo   && l.price > f.priceTo)   return false;
+    if (f.q) {
+      // Gdy aktywny tryb radius — pomijamy text filter (żeby pokazać wioski wokół miasta z hero)
+      if (!(f.radiusCenter && f.radiusKm > 0)) {
+        const hay = normalizeText((l.city || '') + ' ' + (l.district || '') + ' ' + (l.title || ''));
+        const words = f.q.split(/\s+/).filter(Boolean);
+        if (!words.every(w => hay.includes(w))) return false;
+      }
+    }
+    if (f.activeSellers.length > 0 && !f.activeSellers.includes(l.seller_type)) return false;
+    if (f.onlyOrig && l.is_original === false) return false;
+    if (f.ppm2From && l.price_pm2 < f.ppm2From) return false;
+    if (f.ppm2To   && l.price_pm2 > f.ppm2To)   return false;
+    if (f.areaFrom && l.area_m2   < f.areaFrom) return false;
+    if (f.areaTo   && l.area_m2   > f.areaTo)   return false;
+    if (f.yearFrom && (!l.build_year || l.build_year < f.yearFrom)) return false;
+    if (f.yearTo   && (!l.build_year || l.build_year > f.yearTo))   return false;
+
+    // Dynamic filters (typ budynku, standard, market_type, has_*)
+    for (const [key, allowed] of Object.entries(f.dynamic)) {
+      const v = l[key];
+      // Boolean features: chip "true" matches when listing is truthy
+      if (allowed.has("true")) {
+        if (!v) return false;
+        continue;
+      }
+      if (v == null || v === '') return false;
+      if (!allowed.has(String(v))) return false;
+    }
+
+    // Rooms filter (multi-select)
+    if (f.activeRooms.length > 0) {
+      const r = l.rooms || 0;
+      const match = f.activeRooms.some(spec => {
+        if (spec === '5+') return r >= 5;
+        return r === parseInt(spec, 10);
+      });
+      if (!match) return false;
+    }
+
+    // Floor filter (multi-select)
+    if (f.activeFloors.length > 0) {
+      const fl = l.floor;
+      if (fl == null) return false;
+      const match = f.activeFloors.some(spec => {
+        if (spec === '0')    return fl === 0;
+        if (spec === '1-3')  return fl >= 1 && fl <= 3;
+        if (spec === '4-7')  return fl >= 4 && fl <= 7;
+        if (spec === '8+')   return fl >= 8;
+        return false;
+      });
+      if (!match) return false;
+    }
+
+    // AI verdict filter
+    if (f.activeVerdicts.length > 0) {
+      const v = l.verdict_badge || 'normal';
+      // "hide-over" oznacza ukryj zawyżone → wtedy wszystkie oprócz over
+      const wantHideOver = f.activeVerdicts.includes('hide-over');
+      const explicitVerdicts = f.activeVerdicts.filter(x => x !== 'hide-over');
+      if (wantHideOver && v === 'over') return false;
+      if (explicitVerdicts.length > 0 && !explicitVerdicts.includes(v)) return false;
+    }
+
+    // Promień od miasta centralnego (haversine city→city)
+    if (f.radiusCenter && f.radiusKm > 0) {
+      const key = normalizeCity(l.city || '');
+      const c = window.CITY_COORDS?.[key];
+      if (!c) return false;  // miasto oferty nie ma w słowniku → ukrywamy
+      const d = haversineKm(f.radiusCenter[0], f.radiusCenter[1], c[0], c[1]);
+      if (d > f.radiusKm) return false;
+    }
+
+    // Data dodania
+    if (f.dateFromMs || f.dateToMs) {
+      const t = l.added_at ? new Date(l.added_at).getTime() : 0;
+      if (!t) return false;
+      if (f.dateFromMs && t < f.dateFromMs) return false;
+      if (f.dateToMs   && t > f.dateToMs)   return false;
+    }
+    return true;
+  });
+
+  // Sortowanie
+  const sortFuncs = {
+    ai: (a, b) => {
+      const order = { deal: 0, normal: 1, over: 2, outlier: 3 };
+      const oa = order[a.verdict_badge] ?? 1, ob = order[b.verdict_badge] ?? 1;
+      if (oa !== ob) return oa - ob;
+      return (a.ai_delta_pct || 0) - (b.ai_delta_pct || 0);
+    },
+    newest: (a, b) => (b.added_at || '').localeCompare(a.added_at || ''),
+    price_asc:  (a, b) => a.price - b.price,
+    price_desc: (a, b) => b.price - a.price,
+    ppm2_asc:   (a, b) => a.price_pm2 - b.price_pm2,
+    ppm2_desc:  (a, b) => b.price_pm2 - a.price_pm2,
+    area_desc:  (a, b) => b.area_m2 - a.area_m2,
+  };
+  const sortFn = sortFuncs[f.sortMode] || sortFuncs.ai;
+  filtered.sort(sortFn);
+
+  // Sync sidebar chip typu (jeśli hero-select zmienił typ)
+  if (f.type) {
+    document.querySelectorAll('#propertyType .chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.type === f.type);
+    });
+    if (typeof updateSubType === 'function') updateSubType(f.type);
+  }
+
+  // Bezpieczne renderowanie: bypass onlyOrig filter w renderListings (już zastosowany)
+  const grid = document.getElementById('grid');
+  CURRENT_FILTERED = filtered;
+  currentPage = 1;
+  document.getElementById('count').textContent = filtered.length;
+  renderPage();
+}
+
+// Alias backward-compat (stary hero-search wywołuje applyHeroSearch)
+function applyHeroSearch() { applyAllFilters(); }
+
+// Debounce dla live-search
+let filterTimer = null;
+function applyAllFiltersDebounced() {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(applyAllFilters, 250);
+}
+
+// Podpięcie eventów HERO
+document.getElementById('q')?.addEventListener('input', applyAllFiltersDebounced);
+document.getElementById('q')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); applyAllFilters(); }
+});
+document.getElementById('heroType')?.addEventListener('change', applyAllFilters);
+document.getElementById('heroTrans')?.addEventListener('change', applyAllFilters);
+document.getElementById('heroPrice')?.addEventListener('input', applyAllFiltersDebounced);
+document.getElementById('heroPrice')?.addEventListener('change', applyAllFilters);
+document.getElementById('heroMarket')?.addEventListener('change', applyAllFilters);
+document.getElementById('heroSearchBtn')?.addEventListener('click', applyAllFilters);
+
+// Hero radius km — synchronizuj z ukrytym sidebar #fRadiusKm i wywołaj filtr
+document.getElementById('heroRadiusKm')?.addEventListener('input', () => {
+  const km = document.getElementById('heroRadiusKm').value;
+  const sidebarKm = document.getElementById('fRadiusKm');
+  if (sidebarKm) sidebarKm.value = km;
+  applyAllFiltersDebounced();
+});
+// #q (miasto) synchronizuj z ukrytym #fRadiusCity gdy km > 0 (żeby filter radius mial nazwe miasta)
+document.getElementById('q')?.addEventListener('input', () => {
+  const city = document.getElementById('q').value;
+  const sidebarCity = document.getElementById('fRadiusCity');
+  if (sidebarCity) sidebarCity.value = city;
+});
+
+// Podpięcie eventów SIDEBAR — chipy sellera (multi-select)
+document.querySelectorAll('.chip[data-seller]').forEach(c => {
+  c.addEventListener('click', (e) => {
+    e.stopImmediatePropagation();
+    c.classList.toggle('active');
+    applyAllFilters();
+  }, true);
+});
+
+// Chip "Tylko oryginały" — trigger filtracji
+document.getElementById('chipOnlyOrig')?.addEventListener('click', (e) => {
+  e.stopImmediatePropagation();
+  e.currentTarget.classList.toggle('active');
+  applyAllFilters();
+}, false);
+
+// Inputy cena/powierzchnia/rok/promień — live
+['fPpm2From','fPpm2To','fPriceFrom','fPriceTo','fAreaFrom','fAreaTo','fYearFrom','fYearTo','fRadiusCity','fRadiusKm'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', applyAllFiltersDebounced);
+});
+
+// Wypełnij datalist z listą miast (nazwa z wielkiej litery)
+(function initCityDatalist(){
+  const dl = document.getElementById('cityList');
+  if (!dl || !window.CITY_COORDS) return;
+  const displayNames = {
+    "krakow":"Kraków","lodz":"Łódź","wroclaw":"Wrocław","poznan":"Poznań","gdansk":"Gdańsk",
+    "bialystok":"Białystok","gdynia":"Gdynia","czestochowa":"Częstochowa","radom":"Radom",
+    "torun":"Toruń","kielce":"Kielce","rzeszow":"Rzeszów","gliwice":"Gliwice","zabrze":"Zabrze",
+    "olsztyn":"Olsztyn","bielsko-biala":"Bielsko-Biała","bytom":"Bytom","zielona-gora":"Zielona Góra",
+    "rybnik":"Rybnik","opole":"Opole","gorzow-wielkopolski":"Gorzów Wielkopolski",
+    "walbrzych":"Wałbrzych","tarnow":"Tarnów","kalisz":"Kalisz","legnica":"Legnica",
+    "grudziadz":"Grudziądz","slupsk":"Słupsk","jelenia-gora":"Jelenia Góra","nowy-sacz":"Nowy Sącz",
+    "sopot":"Sopot","zakopane":"Zakopane","wieliczka":"Wieliczka","niepolomice":"Niepołomice",
+    "piaseczno":"Piaseczno","pruszkow":"Pruszków","legionowo":"Legionowo","otwock":"Otwock"
+  };
+  const html = Object.keys(window.CITY_COORDS)
+    .map(k => {
+      const nice = displayNames[k] || k.split('-').map(w => w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+      return `<option value="${nice}">`;
+    }).join('');
+  dl.innerHTML = html;
+})();
+
+// Chipy z data-filter (standard, market_type, has_*) — multi-select w grupie
+document.querySelectorAll('.chip[data-filter][data-value]').forEach(c => {
+  c.addEventListener('click', (e) => {
+    e.stopImmediatePropagation();
+    c.classList.toggle('active');
+    applyAllFilters();
+  }, true);
+});
+
+// Chipy pokoi — multi-select
+document.querySelectorAll('.chip[data-rooms]').forEach(c => {
+  c.addEventListener('click', (e) => {
+    e.stopImmediatePropagation();
+    c.classList.toggle('active');
+    applyAllFilters();
+  }, true);
+});
+
+// Chipy piętra — multi-select
+document.querySelectorAll('.chip[data-floor]').forEach(c => {
+  c.addEventListener('click', (e) => {
+    e.stopImmediatePropagation();
+    c.classList.toggle('active');
+    applyAllFilters();
+  }, true);
+});
+
+// Chipy AI verdict — multi-select
+document.querySelectorAll('.chip[data-verdict]').forEach(c => {
+  c.addEventListener('click', (e) => {
+    e.stopImmediatePropagation();
+    c.classList.toggle('active');
+    applyAllFilters();
+  }, true);
+});
+
+// "Pokaż wszystko" — po prostu wyłącza "Tylko oryginały" (nie ma własnego stanu)
+document.getElementById('chipShowAll')?.addEventListener('click', () => {
+  document.getElementById('chipOnlyOrig')?.classList.remove('active');
+  applyAllFilters();
+});
+
+// Date chips — radio (jeden aktywny na raz)
+document.querySelectorAll('.date-chip').forEach(c => {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.date-chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    const isCustom = c.dataset.date === 'custom';
+    document.getElementById('dateCustom').style.display = isCustom ? 'flex' : 'none';
+    applyAllFilters();
+  });
+});
+document.getElementById('dateFrom')?.addEventListener('change', applyAllFilters);
+document.getElementById('dateTo')?.addEventListener('change', applyAllFilters);
+
+// Sortowanie
+document.getElementById('sortSelect')?.addEventListener('change', applyAllFilters);
+
+</script>
+
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"7f7b0fd8732c4326aae4b9d58d5c514a"}' crossorigin="anonymous"></script>
+</body>
+</html>

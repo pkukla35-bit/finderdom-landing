@@ -52,8 +52,8 @@ jobs:
         env:
           DETAILS_ONLY: "1"
           DETAIL_MAX: ${{ github.event.inputs.detail_max || '10000' }}
-          DETAIL_WORKERS: "3"
-          DETAIL_DELAY: "0.5"
+          DETAIL_WORKERS: "10"
+          DETAIL_DELAY: "0.2"
           MAX_RUN_TIME: "9000"
           # Tylko mieszkania — ten workflow zajmuje się MIESZKANIAMI
           DETAIL_ONLY_TYPE: "mieszkanie"

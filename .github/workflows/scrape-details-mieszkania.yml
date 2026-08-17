@@ -59,6 +59,7 @@ jobs:
           DETAIL_ONLY_TYPE: "mieszkanie"
           # Pomijaj już wzbogacone (kluczowe dla CRON)
           SKIP_ENRICHED: "1"
+          SKIP_MODE: "geo"
           # 🐝 ScrapingBee — provider dla mieszkań (osobny budżet niż domy/ZenRows)
           SCRAPINGBEE_API_KEY: ${{ secrets.SCRAPINGBEE_API_KEY }}
           SCRAPINGBEE_PREMIUM: "1"

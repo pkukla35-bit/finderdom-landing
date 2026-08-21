@@ -148,7 +148,7 @@ async def current_user(
     return user
 
 
-@app.get("/health")
+@app.get("/api/health")
 async def health():
     try:
         await database().command("ping")
@@ -157,7 +157,7 @@ async def health():
         raise HTTPException(500, f"DB error: {str(e)[:100]}")
 
 
-@app.post("/auth/register", status_code=201)
+@app.post("/api/auth/register", status_code=201)
 async def register(body: RegisterRequest):
     email = clean_email(body.email)
     account_type = body.account_type.strip().lower()
@@ -207,7 +207,7 @@ async def register(body: RegisterRequest):
     return {"token": token_for(user), "user": public_user(user)}
 
 
-@app.post("/auth/login")
+@app.post("/api/auth/login")
 async def login(body: LoginRequest):
     email = clean_email(body.email)
     users = await users_collection()
@@ -220,6 +220,6 @@ async def login(body: LoginRequest):
     return {"token": token_for(user), "user": public_user(user)}
 
 
-@app.get("/auth/me")
+@app.get("/api/auth/me")
 async def me(user: dict = Depends(current_user)):
     return {"user": public_user(user)}

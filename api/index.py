@@ -68,6 +68,20 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Stripe-Signature"],
 )
 
+# Debug: return real error as JSON instead of generic 500
+from fastapi.responses import JSONResponse
+import traceback as _tb
+
+@app.exception_handler(Exception)
+async def _err(_req, exc):
+    if isinstance(exc, HTTPException):
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    return JSONResponse(
+        {"detail": f"{type(exc).__name__}: {str(exc)[:200]}",
+         "trace": _tb.format_exc().split("\n")[-3:-1]},
+        status_code=500,
+    )
+
 _client = None
 _indexes_ready = False
 security = HTTPBearer(auto_error=False)

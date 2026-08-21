@@ -68,11 +68,18 @@
   .wrap{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 24px 60px;text-align:center}
 
   /* Header */
-  .header{display:flex;align-items:center;gap:12px;margin-bottom:60px;animation:fadeIn 0.8s ease}
+  .header{display:flex;align-items:center;gap:12px;margin-bottom:60px;animation:fadeIn 0.8s ease;width:100%;max-width:1200px;justify-content:space-between}
+  .header-brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:#fff}
   .logo-mini{width:44px;height:44px;background:linear-gradient(135deg,#1a2e5c 0%,#2d4a8a 100%);border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
   .logo-mini svg{width:26px;height:26px}
   .brand{font-size:18px;font-weight:900;letter-spacing:-0.5px}
   .brand .accent{color:#FFB800}
+  .header-auth{display:flex;align-items:center;gap:10px}
+  .header-auth .a-login{color:#c5d0e6;font-weight:700;font-size:14px;text-decoration:none;padding:8px 12px}
+  .header-auth .a-login:hover{color:#FFB800}
+  .header-auth .a-cta{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;padding:10px 18px;border-radius:10px;font-weight:900;font-size:13px;text-decoration:none;box-shadow:0 4px 12px rgba(255,184,0,0.25);transition:transform 0.15s ease}
+  .header-auth .a-cta:hover{transform:translateY(-1px)}
+  @media (max-width:480px){.header-auth .a-login{display:none}}
 
   /* Hero */
   .hero{max-width:900px;width:100%;animation:fadeIn 1s ease 0.2s both}
@@ -219,14 +226,17 @@
 
   <!-- Header -->
   <div class="header">
-    <div class="logo-mini">
-      <svg viewBox="0 0 100 100" fill="none">
-        <path d="M50 20L20 45v35h60V45L50 20z" stroke="#FFB800" stroke-width="6" stroke-linejoin="round"/>
-        <circle cx="65" cy="45" r="10" stroke="#FFB800" stroke-width="6"/>
-        <path d="M72 52l8 8" stroke="#FFB800" stroke-width="6" stroke-linecap="round"/>
-      </svg>
-    </div>
-    <div class="brand">Finder<span class="accent">Dom</span>.pl</div>
+    <a href="/" class="header-brand">
+      <div class="logo-mini">
+        <svg viewBox="0 0 100 100" fill="none">
+          <path d="M50 20L20 45v35h60V45L50 20z" stroke="#FFB800" stroke-width="6" stroke-linejoin="round"/>
+          <circle cx="65" cy="45" r="10" stroke="#FFB800" stroke-width="6"/>
+          <path d="M72 52l8 8" stroke="#FFB800" stroke-width="6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="brand">Finder<span class="accent">Dom</span>.pl</div>
+    </a>
+    <div class="header-auth" id="headerAuth"></div>
   </div>
 
   <!-- Hero -->
@@ -525,6 +535,18 @@
       btn.textContent = 'ZAPISZ MNIE';
     }
   });
+
+  // Auth widget
+  (function renderAuthWidget(){
+    const el = document.getElementById('headerAuth');
+    if (!el) return;
+    const token = localStorage.getItem('finderdom_token');
+    if (token) {
+      el.innerHTML = '<a href="/konto" class="a-cta">👤 Moje konto</a>';
+    } else {
+      el.innerHTML = '<a href="/logowanie" class="a-login">Zaloguj</a><a href="/rejestracja" class="a-cta">Zarejestruj</a>';
+    }
+  })();
 </script>
 
 </body>

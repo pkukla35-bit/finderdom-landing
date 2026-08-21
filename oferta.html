@@ -29,6 +29,11 @@
   .nav-links{display:flex;gap:20px;align-items:center;font-size:14px}
   .nav-links a{color:#c5d0e6;text-decoration:none;font-weight:600}
   .nav-links a:hover,.nav-links a.active{color:#FFB800}
+  .auth-widget{display:inline-flex;gap:10px;align-items:center}
+  .auth-widget .a-login{color:#c5d0e6;font-weight:700;font-size:14px;text-decoration:none}
+  .auth-widget .a-login:hover{color:#FFB800}
+  .auth-widget .a-cta{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;padding:8px 16px;border-radius:10px;font-weight:900;font-size:13px;text-decoration:none;box-shadow:0 4px 12px rgba(255,184,0,0.25);transition:transform 0.15s ease}
+  .auth-widget .a-cta:hover{transform:translateY(-1px)}
   .cta-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:10px 18px;border-radius:10px;text-decoration:none;font-size:13px;text-transform:uppercase}
 
   /* Breadcrumb */
@@ -162,7 +167,7 @@
       <a href="/szukaj.html">Wyszukiwarka</a>
       <a href="/oferta.html" class="active">Przykład oferty</a>
       <a href="/#valuation">Wycena</a>
-      <a href="/#newsletter" class="cta-btn">Zapisz się</a>
+      <span id="authWidget" class="auth-widget"></span>
     </div>
   </div>
 </nav>
@@ -767,11 +772,19 @@ el('alertBtn')?.addEventListener('click', async () => {
 });
 
 loadOffer();
-</script>
 
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"7f7b0fd8732c4326aae4b9d58d5c514a"}' crossorigin="anonymous"></script>
-</body>
-</html>
+// Auth widget
+(function renderAuthWidget(){
+  const el = document.getElementById('authWidget');
+  if (!el) return;
+  const token = localStorage.getItem('finderdom_token');
+  if (token) {
+    el.innerHTML = '<a href="/konto" class="a-cta">👤 Moje konto</a>';
+  } else {
+    el.innerHTML = '<a href="/logowanie" class="a-login">Zaloguj</a><a href="/rejestracja" class="a-cta">Zarejestruj</a>';
+  }
+})();
+</script>
 
 </body>
 </html>

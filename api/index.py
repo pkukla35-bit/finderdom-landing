@@ -101,13 +101,19 @@ async def ensure_indexes():
     if _indexes_ready:
         return
     db = database()
-    await db.users.create_index("email", unique=True)
-    await db.invoices.create_index([("user_id", 1), ("created_at", -1)])
+    try:
+        await db.users.create_index("email", unique=True)
+    except Exception:
+        pass
+    try:
+        await db.invoices.create_index([("user_id", 1), ("created_at", -1)])
+    except Exception:
+        pass
     try:
         await db.invoices.create_index("stripe_session_id", unique=True, sparse=True)
     except Exception:
         pass
-    await db.stripe_events.create_index("_id", unique=True)
+    # Note: _id is unique automatically; do NOT create additional unique index on it.
     _indexes_ready = True
 
 

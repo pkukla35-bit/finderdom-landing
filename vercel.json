@@ -5,7 +5,8 @@
   "trailingSlash": false,
   "functions": {
     "api/index.py": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "api/fonts/**"
     },
     "api/subscribe.js": {
       "maxDuration": 10
@@ -13,8 +14,13 @@
   },
   "rewrites": [
     { "source": "/api/auth/:path*", "destination": "/api/index" },
+    { "source": "/api/payments/:path*", "destination": "/api/index" },
+    { "source": "/api/invoices/:path*", "destination": "/api/index" },
+    { "source": "/api/invoices", "destination": "/api/index" },
     { "source": "/api/health", "destination": "/api/index" },
-    { "source": "/api/docs", "destination": "/api/index" }
+    { "source": "/api/docs", "destination": "/api/index" },
+    { "source": "/platnosc-sukces", "destination": "/platnosc-sukces.html" },
+    { "source": "/platnosc-anulowana", "destination": "/platnosc-anulowana.html" }
   ],
   "headers": [
     {

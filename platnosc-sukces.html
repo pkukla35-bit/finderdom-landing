@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Płatność zakończona — FinderDom.pl</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0B1836;color:#fff;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  .bg-orbs{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+  .orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.35}
+  .orb1{width:500px;height:500px;background:#22C55E;top:-100px;left:-100px}
+  .orb2{width:400px;height:400px;background:#FFB800;bottom:-100px;right:-100px}
+  .wrap{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px}
+  .card{width:100%;max-width:480px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:44px 32px;backdrop-filter:blur(10px);text-align:center}
+  .icon{width:80px;height:80px;background:linear-gradient(135deg,#22C55E,#16A34A);border-radius:50%;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;font-size:40px;box-shadow:0 8px 24px rgba(34,197,94,0.35);animation:pop 0.5s ease}
+  @keyframes pop{0%{transform:scale(0)}60%{transform:scale(1.15)}100%{transform:scale(1)}}
+  h1{font-size:26px;font-weight:900;margin-bottom:10px;letter-spacing:-0.5px}
+  .subtitle{color:#a3b3d1;font-size:15px;line-height:1.5;margin-bottom:24px}
+  #status{color:#c5d0e6;font-size:14px;padding:14px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:12px;margin-bottom:20px}
+  #status.ok{background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.4);color:#86efac}
+  .details{background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:16px;margin-bottom:24px;text-align:left;display:none}
+  .details.show{display:block}
+  .details .row{display:flex;justify-content:space-between;padding:6px 0;font-size:14px}
+  .details .k{color:#8ba3d4}
+  .details .v{color:#fff;font-weight:700}
+  .btn{display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;border:none;border-radius:12px;font-size:15px;font-weight:900;cursor:pointer;transition:transform 0.15s ease;font-family:inherit;text-decoration:none}
+  .btn:hover{transform:translateY(-1px)}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="bg-orbs"><div class="orb orb1"></div><div class="orb orb2"></div></div>
+<div class="wrap">
+  <div class="card">
+    <div class="icon">✓</div>
+    <h1>Dziękujemy za płatność!</h1>
+    <p class="subtitle">Weryfikujemy i aktywujemy Twój plan…</p>
+    <div id="status"><span class="spinner"></span> Sprawdzanie statusu płatności...</div>
+    <div id="details" class="details"></div>
+    <a href="/konto" class="btn">Przejdź do konta →</a>
+  </div>
+</div>
+<script>
+  const token = localStorage.getItem('finderdom_token');
+  const params = new URLSearchParams(location.search);
+  const sessionId = params.get('session_id');
+  const statusEl = document.getElementById('status');
+  const detailsEl = document.getElementById('details');
+
+  if (!token) {
+    statusEl.innerHTML = 'Musisz być zalogowany, aby zweryfikować płatność.';
+    setTimeout(() => location.href = '/logowanie', 2000);
+  } else if (!sessionId) {
+    statusEl.innerHTML = 'Brak identyfikatora sesji płatności.';
+  } else {
+    verify();
+  }
+
+  const PLAN_LABELS = { individual: 'Osobisty (35 zł)', business: 'Firmowy (199 zł)', free: 'Darmowy' };
+
+  async function verify() {
+    try {
+      const r = await fetch('/api/payments/verify?session_id=' + encodeURIComponent(sessionId), {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || 'Błąd weryfikacji');
+
+      if (data.paid && data.user) {
+        statusEl.className = 'ok';
+        statusEl.innerHTML = '✓ Płatność zatwierdzona. Plan aktywny!';
+        const exp = new Date(data.user.expires_at).toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
+        detailsEl.innerHTML = `
+          <div class="row"><span class="k">Plan</span><span class="v">${PLAN_LABELS[data.user.tier] || data.user.tier}</span></div>
+          <div class="row"><span class="k">Ważny do</span><span class="v">${exp}</span></div>
+          <div class="row"><span class="k">Konto</span><span class="v">${data.user.email}</span></div>
+        `;
+        detailsEl.classList.add('show');
+        // refresh cached user
+        localStorage.setItem('finderdom_user', JSON.stringify(data.user));
+      } else {
+        // Not yet paid — poll for a while (BLIK can take a moment)
+        statusEl.innerHTML = '<span class="spinner"></span> Płatność jest weryfikowana...';
+        setTimeout(verify, 2500);
+      }
+    } catch (e) {
+      statusEl.innerHTML = 'Błąd: ' + e.message + '. Sprawdź konto za chwilę.';
+    }
+  }
+</script>
+</body>
+</html>

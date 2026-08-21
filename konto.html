@@ -10,23 +10,18 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0B1836;color:#fff;-webkit-font-smoothing:antialiased}
   a{color:inherit;text-decoration:none}
-
   .bg-orbs{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
   .orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.3}
   .orb1{width:500px;height:500px;background:#FFB800;top:-100px;left:-100px}
   .orb2{width:400px;height:400px;background:#4A90E2;bottom:-100px;right:-100px}
-
   .wrap{position:relative;z-index:1;min-height:100vh;padding:24px 20px 60px;max-width:960px;margin:0 auto}
-
   .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px}
   .logo{display:flex;align-items:center;gap:12px}
   .logo-mini{width:44px;height:44px;background:linear-gradient(135deg,#1a2e5c 0%,#2d4a8a 100%);border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
   .brand{font-size:18px;font-weight:900;letter-spacing:-0.5px}
   .brand .accent{color:#FFB800}
-
   .btn-outline{padding:10px 16px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:#fff;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;transition:all 0.2s ease;font-family:inherit}
   .btn-outline:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.25)}
-
   .loading{padding:60px 20px;text-align:center;color:#a3b3d1}
 
   .hero-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:32px;backdrop-filter:blur(10px);margin-bottom:24px}
@@ -43,7 +38,6 @@
 
   .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:28px;backdrop-filter:blur(10px);margin-bottom:16px}
   .card h2{font-size:18px;font-weight:900;margin-bottom:16px}
-
   .row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.06)}
   .row:last-child{border-bottom:none}
   .row .k{font-size:13px;color:#8ba3d4;text-transform:uppercase;letter-spacing:1px;font-weight:800}
@@ -60,33 +54,53 @@
   .placeholder-box p{font-size:13px;line-height:1.6}
 
   .plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:16px}
-  .plan{padding:24px 20px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:16px;transition:all 0.25s ease}
-  .plan.current{border-color:rgba(255,184,0,0.5);background:rgba(255,184,0,0.06)}
+  .plan{padding:24px 20px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:16px;transition:all 0.25s ease;display:flex;flex-direction:column}
+  .plan.recommended{border-color:rgba(255,184,0,0.4);background:linear-gradient(135deg,rgba(255,184,0,0.08),rgba(255,184,0,0.02))}
+  .plan.current{border-color:rgba(34,197,94,0.5);background:rgba(34,197,94,0.06)}
+  .plan-tag{position:absolute;top:-11px;right:16px;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-size:10px;font-weight:900;padding:4px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:0.5px}
+  .plan{position:relative}
   .plan .p-name{font-size:12px;color:#8ba3d4;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin-bottom:6px}
   .plan .p-price{font-size:26px;font-weight:900;margin-bottom:2px}
   .plan .p-price .m{font-size:14px;color:#a3b3d1;font-weight:700}
-  .plan .p-desc{font-size:13px;color:#a3b3d1;line-height:1.5;margin-bottom:12px}
-  .plan .p-btn{width:100%;padding:12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;transition:all 0.2s ease}
-  .plan .p-btn:hover{background:rgba(255,255,255,0.14)}
-  .plan.current .p-btn{background:rgba(255,184,0,0.15);border-color:rgba(255,184,0,0.4);color:#FFB800;cursor:default}
+  .plan .p-desc{font-size:13px;color:#a3b3d1;line-height:1.5;margin-bottom:14px;flex:1}
+  .plan .p-list{list-style:none;padding:0;margin:0 0 16px}
+  .plan .p-list li{font-size:12px;color:#c5d0e6;padding:4px 0 4px 20px;position:relative}
+  .plan .p-list li::before{content:"✓";position:absolute;left:0;color:#FFB800;font-weight:900}
+  .plan .p-btn{width:100%;padding:12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:10px;font-size:13px;font-weight:900;cursor:pointer;font-family:inherit;transition:all 0.2s ease}
+  .plan .p-btn:not(:disabled):hover{background:rgba(255,184,0,0.15);border-color:rgba(255,184,0,0.4);color:#FFB800}
+  .plan .p-btn.pay{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;border:none;box-shadow:0 4px 12px rgba(255,184,0,0.25)}
+  .plan .p-btn.pay:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(255,184,0,0.4)}
+  .plan .p-btn:disabled{opacity:0.5;cursor:not-allowed}
+  .plan.current .p-btn{background:rgba(34,197,94,0.15);border-color:rgba(34,197,94,0.4);color:#86efac;cursor:default}
 
-  .btn-danger{padding:12px 20px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#fca5a5;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;transition:all 0.2s ease;font-family:inherit}
-  .btn-danger:hover{background:rgba(239,68,68,0.2)}
+  .pay-info{margin-top:16px;padding:14px 16px;background:rgba(255,184,0,0.06);border:1px solid rgba(255,184,0,0.2);border-radius:12px;font-size:12px;color:#c5d0e6;line-height:1.5}
+  .pay-info b{color:#FFB800}
+
+  .pay-error{margin-top:12px;padding:12px 14px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#fca5a5;border-radius:10px;font-size:13px;display:none}
+  .pay-error.show{display:block}
+
+  .invoice-item{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:12px;margin-bottom:10px;gap:12px}
+  .invoice-item .inv-info .num{font-weight:900;font-size:14px;margin-bottom:2px}
+  .invoice-item .inv-info .meta{font-size:12px;color:#8ba3d4}
+  .invoice-item .inv-amount{font-weight:900;color:#FFB800;font-size:15px;margin-right:8px}
+  .invoice-item .inv-dl{padding:8px 14px;background:rgba(255,184,0,0.12);border:1px solid rgba(255,184,0,0.35);color:#FFB800;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;text-decoration:none}
+  .invoice-item .inv-dl:hover{background:rgba(255,184,0,0.2)}
+
+  .spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
 
   @media (max-width:480px){
     .hero-card{padding:24px 20px}
     .card{padding:22px 18px}
     .row{flex-direction:column;align-items:flex-start;gap:6px}
     .row .v{text-align:left}
+    .invoice-item{flex-direction:column;align-items:flex-start}
+    .invoice-item .inv-amount{margin-right:0}
   }
 </style>
 </head>
 <body>
-<div class="bg-orbs">
-  <div class="orb orb1"></div>
-  <div class="orb orb2"></div>
-</div>
-
+<div class="bg-orbs"><div class="orb orb1"></div><div class="orb orb2"></div></div>
 <div class="wrap">
   <div class="topbar">
     <a href="/" class="logo">
@@ -113,6 +127,7 @@
     <div class="tabs">
       <button type="button" class="tab active" data-tab="profile">👤 Profil</button>
       <button type="button" class="tab" data-tab="subscription">💎 Subskrypcja</button>
+      <button type="button" class="tab" data-tab="invoices">📄 Faktury</button>
       <button type="button" class="tab" data-tab="favorites">❤️ Ulubione</button>
     </div>
 
@@ -120,78 +135,84 @@
     <div class="panel active" id="panel-profile">
       <div class="card">
         <h2>Dane konta</h2>
-        <div class="row">
-          <div class="k">Email</div>
-          <div class="v" id="pEmail">—</div>
-        </div>
-        <div class="row">
-          <div class="k">Typ konta</div>
-          <div class="v" id="pAccountType">—</div>
-        </div>
-        <div class="row biz-only" style="display:none">
-          <div class="k">Nazwa firmy</div>
-          <div class="v" id="pCompany">—</div>
-        </div>
-        <div class="row biz-only" style="display:none">
-          <div class="k">NIP</div>
-          <div class="v" id="pNip">—</div>
-        </div>
-        <div class="row">
-          <div class="k">Konto od</div>
-          <div class="v" id="pCreated">—</div>
-        </div>
+        <div class="row"><div class="k">Email</div><div class="v" id="pEmail">—</div></div>
+        <div class="row"><div class="k">Typ konta</div><div class="v" id="pAccountType">—</div></div>
+        <div class="row biz-only" style="display:none"><div class="k">Nazwa firmy</div><div class="v" id="pCompany">—</div></div>
+        <div class="row biz-only" style="display:none"><div class="k">NIP</div><div class="v" id="pNip">—</div></div>
+        <div class="row"><div class="k">Konto od</div><div class="v" id="pCreated">—</div></div>
       </div>
     </div>
 
-    <!-- Subskrypcja (placeholder pod Fazę 2) -->
+    <!-- Subskrypcja -->
     <div class="panel" id="panel-subscription">
       <div class="card">
         <h2>Twoja subskrypcja</h2>
-        <div class="row">
-          <div class="k">Aktualny plan</div>
-          <div class="v"><span id="tierBadge" class="badge badge-free">Free</span></div>
-        </div>
-        <div class="row">
-          <div class="k">Status</div>
-          <div class="v" id="subStatus">Aktywny</div>
-        </div>
-        <div class="row">
-          <div class="k">Wygasa</div>
-          <div class="v" id="subExpires">—</div>
-        </div>
+        <div class="row"><div class="k">Aktualny plan</div><div class="v"><span id="tierBadge" class="badge badge-free">Free</span></div></div>
+        <div class="row"><div class="k">Status</div><div class="v" id="subStatus">Aktywny</div></div>
+        <div class="row"><div class="k">Ważny do</div><div class="v" id="subExpires">—</div></div>
+      </div>
 
+      <div class="card">
+        <h2>Wybierz plan</h2>
         <div class="plans">
           <div class="plan" data-plan="free">
             <div class="p-name">Free</div>
             <div class="p-price">0 zł <span class="m">/mies.</span></div>
-            <div class="p-desc">Podstawowe wyszukiwanie, standardowe filtry.</div>
-            <button type="button" class="p-btn">Aktualny plan</button>
+            <div class="p-desc">Podstawowe wyszukiwanie ofert.</div>
+            <ul class="p-list">
+              <li>Wyszukiwarka portalu</li>
+              <li>Standardowe filtry</li>
+            </ul>
+            <button type="button" class="p-btn" data-buy="free" disabled>Twój plan</button>
           </div>
-          <div class="plan" data-plan="individual">
+          <div class="plan recommended" data-plan="individual">
+            <div class="plan-tag">Polecane</div>
             <div class="p-name">Osobisty</div>
-            <div class="p-price">35 zł <span class="m">/mies.</span></div>
-            <div class="p-desc">Analiza AI 5km, ulubione, zaawansowane filtry.</div>
-            <button type="button" class="p-btn" disabled>Wkrótce — Faza 2</button>
+            <div class="p-price">35 zł <span class="m">/30 dni</span></div>
+            <div class="p-desc">Dla osób prywatnych szukających mieszkania lub domu.</div>
+            <ul class="p-list">
+              <li>Analiza AI ceny w promieniu 5 km</li>
+              <li>Ulubione oferty</li>
+              <li>Zaawansowane filtry</li>
+              <li>Bez reklam</li>
+            </ul>
+            <button type="button" class="p-btn pay" data-buy="individual">Zapłać 35 zł</button>
           </div>
           <div class="plan" data-plan="business">
-            <div class="p-name">Firmowy (B2B)</div>
-            <div class="p-price">199 zł <span class="m">/mies.</span></div>
-            <div class="p-desc">TeamMode, raporty PDF, CRM, faktury VAT.</div>
-            <button type="button" class="p-btn" disabled>Wkrótce — Faza 2</button>
+            <div class="p-name">Firmowy B2B</div>
+            <div class="p-price">199 zł <span class="m">/30 dni</span></div>
+            <div class="p-desc">Dla pośredników, fliperów i biur nieruchomości.</div>
+            <ul class="p-list">
+              <li>Wszystko z planu Osobistego</li>
+              <li>TeamMode (CRM)</li>
+              <li>Raporty wyceny PDF</li>
+              <li>Faktury VAT</li>
+            </ul>
+            <button type="button" class="p-btn pay" data-buy="business">Zapłać 199 zł</button>
           </div>
         </div>
+        <div class="pay-info">
+          💳 Płatność jednorazowa przez <b>Stripe</b>. Akceptujemy karty i <b>BLIK</b>.<br>
+          Po opłacie plan aktywny <b>przez 30 dni</b> — automatycznie generujemy fakturę VAT.
+        </div>
+        <div id="payError" class="pay-error"></div>
       </div>
+    </div>
 
+    <!-- Faktury -->
+    <div class="panel" id="panel-invoices">
       <div class="card">
-        <div class="placeholder-box">
-          <div class="emoji">🚧</div>
-          <h3>Płatności w przygotowaniu</h3>
-          <p>Integracja z Przelewy24 pojawi się w kolejnej fazie.<br>Damy znać mailowo, gdy plany będą dostępne.</p>
+        <h2>Twoje faktury</h2>
+        <div id="invoicesList">
+          <div class="placeholder-box">
+            <div class="emoji">📄</div>
+            <h3>Ładowanie...</h3>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Ulubione (placeholder pod Fazę Favorites) -->
+    <!-- Ulubione -->
     <div class="panel" id="panel-favorites">
       <div class="card">
         <div class="placeholder-box">
@@ -206,31 +227,28 @@
 
 <script>
   const token = localStorage.getItem('finderdom_token');
-  if (!token) {
-    window.location.href = '/logowanie';
-  }
+  if (!token) window.location.href = '/logowanie';
 
-  function fmtDate(iso) {
+  const PLAN_LABEL = { free: 'Darmowy', individual: 'Osobisty', business: 'Firmowy' };
+
+  function fmtDate(iso){
     if (!iso) return '—';
-    try {
-      const d = new Date(iso);
-      return d.toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
-    } catch (e) { return '—'; }
+    try { return new Date(iso).toLocaleDateString('pl-PL', { day:'2-digit', month:'long', year:'numeric' }); }
+    catch(e){ return '—'; }
   }
+  function fmtMoney(grosze){ return (Number(grosze)/100).toFixed(2).replace('.', ',') + ' zł'; }
 
-  function tierBadge(tier) {
+  function tierBadge(tier){
     const el = document.getElementById('tierBadge');
-    if (tier === 'individual') { el.className = 'badge badge-ind'; el.textContent = 'Osobisty'; }
-    else if (tier === 'business') { el.className = 'badge badge-biz'; el.textContent = 'Firmowy'; }
-    else { el.className = 'badge badge-free'; el.textContent = 'Free'; }
+    if (tier === 'individual'){ el.className='badge badge-ind'; el.textContent='Osobisty'; }
+    else if (tier === 'business'){ el.className='badge badge-biz'; el.textContent='Firmowy'; }
+    else { el.className='badge badge-free'; el.textContent='Free'; }
   }
 
-  async function loadMe() {
+  async function loadMe(){
     try {
-      const r = await fetch('/api/auth/me', {
-        headers: { 'Authorization': 'Bearer ' + token }
-      });
-      if (r.status === 401) {
+      const r = await fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token }});
+      if (r.status === 401){
         localStorage.removeItem('finderdom_token');
         localStorage.removeItem('finderdom_user');
         window.location.href = '/logowanie';
@@ -243,38 +261,116 @@
       document.getElementById('loading').style.display = 'none';
       document.getElementById('content').style.display = 'block';
 
-      // Header
       const displayName = u.account_type === 'business' ? (u.company_name || u.email) : u.email.split('@')[0];
       document.getElementById('greetName').textContent = displayName;
       document.getElementById('emailLine').textContent = u.email;
-
-      // Profil
       document.getElementById('pEmail').textContent = u.email;
       document.getElementById('pAccountType').textContent = u.account_type === 'business' ? 'Firmowe' : 'Osobiste';
       document.getElementById('pCreated').textContent = fmtDate(u.created_at);
 
-      if (u.account_type === 'business') {
+      if (u.account_type === 'business'){
         document.querySelectorAll('.biz-only').forEach(el => el.style.display = '');
         document.getElementById('pCompany').textContent = u.company_name || '—';
         document.getElementById('pNip').textContent = u.nip || '—';
       }
 
-      // Subskrypcja
       tierBadge(u.tier);
-      document.getElementById('subStatus').textContent =
-        u.subscription_status === 'active' ? 'Aktywny' : (u.subscription_status || '—');
+      document.getElementById('subStatus').textContent = u.tier === 'free' ? 'Bez subskrypcji' : 'Aktywny';
       document.getElementById('subExpires').textContent = u.expires_at ? fmtDate(u.expires_at) : '— (plan darmowy)';
 
-      // Zaznacz aktualny plan
       document.querySelectorAll('.plan').forEach(p => {
-        if (p.dataset.plan === u.tier) {
+        p.classList.remove('current');
+        const btn = p.querySelector('.p-btn');
+        if (p.dataset.plan === u.tier){
           p.classList.add('current');
-          p.querySelector('.p-btn').textContent = 'Aktualny plan';
-          p.querySelector('.p-btn').disabled = true;
+          btn.textContent = u.tier === 'free' ? 'Twój plan' : 'Aktywny plan';
+          btn.disabled = true;
         }
       });
-    } catch (e) {
-      document.getElementById('loading').textContent = 'Błąd ładowania konta. Spróbuj odświeżyć stronę.';
+    } catch(e){
+      document.getElementById('loading').textContent = 'Błąd ładowania konta. Odśwież stronę.';
+    }
+  }
+
+  async function loadInvoices(){
+    const list = document.getElementById('invoicesList');
+    try {
+      const r = await fetch('/api/invoices', { headers: { 'Authorization': 'Bearer ' + token }});
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || 'Błąd');
+      if (!data.invoices || data.invoices.length === 0){
+        list.innerHTML = `<div class="placeholder-box">
+          <div class="emoji">📄</div>
+          <h3>Brak faktur</h3>
+          <p>Faktury pojawią się tutaj automatycznie po opłaceniu subskrypcji.</p>
+        </div>`;
+        return;
+      }
+      list.innerHTML = data.invoices.map(inv => `
+        <div class="invoice-item">
+          <div class="inv-info">
+            <div class="num">${inv.invoice_number}</div>
+            <div class="meta">${fmtDate(inv.created_at)} · Plan ${PLAN_LABEL[inv.plan] || inv.plan}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="inv-amount">${fmtMoney(inv.amount)}</div>
+            <a class="inv-dl" href="/api/invoices/${inv.id}/pdf" data-inv="${inv.id}">📥 PDF</a>
+          </div>
+        </div>
+      `).join('');
+      // Attach auth header via fetch for PDF download
+      list.querySelectorAll('.inv-dl').forEach(a => {
+        a.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const id = a.dataset.inv;
+          const orig = a.textContent;
+          a.textContent = '⏳';
+          try {
+            const r = await fetch(`/api/invoices/${id}/pdf`, { headers: { 'Authorization': 'Bearer ' + token }});
+            if (!r.ok) throw new Error('Nie można pobrać faktury');
+            const blob = await r.blob();
+            const url = URL.createObjectURL(blob);
+            const dl = document.createElement('a');
+            dl.href = url;
+            const cd = r.headers.get('content-disposition') || '';
+            const m = cd.match(/filename="([^"]+)"/);
+            dl.download = m ? m[1] : `faktura-${id}.pdf`;
+            dl.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          } catch(err){
+            alert(err.message);
+          } finally {
+            a.textContent = orig;
+          }
+        });
+      });
+    } catch(e){
+      list.innerHTML = `<div class="placeholder-box"><div class="emoji">⚠️</div><h3>Błąd ładowania</h3><p>${e.message}</p></div>`;
+    }
+  }
+
+  async function buyPlan(plan){
+    const errBox = document.getElementById('payError');
+    errBox.className = 'pay-error';
+    const btn = document.querySelector(`.plan[data-plan="${plan}"] .p-btn`);
+    if (!btn) return;
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Przekierowuję...';
+    try {
+      const r = await fetch('/api/payments/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ plan })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || 'Nie udało się utworzyć płatności');
+      window.location.href = data.url;
+    } catch(e){
+      errBox.textContent = '⚠️ ' + e.message;
+      errBox.className = 'pay-error show';
+      btn.disabled = false;
+      btn.innerHTML = orig;
     }
   }
 
@@ -285,10 +381,19 @@
       document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
       tab.classList.add('active');
       document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+      if (tab.dataset.tab === 'invoices') loadInvoices();
     });
   });
 
-  // Logout
+  // Buy buttons
+  document.querySelectorAll('.p-btn[data-buy]').forEach(b => {
+    b.addEventListener('click', () => {
+      const plan = b.dataset.buy;
+      if (plan === 'free') return;
+      buyPlan(plan);
+    });
+  });
+
   document.getElementById('logoutBtn').addEventListener('click', () => {
     localStorage.removeItem('finderdom_token');
     localStorage.removeItem('finderdom_user');

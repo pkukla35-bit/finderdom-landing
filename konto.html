@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Moje konto — FinderDom.pl</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0B1836;color:#fff;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+
+  .bg-orbs{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+  .orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.3}
+  .orb1{width:500px;height:500px;background:#FFB800;top:-100px;left:-100px}
+  .orb2{width:400px;height:400px;background:#4A90E2;bottom:-100px;right:-100px}
+
+  .wrap{position:relative;z-index:1;min-height:100vh;padding:24px 20px 60px;max-width:960px;margin:0 auto}
+
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-mini{width:44px;height:44px;background:linear-gradient(135deg,#1a2e5c 0%,#2d4a8a 100%);border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
+  .brand{font-size:18px;font-weight:900;letter-spacing:-0.5px}
+  .brand .accent{color:#FFB800}
+
+  .btn-outline{padding:10px 16px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:#fff;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;transition:all 0.2s ease;font-family:inherit}
+  .btn-outline:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.25)}
+
+  .loading{padding:60px 20px;text-align:center;color:#a3b3d1}
+
+  .hero-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:32px;backdrop-filter:blur(10px);margin-bottom:24px}
+  .greet{font-size:14px;color:#8ba3d4;text-transform:uppercase;letter-spacing:1.5px;font-weight:800;margin-bottom:6px}
+  h1{font-size:clamp(24px,4vw,34px);font-weight:900;letter-spacing:-0.5px;margin-bottom:6px}
+  .email-line{color:#a3b3d1;font-size:14px}
+
+  .tabs{display:flex;gap:6px;background:rgba(0,0,0,0.25);padding:6px;border-radius:14px;margin-bottom:20px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tab{padding:12px 20px;background:transparent;border:none;color:#a3b3d1;font-size:14px;font-weight:800;border-radius:10px;cursor:pointer;transition:all 0.2s ease;font-family:inherit;white-space:nowrap}
+  .tab.active{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;box-shadow:0 4px 12px rgba(255,184,0,0.25)}
+
+  .panel{display:none}
+  .panel.active{display:block}
+
+  .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:28px;backdrop-filter:blur(10px);margin-bottom:16px}
+  .card h2{font-size:18px;font-weight:900;margin-bottom:16px}
+
+  .row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.06)}
+  .row:last-child{border-bottom:none}
+  .row .k{font-size:13px;color:#8ba3d4;text-transform:uppercase;letter-spacing:1px;font-weight:800}
+  .row .v{font-size:15px;color:#fff;font-weight:700;text-align:right}
+
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;font-size:11px;font-weight:800;letter-spacing:0.5px;text-transform:uppercase}
+  .badge-free{background:rgba(139,163,212,0.15);border:1px solid rgba(139,163,212,0.3);color:#a3b3d1}
+  .badge-ind{background:rgba(74,144,226,0.15);border:1px solid rgba(74,144,226,0.4);color:#7bb0ff}
+  .badge-biz{background:rgba(255,184,0,0.15);border:1px solid rgba(255,184,0,0.4);color:#FFB800}
+
+  .placeholder-box{padding:32px 20px;text-align:center;background:rgba(0,0,0,0.2);border:1px dashed rgba(255,255,255,0.12);border-radius:16px;color:#a3b3d1}
+  .placeholder-box .emoji{font-size:36px;margin-bottom:12px}
+  .placeholder-box h3{font-size:16px;font-weight:900;color:#fff;margin-bottom:6px}
+  .placeholder-box p{font-size:13px;line-height:1.6}
+
+  .plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:16px}
+  .plan{padding:24px 20px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:16px;transition:all 0.25s ease}
+  .plan.current{border-color:rgba(255,184,0,0.5);background:rgba(255,184,0,0.06)}
+  .plan .p-name{font-size:12px;color:#8ba3d4;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin-bottom:6px}
+  .plan .p-price{font-size:26px;font-weight:900;margin-bottom:2px}
+  .plan .p-price .m{font-size:14px;color:#a3b3d1;font-weight:700}
+  .plan .p-desc{font-size:13px;color:#a3b3d1;line-height:1.5;margin-bottom:12px}
+  .plan .p-btn{width:100%;padding:12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;transition:all 0.2s ease}
+  .plan .p-btn:hover{background:rgba(255,255,255,0.14)}
+  .plan.current .p-btn{background:rgba(255,184,0,0.15);border-color:rgba(255,184,0,0.4);color:#FFB800;cursor:default}
+
+  .btn-danger{padding:12px 20px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#fca5a5;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;transition:all 0.2s ease;font-family:inherit}
+  .btn-danger:hover{background:rgba(239,68,68,0.2)}
+
+  @media (max-width:480px){
+    .hero-card{padding:24px 20px}
+    .card{padding:22px 18px}
+    .row{flex-direction:column;align-items:flex-start;gap:6px}
+    .row .v{text-align:left}
+  }
+</style>
+</head>
+<body>
+<div class="bg-orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+</div>
+
+<div class="wrap">
+  <div class="topbar">
+    <a href="/" class="logo">
+      <div class="logo-mini">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#FFB800" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg>
+      </div>
+      <div class="brand">Finder<span class="accent">Dom</span>.pl</div>
+    </a>
+    <button class="btn-outline" id="logoutBtn">Wyloguj</button>
+  </div>
+
+  <div id="loading" class="loading">Ładowanie...</div>
+
+  <div id="content" style="display:none">
+    <div class="hero-card">
+      <div class="greet">Witaj</div>
+      <h1 id="greetName">—</h1>
+      <div class="email-line" id="emailLine">—</div>
+    </div>
+
+    <div class="tabs">
+      <button type="button" class="tab active" data-tab="profile">👤 Profil</button>
+      <button type="button" class="tab" data-tab="subscription">💎 Subskrypcja</button>
+      <button type="button" class="tab" data-tab="favorites">❤️ Ulubione</button>
+    </div>
+
+    <!-- Profil -->
+    <div class="panel active" id="panel-profile">
+      <div class="card">
+        <h2>Dane konta</h2>
+        <div class="row">
+          <div class="k">Email</div>
+          <div class="v" id="pEmail">—</div>
+        </div>
+        <div class="row">
+          <div class="k">Typ konta</div>
+          <div class="v" id="pAccountType">—</div>
+        </div>
+        <div class="row biz-only" style="display:none">
+          <div class="k">Nazwa firmy</div>
+          <div class="v" id="pCompany">—</div>
+        </div>
+        <div class="row biz-only" style="display:none">
+          <div class="k">NIP</div>
+          <div class="v" id="pNip">—</div>
+        </div>
+        <div class="row">
+          <div class="k">Konto od</div>
+          <div class="v" id="pCreated">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Subskrypcja (placeholder pod Fazę 2) -->
+    <div class="panel" id="panel-subscription">
+      <div class="card">
+        <h2>Twoja subskrypcja</h2>
+        <div class="row">
+          <div class="k">Aktualny plan</div>
+          <div class="v"><span id="tierBadge" class="badge badge-free">Free</span></div>
+        </div>
+        <div class="row">
+          <div class="k">Status</div>
+          <div class="v" id="subStatus">Aktywny</div>
+        </div>
+        <div class="row">
+          <div class="k">Wygasa</div>
+          <div class="v" id="subExpires">—</div>
+        </div>
+
+        <div class="plans">
+          <div class="plan" data-plan="free">
+            <div class="p-name">Free</div>
+            <div class="p-price">0 zł <span class="m">/mies.</span></div>
+            <div class="p-desc">Podstawowe wyszukiwanie, standardowe filtry.</div>
+            <button type="button" class="p-btn">Aktualny plan</button>
+          </div>
+          <div class="plan" data-plan="individual">
+            <div class="p-name">Osobisty</div>
+            <div class="p-price">35 zł <span class="m">/mies.</span></div>
+            <div class="p-desc">Analiza AI 5km, ulubione, zaawansowane filtry.</div>
+            <button type="button" class="p-btn" disabled>Wkrótce — Faza 2</button>
+          </div>
+          <div class="plan" data-plan="business">
+            <div class="p-name">Firmowy (B2B)</div>
+            <div class="p-price">199 zł <span class="m">/mies.</span></div>
+            <div class="p-desc">TeamMode, raporty PDF, CRM, faktury VAT.</div>
+            <button type="button" class="p-btn" disabled>Wkrótce — Faza 2</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="placeholder-box">
+          <div class="emoji">🚧</div>
+          <h3>Płatności w przygotowaniu</h3>
+          <p>Integracja z Przelewy24 pojawi się w kolejnej fazie.<br>Damy znać mailowo, gdy plany będą dostępne.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ulubione (placeholder pod Fazę Favorites) -->
+    <div class="panel" id="panel-favorites">
+      <div class="card">
+        <div class="placeholder-box">
+          <div class="emoji">❤️</div>
+          <h3>Brak zapisanych ofert</h3>
+          <p>Kliknij serduszko przy ofercie na stronie wyszukiwarki,<br>aby dodać ją do ulubionych.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const token = localStorage.getItem('finderdom_token');
+  if (!token) {
+    window.location.href = '/logowanie';
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
+    } catch (e) { return '—'; }
+  }
+
+  function tierBadge(tier) {
+    const el = document.getElementById('tierBadge');
+    if (tier === 'individual') { el.className = 'badge badge-ind'; el.textContent = 'Osobisty'; }
+    else if (tier === 'business') { el.className = 'badge badge-biz'; el.textContent = 'Firmowy'; }
+    else { el.className = 'badge badge-free'; el.textContent = 'Free'; }
+  }
+
+  async function loadMe() {
+    try {
+      const r = await fetch('/api/auth/me', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (r.status === 401) {
+        localStorage.removeItem('finderdom_token');
+        localStorage.removeItem('finderdom_user');
+        window.location.href = '/logowanie';
+        return;
+      }
+      const data = await r.json();
+      const u = data.user;
+      localStorage.setItem('finderdom_user', JSON.stringify(u));
+
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+
+      // Header
+      const displayName = u.account_type === 'business' ? (u.company_name || u.email) : u.email.split('@')[0];
+      document.getElementById('greetName').textContent = displayName;
+      document.getElementById('emailLine').textContent = u.email;
+
+      // Profil
+      document.getElementById('pEmail').textContent = u.email;
+      document.getElementById('pAccountType').textContent = u.account_type === 'business' ? 'Firmowe' : 'Osobiste';
+      document.getElementById('pCreated').textContent = fmtDate(u.created_at);
+
+      if (u.account_type === 'business') {
+        document.querySelectorAll('.biz-only').forEach(el => el.style.display = '');
+        document.getElementById('pCompany').textContent = u.company_name || '—';
+        document.getElementById('pNip').textContent = u.nip || '—';
+      }
+
+      // Subskrypcja
+      tierBadge(u.tier);
+      document.getElementById('subStatus').textContent =
+        u.subscription_status === 'active' ? 'Aktywny' : (u.subscription_status || '—');
+      document.getElementById('subExpires').textContent = u.expires_at ? fmtDate(u.expires_at) : '— (plan darmowy)';
+
+      // Zaznacz aktualny plan
+      document.querySelectorAll('.plan').forEach(p => {
+        if (p.dataset.plan === u.tier) {
+          p.classList.add('current');
+          p.querySelector('.p-btn').textContent = 'Aktualny plan';
+          p.querySelector('.p-btn').disabled = true;
+        }
+      });
+    } catch (e) {
+      document.getElementById('loading').textContent = 'Błąd ładowania konta. Spróbuj odświeżyć stronę.';
+    }
+  }
+
+  // Tabs
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  // Logout
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    localStorage.removeItem('finderdom_token');
+    localStorage.removeItem('finderdom_user');
+    window.location.href = '/';
+  });
+
+  loadMe();
+</script>
+</body>
+</html>

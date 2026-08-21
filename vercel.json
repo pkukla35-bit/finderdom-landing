@@ -1,7 +1,21 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "cleanUrls": true,
   "trailingSlash": false,
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 30
+    },
+    "api/subscribe.js": {
+      "maxDuration": 10
+    }
+  },
+  "rewrites": [
+    { "source": "/api/auth/:path*", "destination": "/api/index" },
+    { "source": "/api/health", "destination": "/api/index" },
+    { "source": "/api/docs", "destination": "/api/index" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

@@ -20,7 +20,9 @@
     { "source": "/api/health", "destination": "/api/index" },
     { "source": "/api/docs", "destination": "/api/index" },
     { "source": "/platnosc-sukces", "destination": "/platnosc-sukces.html" },
-    { "source": "/platnosc-anulowana", "destination": "/platnosc-anulowana.html" }
+    { "source": "/platnosc-anulowana", "destination": "/platnosc-anulowana.html" },
+    { "source": "/regulamin", "destination": "/regulamin.html" },
+    { "source": "/polityka-prywatnosci", "destination": "/polityka-prywatnosci.html" }
   ],
   "headers": [
     {

@@ -16,7 +16,7 @@
  * Reklamy są AUTOMATYCZNIE UKRYWANE dla użytkowników z planem Osobisty (35 zł) i Firmowy (199 zł).
  */
 window.FD_ADS = {
-  CLIENT: 'ca-pub-XXXXXXXXXXXXXXXX', // <- WKLEJ TWÓJ ID KLIENTA ADSENSE
+  CLIENT: 'ca-pub-7963354786615192', // <- WKLEJ TWÓJ ID KLIENTA ADSENSE
   SLOTS: {
     'listing-top':     '0000000000',  // <- BLOK REKLAMOWY: nad wynikami wyszukiwania
     'listing-inline':  '0000000000',  // <- BLOK REKLAMOWY: między ofertami (co 8 pozycji)
@@ -37,9 +37,8 @@ window.FD_ADS = {
     } catch(e){ return false; }
   }
 
-  // Wstaw skrypt AdSense (jeśli nie placeholder i klient skonfigurowany)
+  // Wstaw skrypt AdSense (potrzebny do weryfikacji witryny przez Google)
   function loadAdSenseScript(){
-    if (window.FD_ADS.PLACEHOLDER) return;
     if (!window.FD_ADS.CLIENT || window.FD_ADS.CLIENT.includes('XXXX')) return;
     if (document.querySelector('script[data-fd-adsense]')) return;
     const s = document.createElement('script');

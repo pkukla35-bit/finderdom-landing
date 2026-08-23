@@ -81,6 +81,14 @@
   .header-auth .a-cta:hover{transform:translateY(-1px)}
   @media (max-width:480px){.header-auth .a-login{display:none}}
 
+  /* Reklamy (AdSense) */
+  .fd-ad-slot{min-height:100px;display:block}
+  .fd-ad-placeholder{padding:24px 20px;background:linear-gradient(135deg,rgba(255,184,0,0.06),rgba(74,144,226,0.06));border:1px dashed rgba(255,184,0,0.3);border-radius:14px;text-align:center;color:#8ba3d4}
+  .fd-ad-ph-inner{display:inline-flex;align-items:center;gap:14px}
+  .fd-ad-ph-icon{font-size:26px}
+  .fd-ad-ph-title{font-size:13px;font-weight:900;color:#FFB800;letter-spacing:0.5px}
+  .fd-ad-ph-sub{font-size:11px;color:#8ba3d4;margin-top:2px}
+
   /* Hero */
   .hero{max-width:900px;width:100%;animation:fadeIn 1s ease 0.2s both}
   .badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,184,0,0.15);border:1px solid rgba(255,184,0,0.3);color:#FFB800;padding:8px 16px;border-radius:100px;font-size:12px;font-weight:800;letter-spacing:1px;margin-bottom:24px;text-transform:uppercase}
@@ -437,6 +445,9 @@
     <div class="preview-note">💡 Dane w przykładach są poglądowe. Prawdziwa analiza opiera się na aktualnych ofertach + Rejestrze Cen Nieruchomości (RCN) — od 13.02.2026 dostępnym bezpłatnie dla wszystkich.</div>
   </div>
 
+  <!-- AdSense: Na dole strony głównej -->
+  <div class="fd-ad-slot" data-slot="home-bottom" data-format="horizontal" style="max-width:1200px;width:100%;margin:40px 0"></div>
+
   <!-- Newsletter -->
   <div class="newsletter">
     <div class="gift">🎁</div>
@@ -548,6 +559,7 @@
     }
   })();
 </script>
+<script src="/scripts/ads.js"></script>
 
 </body>
 </html>

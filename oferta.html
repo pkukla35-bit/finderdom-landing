@@ -34,6 +34,14 @@
   .auth-widget .a-login:hover{color:#FFB800}
   .auth-widget .a-cta{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;padding:8px 16px;border-radius:10px;font-weight:900;font-size:13px;text-decoration:none;box-shadow:0 4px 12px rgba(255,184,0,0.25);transition:transform 0.15s ease}
   .auth-widget .a-cta:hover{transform:translateY(-1px)}
+
+  /* Reklamy (AdSense) */
+  .fd-ad-slot{max-width:1400px;margin:16px auto;padding:0 24px;min-height:100px;display:block}
+  .fd-ad-placeholder{padding:24px 20px;background:linear-gradient(135deg,rgba(255,184,0,0.06),rgba(74,144,226,0.06));border:1px dashed rgba(255,184,0,0.3);border-radius:14px;text-align:center;color:#8ba3d4}
+  .fd-ad-ph-inner{display:inline-flex;align-items:center;gap:14px}
+  .fd-ad-ph-icon{font-size:26px}
+  .fd-ad-ph-title{font-size:13px;font-weight:900;color:#FFB800;letter-spacing:0.5px}
+  .fd-ad-ph-sub{font-size:11px;color:#8ba3d4;margin-top:2px}
   .cta-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:10px 18px;border-radius:10px;text-decoration:none;font-size:13px;text-transform:uppercase}
 
   /* Breadcrumb */
@@ -177,6 +185,9 @@
   <a href="/">Strona główna</a> › <a href="/szukaj.html">Wyszukiwarka</a> › <span id="bcType">Oferta</span>
 </div>
 
+<!-- AdSense: Nad ofertą -->
+<div class="fd-ad-slot" data-slot="oferta-top" data-format="horizontal"></div>
+
 <!-- Loading state -->
 <div id="loadingState" style="max-width:1400px;margin:0 auto;padding:80px 24px;text-align:center;color:#8ba3d4">
   <div style="font-size:48px;margin-bottom:16px">⏳</div>
@@ -294,6 +305,9 @@
   </aside>
 
 </div>
+
+<!-- AdSense: Pod ofertą -->
+<div class="fd-ad-slot" data-slot="oferta-bottom" data-format="horizontal"></div>
 
 <!-- Similar offers (dynamic) -->
 <div class="similar-section" id="similarSection" style="display:none">
@@ -785,6 +799,8 @@ loadOffer();
   }
 })();
 </script>
+<!-- AdSense: Pod ofertą (wstawia się dynamicznie z JS w loadOffer) -->
+<script src="/scripts/ads.js"></script>
 
 </body>
 </html>

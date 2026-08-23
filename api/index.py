@@ -420,7 +420,8 @@ async def stripe_webhook(request: Request):
         return {"received": True}
 
     if event["type"] == "checkout.session.completed":
-        s = event["data"]["object"]
+        s_obj = event["data"]["object"]
+        s = s_obj.to_dict() if hasattr(s_obj, "to_dict") else dict(s_obj)
         if s.get("payment_status") != "paid":
             return {"received": True}
         md = s.get("metadata") or {}
@@ -428,9 +429,10 @@ async def stripe_webhook(request: Request):
         plan = md.get("plan")
         if plan not in PLANS or not user_id:
             return {"received": True}
+        customer = s.get("customer")
         await apply_payment(
             user_id, plan, s["id"], int(s.get("amount_total") or 0),
-            s.get("customer") if isinstance(s.get("customer"), str) else None,
+            customer if isinstance(customer, str) else None,
         )
     return {"received": True}
 
@@ -447,9 +449,11 @@ async def verify_payment(session_id: str, user: dict = Depends(current_user)):
         return stripe.checkout.Session.retrieve(session_id)
 
     try:
-        session = await asyncio.to_thread(retrieve)
+        session_obj = await asyncio.to_thread(retrieve)
     except stripe.error.StripeError as e:
         raise HTTPException(502, f"Stripe error: {str(e)[:200]}")
+
+    session = session_obj.to_dict() if hasattr(session_obj, "to_dict") else dict(session_obj)
 
     if session.get("payment_status") != "paid":
         return {"paid": False, "status": session.get("payment_status")}
@@ -461,9 +465,10 @@ async def verify_payment(session_id: str, user: dict = Depends(current_user)):
     if plan not in PLANS:
         raise HTTPException(400, "Nieprawidłowy plan w sesji")
 
+    customer = session.get("customer")
     await apply_payment(
         str(user["_id"]), plan, session["id"], int(session.get("amount_total") or 0),
-        session.get("customer") if isinstance(session.get("customer"), str) else None,
+        customer if isinstance(customer, str) else None,
     )
 
     refreshed = await (await users_collection()).find_one({"_id": user["_id"]})

@@ -10,16 +10,25 @@ Endpoints:
   GET  /api/payments/verify
   GET  /api/invoices
   GET  /api/invoices/{id}/pdf
+  GET  /api/leads/mine
+  POST /api/leads/claim
 """
 import asyncio
 import io
 import os
 import re
+import secrets
+import logging
+import ipaddress
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
+from html import escape
+from html.parser import HTMLParser
 from typing import Optional
+from urllib.parse import urlparse
 
 import bcrypt
+import httpx
 import jwt
 import stripe
 from bson import ObjectId
@@ -53,6 +62,14 @@ if STRIPE_SECRET_KEY:
 PLANS = {"individual": 35, "business": 199}  # gross PLN per 30 days
 PLAN_LABELS = {"individual": "Osobisty", "business": "Firmowy"}
 VALUATION_PRICE = 32  # PLN one-time per property valuation PDF
+
+# Email (Emergent managed Resend)
+EMAIL_BASE_URL = "https://integrations.emergentagent.com"  # constant, NOT env
+EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY", "")
+EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "FinderDom.pl")
+EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO", "")
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="FinderDom API", docs_url="/docs", redoc_url=None)
 
@@ -112,6 +129,12 @@ async def ensure_indexes():
         pass
     try:
         await db.invoices.create_index("stripe_session_id", unique=True, sparse=True)
+    except Exception:
+        pass
+    try:
+        await db.leads.create_index("claim_token", unique=True, sparse=True)
+        await db.leads.create_index([("city", 1), ("created_at", -1)])
+        await db.leads.create_index([("claimed_by", 1), ("created_at", -1)])
     except Exception:
         pass
     # Note: _id is unique automatically; do NOT create additional unique index on it.
@@ -227,6 +250,242 @@ async def next_invoice_number() -> str:
         return_document=ReturnDocument.AFTER,
     )
     return f"FV/{now.year}/{now.month:02d}/{doc['seq']:03d}"
+
+
+# --- Email helpers (Emergent managed Resend) ---
+_EMAIL_SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
+_EMAIL_CRED_ASK = ("reply with your password", "reply with the code", "send your password",
+                   "cvv", "send us your password", "enter your password below",
+                   "confirm your card number", "your full card number", "seed phrase",
+                   "recovery phrase", "verify your card", "social security number",
+                   "confirm your bank details")
+_EMAIL_HOSTISH = re.compile(r"\b(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,})", re.I)
+
+
+def _email_host_ok(host: str) -> bool:
+    if not host or "xn--" in host:
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return False
+    except ValueError:
+        pass
+    return not any(host == s or host.endswith("." + s) for s in _EMAIL_SHORTENERS)
+
+
+def _email_same_site(shown: str, real: str) -> bool:
+    return shown == real or real.endswith("." + shown) or shown.endswith("." + real)
+
+
+class _EmailScan(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.tags, self.urls, self.anchors = set(), [], []
+        self._href, self._text = None, []
+    def handle_starttag(self, tag, attrs):
+        self.tags.add(tag.lower())
+        self.urls += [v for k, v in attrs if k.lower() in ("href", "src") and v]
+        if tag.lower() == "a":
+            self._href = dict((k.lower(), v) for k, v in attrs).get("href")
+            self._text = []
+    def handle_data(self, data):
+        if self._href is not None:
+            self._text.append(data)
+    def handle_endtag(self, tag):
+        if tag.lower() == "a" and self._href is not None:
+            self.anchors.append((self._href, "".join(self._text)))
+            self._href, self._text = None, []
+
+
+def _assert_safe_email(subject: str, html: str) -> None:
+    scan = _EmailScan(); scan.feed(html)
+    if scan.tags & {"form", "input", "textarea", "select"}:
+        raise ValueError("No forms or input fields in email (G2)")
+    body = f"{subject}\n{html}".lower()
+    for p in _EMAIL_CRED_ASK:
+        if p in body:
+            raise ValueError(f"Email asks for credentials: {p!r} (G2)")
+    for url in scan.urls:
+        low = url.strip().lower()
+        if low.startswith(("mailto:", "tel:", "cid:", "#")):
+            continue
+        if not low.startswith("https://"):
+            raise ValueError(f"Email links must be absolute https: {url!r} (G3)")
+        host = urlparse(low).hostname or ""
+        if not _email_host_ok(host) or urlparse(low).username is not None:
+            raise ValueError(f"Blocked URL: {url!r} (G3)")
+    for href, text in scan.anchors:
+        real = urlparse(href.strip().lower()).hostname or ""
+        if not real:
+            continue
+        for m in _EMAIL_HOSTISH.finditer(text):
+            if not _email_same_site(m.group(1).lower(), real):
+                raise ValueError(f"Anchor text {m.group(1)!r} != host {real!r} (G3)")
+
+
+async def send_email(*, to: str, subject: str, html: str) -> Optional[str]:
+    """Send a transactional email via Emergent Resend. Returns provider id or None on failure."""
+    if not EMAIL_KEY:
+        logger.warning("EMERGENT_EMAIL_KEY not configured; skipping email to %s", to)
+        return None
+    _assert_safe_email(subject, html)
+    payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+    if EMAIL_REPLY_TO:
+        payload["contact_email"] = EMAIL_REPLY_TO
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{EMAIL_BASE_URL}/api/v1/email/send",
+                headers={"X-Email-Key": EMAIL_KEY},
+                json=payload,
+            )
+        resp.raise_for_status()
+        return resp.json().get("id")
+    except Exception as e:
+        logger.error("Email send failed to %s: %s", to, str(e)[:200])
+        return None
+
+
+# --- Lead notifications & claim ---
+async def _notify_leads_to_businesses(lead_id: str, lead: dict) -> None:
+    """Send email to all active Firmowy subscribers about a new lead. First-come-first-served claim."""
+    try:
+        db = database()
+        now = datetime.now(timezone.utc)
+        cursor = db.users.find({
+            "tier": "business",
+            "expires_at": {"$gt": now},
+        })
+        recipients = []
+        async for u in cursor:
+            e = (u.get("email") or "").strip()
+            if e:
+                recipients.append(e)
+        if not recipients:
+            logger.info("No active Firmowy subscribers to notify")
+            return
+
+        city = escape(lead.get("city") or "—")
+        district = escape(lead.get("district") or "")
+        loc = f"{city}" + (f", {district}" if district else "")
+        typ_map = {"apartment": "Mieszkanie", "house": "Dom", "plot": "Działka"}
+        typ = typ_map.get(lead.get("type", ""), escape(lead.get("type") or "Nieruchomość"))
+        area = f"{int(lead['area_m2'])} m²" if lead.get("area_m2") else "—"
+        reason_map = {"ciekawosc": "Sprawdza z ciekawości", "sprzedaz": "Chce sprzedać",
+                      "agent": "Agent nieruchomości"}
+        reason = reason_map.get(lead.get("reason", ""), "—")
+        claim_url = f"{DOMAIN}/lead-claim?token={lead.get('claim_token','')}"
+
+        subject = f"🔥 Nowy lead: {loc} ({typ}, {area})"
+        html = f"""<table role="presentation" width="100%" style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;background:#f7f7f9">
+<tr><td style="padding:24px">
+  <div style="background:#0b1220;color:#fff;padding:20px 24px;border-radius:14px 14px 0 0">
+    <h1 style="margin:0;font-size:22px;color:#FFB800">📞 Nowy klient chce wyceny</h1>
+    <p style="margin:8px 0 0;color:#c5d0e6;font-size:13px">FinderDom.pl · Subskrypcja Firmowa</p>
+  </div>
+  <div style="background:#fff;padding:24px;border-radius:0 0 14px 14px;border:1px solid #e5e7eb;border-top:none">
+    <p style="margin:0 0 16px;color:#1f2937;font-size:15px">Klient właśnie zapłacił za wycenę i wyraził zgodę na kontakt z profesjonalnym agentem nieruchomości.</p>
+    <table role="presentation" width="100%" style="border-collapse:collapse;margin:16px 0">
+      <tr><td style="padding:8px 0;color:#6b7280;font-size:13px;width:40%">Lokalizacja:</td>
+          <td style="padding:8px 0;color:#111827;font-weight:600;font-size:14px">{loc}</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;font-size:13px">Typ nieruchomości:</td>
+          <td style="padding:8px 0;color:#111827;font-weight:600;font-size:14px">{typ}</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;font-size:13px">Powierzchnia:</td>
+          <td style="padding:8px 0;color:#111827;font-weight:600;font-size:14px">{area}</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;font-size:13px">Powód wyceny:</td>
+          <td style="padding:8px 0;color:#111827;font-weight:600;font-size:14px">{reason}</td></tr>
+    </table>
+    <div style="background:#fef3c7;border:2px solid #FFB800;border-radius:12px;padding:16px;margin:20px 0;text-align:center">
+      <p style="margin:0 0 8px;color:#78350f;font-size:13px;font-weight:600">⚡ WYŁĄCZNOŚĆ · Pierwszy który zabookuje wygrywa</p>
+      <p style="margin:0;color:#111827;font-size:14px">Numer telefonu klienta pokaże się TYLKO pierwszemu biuru, które kliknie poniższy przycisk.</p>
+    </div>
+    <div style="text-align:center;margin:24px 0">
+      <a href="{claim_url}" style="display:inline-block;background:#FFB800;color:#0b1220;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px">🎯 Zabookuj tego leada</a>
+    </div>
+    <p style="margin:16px 0 0;color:#6b7280;font-size:12px;text-align:center">Ten link zadziała tylko dla zalogowanego konta Firmowego z aktywną subskrypcją.</p>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
+    <p style="margin:0;color:#9ca3af;font-size:11px;text-align:center">Wysłane przez {escape(EMAIL_FROM_NAME)}. Nie prosimy o hasła ani dane karty w emailach.</p>
+  </div>
+</td></tr></table>"""
+
+        for r in recipients:
+            try:
+                await send_email(to=r, subject=subject, html=html)
+            except Exception as e:
+                logger.error("Notify lead %s to %s failed: %s", lead_id, r, str(e)[:100])
+    except Exception as e:
+        logger.error("Notify leads to businesses failed: %s", str(e)[:200])
+
+
+@app.get("/api/leads/mine")
+async def list_my_leads(user: dict = Depends(current_user)):
+    """List leads claimed by the current Firmowy user."""
+    if effective_tier(user) != "business":
+        raise HTTPException(403, "Tylko subskrypcja Firmowa")
+    cursor = database().leads.find({"claimed_by": user["_id"]}).sort("claimed_at", -1).limit(100)
+    out = []
+    async for l in cursor:
+        out.append({
+            "id": str(l["_id"]),
+            "phone": l.get("phone"),
+            "email": l.get("email"),
+            "city": l.get("city"),
+            "district": l.get("district"),
+            "type": l.get("type"),
+            "area_m2": l.get("area_m2"),
+            "reason": l.get("reason"),
+            "claimed_at": (l.get("claimed_at") or l.get("created_at")).isoformat() if l.get("claimed_at") or l.get("created_at") else None,
+        })
+    return {"leads": out}
+
+
+@app.post("/api/leads/claim")
+async def claim_lead(token: str, user: dict = Depends(current_user)):
+    """Atomically claim a lead. First-come-first-served. Returns phone number if success."""
+    if effective_tier(user) != "business":
+        raise HTTPException(403, "Tylko subskrypcja Firmowa może rezerwować leady")
+    if not token or len(token) < 10:
+        raise HTTPException(400, "Nieprawidłowy token")
+    now = datetime.now(timezone.utc)
+    # Atomic: only claim if not already claimed
+    updated = await database().leads.find_one_and_update(
+        {"claim_token": token, "claimed_by": None},
+        {"$set": {"claimed_by": user["_id"], "claimed_at": now, "status": "claimed"}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if updated:
+        return {
+            "success": True,
+            "lead": {
+                "phone": updated.get("phone"),
+                "email": updated.get("email"),
+                "city": updated.get("city"),
+                "district": updated.get("district"),
+                "type": updated.get("type"),
+                "area_m2": updated.get("area_m2"),
+                "reason": updated.get("reason"),
+            }
+        }
+    # Check if lead exists at all
+    existing = await database().leads.find_one({"claim_token": token})
+    if not existing:
+        raise HTTPException(404, "Lead nie istnieje")
+    # Already claimed - is it by this user?
+    if str(existing.get("claimed_by")) == str(user["_id"]):
+        return {
+            "success": True,
+            "already_yours": True,
+            "lead": {
+                "phone": existing.get("phone"),
+                "email": existing.get("email"),
+                "city": existing.get("city"),
+                "district": existing.get("district"),
+                "type": existing.get("type"),
+                "area_m2": existing.get("area_m2"),
+                "reason": existing.get("reason"),
+            }
+        }
+    raise HTTPException(409, "Ten lead został już zarezerwowany przez inne biuro")
 
 
 # --- Auth endpoints ---
@@ -434,20 +693,30 @@ async def stripe_webhook(request: Request):
                 prop = _json.loads(md.get("property_json") or "{}")
                 phone = (prop.get("phone") or "").strip()
                 if phone:
-                    await database().leads.insert_one({
+                    claim_token = secrets.token_urlsafe(24)
+                    lead_doc = {
                         "phone": phone,
                         "email": md.get("email", ""),
-                        "city": prop.get("city", ""),
-                        "district": prop.get("district", ""),
+                        "city": (prop.get("city") or "").strip(),
+                        "district": (prop.get("district") or "").strip(),
                         "type": prop.get("type", ""),
                         "area_m2": prop.get("area_m2"),
                         "reason": prop.get("reason", ""),
                         "session_id": s.get("id"),
                         "status": "new",
+                        "claim_token": claim_token,
+                        "claimed_by": None,
+                        "claimed_at": None,
                         "created_at": datetime.now(timezone.utc),
-                    })
+                    }
+                    result = await database().leads.insert_one(lead_doc)
+                    # Notify all Firmowy subscribers (await - Vercel serverless kills after response)
+                    try:
+                        await _notify_leads_to_businesses(str(result.inserted_id), lead_doc)
+                    except Exception as e:
+                        logger.error(f"Lead notify failed: {e}")
             except Exception as e:
-                print(f"[WEBHOOK] Lead save failed: {e}")
+                logger.error(f"Lead save failed: {e}")
             return {"received": True}
 
         user_id = md.get("user_id")

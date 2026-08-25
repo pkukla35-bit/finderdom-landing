@@ -4,3 +4,5 @@ bcrypt>=4.2,<5
 PyJWT>=2.9,<3
 stripe>=12.0.0
 reportlab>=4.2,<5
+httpx>=0.27.0
+requests>=2.31.0

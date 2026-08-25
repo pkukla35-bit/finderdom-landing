@@ -264,6 +264,10 @@
               <small style="color:#c5d0e6;font-size:12px;margin-top:8px;display:block;line-height:1.5">
                 ✨ <strong style="color:#FFB800">Bonus:</strong> Zostaw numer, a profesjonalny agent nieruchomości wybrany przez nas do Twojej okolicy zadzwoni do Ciebie z bezpłatną konsultacją.
               </small>
+              <label id="vPhoneConsentWrap" style="display:none;margin-top:12px;align-items:flex-start;gap:8px;cursor:pointer;color:#c5d0e6;font-size:11px;line-height:1.5">
+                <input type="checkbox" id="vPhoneConsent" style="accent-color:#FFB800;margin-top:2px;flex-shrink:0">
+                <span>Wyrażam zgodę na przekazanie mojego numeru telefonu współpracującemu z FinderDom.pl biuru nieruchomości w celu kontaktu z bezpłatną konsultacją dot. wyceny mojej nieruchomości. Zgoda jest dobrowolna i mogę ją wycofać w każdej chwili pisząc na kontakt@finderdom.pl (art. 6 ust. 1 lit. a RODO).</span>
+              </label>
             </div>
           </div>
           <div class="field field-full">
@@ -336,6 +340,13 @@
 
     const val = (id) => document.getElementById(id).value.trim();
     const num = (id) => { const v = parseInt(document.getElementById(id).value); return isNaN(v) ? null : v; };
+    const phoneRaw = (document.getElementById('vPhone') || {}).value || '';
+    const phoneClean = phoneRaw.replace(/[\s\-]/g, '');
+    if (phoneClean && !document.getElementById('vPhoneConsent').checked) {
+      errBox.textContent = 'Aby podać numer telefonu, zaznacz zgodę na kontakt z biurem nieruchomości.';
+      errBox.className = 'val-err show';
+      return false;
+    }
     const property = {
       type: val('vType'),
       market_type: val('vMarket'),
@@ -357,7 +368,7 @@
       utilities: val('vUtilities'),
       road_access: val('vRoadAccess'),
       price: null,
-      phone: (document.getElementById('vPhone') || {}).value || '',
+      phone: phoneClean,
       reason: (document.querySelector('input[name="vReason"]:checked') || {}).value || '',
     };
 
@@ -382,6 +393,19 @@
     }
     return false;
   }
+
+  // Show consent checkbox only when user starts typing phone
+  document.addEventListener('DOMContentLoaded', function() {
+    const phoneEl = document.getElementById('vPhone');
+    const consentWrap = document.getElementById('vPhoneConsentWrap');
+    if (phoneEl && consentWrap) {
+      const toggleConsent = () => {
+        consentWrap.style.display = phoneEl.value.trim() ? 'flex' : 'none';
+      };
+      phoneEl.addEventListener('input', toggleConsent);
+      phoneEl.addEventListener('blur', toggleConsent);
+    }
+  });
 </script>
 </body>
 </html>

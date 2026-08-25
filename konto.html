@@ -128,6 +128,7 @@
       <button type="button" class="tab active" data-tab="profile">👤 Profil</button>
       <button type="button" class="tab" data-tab="subscription">💎 Subskrypcja</button>
       <button type="button" class="tab" data-tab="invoices">📄 Faktury</button>
+      <button type="button" class="tab biz-only-tab" data-tab="leads" style="display:none">📞 Leady</button>
       <button type="button" class="tab" data-tab="favorites">❤️ Ulubione</button>
     </div>
 
@@ -212,6 +213,20 @@
       </div>
     </div>
 
+    <!-- Leady (Firmowy only) -->
+    <div class="panel" id="panel-leads">
+      <div class="card">
+        <h2>📞 Twoje leady</h2>
+        <p style="color:#a3b3d1;font-size:13px;margin-bottom:16px">Klienci, którzy zapłacili za wycenę i zgodzili się na kontakt. Zadzwoń jak najszybciej — pierwszy który zabookuje wygrywa.</p>
+        <div id="leadsList">
+          <div class="placeholder-box">
+            <div class="emoji">📞</div>
+            <h3>Ładowanie...</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Ulubione -->
     <div class="panel" id="panel-favorites">
       <div class="card">
@@ -272,6 +287,10 @@
         document.querySelectorAll('.biz-only').forEach(el => el.style.display = '');
         document.getElementById('pCompany').textContent = u.company_name || '—';
         document.getElementById('pNip').textContent = u.nip || '—';
+      }
+      // Show Leady tab only for active Firmowy subscribers
+      if (u.tier === 'business'){
+        document.querySelectorAll('.biz-only-tab').forEach(el => el.style.display = '');
       }
 
       tierBadge(u.tier);
@@ -382,8 +401,49 @@
       tab.classList.add('active');
       document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
       if (tab.dataset.tab === 'invoices') loadInvoices();
+      if (tab.dataset.tab === 'leads') loadLeads();
     });
   });
+
+  async function loadLeads(){
+    const list = document.getElementById('leadsList');
+    try {
+      const r = await fetch('/api/leads/mine', { headers: { 'Authorization': 'Bearer ' + token }});
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || 'Błąd');
+      if (!data.leads || data.leads.length === 0){
+        list.innerHTML = `<div class="placeholder-box">
+          <div class="emoji">📞</div>
+          <h3>Brak zabookowanych leadów</h3>
+          <p>Gdy klient zapłaci za wycenę i zaznaczy zgodę,<br>otrzymasz email z linkiem do rezerwacji.</p>
+        </div>`;
+        return;
+      }
+      const typeMap = {apartment:'Mieszkanie', house:'Dom', plot:'Działka'};
+      const reasonMap = {ciekawosc:'Ciekawość', sprzedaz:'Chce sprzedać', agent:'Agent'};
+      list.innerHTML = data.leads.map(l => {
+        const areaTxt = l.area_m2 ? Math.round(l.area_m2) + ' m²' : '—';
+        const locTxt = (l.city || '—') + (l.district ? ', ' + l.district : '');
+        const phoneClean = (l.phone || '').replace(/\s+/g,'');
+        return `<div class="invoice-item" style="flex-direction:column;align-items:stretch;gap:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div class="inv-info">
+              <div class="num">📞 ${l.phone || '—'}</div>
+              <div class="meta">${locTxt} · ${typeMap[l.type] || l.type || ''} · ${areaTxt}</div>
+            </div>
+            <a class="inv-dl" href="tel:${phoneClean}" style="background:#22c55e;color:#fff">📞 Zadzwoń</a>
+          </div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#a3b3d1;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05)">
+            <span>✉️ ${l.email || '—'}</span>
+            <span>🎯 ${reasonMap[l.reason] || '—'}</span>
+            <span>🕐 ${fmtDate(l.claimed_at)}</span>
+          </div>
+        </div>`;
+      }).join('');
+    } catch(e){
+      list.innerHTML = `<div class="placeholder-box"><div class="emoji">⚠️</div><h3>Błąd ładowania</h3><p>${e.message}</p></div>`;
+    }
+  }
 
   // Buy buttons
   document.querySelectorAll('.p-btn[data-buy]').forEach(b => {

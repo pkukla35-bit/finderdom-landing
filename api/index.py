@@ -695,6 +695,7 @@ async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
         "max_floor": prop.get("max_floor"),
         "build_year": prop.get("build_year"),
         "standard": str(prop.get("standard", ""))[:20],
+        "elevator": str(prop.get("elevator", ""))[:10],
         "building_type": str(prop.get("building_type", ""))[:30],
         "price": int(prop.get("price") or 0) or None,
     }
@@ -973,10 +974,12 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     story.append(Paragraph(f"<b>Adres:</b> {loc}", normal))
     story.append(Paragraph(f"<b>Typ:</b> {(l.get('type') or '').capitalize()} · <b>Rynek:</b> {(l.get('market_type') or '—').capitalize()}", normal))
 
+    elevator_label = {"tak": "Tak", "nie": "Nie", "": "—"}.get(l.get("elevator", ""), "—")
     specs_data = [
         ["Powierzchnia", f"{area} m²", "Pokoje", str(l.get("rooms") or "—")],
         ["Piętro", f"{l.get('floor','—')}/{l.get('max_floor','—')}" if l.get('max_floor') else str(l.get('floor','—')), "Rok budowy", str(l.get("build_year") or "—")],
         ["Standard", (l.get("standard") or "—").capitalize(), "Budynek", (l.get("building_type") or "—").capitalize()],
+        ["Winda", elevator_label, "Typ", (l.get("type") or "—").capitalize()],
     ]
     specs_tbl = Table(specs_data, colWidths=[35*mm, 45*mm, 35*mm, 45*mm])
     specs_tbl.setStyle(TableStyle([

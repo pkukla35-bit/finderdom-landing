@@ -163,6 +163,14 @@
               <option value="do_remontu">Do remontu</option>
             </select>
           </div>
+          <div class="field" id="vElevatorField">
+            <label class="label" for="vElevator">Winda</label>
+            <select class="select" id="vElevator">
+              <option value="">— nie wiem —</option>
+              <option value="tak">Tak, jest winda</option>
+              <option value="nie">Nie ma windy</option>
+            </select>
+          </div>
           <div class="field field-full">
             <label class="label" for="vPrice">Twoja proponowana cena sprzedaży (zł, opcjonalnie)</label>
             <input class="input" id="vPrice" type="number" min="0" placeholder="np. 650000 — sprawdzimy czy jest realna">
@@ -196,8 +204,14 @@
 </div>
 
 <script>
-  async function submitValuation(e){
-    e.preventDefault();
+  // Ukryj pole "Winda" gdy typ to Dom lub Działka
+  document.getElementById('vType').addEventListener('change', function(){
+    const elFld = document.getElementById('vElevatorField');
+    if (this.value === 'mieszkanie') elFld.style.display = '';
+    else elFld.style.display = 'none';
+  });
+
+  async function submitValuation(e){    e.preventDefault();
     const errBox = document.getElementById('valErr');
     const btn = document.getElementById('vSubmit');
     errBox.className = 'val-err';
@@ -229,6 +243,7 @@
       max_floor: num('vMaxFloor'),
       build_year: num('vYear'),
       standard: val('vStandard'),
+      elevator: val('vElevator'),
       price: num('vPrice'),
     };
 

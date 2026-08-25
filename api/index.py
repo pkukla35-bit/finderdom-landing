@@ -1442,16 +1442,28 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     ]))
     story.append(val_tbl)
     story.append(Spacer(1, 4*mm))
+    price_line = ""
+    if l.get("price") and ppm2_this:
+        price_line = f"<b>Cena ofertowa (Twoja):</b> {fmt_pln(l.get('price'))} ({fmt_pm2(ppm2_this)})<br/>"
     story.append(Paragraph(f"<b>Zakres cen za m²:</b> {fmt_pm2(ppm2_local*0.92)} — <b>{fmt_pm2(ppm2_local)}</b> — {fmt_pm2(ppm2_local*1.08)}<br/>"
-                           f"<b>Cena ofertowa:</b> {fmt_pln(l.get('price'))} ({fmt_pm2(ppm2_this)})<br/>"
+                           f"{price_line}"
                            f"<b>Analiza w promieniu:</b> {(str(used_radius) + ' km') if used_radius else 'całe miasto'} · {len(local_offers)} porównywalnych ofert (tylko sprzedaż)<br/>"
                            f"<b>Szacowana wartość RCN (transakcje):</b> {fmt_pm2(ppm2_rcn)}", normal))
     story.append(Spacer(1, 6*mm))
 
-    # Verdict
-    story.append(Paragraph(verdict_text, verdict_p))
-    story.append(Spacer(1, 3*mm))
-    story.append(Paragraph(f"<b>Rekomendacja:</b> {recommendation}", normal))
+    # Verdict — pokaż tylko gdy jest cena ofertowa (bo bez niej nie ma z czego porównywać)
+    if l.get("price") and ppm2_this and ppm2_local:
+        story.append(Paragraph(verdict_text, verdict_p))
+        story.append(Spacer(1, 3*mm))
+        story.append(Paragraph(f"<b>Rekomendacja:</b> {recommendation}", normal))
+    else:
+        # Brak ceny (klient wyceniał własną nieruchomość) — pokaż inną rekomendację
+        story.append(Paragraph(
+            f"<b>Wskazówka:</b> Jeśli chcesz sprzedać nieruchomość, "
+            f"celuj w przedział <b>{fmt_pln(est_low)} – {fmt_pln(est_high)}</b>. "
+            f"Cena wywoławcza w środku widełek (~{fmt_pln(est_mid)}) zwykle sprzedaje się najszybciej.",
+            normal
+        ))
 
     # === Page 2 ===
     story.append(PageBreak())

@@ -23,6 +23,7 @@
     { "source": "/platnosc-sukces", "destination": "/platnosc-sukces.html" },
     { "source": "/platnosc-anulowana", "destination": "/platnosc-anulowana.html" },
     { "source": "/wycena-sukces", "destination": "/wycena-sukces.html" },
+    { "source": "/wycena", "destination": "/wycena.html" },
     { "source": "/regulamin", "destination": "/regulamin.html" },
     { "source": "/polityka-prywatnosci", "destination": "/polityka-prywatnosci.html" }
   ],

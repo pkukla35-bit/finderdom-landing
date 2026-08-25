@@ -660,6 +660,81 @@ class ValuationCheckoutReq(BaseModel):
     email: str
 
 
+class ValuationCheckoutCustomReq(BaseModel):
+    property: dict
+    email: str
+
+
+@app.post("/api/valuation/checkout-custom")
+async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
+    """Wycena wprowadzona ręcznie przez właściciela (bez listing_id)."""
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(503, "Stripe niedostępny")
+    email = clean_email(body.email)
+    prop = body.property or {}
+
+    # Walidacja
+    if not prop.get("city"):
+        raise HTTPException(400, "Podaj miasto")
+    if not prop.get("area_m2"):
+        raise HTTPException(400, "Podaj metraż")
+    if not prop.get("type"):
+        raise HTTPException(400, "Wybierz typ nieruchomości")
+
+    # Sanityzacja i skrócenie
+    safe_prop = {
+        "type": str(prop.get("type", ""))[:20],
+        "transaction": "sale",
+        "market_type": str(prop.get("market_type", "wtorny"))[:20],
+        "city": str(prop.get("city", ""))[:60],
+        "district": str(prop.get("district", ""))[:60],
+        "location": str(prop.get("location", ""))[:120],
+        "area_m2": float(prop.get("area_m2") or 0),
+        "rooms": int(prop.get("rooms") or 0) or None,
+        "floor": prop.get("floor"),
+        "max_floor": prop.get("max_floor"),
+        "build_year": prop.get("build_year"),
+        "standard": str(prop.get("standard", ""))[:20],
+        "building_type": str(prop.get("building_type", ""))[:30],
+        "price": int(prop.get("price") or 0) or None,
+    }
+    if safe_prop["price"] and safe_prop["area_m2"]:
+        safe_prop["price_pm2"] = int(safe_prop["price"] / safe_prop["area_m2"])
+
+    import json as _json
+    prop_json = _json.dumps(safe_prop, ensure_ascii=False)
+    if len(prop_json) > 490:
+        raise HTTPException(400, "Za dużo danych - skróć adres/lokalizację")
+
+    def create():
+        return stripe.checkout.Session.create(
+            mode="payment",
+            payment_method_types=["card", "blik"],
+            line_items=[{
+                "price_data": {
+                    "currency": "pln",
+                    "unit_amount": money_grosze(VALUATION_PRICE),
+                    "product_data": {
+                        "name": "FinderDom.pl — Wycena nieruchomości (PDF)",
+                        "description": f"Wycena: {safe_prop['city']}, {int(safe_prop['area_m2'])} m²",
+                    },
+                },
+                "quantity": 1,
+            }],
+            customer_email=email,
+            metadata={"type": "valuation_custom", "property_json": prop_json, "email": email},
+            success_url=f"{DOMAIN}/wycena-sukces?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{DOMAIN}/wycena",
+            locale="pl",
+        )
+
+    try:
+        session = await asyncio.to_thread(create)
+    except stripe.error.StripeError as e:
+        raise HTTPException(502, f"Stripe error: {str(e)[:200]}")
+    return {"url": session.url}
+
+
 @app.post("/api/valuation/checkout")
 async def valuation_checkout(body: ValuationCheckoutReq):
     if not STRIPE_SECRET_KEY:
@@ -716,12 +791,11 @@ async def valuation_download(session_id: str):
     if session.get("payment_status") != "paid":
         raise HTTPException(402, "Płatność jeszcze niezakończona")
     md = session.get("metadata") or {}
-    if md.get("type") != "valuation":
+    val_type = md.get("type")
+    if val_type not in ("valuation", "valuation_custom"):
         raise HTTPException(400, "Sesja nie jest wyceną")
 
-    listing_id = md.get("listing_id")
-
-    # Fetch public listings.json
+    # Fetch public listings.json (used dla obu typów)
     import urllib.request, json as _json
     try:
         with urllib.request.urlopen(f"{DOMAIN}/data/listings.json", timeout=15) as r:
@@ -730,15 +804,36 @@ async def valuation_download(session_id: str):
         raise HTTPException(500, f"Nie można pobrać listingów: {str(e)[:100]}")
 
     all_listings = data if isinstance(data, list) else data.get("listings", [])
-    listing = next((l for l in all_listings if str(l.get("id")) == str(listing_id)), None)
-    if not listing:
-        raise HTTPException(404, "Oferta nie znaleziona")
+
+    if val_type == "valuation":
+        listing_id = md.get("listing_id")
+        listing = next((l for l in all_listings if str(l.get("id")) == str(listing_id)), None)
+        if not listing:
+            raise HTTPException(404, "Oferta nie znaleziona")
+    else:
+        # Custom valuation - property is in metadata
+        listing = _json.loads(md.get("property_json") or "{}")
+        listing["id"] = f"custom-{session_id[-8:]}"
+        # Nie ma lat/lon - PDF użyje fallback (median by city)
+        # Znajdź comparable po city + type
+        comparable = [x for x in all_listings
+                      if x.get("city", "").lower() == (listing.get("city") or "").lower()
+                      and x.get("type") == listing.get("type")
+                      and x.get("price_pm2")
+                      and x.get("is_original") is not False]
+        if comparable:
+            # Compute median as fallback
+            sorted_p = sorted(x["price_pm2"] for x in comparable)
+            n = len(sorted_p)
+            median = sorted_p[n//2] if n % 2 == 1 else (sorted_p[n//2-1] + sorted_p[n//2]) / 2
+            listing["ai_rcn_pm2"] = int(median * 0.94)
 
     pdf_data = await asyncio.to_thread(build_valuation_pdf, listing, all_listings, md.get("email", ""))
+    fname = f"wycena-{listing.get('id','custom')}.pdf".replace("/", "-")
     return StreamingResponse(
         io.BytesIO(pdf_data),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="wycena-{listing_id}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
 
 
@@ -780,6 +875,16 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                     local_offers.append({**x, "_dist": round(d, 2)})
         used_radius = km
         local_offers.sort(key=lambda x: x["_dist"])
+
+    # Fallback: brak GPS - użyj comparable z tego samego miasta
+    if not local_offers:
+        for x in all_listings:
+            if (x.get("city", "").lower() == (l.get("city") or "").lower()
+                and x.get("type") == l.get("type")
+                and x.get("is_original") is not False
+                and x.get("price_pm2")):
+                local_offers.append({**x, "_dist": 0})
+        local_offers = local_offers[:10]
 
     ppm2_this = l.get("price_pm2") or 0
     ppm2_local = 0

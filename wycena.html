@@ -63,9 +63,19 @@
   .info-list li{font-size:13px;color:#c5d0e6;padding:8px 0 8px 28px;position:relative;line-height:1.5}
   .info-list li::before{content:"✓";position:absolute;left:6px;top:8px;color:#FFB800;font-weight:900;font-size:14px}
   .info-badge{display:inline-block;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#86efac;padding:4px 10px;border-radius:100px;font-size:11px;font-weight:800;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:12px}
+
+  /* Dynamiczne pokazywanie pól - default: mieszkanie */
+  body[data-vtype="mieszkanie"] .only-house{display:none !important}
+  body[data-vtype="mieszkanie"] .only-plot{display:none !important}
+  body[data-vtype="dom"] .only-flat:not(.only-house){display:none !important}
+  body[data-vtype="dom"] .only-plot:not(.only-house){display:none !important}
+  body[data-vtype="dzialka"] .only-flat:not(.only-plot){display:none !important}
+  body[data-vtype="dzialka"] .only-house:not(.only-plot){display:none !important}
+  body[data-vtype="dom"] .only-flat.only-house .only-flat{display:none}
+  body[data-vtype="mieszkanie"] .only-flat.only-house .only-house{display:none}
 </style>
 </head>
-<body>
+<body data-vtype="mieszkanie">
 <div class="bg-orbs"><div class="orb orb1"></div><div class="orb orb2"></div></div>
 
 <div class="topbar">
@@ -141,19 +151,23 @@
             <label class="label" for="vRooms">Liczba pokoi</label>
             <input class="input" id="vRooms" type="number" min="1" max="20" placeholder="np. 3">
           </div>
-          <div class="field">
-            <label class="label" for="vFloor">Piętro</label>
+          <div class="field only-flat only-house">
+            <label class="label" for="vFloor">Piętro <span class="only-flat" style="color:#8ba3d4">(mieszkanie)</span><span class="only-house" style="color:#8ba3d4">(liczba pięter)</span></label>
             <input class="input" id="vFloor" type="number" min="0" placeholder="np. 3">
           </div>
-          <div class="field">
+          <div class="field only-flat">
             <label class="label" for="vMaxFloor">Piętro budynku (max)</label>
             <input class="input" id="vMaxFloor" type="number" min="1" placeholder="np. 5">
           </div>
-          <div class="field">
+          <div class="field only-house only-plot">
+            <label class="label" for="vPlotArea">Rozmiar działki (m²)</label>
+            <input class="input" id="vPlotArea" type="number" min="0" placeholder="np. 500">
+          </div>
+          <div class="field only-flat only-house">
             <label class="label" for="vYear">Rok budowy</label>
             <input class="input" id="vYear" type="number" min="1800" max="2030" placeholder="np. 2015">
           </div>
-          <div class="field">
+          <div class="field only-flat only-house">
             <label class="label" for="vStandard">Standard</label>
             <select class="select" id="vStandard">
               <option value="">— wybierz —</option>
@@ -163,7 +177,7 @@
               <option value="do_remontu">Do remontu</option>
             </select>
           </div>
-          <div class="field" id="vElevatorField">
+          <div class="field only-flat" id="vElevatorField">
             <label class="label" for="vElevator">Winda</label>
             <select class="select" id="vElevator">
               <option value="">— nie wiem —</option>
@@ -171,9 +185,59 @@
               <option value="nie">Nie ma windy</option>
             </select>
           </div>
+          <div class="field only-flat only-house">
+            <label class="label" for="vBasement">Piwnica / komórka</label>
+            <select class="select" id="vBasement">
+              <option value="">— nie wiem —</option>
+              <option value="tak">Tak</option>
+              <option value="nie">Nie</option>
+            </select>
+          </div>
+          <div class="field only-flat only-house">
+            <label class="label" for="vParking">Miejsce postojowe</label>
+            <select class="select" id="vParking">
+              <option value="">— nie wiem —</option>
+              <option value="garaz">Garaż</option>
+              <option value="postojowe">Miejsce postojowe</option>
+              <option value="ulica">Ulica</option>
+              <option value="brak">Brak</option>
+            </select>
+          </div>
+          <div class="field only-house">
+            <label class="label" for="vGarden">Ogród</label>
+            <select class="select" id="vGarden">
+              <option value="">— nie wiem —</option>
+              <option value="tak">Tak</option>
+              <option value="nie">Nie</option>
+            </select>
+          </div>
+          <div class="field only-house">
+            <label class="label" for="vAttic">Strych</label>
+            <select class="select" id="vAttic">
+              <option value="">— nie wiem —</option>
+              <option value="uzytkowy">Użytkowy</option>
+              <option value="nieuzytkowy">Nieużytkowy</option>
+              <option value="brak">Brak</option>
+            </select>
+          </div>
           <div class="field field-full">
             <label class="label" for="vPrice">Twoja proponowana cena sprzedaży (zł, opcjonalnie)</label>
             <input class="input" id="vPrice" type="number" min="0" placeholder="np. 650000 — sprawdzimy czy jest realna">
+          </div>
+          <div class="field field-full">
+            <label class="label">Z jakiego powodu wyceniasz nieruchomość?</label>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
+              <label style="display:flex;align-items:center;gap:8px;padding:12px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:10px;cursor:pointer;font-size:13px;color:#c5d0e6">
+                <input type="radio" name="vReason" value="ciekawosc" style="accent-color:#FFB800"> Sprawdzam z ciekawości
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;padding:12px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:10px;cursor:pointer;font-size:13px;color:#c5d0e6">
+                <input type="radio" name="vReason" value="sprzedaz" style="accent-color:#FFB800"> Chcę sprzedać
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;padding:12px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:10px;cursor:pointer;font-size:13px;color:#c5d0e6">
+                <input type="radio" name="vReason" value="agent" style="accent-color:#FFB800"> Jestem agentem nieruchomości
+              </label>
+            </div>
+            <small style="color:#8ba3d4;font-size:11px;margin-top:6px;display:block">Nie wpływa na wycenę. Wpływa na to, co wyślemy Ci później.</small>
           </div>
           <div class="field field-full">
             <label class="label" for="vEmail">Twój email <span class="req">*</span></label>
@@ -206,9 +270,7 @@
 <script>
   // Ukryj pole "Winda" gdy typ to Dom lub Działka
   document.getElementById('vType').addEventListener('change', function(){
-    const elFld = document.getElementById('vElevatorField');
-    if (this.value === 'mieszkanie') elFld.style.display = '';
-    else elFld.style.display = 'none';
+    document.body.dataset.vtype = this.value;
   });
 
   async function submitValuation(e){    e.preventDefault();
@@ -244,7 +306,13 @@
       build_year: num('vYear'),
       standard: val('vStandard'),
       elevator: val('vElevator'),
+      basement: val('vBasement'),
+      parking: val('vParking'),
+      garden: val('vGarden'),
+      attic: val('vAttic'),
+      plot_area: num('vPlotArea'),
       price: num('vPrice'),
+      reason: (document.querySelector('input[name="vReason"]:checked') || {}).value || '',
     };
 
     const orig = btn.innerHTML;

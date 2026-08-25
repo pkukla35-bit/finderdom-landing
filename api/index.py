@@ -696,6 +696,12 @@ async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
         "build_year": prop.get("build_year"),
         "standard": str(prop.get("standard", ""))[:20],
         "elevator": str(prop.get("elevator", ""))[:10],
+        "basement": str(prop.get("basement", ""))[:10],
+        "parking": str(prop.get("parking", ""))[:20],
+        "garden": str(prop.get("garden", ""))[:10],
+        "attic": str(prop.get("attic", ""))[:20],
+        "plot_area": float(prop.get("plot_area") or 0) or None,
+        "reason": str(prop.get("reason", ""))[:20],
         "building_type": str(prop.get("building_type", ""))[:30],
         "price": int(prop.get("price") or 0) or None,
     }

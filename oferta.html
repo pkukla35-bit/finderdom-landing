@@ -569,6 +569,7 @@ function showError() {
 function renderOffer(l, all) {
   el('loadingState').style.display = 'none';
   el('offerContainer').style.display = 'grid';
+  window.__currentListingId = l.id;  // dla modalu Wycena Premium PDF
 
   // Meta / title
   document.title = `${l.title} — ${l.price_display} — FinderDom.pl`;
@@ -976,9 +977,9 @@ loadOffer();
       return;
     }
     const params = new URLSearchParams(location.search);
-    const listingId = params.get('id');
+    const listingId = params.get('id') || window.__currentListingId;
     if (!listingId){
-      errBox.textContent = 'Brak ID oferty.';
+      errBox.textContent = 'Brak ID oferty. Wróć na stronę wyszukiwarki i wybierz konkretną ofertę.';
       errBox.className = 'val-err show';
       return;
     }

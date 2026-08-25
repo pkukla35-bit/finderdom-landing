@@ -977,7 +977,7 @@ async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
     # Sanityzacja i skrócenie
     safe_prop = {
         "type": str(prop.get("type", ""))[:20],
-        "transaction": "sale",
+        "transaction": "sprzedaz",
         "market_type": str(prop.get("market_type", "wtorny"))[:20],
         "city": str(prop.get("city", ""))[:60],
         "district": str(prop.get("district", ""))[:60],
@@ -1118,15 +1118,31 @@ async def valuation_download(session_id: str):
         # Custom valuation - property is in metadata
         listing = _json.loads(md.get("property_json") or "{}")
         listing["id"] = f"custom-{session_id[-8:]}"
-        # Nie ma lat/lon - PDF użyje fallback (median by city)
-        # Znajdź comparable po city + type
-        comparable = [x for x in all_listings
-                      if x.get("city", "").lower() == (listing.get("city") or "").lower()
-                      and x.get("type") == listing.get("type")
-                      and x.get("price_pm2")
-                      and x.get("is_original") is not False]
+
+        # Geocode: użyj mediany lat/lon istniejących ofert w tym mieście+dzielnicy
+        # (SALE only, same type), żeby radius search miał punkt odniesienia
+        city_lc = (listing.get("city") or "").lower()
+        district_lc = (listing.get("district") or "").lower()
+        same_txn_type = [x for x in all_listings
+                         if x.get("city", "").lower() == city_lc
+                         and x.get("type") == listing.get("type")
+                         and x.get("transaction") == "sprzedaz"
+                         and x.get("is_original") is not False
+                         and x.get("lat") is not None and x.get("lon") is not None]
+        # Prefer dzielnica jeśli podana
+        center_pool = [x for x in same_txn_type if district_lc and x.get("district", "").lower() == district_lc]
+        if not center_pool:
+            center_pool = same_txn_type
+        if center_pool:
+            lats = sorted(x["lat"] for x in center_pool)
+            lons = sorted(x["lon"] for x in center_pool)
+            n = len(lats)
+            listing["lat"] = lats[n//2] if n % 2 == 1 else (lats[n//2-1] + lats[n//2]) / 2
+            listing["lon"] = lons[n//2] if n % 2 == 1 else (lons[n//2-1] + lons[n//2]) / 2
+
+        # Comparable dla ai_rcn (median of SALE listings, same city+type)
+        comparable = [x for x in same_txn_type if x.get("price_pm2")]
         if comparable:
-            # Compute median as fallback
             sorted_p = sorted(x["price_pm2"] for x in comparable)
             n = len(sorted_p)
             median = sorted_p[n//2] if n % 2 == 1 else (sorted_p[n//2-1] + sorted_p[n//2]) / 2
@@ -1163,32 +1179,54 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     face_bold = "DejaVu-Bold" if face == "DejaVu" else "Helvetica-Bold"
 
     # Compute local median (5km for mieszkania, 8km for domy/dzialki)
+    # ZAWSZE tylko oferty sprzedaży (nie wynajem)
     local_offers = []
     used_radius = 0
+    txn = l.get("transaction") or "sprzedaz"
+    # Custom valuation may pass "sale" - normalize
+    if txn == "sale":
+        txn = "sprzedaz"
+
     if l.get("lat") is not None and l.get("lon") is not None:
-        km = 5 if l.get("type") == "mieszkanie" else 8
+        # Try radiuses 5,8,12,20 km until we get min 3 offers
+        candidates_by_km = {}
+        max_km = 20
         for x in all_listings:
             if (x.get("id") != l.get("id")
                 and x.get("type") == l.get("type")
-                and x.get("transaction") == l.get("transaction")
+                and x.get("transaction") == "sprzedaz"
                 and x.get("is_original") is not False
                 and x.get("lat") is not None and x.get("lon") is not None
                 and x.get("price_pm2")):
                 d = _haversine_km(l["lat"], l["lon"], x["lat"], x["lon"])
-                if d <= km:
-                    local_offers.append({**x, "_dist": round(d, 2)})
-        used_radius = km
-        local_offers.sort(key=lambda x: x["_dist"])
+                if d <= max_km:
+                    candidates_by_km[x["id"]] = (d, x)
 
-    # Fallback: brak GPS - użyj comparable z tego samego miasta
+        # Choose smallest radius with min 3 offers, default 5km for mieszkania, 8 for reszta
+        min_km = 5 if l.get("type") == "mieszkanie" else 8
+        for km in [min_km, min_km + 3, min_km + 7, min_km + 15]:
+            local_offers = [{**x, "_dist": round(d, 2)}
+                            for _, (d, x) in candidates_by_km.items() if d <= km]
+            if len(local_offers) >= 3:
+                used_radius = km
+                break
+        else:
+            local_offers = [{**x, "_dist": round(d, 2)} for _, (d, x) in candidates_by_km.items()]
+            used_radius = max_km
+        local_offers.sort(key=lambda x: x["_dist"])
+        local_offers = local_offers[:10]
+
+    # Fallback: brak GPS - użyj SALE-only comparable z tego samego miasta
     if not local_offers:
         for x in all_listings:
             if (x.get("city", "").lower() == (l.get("city") or "").lower()
                 and x.get("type") == l.get("type")
+                and x.get("transaction") == "sprzedaz"
                 and x.get("is_original") is not False
                 and x.get("price_pm2")):
-                local_offers.append({**x, "_dist": 0})
+                local_offers.append({**x, "_dist": None})
         local_offers = local_offers[:10]
+        used_radius = 0  # mark as "same city"
 
     ppm2_this = l.get("price_pm2") or 0
     ppm2_local = 0
@@ -1321,7 +1359,7 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     story.append(Spacer(1, 4*mm))
     story.append(Paragraph(f"<b>Zakres cen za m²:</b> {fmt_pm2(ppm2_local*0.92)} — <b>{fmt_pm2(ppm2_local)}</b> — {fmt_pm2(ppm2_local*1.08)}<br/>"
                            f"<b>Cena ofertowa:</b> {fmt_pln(l.get('price'))} ({fmt_pm2(ppm2_this)})<br/>"
-                           f"<b>Analiza w promieniu:</b> {used_radius} km · {len(local_offers)} porównywalnych ofert<br/>"
+                           f"<b>Analiza w promieniu:</b> {(str(used_radius) + ' km') if used_radius else 'całe miasto'} · {len(local_offers)} porównywalnych ofert (tylko sprzedaż)<br/>"
                            f"<b>Szacowana wartość RCN (transakcje):</b> {fmt_pm2(ppm2_rcn)}", normal))
     story.append(Spacer(1, 6*mm))
 
@@ -1333,19 +1371,22 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     # === Page 2 ===
     story.append(PageBreak())
     story.append(Paragraph("Transakcje referencyjne", h2))
-    story.append(Paragraph(f"Poniżej {min(10, len(local_offers))} podobnych ofert z okolicy (promień {used_radius} km):", small))
+    scope_txt = f"promień {used_radius} km" if used_radius else f"miasto {l.get('city') or '—'}"
+    story.append(Paragraph(f"Poniżej {min(10, len(local_offers))} podobnych <b>ofert sprzedaży</b> z okolicy ({scope_txt}):", small))
     story.append(Spacer(1, 3*mm))
 
     if local_offers[:10]:
         ref_rows = [["Lp.", "Lokalizacja", "m²", "Cena", "zł/m²", "Odl."]]
         for i, o in enumerate(local_offers[:10], 1):
+            dist_val = o.get('_dist')
+            dist_txt = f"{dist_val} km" if dist_val is not None else "—"
             ref_rows.append([
                 str(i),
                 (o.get("location") or o.get("city") or "—")[:38],
                 str(o.get("area_m2","—")),
                 fmt_pln(o.get("price")),
                 fmt_pm2(o.get("price_pm2")),
-                f"{o['_dist']} km",
+                dist_txt,
             ])
         ref_tbl = Table(ref_rows, colWidths=[10*mm, 65*mm, 15*mm, 30*mm, 30*mm, 15*mm])
         ref_tbl.setStyle(TableStyle([
@@ -1369,7 +1410,9 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         f"<b>Data wygenerowania:</b> {datetime.now(timezone.utc).strftime('%d.%m.%Y %H:%M')}<br/>"
         f"<b>Zamawiający:</b> {buyer_email or '—'}<br/>"
         f"<b>Płatność:</b> Stripe (opłacone {VALUATION_PRICE} zł)<br/><br/>"
-        f"<b>Metodologia:</b> Wycena AI porównuje cenę ofertową z medianą aktualnych ofert w promieniu {used_radius} km. "
+        f"<b>Metodologia:</b> Wycena AI porównuje cenę ofertową z medianą aktualnych <b>ofert sprzedaży</b> "
+        f"{'w promieniu ' + str(used_radius) + ' km' if used_radius else 'z tego samego miasta'}. "
+        f"Uwzględniane są wyłącznie oferty tego samego typu nieruchomości (bez wynajmu, bez duplikatów). "
         f"Szacowana wartość RCN (transakcje) to około 94% mediany ofertowej (typowa różnica między ceną wywoławczą a ceną transakcyjną). "
         f"Raport ma charakter informacyjny i nie stanowi wyceny w rozumieniu ustawy o gospodarce nieruchomościami.", small
     ))

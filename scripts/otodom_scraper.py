@@ -287,22 +287,35 @@ def normalize_city(name: str) -> str:
     return re.sub(r"\s+", "-", s.translate(trans))
 
 
-def extract_city_district(item: dict) -> tuple[str, str]:
-    """Zwraca (miasto, dzielnica) z location.reverseGeocoding.locations."""
-    city, district = "", ""
+def extract_city_district(item: dict) -> tuple[str, str, str]:
+    """Zwraca (miasto, dzielnica, ulica_lub_osiedle) z location.reverseGeocoding.locations."""
+    city, district, sub = "", "", ""
     try:
         locs = item.get("location", {}).get("reverseGeocoding", {}).get("locations", [])
         for lo in locs:
-            lvl = lo.get("locationLevel", "")
+            lvl = (lo.get("locationLevel") or "").lower()
+            name = lo.get("name", "") or ""
             if lvl == "city_or_village" and not city:
-                city = lo.get("name", "")
+                city = name
             elif lvl == "district" and not district:
-                district = lo.get("name", "")
+                district = name
+            elif lvl in ("subdistrict", "neighborhood", "sub_district") and not sub:
+                sub = name
+            elif lvl in ("street", "estate") and not sub:
+                sub = name
         if not city:
             city = item.get("location", {}).get("address", {}).get("city", {}).get("name", "")
+        # Also try direct address.street
+        if not sub:
+            try:
+                street = item.get("location", {}).get("address", {}).get("street", {}).get("name", "")
+                if street:
+                    sub = f"ul. {street}"
+            except (AttributeError, TypeError, KeyError):
+                pass
     except (AttributeError, TypeError, KeyError):
         pass
-    return city, district
+    return city, district, sub
 
 
 def detect_seller(item: dict) -> tuple[str, str]:
@@ -358,7 +371,7 @@ def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
         elif isinstance(floor_raw, (int, float)):
             floor_num = int(floor_raw)
 
-        city, district = extract_city_district(item)
+        city, district, sub = extract_city_district(item)
         if not city:
             return None
 
@@ -403,7 +416,8 @@ def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
             "title": title,
             "city": city,
             "district": district,
-            "location": f"📍 {city}{', ' + district if district else ''}",
+            "sub_location": sub,
+            "location": f"📍 {city}{', ' + district if district else ''}{', ' + sub if sub else ''}",
             "area_m2": round(float(area), 1),
             "rooms": rooms,
             "floor": floor_num,

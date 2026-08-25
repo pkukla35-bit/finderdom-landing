@@ -1511,9 +1511,32 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         for i, o in enumerate(local_offers[:10], 1):
             dist_val = o.get('_dist')
             dist_txt = f"{dist_val} km" if dist_val is not None else "—"
+            # Buduj lokalizację: miasto, dzielnica, sub_location (ulica/osiedle)
+            city_o = o.get("city") or ""
+            district_o = o.get("district") or ""
+            sub_o = o.get("sub_location") or ""
+            # location field zaczyna się od 📍 - wyczyść
+            loc_str = (o.get("location") or "").lstrip("📍 ").strip()
+            if sub_o:
+                # If sub_location already in loc_str, use loc_str; else build
+                if sub_o not in loc_str:
+                    parts = [p for p in [city_o, district_o, sub_o] if p]
+                    loc_str = ", ".join(parts)
+            elif not loc_str:
+                loc_str = city_o
+            # Try to extract street/estate from title if still no sub info
+            if not sub_o and o.get("title"):
+                title_o = o.get("title", "")
+                # Look for "ul. XYZ" or "os. XYZ" patterns
+                import re as _re
+                m = _re.search(r"\b(ul\.\s*[A-ZŁŚŻŹĆŃÓĄĘ][\w\-ąćęłńóśźż]+(?:\s+[A-ZŁŚŻŹĆŃÓĄĘ][\w\-ąćęłńóśźż]+)?)", title_o)
+                if not m:
+                    m = _re.search(r"\b(os\.\s*[A-ZŁŚŻŹĆŃÓĄĘ][\w\-ąćęłńóśźż]+(?:\s+[A-ZŁŚŻŹĆŃÓĄĘ][\w\-ąćęłńóśźż]+)?)", title_o)
+                if m:
+                    loc_str = f"{loc_str}, {m.group(1)}"
             ref_rows.append([
                 str(i),
-                (o.get("location") or o.get("city") or "—")[:38],
+                loc_str[:42] if loc_str else "—",
                 str(o.get("area_m2","—")),
                 fmt_pln(o.get("price")),
                 fmt_pm2(o.get("price_pm2")),

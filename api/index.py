@@ -1167,6 +1167,91 @@ def _haversine_km(lat1, lon1, lat2, lon2):
     return 2 * R * math.asin(math.sqrt(a))
 
 
+def _build_map_png(main_lat, main_lon, offers, width=900, height=520):
+    """Generate a static OpenStreetMap PNG with main property + offer pins.
+    Returns bytes or None on failure. Uses staticmap library (no API key)."""
+    try:
+        from staticmap import StaticMap, CircleMarker
+        from PIL import Image, ImageDraw
+        import io as _io
+
+        # Use tiles from OSM (default), with 2 max threads to be polite
+        m = StaticMap(width, height, url_template="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png")
+
+        # Add offer pins (red circles, smaller)
+        offer_count = 0
+        for o in offers[:10]:
+            olat, olon = o.get("lat"), o.get("lon")
+            if olat is not None and olon is not None:
+                m.add_marker(CircleMarker((olon, olat), "#DC2626", 14))
+                m.add_marker(CircleMarker((olon, olat), "#ffffff", 6))
+                offer_count += 1
+
+        # Add main property pin (bigger, yellow/orange) LAST so it's on top
+        m.add_marker(CircleMarker((main_lon, main_lat), "#0B1836", 22))
+        m.add_marker(CircleMarker((main_lon, main_lat), "#FFB800", 16))
+
+        img = m.render()  # auto-fits all markers
+
+        # Add pin numbers as overlay using PIL
+        try:
+            from PIL import ImageFont
+            from staticmap import _lon_to_x as _sm_lon_to_x, _lat_to_y as _sm_lat_to_y
+            font = None
+            for fp in ["/app/finderdom-landing/api/fonts/DejaVuSans-Bold.ttf",
+                       "api/fonts/DejaVuSans-Bold.ttf",
+                       "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
+                try:
+                    font = ImageFont.truetype(fp, 11)
+                    break
+                except Exception:
+                    pass
+            if font is None:
+                font = ImageFont.load_default()
+
+            draw = ImageDraw.Draw(img)
+            for i, o in enumerate(offers[:10], 1):
+                olat, olon = o.get("lat"), o.get("lon")
+                if olat is None or olon is None:
+                    continue
+                try:
+                    x = _sm_lon_to_x(olon, m.zoom)
+                    y = _sm_lat_to_y(olat, m.zoom)
+                    px = int(m._x_to_px(x))
+                    py = int(m._y_to_px(y))
+                    txt = str(i)
+                    bbox = draw.textbbox((0, 0), txt, font=font)
+                    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                    draw.text((px - tw/2, py - th/2 - 1), txt, fill="white", font=font)
+                except Exception:
+                    pass
+            # Main pin label "★"
+            try:
+                x = _sm_lon_to_x(main_lon, m.zoom)
+                y = _sm_lat_to_y(main_lat, m.zoom)
+                px = int(m._x_to_px(x))
+                py = int(m._y_to_px(y))
+                txt = "★"
+                bbox = draw.textbbox((0, 0), txt, font=font)
+                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                draw.text((px - tw/2, py - th/2 - 2), txt, fill="#0B1836", font=font)
+            except Exception:
+                pass
+        except Exception as _e:
+            pass
+
+        buf = _io.BytesIO()
+        img.save(buf, "PNG")
+        buf.seek(0)
+        return buf.getvalue()
+    except Exception as e:
+        try:
+            logger.error("Map generation failed: %s", str(e)[:200])
+        except Exception:
+            pass
+        return None
+
+
 def build_valuation_pdf(l, all_listings, buyer_email):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
@@ -1370,6 +1455,40 @@ def build_valuation_pdf(l, all_listings, buyer_email):
 
     # === Page 2 ===
     story.append(PageBreak())
+    story.append(Paragraph("Mapa okolicznych ofert", h2))
+    story.append(Paragraph(
+        "⭐ Twoja nieruchomość (żółta) · 🔴 10 ofert sprzedaży z okolicy (numerowane 1–10)",
+        small
+    ))
+    story.append(Spacer(1, 3*mm))
+
+    # Generate map image
+    map_added = False
+    if l.get("lat") is not None and l.get("lon") is not None:
+        offers_with_gps = [o for o in local_offers[:10]
+                           if o.get("lat") is not None and o.get("lon") is not None]
+        map_bytes = _build_map_png(l["lat"], l["lon"], offers_with_gps, width=900, height=520)
+        if map_bytes:
+            from reportlab.platypus import Image as RLImage
+            map_buf = io.BytesIO(map_bytes)
+            img = RLImage(map_buf, width=170*mm, height=98*mm)
+            img.hAlign = "CENTER"
+            story.append(img)
+            story.append(Spacer(1, 2*mm))
+            story.append(Paragraph(
+                "Źródło map: © OpenStreetMap contributors (openstreetmap.org/copyright)",
+                ParagraphStyle("attr", fontName=face, fontSize=7, textColor=colors.grey, alignment=TA_CENTER)
+            ))
+            story.append(Spacer(1, 5*mm))
+            map_added = True
+
+    if not map_added:
+        story.append(Paragraph(
+            "<i>Mapa niedostępna — brak współrzędnych GPS dla tej lokalizacji.</i>",
+            small
+        ))
+        story.append(Spacer(1, 5*mm))
+
     story.append(Paragraph("Transakcje referencyjne", h2))
     scope_txt = f"promień {used_radius} km" if used_radius else f"miasto {l.get('city') or '—'}"
     story.append(Paragraph(f"Poniżej {min(10, len(local_offers))} podobnych <b>ofert sprzedaży</b> z okolicy ({scope_txt}):", small))

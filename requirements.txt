@@ -6,3 +6,5 @@ stripe>=12.0.0
 reportlab>=4.2,<5
 httpx>=0.27.0
 requests>=2.31.0
+staticmap>=0.5.7
+Pillow>=10.0.0

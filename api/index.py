@@ -902,15 +902,15 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     if ppm2_local and ppm2_this:
         delta_pct = ((ppm2_this - ppm2_local) / ppm2_local) * 100
         if delta_pct <= -8:
-            verdict_text = f"💰 OKAZJA — {abs(delta_pct):.0f}% poniżej rynku"
+            verdict_text = f"OKAZJA — {abs(delta_pct):.0f}% poniżej rynku"
             verdict_color = colors.HexColor("#22c55e")
             recommendation = "Warto działać szybko — oferta znacząco poniżej mediany rynkowej. Zweryfikuj stan techniczny i kupuj."
         elif delta_pct >= 8:
-            verdict_text = f"📈 DROGO — {delta_pct:.0f}% powyżej rynku"
+            verdict_text = f"DROGO — {delta_pct:.0f}% powyżej rynku"
             verdict_color = colors.HexColor("#ef4444")
             recommendation = f"Cena wyraźnie powyżej mediany okolicy ({abs(delta_pct):.0f}%). Negocjuj minimum {abs(delta_pct):.0f}% lub szukaj alternatyw."
         else:
-            verdict_text = f"⚖️ NORMA — {delta_pct:+.0f}% od mediany"
+            verdict_text = f"NORMA — {delta_pct:+.0f}% od mediany"
 
     # Estimate value range
     area = l.get("area_m2") or 0
@@ -943,11 +943,32 @@ def build_valuation_pdf(l, all_listings, buyer_email):
 
     # === Page 1 header ===
     story.append(Paragraph("WYCENA NIERUCHOMOŚCI", title_style))
-    story.append(Paragraph(f"FinderDom.pl · Raport nr FD-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{str(l.get('id',''))[:6]}", small))
+    listing_id_short = str(l.get('id', ''))[-8:].replace('otodom-', '').replace('otodom', '')
+    story.append(Paragraph(f"FinderDom.pl · Raport nr FD-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M')}-{listing_id_short}", small))
     story.append(Spacer(1, 6*mm))
 
+    # Photo (jeśli listing ma image_url)
+    photo_url = l.get('image_url') or (l.get('image_urls') or [None])[0]
+    if photo_url and str(photo_url).startswith('http'):
+        try:
+            import urllib.request
+            from reportlab.platypus import Image as RLImage
+            req = urllib.request.Request(photo_url, headers={
+                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'image/webp,image/apng,image/*,*/*',
+            })
+            with urllib.request.urlopen(req, timeout=8) as r:
+                img_data = r.read()
+            img_buf = io.BytesIO(img_data)
+            img = RLImage(img_buf, width=174*mm, height=100*mm, kind='proportional')
+            img.hAlign = 'CENTER'
+            story.append(img)
+            story.append(Spacer(1, 5*mm))
+        except Exception:
+            pass  # ignore image errors
+
     # Location
-    story.append(Paragraph("📍 Lokalizacja i parametry", h2))
+    story.append(Paragraph("Lokalizacja i parametry", h2))
     loc = l.get("location") or f"{l.get('city','')}{', ' + l.get('district','') if l.get('district') else ''}"
     story.append(Paragraph(f"<b>Adres:</b> {loc}", normal))
     story.append(Paragraph(f"<b>Typ:</b> {(l.get('type') or '').capitalize()} · <b>Rynek:</b> {(l.get('market_type') or '—').capitalize()}", normal))
@@ -977,7 +998,7 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     story.append(Spacer(1, 6*mm))
 
     # Wycena AI
-    story.append(Paragraph("🧠 Wycena AI", h2))
+    story.append(Paragraph("Wycena AI", h2))
     val_tbl = Table([
         [Paragraph("MINIMUM", label_st), Paragraph("WARTOŚĆ RYNKOWA", label_st), Paragraph("MAKSIMUM", label_st)],
         [Paragraph(fmt_pln(est_low), big_num), Paragraph(fmt_pln(est_mid), ParagraphStyle("m", fontName=face_bold, fontSize=24, leading=28, textColor=colors.HexColor("#0B1836"), alignment=TA_CENTER)), Paragraph(fmt_pln(est_high), big_num)],
@@ -1005,7 +1026,7 @@ def build_valuation_pdf(l, all_listings, buyer_email):
 
     # === Page 2 ===
     story.append(PageBreak())
-    story.append(Paragraph("📊 Transakcje referencyjne", h2))
+    story.append(Paragraph("Transakcje referencyjne", h2))
     story.append(Paragraph(f"Poniżej {min(10, len(local_offers))} podobnych ofert z okolicy (promień {used_radius} km):", small))
     story.append(Spacer(1, 3*mm))
 
@@ -1037,7 +1058,7 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         story.append(Paragraph("Brak wystarczających danych z okolicy do porównania.", small))
 
     story.append(Spacer(1, 8*mm))
-    story.append(Paragraph("ℹ️ Informacje o raporcie", h2))
+    story.append(Paragraph("Informacje o raporcie", h2))
     story.append(Paragraph(
         f"<b>Data wygenerowania:</b> {datetime.now(timezone.utc).strftime('%d.%m.%Y %H:%M')}<br/>"
         f"<b>Zamawiający:</b> {buyer_email or '—'}<br/>"

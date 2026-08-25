@@ -52,6 +52,7 @@ if STRIPE_SECRET_KEY:
 
 PLANS = {"individual": 35, "business": 199}  # gross PLN per 30 days
 PLAN_LABELS = {"individual": "Osobisty", "business": "Firmowy"}
+VALUATION_PRICE = 32  # PLN one-time per property valuation PDF
 
 app = FastAPI(title="FinderDom API", docs_url="/docs", redoc_url=None)
 
@@ -650,3 +651,303 @@ async def download_invoice(invoice_id: str, user: dict = Depends(current_user)):
             "Content-Disposition": f'attachment; filename="{inv["invoice_number"].replace("/", "-")}.pdf"'
         },
     )
+
+
+
+# --- Valuation PDF (one-time 32 PLN) ---
+class ValuationCheckoutReq(BaseModel):
+    listing_id: str
+    email: str
+
+
+@app.post("/api/valuation/checkout")
+async def valuation_checkout(body: ValuationCheckoutReq):
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(503, "Stripe niedostępny")
+    email = clean_email(body.email)
+    listing_id = str(body.listing_id).strip()
+    if not listing_id:
+        raise HTTPException(400, "Brak listing_id")
+
+    def create():
+        return stripe.checkout.Session.create(
+            mode="payment",
+            payment_method_types=["card", "blik"],
+            line_items=[{
+                "price_data": {
+                    "currency": "pln",
+                    "unit_amount": money_grosze(VALUATION_PRICE),
+                    "product_data": {
+                        "name": "FinderDom.pl — Wycena nieruchomości (PDF)",
+                        "description": f"Raport wyceny z analizą AI + rynek okolicy",
+                    },
+                },
+                "quantity": 1,
+            }],
+            customer_email=email,
+            metadata={"type": "valuation", "listing_id": listing_id, "email": email},
+            success_url=f"{DOMAIN}/wycena-sukces?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{DOMAIN}/oferta.html?id={listing_id}",
+            locale="pl",
+        )
+
+    try:
+        session = await asyncio.to_thread(create)
+    except stripe.error.StripeError as e:
+        raise HTTPException(502, f"Stripe error: {str(e)[:200]}")
+    return {"url": session.url}
+
+
+@app.get("/api/valuation/download")
+async def valuation_download(session_id: str):
+    """Verify Stripe payment and stream PDF."""
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(503, "Stripe niedostępny")
+
+    def retrieve():
+        return stripe.checkout.Session.retrieve(session_id)
+
+    try:
+        s_obj = await asyncio.to_thread(retrieve)
+    except stripe.error.StripeError as e:
+        raise HTTPException(502, f"Stripe error: {str(e)[:200]}")
+
+    session = s_obj.to_dict() if hasattr(s_obj, "to_dict") else dict(s_obj)
+    if session.get("payment_status") != "paid":
+        raise HTTPException(402, "Płatność jeszcze niezakończona")
+    md = session.get("metadata") or {}
+    if md.get("type") != "valuation":
+        raise HTTPException(400, "Sesja nie jest wyceną")
+
+    listing_id = md.get("listing_id")
+
+    # Fetch public listings.json
+    import urllib.request, json as _json
+    try:
+        with urllib.request.urlopen(f"{DOMAIN}/data/listings.json", timeout=15) as r:
+            data = _json.loads(r.read().decode())
+    except Exception as e:
+        raise HTTPException(500, f"Nie można pobrać listingów: {str(e)[:100]}")
+
+    all_listings = data if isinstance(data, list) else data.get("listings", [])
+    listing = next((l for l in all_listings if str(l.get("id")) == str(listing_id)), None)
+    if not listing:
+        raise HTTPException(404, "Oferta nie znaleziona")
+
+    pdf_data = await asyncio.to_thread(build_valuation_pdf, listing, all_listings, md.get("email", ""))
+    return StreamingResponse(
+        io.BytesIO(pdf_data),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="wycena-{listing_id}.pdf"'},
+    )
+
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+    import math
+    R = 6371
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+    return 2 * R * math.asin(math.sqrt(a))
+
+
+def build_valuation_pdf(l, all_listings, buyer_email):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+
+    face = _register_pdf_font()
+    face_bold = "DejaVu-Bold" if face == "DejaVu" else "Helvetica-Bold"
+
+    # Compute local median (5km for mieszkania, 8km for domy/dzialki)
+    local_offers = []
+    used_radius = 0
+    if l.get("lat") is not None and l.get("lon") is not None:
+        km = 5 if l.get("type") == "mieszkanie" else 8
+        for x in all_listings:
+            if (x.get("id") != l.get("id")
+                and x.get("type") == l.get("type")
+                and x.get("transaction") == l.get("transaction")
+                and x.get("is_original") is not False
+                and x.get("lat") is not None and x.get("lon") is not None
+                and x.get("price_pm2")):
+                d = _haversine_km(l["lat"], l["lon"], x["lat"], x["lon"])
+                if d <= km:
+                    local_offers.append({**x, "_dist": round(d, 2)})
+        used_radius = km
+        local_offers.sort(key=lambda x: x["_dist"])
+
+    ppm2_this = l.get("price_pm2") or 0
+    ppm2_local = 0
+    if local_offers:
+        sorted_p = sorted(x["price_pm2"] for x in local_offers)
+        n = len(sorted_p)
+        ppm2_local = sorted_p[n//2] if n % 2 == 1 else (sorted_p[n//2-1] + sorted_p[n//2]) / 2
+    ppm2_rcn = int(ppm2_local * 0.94) if ppm2_local else (l.get("ai_rcn_pm2") or 0)
+
+    # Verdict
+    delta_pct = 0
+    verdict_text = "W normie"
+    verdict_color = colors.HexColor("#8ba3d4")
+    recommendation = "Oferta w normie rynkowej — możesz negocjować niewielką obniżkę (2-5%)."
+    if ppm2_local and ppm2_this:
+        delta_pct = ((ppm2_this - ppm2_local) / ppm2_local) * 100
+        if delta_pct <= -8:
+            verdict_text = f"💰 OKAZJA — {abs(delta_pct):.0f}% poniżej rynku"
+            verdict_color = colors.HexColor("#22c55e")
+            recommendation = "Warto działać szybko — oferta znacząco poniżej mediany rynkowej. Zweryfikuj stan techniczny i kupuj."
+        elif delta_pct >= 8:
+            verdict_text = f"📈 DROGO — {delta_pct:.0f}% powyżej rynku"
+            verdict_color = colors.HexColor("#ef4444")
+            recommendation = f"Cena wyraźnie powyżej mediany okolicy ({abs(delta_pct):.0f}%). Negocjuj minimum {abs(delta_pct):.0f}% lub szukaj alternatyw."
+        else:
+            verdict_text = f"⚖️ NORMA — {delta_pct:+.0f}% od mediany"
+
+    # Estimate value range
+    area = l.get("area_m2") or 0
+    est_low = int(ppm2_local * 0.92 * area) if ppm2_local else 0
+    est_mid = int(ppm2_local * area) if ppm2_local else 0
+    est_high = int(ppm2_local * 1.08 * area) if ppm2_local else 0
+
+    def fmt_pln(n):
+        try:
+            return f"{int(n):,}".replace(",", " ") + " zł"
+        except: return "—"
+
+    def fmt_pm2(n):
+        try:
+            return f"{int(n):,}".replace(",", " ") + " zł/m²"
+        except: return "—"
+
+    # Styles
+    title_style = ParagraphStyle("t", fontName=face_bold, fontSize=22, leading=26, textColor=colors.HexColor("#0B1836"))
+    h2 = ParagraphStyle("h2", fontName=face_bold, fontSize=14, leading=18, textColor=colors.HexColor("#0B1836"), spaceBefore=8, spaceAfter=6)
+    normal = ParagraphStyle("n", fontName=face, fontSize=10, leading=14, textColor=colors.HexColor("#333333"))
+    small = ParagraphStyle("s", fontName=face, fontSize=8, leading=11, textColor=colors.grey)
+    verdict_p = ParagraphStyle("v", fontName=face_bold, fontSize=18, leading=22, textColor=verdict_color, alignment=TA_CENTER)
+    big_num = ParagraphStyle("bn", fontName=face_bold, fontSize=20, leading=24, textColor=colors.HexColor("#FFB800"), alignment=TA_CENTER)
+    label_st = ParagraphStyle("l", fontName=face_bold, fontSize=8, leading=11, textColor=colors.HexColor("#8ba3d4"), alignment=TA_CENTER)
+
+    out = io.BytesIO()
+    doc = SimpleDocTemplate(out, pagesize=A4, leftMargin=18*mm, rightMargin=18*mm, topMargin=18*mm, bottomMargin=18*mm, title="Wycena FinderDom.pl")
+    story = []
+
+    # === Page 1 header ===
+    story.append(Paragraph("WYCENA NIERUCHOMOŚCI", title_style))
+    story.append(Paragraph(f"FinderDom.pl · Raport nr FD-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{str(l.get('id',''))[:6]}", small))
+    story.append(Spacer(1, 6*mm))
+
+    # Location
+    story.append(Paragraph("📍 Lokalizacja i parametry", h2))
+    loc = l.get("location") or f"{l.get('city','')}{', ' + l.get('district','') if l.get('district') else ''}"
+    story.append(Paragraph(f"<b>Adres:</b> {loc}", normal))
+    story.append(Paragraph(f"<b>Typ:</b> {(l.get('type') or '').capitalize()} · <b>Rynek:</b> {(l.get('market_type') or '—').capitalize()}", normal))
+
+    specs_data = [
+        ["Powierzchnia", f"{area} m²", "Pokoje", str(l.get("rooms") or "—")],
+        ["Piętro", f"{l.get('floor','—')}/{l.get('max_floor','—')}" if l.get('max_floor') else str(l.get('floor','—')), "Rok budowy", str(l.get("build_year") or "—")],
+        ["Standard", (l.get("standard") or "—").capitalize(), "Budynek", (l.get("building_type") or "—").capitalize()],
+    ]
+    specs_tbl = Table(specs_data, colWidths=[35*mm, 45*mm, 35*mm, 45*mm])
+    specs_tbl.setStyle(TableStyle([
+        ("FONTNAME", (0,0), (-1,-1), face),
+        ("FONTSIZE", (0,0), (-1,-1), 9),
+        ("BACKGROUND", (0,0), (0,-1), colors.HexColor("#F5F7FB")),
+        ("BACKGROUND", (2,0), (2,-1), colors.HexColor("#F5F7FB")),
+        ("TEXTCOLOR", (0,0), (0,-1), colors.HexColor("#8ba3d4")),
+        ("TEXTCOLOR", (2,0), (2,-1), colors.HexColor("#8ba3d4")),
+        ("FONTNAME", (0,0), (0,-1), face_bold),
+        ("FONTNAME", (2,0), (2,-1), face_bold),
+        ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#c5d0e6")),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("LEFTPADDING", (0,0), (-1,-1), 8),
+        ("TOPPADDING", (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+    ]))
+    story.append(specs_tbl)
+    story.append(Spacer(1, 6*mm))
+
+    # Wycena AI
+    story.append(Paragraph("🧠 Wycena AI", h2))
+    val_tbl = Table([
+        [Paragraph("MINIMUM", label_st), Paragraph("WARTOŚĆ RYNKOWA", label_st), Paragraph("MAKSIMUM", label_st)],
+        [Paragraph(fmt_pln(est_low), big_num), Paragraph(fmt_pln(est_mid), ParagraphStyle("m", fontName=face_bold, fontSize=24, leading=28, textColor=colors.HexColor("#0B1836"), alignment=TA_CENTER)), Paragraph(fmt_pln(est_high), big_num)],
+    ], colWidths=[52*mm, 56*mm, 52*mm])
+    val_tbl.setStyle(TableStyle([
+        ("BACKGROUND", (1,0), (1,-1), colors.HexColor("#FFF9E6")),
+        ("BOX", (0,0), (-1,-1), 0.5, colors.HexColor("#c5d0e6")),
+        ("LINEBEFORE", (1,0), (1,-1), 1, colors.HexColor("#FFB800")),
+        ("LINEAFTER", (1,0), (1,-1), 1, colors.HexColor("#FFB800")),
+        ("TOPPADDING", (0,0), (-1,-1), 8),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 12),
+    ]))
+    story.append(val_tbl)
+    story.append(Spacer(1, 4*mm))
+    story.append(Paragraph(f"<b>Zakres cen za m²:</b> {fmt_pm2(ppm2_local*0.92)} — <b>{fmt_pm2(ppm2_local)}</b> — {fmt_pm2(ppm2_local*1.08)}<br/>"
+                           f"<b>Cena ofertowa:</b> {fmt_pln(l.get('price'))} ({fmt_pm2(ppm2_this)})<br/>"
+                           f"<b>Analiza w promieniu:</b> {used_radius} km · {len(local_offers)} porównywalnych ofert<br/>"
+                           f"<b>Szacowana wartość RCN (transakcje):</b> {fmt_pm2(ppm2_rcn)}", normal))
+    story.append(Spacer(1, 6*mm))
+
+    # Verdict
+    story.append(Paragraph(verdict_text, verdict_p))
+    story.append(Spacer(1, 3*mm))
+    story.append(Paragraph(f"<b>Rekomendacja:</b> {recommendation}", normal))
+
+    # === Page 2 ===
+    story.append(PageBreak())
+    story.append(Paragraph("📊 Transakcje referencyjne", h2))
+    story.append(Paragraph(f"Poniżej {min(10, len(local_offers))} podobnych ofert z okolicy (promień {used_radius} km):", small))
+    story.append(Spacer(1, 3*mm))
+
+    if local_offers[:10]:
+        ref_rows = [["Lp.", "Lokalizacja", "m²", "Cena", "zł/m²", "Odl."]]
+        for i, o in enumerate(local_offers[:10], 1):
+            ref_rows.append([
+                str(i),
+                (o.get("location") or o.get("city") or "—")[:38],
+                str(o.get("area_m2","—")),
+                fmt_pln(o.get("price")),
+                fmt_pm2(o.get("price_pm2")),
+                f"{o['_dist']} km",
+            ])
+        ref_tbl = Table(ref_rows, colWidths=[10*mm, 65*mm, 15*mm, 30*mm, 30*mm, 15*mm])
+        ref_tbl.setStyle(TableStyle([
+            ("FONTNAME", (0,0), (-1,-1), face),
+            ("FONTSIZE", (0,0), (-1,-1), 8),
+            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#0B1836")),
+            ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+            ("FONTNAME", (0,0), (-1,0), face_bold),
+            ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#c5d0e6")),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("LEFTPADDING", (0,0), (-1,-1), 5),
+            ("ALIGN", (2,1), (-1,-1), "RIGHT"),
+        ]))
+        story.append(ref_tbl)
+    else:
+        story.append(Paragraph("Brak wystarczających danych z okolicy do porównania.", small))
+
+    story.append(Spacer(1, 8*mm))
+    story.append(Paragraph("ℹ️ Informacje o raporcie", h2))
+    story.append(Paragraph(
+        f"<b>Data wygenerowania:</b> {datetime.now(timezone.utc).strftime('%d.%m.%Y %H:%M')}<br/>"
+        f"<b>Zamawiający:</b> {buyer_email or '—'}<br/>"
+        f"<b>Płatność:</b> Stripe (opłacone {VALUATION_PRICE} zł)<br/><br/>"
+        f"<b>Metodologia:</b> Wycena AI porównuje cenę ofertową z medianą aktualnych ofert w promieniu {used_radius} km. "
+        f"Szacowana wartość RCN (transakcje) to około 94% mediany ofertowej (typowa różnica między ceną wywoławczą a ceną transakcyjną). "
+        f"Raport ma charakter informacyjny i nie stanowi wyceny w rozumieniu ustawy o gospodarce nieruchomościami.", small
+    ))
+    story.append(Spacer(1, 10*mm))
+
+    footer = ParagraphStyle("f", fontName=face_bold, fontSize=10, leading=13, textColor=colors.HexColor("#FFB800"), alignment=TA_CENTER)
+    footer_small = ParagraphStyle("fs", fontName=face, fontSize=8, leading=11, textColor=colors.grey, alignment=TA_CENTER)
+    story.append(Paragraph(f"FinderDom.pl · {COMPANY_NAME}", footer))
+    if COMPANY_NIP:
+        story.append(Paragraph(f"NIP: {COMPANY_NIP} · {COMPANY_ADDRESS}", footer_small))
+
+    doc.build(story)
+    return out.getvalue()

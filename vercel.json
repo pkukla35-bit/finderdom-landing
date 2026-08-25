@@ -15,12 +15,14 @@
   "rewrites": [
     { "source": "/api/auth/:path*", "destination": "/api/index" },
     { "source": "/api/payments/:path*", "destination": "/api/index" },
+    { "source": "/api/valuation/:path*", "destination": "/api/index" },
     { "source": "/api/invoices/:path*", "destination": "/api/index" },
     { "source": "/api/invoices", "destination": "/api/index" },
     { "source": "/api/health", "destination": "/api/index" },
     { "source": "/api/docs", "destination": "/api/index" },
     { "source": "/platnosc-sukces", "destination": "/platnosc-sukces.html" },
     { "source": "/platnosc-anulowana", "destination": "/platnosc-anulowana.html" },
+    { "source": "/wycena-sukces", "destination": "/wycena-sukces.html" },
     { "source": "/regulamin", "destination": "/regulamin.html" },
     { "source": "/polityka-prywatnosci", "destination": "/polityka-prywatnosci.html" }
   ],

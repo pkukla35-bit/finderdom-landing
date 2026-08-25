@@ -65,6 +65,28 @@
   .premium-lock-card .lock-login{display:inline-block;margin-top:14px;color:#a3b3d1;font-size:13px;text-decoration:none}
   .premium-lock-card .lock-login a{color:#FFB800;text-decoration:none;font-weight:800}
   .premium-lock-card .lock-login a:hover{text-decoration:underline}
+
+  /* Modal Wycena */
+  .val-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);z-index:9999;display:none;align-items:center;justify-content:center;padding:20px;animation:fadeIn 0.2s ease}
+  .val-modal-bg.show{display:flex}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  .val-modal{width:100%;max-width:460px;background:#111d38;border:1px solid rgba(255,184,0,0.35);border-radius:20px;padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,0.6);position:relative}
+  .val-modal .close-x{position:absolute;top:14px;right:16px;background:none;border:none;color:#a3b3d1;font-size:26px;cursor:pointer;line-height:1;padding:4px 10px}
+  .val-modal .close-x:hover{color:#fff}
+  .val-modal h3{font-size:20px;font-weight:900;color:#fff;margin-bottom:8px;letter-spacing:-0.3px}
+  .val-modal .val-sub{color:#c5d0e6;font-size:14px;line-height:1.6;margin-bottom:20px}
+  .val-modal .val-features{background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px 18px;margin-bottom:18px}
+  .val-modal .val-features li{font-size:13px;color:#c5d0e6;padding:4px 0 4px 26px;position:relative;list-style:none}
+  .val-modal .val-features li::before{content:"✓";position:absolute;left:6px;color:#FFB800;font-weight:900}
+  .val-modal label{display:block;font-size:12px;font-weight:800;color:#c5d0e6;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+  .val-modal input{width:100%;padding:14px 16px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:#fff;font-size:15px;font-family:inherit;margin-bottom:14px}
+  .val-modal input:focus{outline:none;border-color:#FFB800;background:rgba(0,0,0,0.35)}
+  .val-modal .val-btn{width:100%;padding:16px;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;border:none;border-radius:12px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px rgba(255,184,0,0.35);transition:transform 0.15s ease}
+  .val-modal .val-btn:hover:not(:disabled){transform:translateY(-1px)}
+  .val-modal .val-btn:disabled{opacity:0.6;cursor:not-allowed}
+  .val-modal .val-err{padding:10px 14px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#fca5a5;border-radius:10px;font-size:13px;margin-bottom:12px;display:none}
+  .val-modal .val-err.show{display:block}
+  .val-modal .val-small{font-size:11px;color:#8ba3d4;text-align:center;margin-top:12px;line-height:1.5}
   .cta-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:10px 18px;border-radius:10px;text-decoration:none;font-size:13px;text-transform:uppercase}
 
   /* Breadcrumb */
@@ -332,7 +354,7 @@
     <div class="contact-card">
       <div class="contact-title">📞 Kontakt ze sprzedającym</div>
       <a id="ctaOtodom" href="#" target="_blank" rel="noopener" class="contact-btn">🔗 Otwórz w Otodom</a>
-      <a href="/#valuation" class="contact-btn secondary">💎 Wycena Premium (49 zł)</a>
+      <a href="#" onclick="event.preventDefault(); openValuationModal();" class="contact-btn secondary">💎 Wycena Premium PDF (32 zł)</a>
       <div class="contact-mini" id="ctaHint">
         <strong>💡 Wskazówka:</strong> Kliknij „Otwórz w Otodom" żeby zobaczyć numer telefonu, pełny opis i wszystkie zdjęcia.
       </div>
@@ -899,6 +921,89 @@ loadOffer();
 </script>
 <!-- AdSense: Pod ofertą (wstawia się dynamicznie z JS w loadOffer) -->
 <script src="/scripts/ads.js"></script>
+
+<!-- Modal Wycena Premium (32 zł) -->
+<div class="val-modal-bg" id="valModal">
+  <div class="val-modal">
+    <button type="button" class="close-x" onclick="closeValuationModal()">×</button>
+    <h3>💎 Wycena Premium PDF</h3>
+    <p class="val-sub">Otrzymaj profesjonalny <strong>raport PDF</strong> z pełną analizą tej nieruchomości.</p>
+    <ul class="val-features">
+      <li>Wycena AI (min / średnia / max) na podstawie 5-8 km</li>
+      <li>10 podobnych transakcji w okolicy</li>
+      <li>Porównanie z medianą RCN</li>
+      <li>Rekomendacja: kupować / negocjować / uciekać</li>
+    </ul>
+    <div id="valErr" class="val-err"></div>
+    <label for="valEmail">Twój email (na który wyślemy potwierdzenie)</label>
+    <input type="email" id="valEmail" placeholder="twoj@email.pl" autocomplete="email" required>
+    <button type="button" class="val-btn" id="valBuyBtn" onclick="startValuationCheckout()">Zapłać 32 zł kartą / BLIK →</button>
+    <div class="val-small">Płatność bezpieczna przez Stripe. Po opłacie automatycznie wygenerujemy PDF.</div>
+  </div>
+</div>
+
+<script>
+  function openValuationModal(){
+    const m = document.getElementById('valModal');
+    if (!m) return;
+    // Pre-fill email if logged in
+    try {
+      const u = JSON.parse(localStorage.getItem('finderdom_user') || 'null');
+      if (u && u.email) document.getElementById('valEmail').value = u.email;
+    } catch(e){}
+    m.classList.add('show');
+    setTimeout(() => document.getElementById('valEmail').focus(), 100);
+  }
+  function closeValuationModal(){
+    document.getElementById('valModal').classList.remove('show');
+  }
+  document.getElementById('valModal').addEventListener('click', (e) => {
+    if (e.target.id === 'valModal') closeValuationModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeValuationModal();
+  });
+
+  async function startValuationCheckout(){
+    const errBox = document.getElementById('valErr');
+    const btn = document.getElementById('valBuyBtn');
+    errBox.className = 'val-err';
+
+    const email = (document.getElementById('valEmail').value || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
+      errBox.textContent = 'Podaj prawidłowy adres email.';
+      errBox.className = 'val-err show';
+      return;
+    }
+    const params = new URLSearchParams(location.search);
+    const listingId = params.get('id');
+    if (!listingId){
+      errBox.textContent = 'Brak ID oferty.';
+      errBox.className = 'val-err show';
+      return;
+    }
+
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = 'Przekierowuję do płatności...';
+
+    try {
+      const r = await fetch('/api/valuation/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listing_id: listingId, email }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || 'Błąd płatności');
+      window.location.href = data.url;
+    } catch(e){
+      errBox.textContent = '⚠️ ' + e.message;
+      errBox.className = 'val-err show';
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  }
+</script>
 
 <footer class="fd-footer">
   <div>© 2026 FinderDom.pl</div>

@@ -163,6 +163,41 @@
             <label class="label" for="vPlotArea">Rozmiar działki (m²)</label>
             <input class="input" id="vPlotArea" type="number" min="0" placeholder="np. 500">
           </div>
+          <div class="field only-plot">
+            <label class="label" for="vLandType">Rodzaj działki</label>
+            <select class="select" id="vLandType">
+              <option value="">— wybierz —</option>
+              <option value="budowlana">Budowlana</option>
+              <option value="rolna">Rolna</option>
+              <option value="rolno-budowlana">Rolno-budowlana</option>
+              <option value="rekreacyjna">Rekreacyjna</option>
+              <option value="lesna">Leśna</option>
+              <option value="siedliskowa">Siedliskowa</option>
+              <option value="inwestycyjna">Inwestycyjna</option>
+            </select>
+          </div>
+          <div class="field only-plot">
+            <label class="label" for="vUtilities">Uzbrojenie</label>
+            <select class="select" id="vUtilities">
+              <option value="">— wybierz —</option>
+              <option value="pelne">Pełne (prąd, woda, gaz, kanalizacja)</option>
+              <option value="czesciowe">Częściowe (część mediów)</option>
+              <option value="prad-woda">Prąd + woda</option>
+              <option value="tylko-prad">Tylko prąd</option>
+              <option value="brak">Brak uzbrojenia</option>
+            </select>
+          </div>
+          <div class="field only-plot">
+            <label class="label" for="vRoadAccess">Droga dojazdowa</label>
+            <select class="select" id="vRoadAccess">
+              <option value="">— wybierz —</option>
+              <option value="asfaltowa">Asfaltowa</option>
+              <option value="utwardzona">Utwardzona (kostka/beton)</option>
+              <option value="szutrowa">Szutrowa</option>
+              <option value="gruntowa">Gruntowa</option>
+              <option value="brak">Brak drogi</option>
+            </select>
+          </div>
           <div class="field only-flat only-house">
             <label class="label" for="vYear">Rok budowy</label>
             <input class="input" id="vYear" type="number" min="1800" max="2030" placeholder="np. 2015">
@@ -221,8 +256,15 @@
             </select>
           </div>
           <div class="field field-full">
-            <label class="label" for="vPrice">Twoja proponowana cena sprzedaży (zł, opcjonalnie)</label>
-            <input class="input" id="vPrice" type="number" min="0" placeholder="np. 650000 — sprawdzimy czy jest realna">
+            <div style="background:linear-gradient(135deg,rgba(255,184,0,0.12),rgba(255,140,0,0.06));border:1px solid rgba(255,184,0,0.35);border-radius:14px;padding:16px">
+              <label class="label" for="vPhone" style="display:flex;align-items:center;gap:8px;color:#FFB800;font-weight:700;margin-bottom:8px">
+                📞 Numer telefonu (opcjonalnie)
+              </label>
+              <input class="input" id="vPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="np. 600 123 456" pattern="[0-9 +\-]{9,15}">
+              <small style="color:#c5d0e6;font-size:12px;margin-top:8px;display:block;line-height:1.5">
+                ✨ <strong style="color:#FFB800">Bonus:</strong> Zostaw numer, a profesjonalny agent nieruchomości wybrany przez nas do Twojej okolicy zadzwoni do Ciebie z bezpłatną konsultacją.
+              </small>
+            </div>
           </div>
           <div class="field field-full">
             <label class="label">Z jakiego powodu wyceniasz nieruchomość?</label>
@@ -311,7 +353,11 @@
       garden: val('vGarden'),
       attic: val('vAttic'),
       plot_area: num('vPlotArea'),
-      price: num('vPrice'),
+      land_type: val('vLandType'),
+      utilities: val('vUtilities'),
+      road_access: val('vRoadAccess'),
+      price: null,
+      phone: (document.getElementById('vPhone') || {}).value || '',
       reason: (document.querySelector('input[name="vReason"]:checked') || {}).value || '',
     };
 

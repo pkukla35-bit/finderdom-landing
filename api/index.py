@@ -426,6 +426,30 @@ async def stripe_webhook(request: Request):
         if s.get("payment_status") != "paid":
             return {"received": True}
         md = s.get("metadata") or {}
+
+        # Handle valuation_custom: save phone lead for agent callback
+        if md.get("type") == "valuation_custom":
+            try:
+                import json as _json
+                prop = _json.loads(md.get("property_json") or "{}")
+                phone = (prop.get("phone") or "").strip()
+                if phone:
+                    await database().leads.insert_one({
+                        "phone": phone,
+                        "email": md.get("email", ""),
+                        "city": prop.get("city", ""),
+                        "district": prop.get("district", ""),
+                        "type": prop.get("type", ""),
+                        "area_m2": prop.get("area_m2"),
+                        "reason": prop.get("reason", ""),
+                        "session_id": s.get("id"),
+                        "status": "new",
+                        "created_at": datetime.now(timezone.utc),
+                    })
+            except Exception as e:
+                print(f"[WEBHOOK] Lead save failed: {e}")
+            return {"received": True}
+
         user_id = md.get("user_id")
         plan = md.get("plan")
         if plan not in PLANS or not user_id:
@@ -701,8 +725,12 @@ async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
         "garden": str(prop.get("garden", ""))[:10],
         "attic": str(prop.get("attic", ""))[:20],
         "plot_area": float(prop.get("plot_area") or 0) or None,
+        "land_type": str(prop.get("land_type", ""))[:30],
+        "utilities": str(prop.get("utilities", ""))[:30],
+        "road_access": str(prop.get("road_access", ""))[:30],
         "reason": str(prop.get("reason", ""))[:20],
         "building_type": str(prop.get("building_type", ""))[:30],
+        "phone": str(prop.get("phone", ""))[:20],
         "price": int(prop.get("price") or 0) or None,
     }
     if safe_prop["price"] and safe_prop["area_m2"]:

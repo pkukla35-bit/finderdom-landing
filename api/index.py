@@ -1157,6 +1157,172 @@ async def valuation_download(session_id: str):
     )
 
 
+def _make_bar_chart_drawing(data, categories, highlight_idx, title="", width=170, height=80, y_label="%", face="Helvetica"):
+    """Return a reportlab Drawing with a bar chart. highlight_idx: which bar to color yellow.
+    data: list[float], categories: list[str]. Values are treated as %."""
+    from reportlab.graphics.shapes import Drawing, String
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
+    from reportlab.lib import colors as _c
+
+    d = Drawing(width, height)
+    if title:
+        d.add(String(width/2, height - 8, title, fontName=face, fontSize=9,
+                     fillColor=_c.HexColor("#0B1836"), textAnchor="middle"))
+
+    bc = VerticalBarChart()
+    bc.x = 24
+    bc.y = 18
+    bc.width = width - 30
+    bc.height = height - 32
+    bc.data = [data]
+    bc.strokeColor = _c.transparent
+
+    # Category axis
+    bc.categoryAxis.categoryNames = categories
+    bc.categoryAxis.labels.fontName = face
+    bc.categoryAxis.labels.fontSize = 6
+    bc.categoryAxis.labels.dy = -2
+    bc.categoryAxis.labels.boxAnchor = "n"
+    bc.categoryAxis.labels.angle = 0
+
+    # Value axis
+    max_v = max(data) if data else 1
+    bc.valueAxis.valueMin = 0
+    bc.valueAxis.valueMax = max_v * 1.25 if max_v > 0 else 10
+    bc.valueAxis.valueStep = max(round(max_v / 4), 5) if max_v > 0 else 5
+    bc.valueAxis.labels.fontName = face
+    bc.valueAxis.labels.fontSize = 6
+    bc.valueAxis.strokeColor = _c.HexColor("#c5d0e6")
+    bc.categoryAxis.strokeColor = _c.HexColor("#c5d0e6")
+
+    # Colors: highlight bar = blue, others = gray
+    bc.bars[0].fillColor = _c.HexColor("#c5d0e6")
+    for i in range(len(data)):
+        if i == highlight_idx:
+            bc.bars[(0, i)].fillColor = _c.HexColor("#3B82F6")  # blue like urban.one
+        else:
+            bc.bars[(0, i)].fillColor = _c.HexColor("#9CA3AF")  # gray
+    bc.bars[0].strokeColor = _c.transparent
+
+    # Bar labels (values)
+    bc.barLabelFormat = "%.1f%%"
+    bc.barLabels.fontName = face
+    bc.barLabels.fontSize = 6
+    bc.barLabels.dy = 4
+    bc.barLabels.fillColor = _c.HexColor("#0B1836")
+    bc.barLabels.nudge = 4
+
+    d.add(bc)
+    return d
+
+
+def _compute_price_distribution(city_offers, this_ppm2):
+    """Compute % distribution of price/m² across 6 buckets. Returns (data, categories, highlight_idx)."""
+    if not city_offers or not this_ppm2:
+        return [], [], -1
+    prices = [o["price_pm2"] for o in city_offers if o.get("price_pm2")]
+    if not prices:
+        return [], [], -1
+    # Auto buckets based on data range (median +/- 30%)
+    med = sorted(prices)[len(prices)//2]
+    # 6 buckets, in tys. zł/m²
+    # Use nice numbers around median
+    step = max(round(med / 5000) * 1000, 1000)  # ~1000-2000 zł steps
+    base = int((med * 0.6) // step * step)
+    edges = [base + i * step for i in range(7)]
+    labels = [f"< {edges[1]/1000:.1f}k"]
+    for i in range(1, 5):
+        labels.append(f"{edges[i]/1000:.1f}-{edges[i+1]/1000:.1f}k")
+    labels.append(f"> {edges[5]/1000:.1f}k")
+
+    counts = [0] * 6
+    for p in prices:
+        if p < edges[1]:
+            counts[0] += 1
+        elif p < edges[2]:
+            counts[1] += 1
+        elif p < edges[3]:
+            counts[2] += 1
+        elif p < edges[4]:
+            counts[3] += 1
+        elif p < edges[5]:
+            counts[4] += 1
+        else:
+            counts[5] += 1
+    total = sum(counts) or 1
+    data = [c / total * 100 for c in counts]
+
+    # Which bucket does this_ppm2 fall in?
+    hi = -1
+    if this_ppm2 < edges[1]: hi = 0
+    elif this_ppm2 < edges[2]: hi = 1
+    elif this_ppm2 < edges[3]: hi = 2
+    elif this_ppm2 < edges[4]: hi = 3
+    elif this_ppm2 < edges[5]: hi = 4
+    else: hi = 5
+    return data, labels, hi
+
+
+def _compute_area_distribution(city_offers, this_area, ptype):
+    """% distribution of area_m2. Uses different buckets for mieszkanie vs dom vs dzialka."""
+    if not city_offers or not this_area:
+        return [], [], -1
+    areas = [o["area_m2"] for o in city_offers if o.get("area_m2")]
+    if not areas:
+        return [], [], -1
+
+    if ptype == "mieszkanie":
+        edges = [0, 30, 40, 50, 60, 80, 10000]
+        labels = ["< 30 m²", "30-40 m²", "40-50 m²", "50-60 m²", "60-80 m²", "> 80 m²"]
+    elif ptype == "dom":
+        edges = [0, 100, 150, 200, 250, 350, 100000]
+        labels = ["< 100 m²", "100-150", "150-200", "200-250", "250-350", "> 350 m²"]
+    else:  # dzialka
+        edges = [0, 500, 1000, 2000, 5000, 10000, 10000000]
+        labels = ["< 500 m²", "500-1k", "1k-2k", "2k-5k", "5k-10k", "> 10k m²"]
+
+    counts = [0] * 6
+    for a in areas:
+        for i in range(6):
+            if edges[i] <= a < edges[i+1]:
+                counts[i] += 1
+                break
+    total = sum(counts) or 1
+    data = [c / total * 100 for c in counts]
+
+    hi = -1
+    for i in range(6):
+        if edges[i] <= this_area < edges[i+1]:
+            hi = i
+            break
+    return data, labels, hi
+
+
+def _compute_district_prices(city_offers, this_district):
+    """Median price/m² per district in the city. Returns list of (district, median_ppm2, is_highlighted)."""
+    from collections import defaultdict
+    by_dist = defaultdict(list)
+    for o in city_offers:
+        d = o.get("district") or "Inne"
+        if o.get("price_pm2"):
+            by_dist[d].append(o["price_pm2"])
+    if not by_dist:
+        return []
+    results = []
+    for d, prices in by_dist.items():
+        if len(prices) < 3:  # skip districts with too little data
+            continue
+        prices_sorted = sorted(prices)
+        n = len(prices_sorted)
+        med = prices_sorted[n//2] if n % 2 == 1 else (prices_sorted[n//2-1] + prices_sorted[n//2]) / 2
+        is_hl = (d.lower() == (this_district or "").lower())
+        results.append((d, int(med), is_hl))
+    # Sort by median asc
+    results.sort(key=lambda x: x[1])
+    # Take top 8 (or all if less)
+    return results[:8]
+
+
 def _haversine_km(lat1, lon1, lat2, lon2):
     import math
     R = 6371
@@ -1557,6 +1723,103 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         story.append(ref_tbl)
     else:
         story.append(Paragraph("Brak wystarczających danych z okolicy do porównania.", small))
+
+    # === Page 3: Rozkłady rynkowe ===
+    # Compute city offers (same city, same type, SALE only)
+    city_offers_for_charts = [
+        x for x in all_listings
+        if x.get("city", "").lower() == (l.get("city") or "").lower()
+        and x.get("type") == l.get("type")
+        and x.get("transaction") == "sprzedaz"
+        and x.get("is_original") is not False
+        and x.get("price_pm2")
+    ]
+
+    if len(city_offers_for_charts) >= 20:
+        story.append(PageBreak())
+        story.append(Paragraph("Rozkłady rynkowe", h2))
+        story.append(Paragraph(
+            f"Poniższe wykresy pokazują jak Twoja nieruchomość plasuje się na tle "
+            f"<b>{len(city_offers_for_charts)} ofert sprzedaży {l.get('type','')}</b> w mieście {l.get('city','—')}. "
+            f"Niebieskim kolorem zaznaczony jest przedział, w którym znajduje się Twoja nieruchomość.",
+            small
+        ))
+        story.append(Spacer(1, 4*mm))
+
+        # F: Median prices per district
+        district_data = _compute_district_prices(city_offers_for_charts, l.get("district"))
+        if district_data and len(district_data) >= 2:
+            story.append(Paragraph(
+                f"<b>F</b> Średnie ceny sprzedaży per dzielnica — <b>{l.get('city','')}</b>",
+                ParagraphStyle("fbold", fontName=face_bold, fontSize=10, textColor=colors.HexColor("#0B1836"))
+            ))
+            story.append(Spacer(1, 2*mm))
+            from reportlab.graphics.shapes import Drawing, String
+            from reportlab.graphics.charts.barcharts import HorizontalBarChart
+            from reportlab.lib import colors as _cc
+            dwidth, dheight = 480, 22 * len(district_data) + 20
+            drw = Drawing(dwidth, dheight)
+            bc = HorizontalBarChart()
+            bc.x = 105
+            bc.y = 10
+            bc.width = dwidth - 130
+            bc.height = dheight - 20
+            bc.data = [[d[1] for d in district_data]]
+            bc.categoryAxis.categoryNames = [d[0][:22] for d in district_data]
+            bc.categoryAxis.labels.fontName = face
+            bc.categoryAxis.labels.fontSize = 7
+            bc.categoryAxis.labels.dx = -3
+            bc.valueAxis.labels.fontName = face
+            bc.valueAxis.labels.fontSize = 6
+            max_v = max(d[1] for d in district_data)
+            bc.valueAxis.valueMin = 0
+            bc.valueAxis.valueMax = max_v * 1.2
+            bc.valueAxis.valueStep = max(int(max_v // 4 // 1000 * 1000), 1000)
+            bc.strokeColor = _cc.transparent
+            bc.bars[0].strokeColor = _cc.transparent
+            for i, (_, _, is_hl) in enumerate(district_data):
+                bc.bars[(0, i)].fillColor = _cc.HexColor("#3B82F6") if is_hl else _cc.HexColor("#9CA3AF")
+            bc.barLabelFormat = lambda v: f"{int(v):,}".replace(",", " ")
+            bc.barLabels.fontName = face
+            bc.barLabels.fontSize = 6
+            bc.barLabels.dx = 3
+            bc.barLabels.fillColor = _cc.HexColor("#0B1836")
+            bc.barLabels.nudge = 3
+            drw.add(bc)
+            story.append(drw)
+            story.append(Spacer(1, 6*mm))
+
+        # G1 + G2: Two histograms side by side
+        this_ppm2 = l.get("price_pm2") or 0
+        this_area = l.get("area_m2") or 0
+        # If user has no price, use city median for chart highlight
+        if not this_ppm2:
+            sorted_p = sorted(x["price_pm2"] for x in city_offers_for_charts)
+            this_ppm2 = sorted_p[len(sorted_p)//2] if sorted_p else 0
+
+        g1_data, g1_labels, g1_hi = _compute_price_distribution(city_offers_for_charts, this_ppm2)
+        g2_data, g2_labels, g2_hi = _compute_area_distribution(city_offers_for_charts, this_area, l.get("type", ""))
+
+        if g1_data:
+            story.append(Paragraph(
+                f"<b>G1</b> Rozkład cen sprzedaży w mieście {l.get('city','')}",
+                ParagraphStyle("g1", fontName=face_bold, fontSize=10, textColor=colors.HexColor("#0B1836"))
+            ))
+            story.append(Spacer(1, 2*mm))
+            story.append(_make_bar_chart_drawing(g1_data, g1_labels, g1_hi, width=480, height=140, face=face))
+            story.append(Spacer(1, 4*mm))
+        if g2_data:
+            story.append(Paragraph(
+                f"<b>G2</b> Powierzchnia sprzedawanych {l.get('type','')} w mieście {l.get('city','')}",
+                ParagraphStyle("g2", fontName=face_bold, fontSize=10, textColor=colors.HexColor("#0B1836"))
+            ))
+            story.append(Spacer(1, 2*mm))
+            story.append(_make_bar_chart_drawing(g2_data, g2_labels, g2_hi, width=480, height=140, face=face))
+            story.append(Spacer(1, 3*mm))
+            story.append(Paragraph(
+                "Niebieski słupek to przedział, w którym znajduje się Twoja nieruchomość.",
+                small
+            ))
 
     story.append(Spacer(1, 8*mm))
     story.append(Paragraph("Informacje o raporcie", h2))

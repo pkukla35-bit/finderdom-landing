@@ -85,9 +85,12 @@ jobs:
           DELAY_MAX: "2.5"
           SCRAPE_VOIVODESHIPS: "1"
           SKIP_DETAILS: "1"
-          ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
-          ZENROWS_ANTIBOT: "1"
-          # ScraperAPI (proxy pool + anti-bot bypass) — dodaj Secret w Settings → Secrets → Actions
+          # ScrapingBee (premium Akamai bypass) — priorytet nad ScraperAPI
+          SCRAPINGBEE_API_KEY: ${{ secrets.SCRAPINGBEE_API_KEY }}
+          SCRAPINGBEE_PREMIUM: "1"
+          SCRAPINGBEE_RENDER_JS: "0"
+          SCRAPINGBEE_COUNTRY: "pl"
+          # ScraperAPI (fallback, gdy brak ScrapingBee)
           SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
           SCRAPER_API_PREMIUM: "1"
           SCRAPER_API_COUNTRY: "pl"
@@ -117,4 +120,3 @@ jobs:
           COUNT=$(python -c "import json; print(json.load(open('data/listings.json'))['count'])")
           git commit -m "chore(data): scrape Otodom — ${COUNT} listings [skip ci]"
           git push
-          

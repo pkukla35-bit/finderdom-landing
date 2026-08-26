@@ -1,13 +1,25 @@
 name: Scrape Otodom Details (Phase 2)
 
+# WORKFLOW #2: wzbogaca ISTNIEJĄCY data/listings.json o szczegóły (rynek, standard,
+# typ budynku, balkon...) — uruchamiać PO głównym scrape-listings.yml.
+#
+# Zaleta: osobny scrape = nowa sesja HTTP = mniejsze ryzyko banu Otodom.
+
 on:
   workflow_dispatch:
     inputs:
       detail_max:
-        description: "Gorny limit ofert (scraper i tak zatrzyma sie po MAX_RUN_TIME)."
+        description: "Górny limit ofert do enrichmentu (scraper i tak zatrzyma się po MAX_RUN_TIME)."
         required: true
         default: "10000"
         type: string
+  # Automatyczne uruchamianie co 4 godziny — enrichment tła bez klikania.
+  # Scraper ma wbudowany TIME BUDGET (MAX_RUN_TIME=9000s = 2h 30min) — zawsze zdąży
+  # zapisać JSON i zacommitować PRZED 3h timeout GH Actions.
+  # UWAGA: przed enable sprawdź swój budżet ZenRows! Każdy request = 25 credit.
+  # Odkomentuj `schedule:` DOPIERO po potwierdzeniu budżetu.
+  # schedule:
+  #   - cron: "10 */4 * * *"   # co 4h o :10 (00:10, 04:10, 08:10, 12:10, 16:10, 20:10 UTC)
 
 permissions:
   contents: write
@@ -18,7 +30,7 @@ concurrency:
 
 jobs:
   details:
-    name: Scrape Otodom Details
+    name: Scrape Otodom Details → wzbogać data/listings.json
     runs-on: ubuntu-latest
     timeout-minutes: 180
 
@@ -41,12 +53,23 @@ jobs:
       - name: Run details fetch
         env:
           DETAILS_ONLY: "1"
+          # Górny cap ilości ofert — scraper i tak zatrzyma się na MAX_RUN_TIME.
           DETAIL_MAX: ${{ github.event.inputs.detail_max || '10000' }}
           DETAIL_WORKERS: "6"
           DETAIL_DELAY: "0.3"
+          # ⏱️ TIME BUDGET — kluczowe! Scraper zatrzyma się dobrowolnie po 9000s (2h 30min)
+          # i zdąży zapisać JSON + commit + push przed 3h timeout GH Actions.
           MAX_RUN_TIME: "9000"
+          # Tylko domy — oszczędzamy credity ZenRows (25 credits/req).
           DETAIL_ONLY_TYPE: "dom"
+          # Pomijaj już wzbogacone oferty (kluczowe dla CRON — bez tego by scrapował w kółko te same).
           SKIP_ENRICHED: "1"
+          # ScrapingBee (premium Akamai bypass) — priorytet
+          SCRAPINGBEE_API_KEY: ${{ secrets.SCRAPINGBEE_API_KEY }}
+          SCRAPINGBEE_PREMIUM: "1"
+          SCRAPINGBEE_RENDER_JS: "0"
+          SCRAPINGBEE_COUNTRY: "pl"
+          # ScraperAPI / ZenRows (fallback)
           SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
           SCRAPER_API_PREMIUM: "1"
           SCRAPER_API_COUNTRY: "pl"
@@ -65,7 +88,7 @@ jobs:
       - name: Commit & push enriched listings
         run: |
           if git diff --quiet data/listings.json; then
-            echo "Brak zmian - nie commituje."
+            echo "ℹ️  Brak zmian — nie commituję."
             exit 0
           fi
           git config user.name  "FinderDom Bot"
@@ -73,5 +96,5 @@ jobs:
           git add data/listings.json
           ENRICHED=$(python -c "import json; d=json.load(open('data/listings.json')); print(d.get('details_enriched', 0))")
           THIS_RUN=$(python -c "import json; d=json.load(open('data/listings.json')); print(d.get('details_enriched_this_run', 0))")
-          git commit -m "chore(data): enrich Otodom details - +${THIS_RUN} (total ${ENRICHED}) [skip ci]"
+          git commit -m "chore(data): enrich Otodom details — +${THIS_RUN} (total ${ENRICHED}) [skip ci]"
           git push

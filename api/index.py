@@ -1362,7 +1362,7 @@ def _build_map_png(main_lat, main_lon, offers, width=900, height=520):
         # Add pin numbers as overlay using PIL
         try:
             from PIL import ImageFont
-            from staticmap import _lon_to_x as _sm_lon_to_x, _lat_to_y as _sm_lat_to_y
+            from staticmap.staticmap import _lon_to_x as _sm_lon_to_x, _lat_to_y as _sm_lat_to_y
             font = None
             for fp in ["/app/finderdom-landing/api/fonts/DejaVuSans-Bold.ttf",
                        "api/fonts/DejaVuSans-Bold.ttf",
@@ -1418,28 +1418,242 @@ def _build_map_png(main_lat, main_lon, offers, width=900, height=520):
         return None
 
 
+def _build_map_with_price_labels(main_lat, main_lon, offers, width=1000, height=560):
+    """Map with price labels (propertly.io style): each offer gets bubble with price/m² in tys. zł."""
+    try:
+        from staticmap import StaticMap, CircleMarker
+        from staticmap.staticmap import _lon_to_x as _sm_lon_to_x, _lat_to_y as _sm_lat_to_y
+        from PIL import Image, ImageDraw, ImageFont
+        import io as _io
+
+        m = StaticMap(width, height, url_template="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png")
+
+        # Add invisible markers to force auto-fit
+        for o in offers[:10]:
+            olat, olon = o.get("lat"), o.get("lon")
+            if olat is not None and olon is not None:
+                m.add_marker(CircleMarker((olon, olat), "#4F46E5", 8))
+        m.add_marker(CircleMarker((main_lon, main_lat), "#4F46E5", 12))
+
+        img = m.render()
+
+        # Overlay price labels
+        try:
+            draw = ImageDraw.Draw(img, "RGBA")
+            font = None
+            font_bold = None
+            for fp in ["/app/finderdom-landing/api/fonts/DejaVuSans-Bold.ttf",
+                       "api/fonts/DejaVuSans-Bold.ttf",
+                       "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
+                try:
+                    font_bold = ImageFont.truetype(fp, 14)
+                    font = ImageFont.truetype(fp.replace("-Bold",""), 12)
+                    break
+                except Exception:
+                    pass
+            if font is None:
+                font = font_bold = ImageFont.load_default()
+
+            def _fmt_short(v):
+                v = int(v)
+                if v >= 1000:
+                    return f"{v/1000:.1f}".rstrip("0").rstrip(".").replace(".", ",") + " tys. zł/m²"
+                return f"{v} zł/m²"
+
+            for o in offers[:10]:
+                olat, olon = o.get("lat"), o.get("lon")
+                if olat is None or olon is None or not o.get("price_pm2"):
+                    continue
+                try:
+                    x = _sm_lon_to_x(olon, m.zoom)
+                    y = _sm_lat_to_y(olat, m.zoom)
+                    px = int(m._x_to_px(x))
+                    py = int(m._y_to_px(y))
+                    label = _fmt_short(o["price_pm2"])
+                    bbox = draw.textbbox((0, 0), label, font=font_bold)
+                    tw = bbox[2] - bbox[0]
+                    th = bbox[3] - bbox[1]
+                    # Rounded rectangle background
+                    pad_x, pad_y = 6, 3
+                    rx, ry = px - tw//2 - pad_x, py - th - 14
+                    rw, rh = tw + 2*pad_x, th + 2*pad_y
+                    # Bubble (white with border)
+                    draw.rounded_rectangle(
+                        [(rx, ry), (rx+rw, ry+rh)], radius=6,
+                        fill=(255,255,255,235), outline=(79,70,229,255), width=1
+                    )
+                    # Small dot connector (triangle downward)
+                    tip_y = ry + rh
+                    draw.polygon([
+                        (px - 4, tip_y - 1),
+                        (px + 4, tip_y - 1),
+                        (px, tip_y + 5)
+                    ], fill=(255,255,255,235), outline=(79,70,229,255))
+                    # Text
+                    draw.text((rx + pad_x, ry + pad_y - 1), label,
+                              fill=(31, 41, 55, 255), font=font_bold)
+                except Exception:
+                    pass
+
+            # Main property marker (larger, purple)
+            try:
+                x = _sm_lon_to_x(main_lon, m.zoom)
+                y = _sm_lat_to_y(main_lat, m.zoom)
+                px = int(m._x_to_px(x))
+                py = int(m._y_to_px(y))
+                # Big pin: circle + label "TA NIERUCHOMOŚĆ"
+                draw.ellipse([px-16, py-16, px+16, py+16], fill=(79,70,229,255), outline=(255,255,255,255), width=2)
+                draw.ellipse([px-6, py-6, px+6, py+6], fill=(255,255,255,255))
+                label = "TWOJA NIERUCHOMOŚĆ"
+                bbox = draw.textbbox((0, 0), label, font=font_bold)
+                tw = bbox[2] - bbox[0]
+                th = bbox[3] - bbox[1]
+                rx = px - tw//2 - 8
+                ry = py + 18
+                rw = tw + 16
+                rh = th + 8
+                draw.rounded_rectangle(
+                    [(rx, ry), (rx+rw, ry+rh)], radius=8,
+                    fill=(79,70,229,255)
+                )
+                draw.text((rx + 8, ry + 3), label, fill=(255,255,255,255), font=font_bold)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        buf = _io.BytesIO()
+        img.save(buf, "PNG")
+        buf.seek(0)
+        return buf.getvalue()
+    except Exception as e:
+        try:
+            logger.error("Map with labels failed: %s", str(e)[:200])
+        except Exception:
+            pass
+        return None
+
+
+def _make_distribution_chart(values, highlight_val, kind="price", face="Helvetica", ptype=""):
+    """Return a Drawing showing distribution histogram + highlighted user's bucket.
+    kind: 'price', 'price_pm2', 'area'"""
+    from reportlab.graphics.shapes import Drawing, String, Rect, Line
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
+    from reportlab.lib import colors as _c
+    from reportlab.lib.units import mm
+
+    if not values or len(values) < 5:
+        d = Drawing(180*mm, 32*mm)
+        d.add(String(90*mm, 15*mm, "Brak wystarczających danych", fontName=face, fontSize=9,
+                     fillColor=_c.HexColor("#6B7280"), textAnchor="middle"))
+        return d
+
+    vs = sorted(values)
+    n = len(vs)
+    lo, hi = vs[int(n*0.02)], vs[int(n*0.98)]
+
+    # 10 buckets between p2-p98
+    step = (hi - lo) / 10 if hi > lo else 1
+    if step <= 0:
+        step = 1
+    buckets = [0] * 10
+    for v in vs:
+        idx = int((v - lo) / step)
+        if idx < 0: idx = 0
+        if idx > 9: idx = 9
+        buckets[idx] += 1
+    total = sum(buckets) or 1
+    percents = [b / total * 100 for b in buckets]
+
+    # highlight bucket
+    hi_idx = -1
+    if highlight_val:
+        hi_idx = int((highlight_val - lo) / step)
+        if hi_idx < 0: hi_idx = 0
+        if hi_idx > 9: hi_idx = 9
+
+    # Format labels
+    def _fmt_label(v):
+        if kind == "price_pm2":
+            return f"{v/1000:.0f}k" if v >= 1000 else f"{v:.0f}"
+        elif kind == "price":
+            return f"{v/1_000_000:.2f}M".replace(".",",") if v >= 1_000_000 else f"{v/1000:.0f}k"
+        else:  # area
+            return f"{v:.0f}"
+
+    categories = []
+    for i in range(10):
+        edge = lo + i * step
+        categories.append(_fmt_label(edge))
+
+    d = Drawing(180*mm, 32*mm)
+    bc = VerticalBarChart()
+    bc.x = 20
+    bc.y = 16
+    bc.width = 180*mm - 30
+    bc.height = 32*mm - 24
+    bc.data = [percents]
+    bc.strokeColor = _c.transparent
+    bc.categoryAxis.categoryNames = categories
+    bc.categoryAxis.labels.fontName = face
+    bc.categoryAxis.labels.fontSize = 6
+    bc.categoryAxis.labels.dy = -2
+    bc.categoryAxis.strokeColor = _c.HexColor("#E5E7EB")
+    bc.categoryAxis.tickDown = 2
+    bc.valueAxis.valueMin = 0
+    max_p = max(percents) if percents else 1
+    bc.valueAxis.valueMax = max_p * 1.2 if max_p > 0 else 10
+    bc.valueAxis.labels.fontName = face
+    bc.valueAxis.labels.fontSize = 6
+    bc.valueAxis.strokeColor = _c.HexColor("#E5E7EB")
+    bc.bars[0].strokeColor = _c.transparent
+    for i in range(10):
+        if i == hi_idx:
+            bc.bars[(0, i)].fillColor = _c.HexColor("#4F46E5")  # indigo
+        else:
+            bc.bars[(0, i)].fillColor = _c.HexColor("#C7D2FE")  # indigo-200
+    d.add(bc)
+    return d
+
+
 def build_valuation_pdf(l, all_listings, buyer_email):
+    """
+    Wycena nieruchomości w stylu propertly.io - profesjonalny raport 4-stronicowy.
+    Kolorystyka: głęboki indygo/purpura, białe karty na jasnym tle.
+    """
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
     from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+        PageBreak, KeepTogether
+    )
 
     face = _register_pdf_font()
     face_bold = "DejaVu-Bold" if face == "DejaVu" else "Helvetica-Bold"
 
-    # Compute local median (5km for mieszkania, 8km for domy/dzialki)
-    # ZAWSZE tylko oferty sprzedaży (nie wynajem)
-    local_offers = []
-    used_radius = 0
+    # === Palette (propertly.io style) ===
+    PRIMARY = colors.HexColor("#4F46E5")      # indigo-600
+    PRIMARY_DARK = colors.HexColor("#3730A3") # indigo-800
+    PRIMARY_LIGHT = colors.HexColor("#EEF2FF")# indigo-50
+    ACCENT = colors.HexColor("#6366F1")       # indigo-500
+    TEXT_DARK = colors.HexColor("#111827")    # gray-900
+    TEXT_MUTED = colors.HexColor("#6B7280")   # gray-500
+    BORDER = colors.HexColor("#E5E7EB")       # gray-200
+    BG_LIGHT = colors.HexColor("#F9FAFB")     # gray-50
+    SUCCESS = colors.HexColor("#10B981")      # green-500
+    DANGER = colors.HexColor("#EF4444")       # red-500
+
+    # === Data prep ===
     txn = l.get("transaction") or "sprzedaz"
-    # Custom valuation may pass "sale" - normalize
     if txn == "sale":
         txn = "sprzedaz"
 
+    local_offers = []
+    used_radius = 0
     if l.get("lat") is not None and l.get("lon") is not None:
-        # Try radiuses 5,8,12,20 km until we get min 3 offers
         candidates_by_km = {}
         max_km = 20
         for x in all_listings:
@@ -1452,8 +1666,6 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                 d = _haversine_km(l["lat"], l["lon"], x["lat"], x["lon"])
                 if d <= max_km:
                     candidates_by_km[x["id"]] = (d, x)
-
-        # Choose smallest radius with min 3 offers, default 5km for mieszkania, 8 for reszta
         min_km = 5 if l.get("type") == "mieszkanie" else 8
         for km in [min_km, min_km + 3, min_km + 7, min_km + 15]:
             local_offers = [{**x, "_dist": round(d, 2)}
@@ -1462,12 +1674,12 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                 used_radius = km
                 break
         else:
-            local_offers = [{**x, "_dist": round(d, 2)} for _, (d, x) in candidates_by_km.items()]
+            local_offers = [{**x, "_dist": round(d, 2)}
+                            for _, (d, x) in candidates_by_km.items()]
             used_radius = max_km
         local_offers.sort(key=lambda x: x["_dist"])
         local_offers = local_offers[:10]
 
-    # Fallback: brak GPS - użyj SALE-only comparable z tego samego miasta
     if not local_offers:
         for x in all_listings:
             if (x.get("city", "").lower() == (l.get("city") or "").lower()
@@ -1477,256 +1689,9 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                 and x.get("price_pm2")):
                 local_offers.append({**x, "_dist": None})
         local_offers = local_offers[:10]
-        used_radius = 0  # mark as "same city"
 
-    ppm2_this = l.get("price_pm2") or 0
-    ppm2_local = 0
-    if local_offers:
-        sorted_p = sorted(x["price_pm2"] for x in local_offers)
-        n = len(sorted_p)
-        ppm2_local = sorted_p[n//2] if n % 2 == 1 else (sorted_p[n//2-1] + sorted_p[n//2]) / 2
-    ppm2_rcn = int(ppm2_local * 0.94) if ppm2_local else (l.get("ai_rcn_pm2") or 0)
-
-    # Verdict
-    delta_pct = 0
-    verdict_text = "W normie"
-    verdict_color = colors.HexColor("#8ba3d4")
-    recommendation = "Oferta w normie rynkowej — możesz negocjować niewielką obniżkę (2-5%)."
-    if ppm2_local and ppm2_this:
-        delta_pct = ((ppm2_this - ppm2_local) / ppm2_local) * 100
-        if delta_pct <= -8:
-            verdict_text = f"OKAZJA — {abs(delta_pct):.0f}% poniżej rynku"
-            verdict_color = colors.HexColor("#22c55e")
-            recommendation = "Warto działać szybko — oferta znacząco poniżej mediany rynkowej. Zweryfikuj stan techniczny i kupuj."
-        elif delta_pct >= 8:
-            verdict_text = f"DROGO — {delta_pct:.0f}% powyżej rynku"
-            verdict_color = colors.HexColor("#ef4444")
-            recommendation = f"Cena wyraźnie powyżej mediany okolicy ({abs(delta_pct):.0f}%). Negocjuj minimum {abs(delta_pct):.0f}% lub szukaj alternatyw."
-        else:
-            verdict_text = f"NORMA — {delta_pct:+.0f}% od mediany"
-
-    # Estimate value range
-    area = l.get("area_m2") or 0
-    est_low = int(ppm2_local * 0.92 * area) if ppm2_local else 0
-    est_mid = int(ppm2_local * area) if ppm2_local else 0
-    est_high = int(ppm2_local * 1.08 * area) if ppm2_local else 0
-
-    def fmt_pln(n):
-        try:
-            return f"{int(n):,}".replace(",", " ") + " zł"
-        except: return "—"
-
-    def fmt_pm2(n):
-        try:
-            return f"{int(n):,}".replace(",", " ") + " zł/m²"
-        except: return "—"
-
-    # Styles
-    title_style = ParagraphStyle("t", fontName=face_bold, fontSize=22, leading=26, textColor=colors.HexColor("#0B1836"))
-    h2 = ParagraphStyle("h2", fontName=face_bold, fontSize=14, leading=18, textColor=colors.HexColor("#0B1836"), spaceBefore=8, spaceAfter=6)
-    normal = ParagraphStyle("n", fontName=face, fontSize=10, leading=14, textColor=colors.HexColor("#333333"))
-    small = ParagraphStyle("s", fontName=face, fontSize=8, leading=11, textColor=colors.grey)
-    verdict_p = ParagraphStyle("v", fontName=face_bold, fontSize=18, leading=22, textColor=verdict_color, alignment=TA_CENTER)
-    big_num = ParagraphStyle("bn", fontName=face_bold, fontSize=20, leading=24, textColor=colors.HexColor("#FFB800"), alignment=TA_CENTER)
-    label_st = ParagraphStyle("l", fontName=face_bold, fontSize=8, leading=11, textColor=colors.HexColor("#8ba3d4"), alignment=TA_CENTER)
-
-    out = io.BytesIO()
-    doc = SimpleDocTemplate(out, pagesize=A4, leftMargin=18*mm, rightMargin=18*mm, topMargin=18*mm, bottomMargin=18*mm, title="Wycena FinderDom.pl")
-    story = []
-
-    # === Page 1 header ===
-    story.append(Paragraph("WYCENA NIERUCHOMOŚCI", title_style))
-    listing_id_short = str(l.get('id', ''))[-8:].replace('otodom-', '').replace('otodom', '')
-    story.append(Paragraph(f"FinderDom.pl · Raport nr FD-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M')}-{listing_id_short}", small))
-    story.append(Spacer(1, 6*mm))
-
-    # Photo (jeśli listing ma image_url)
-    photo_url = l.get('image_url') or (l.get('image_urls') or [None])[0]
-    if photo_url and str(photo_url).startswith('http'):
-        try:
-            import urllib.request
-            from reportlab.platypus import Image as RLImage
-            req = urllib.request.Request(photo_url, headers={
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'image/webp,image/apng,image/*,*/*',
-            })
-            with urllib.request.urlopen(req, timeout=8) as r:
-                img_data = r.read()
-            img_buf = io.BytesIO(img_data)
-            img = RLImage(img_buf, width=174*mm, height=100*mm, kind='proportional')
-            img.hAlign = 'CENTER'
-            story.append(img)
-            story.append(Spacer(1, 5*mm))
-        except Exception:
-            pass  # ignore image errors
-
-    # Location
-    story.append(Paragraph("Lokalizacja i parametry", h2))
-    loc = l.get("location") or f"{l.get('city','')}{', ' + l.get('district','') if l.get('district') else ''}"
-    story.append(Paragraph(f"<b>Adres:</b> {loc}", normal))
-    story.append(Paragraph(f"<b>Typ:</b> {(l.get('type') or '').capitalize()} · <b>Rynek:</b> {(l.get('market_type') or '—').capitalize()}", normal))
-
-    elevator_label = {"tak": "Tak", "nie": "Nie", "": "—"}.get(l.get("elevator", ""), "—")
-    specs_data = [
-        ["Powierzchnia", f"{area} m²", "Pokoje", str(l.get("rooms") or "—")],
-        ["Piętro", f"{l.get('floor','—')}/{l.get('max_floor','—')}" if l.get('max_floor') else str(l.get('floor','—')), "Rok budowy", str(l.get("build_year") or "—")],
-        ["Standard", (l.get("standard") or "—").capitalize(), "Budynek", (l.get("building_type") or "—").capitalize()],
-        ["Winda", elevator_label, "Typ", (l.get("type") or "—").capitalize()],
-    ]
-    specs_tbl = Table(specs_data, colWidths=[35*mm, 45*mm, 35*mm, 45*mm])
-    specs_tbl.setStyle(TableStyle([
-        ("FONTNAME", (0,0), (-1,-1), face),
-        ("FONTSIZE", (0,0), (-1,-1), 9),
-        ("BACKGROUND", (0,0), (0,-1), colors.HexColor("#F5F7FB")),
-        ("BACKGROUND", (2,0), (2,-1), colors.HexColor("#F5F7FB")),
-        ("TEXTCOLOR", (0,0), (0,-1), colors.HexColor("#8ba3d4")),
-        ("TEXTCOLOR", (2,0), (2,-1), colors.HexColor("#8ba3d4")),
-        ("FONTNAME", (0,0), (0,-1), face_bold),
-        ("FONTNAME", (2,0), (2,-1), face_bold),
-        ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#c5d0e6")),
-        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("LEFTPADDING", (0,0), (-1,-1), 8),
-        ("TOPPADDING", (0,0), (-1,-1), 6),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-    ]))
-    story.append(specs_tbl)
-    story.append(Spacer(1, 6*mm))
-
-    # Wycena AI
-    story.append(Paragraph("Wycena AI", h2))
-    val_tbl = Table([
-        [Paragraph("MINIMUM", label_st), Paragraph("WARTOŚĆ RYNKOWA", label_st), Paragraph("MAKSIMUM", label_st)],
-        [Paragraph(fmt_pln(est_low), big_num), Paragraph(fmt_pln(est_mid), ParagraphStyle("m", fontName=face_bold, fontSize=24, leading=28, textColor=colors.HexColor("#0B1836"), alignment=TA_CENTER)), Paragraph(fmt_pln(est_high), big_num)],
-    ], colWidths=[52*mm, 56*mm, 52*mm])
-    val_tbl.setStyle(TableStyle([
-        ("BACKGROUND", (1,0), (1,-1), colors.HexColor("#FFF9E6")),
-        ("BOX", (0,0), (-1,-1), 0.5, colors.HexColor("#c5d0e6")),
-        ("LINEBEFORE", (1,0), (1,-1), 1, colors.HexColor("#FFB800")),
-        ("LINEAFTER", (1,0), (1,-1), 1, colors.HexColor("#FFB800")),
-        ("TOPPADDING", (0,0), (-1,-1), 8),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 12),
-    ]))
-    story.append(val_tbl)
-    story.append(Spacer(1, 4*mm))
-    price_line = ""
-    if l.get("price") and ppm2_this:
-        price_line = f"<b>Cena ofertowa (Twoja):</b> {fmt_pln(l.get('price'))} ({fmt_pm2(ppm2_this)})<br/>"
-    story.append(Paragraph(f"<b>Zakres cen za m²:</b> {fmt_pm2(ppm2_local*0.92)} — <b>{fmt_pm2(ppm2_local)}</b> — {fmt_pm2(ppm2_local*1.08)}<br/>"
-                           f"{price_line}"
-                           f"<b>Analiza w promieniu:</b> {(str(used_radius) + ' km') if used_radius else 'całe miasto'} · {len(local_offers)} porównywalnych ofert (tylko sprzedaż)<br/>"
-                           f"<b>Szacowana wartość RCN (transakcje):</b> {fmt_pm2(ppm2_rcn)}", normal))
-    story.append(Spacer(1, 6*mm))
-
-    # Verdict — pokaż tylko gdy jest cena ofertowa (bo bez niej nie ma z czego porównywać)
-    if l.get("price") and ppm2_this and ppm2_local:
-        story.append(Paragraph(verdict_text, verdict_p))
-        story.append(Spacer(1, 3*mm))
-        story.append(Paragraph(f"<b>Rekomendacja:</b> {recommendation}", normal))
-    else:
-        # Brak ceny (klient wyceniał własną nieruchomość) — pokaż inną rekomendację
-        story.append(Paragraph(
-            f"<b>Wskazówka:</b> Jeśli chcesz sprzedać nieruchomość, "
-            f"celuj w przedział <b>{fmt_pln(est_low)} – {fmt_pln(est_high)}</b>. "
-            f"Cena wywoławcza w środku widełek (~{fmt_pln(est_mid)}) zwykle sprzedaje się najszybciej.",
-            normal
-        ))
-
-    # === Page 2 ===
-    story.append(PageBreak())
-    story.append(Paragraph("Mapa okolicznych ofert", h2))
-    story.append(Paragraph(
-        "⭐ Twoja nieruchomość (żółta) · 🔴 10 ofert sprzedaży z okolicy (numerowane 1–10)",
-        small
-    ))
-    story.append(Spacer(1, 3*mm))
-
-    # Generate map image
-    map_added = False
-    if l.get("lat") is not None and l.get("lon") is not None:
-        offers_with_gps = [o for o in local_offers[:10]
-                           if o.get("lat") is not None and o.get("lon") is not None]
-        map_bytes = _build_map_png(l["lat"], l["lon"], offers_with_gps, width=900, height=520)
-        if map_bytes:
-            from reportlab.platypus import Image as RLImage
-            map_buf = io.BytesIO(map_bytes)
-            img = RLImage(map_buf, width=170*mm, height=98*mm)
-            img.hAlign = "CENTER"
-            story.append(img)
-            story.append(Spacer(1, 2*mm))
-            story.append(Paragraph(
-                "Źródło map: © OpenStreetMap contributors (openstreetmap.org/copyright)",
-                ParagraphStyle("attr", fontName=face, fontSize=7, textColor=colors.grey, alignment=TA_CENTER)
-            ))
-            story.append(Spacer(1, 5*mm))
-            map_added = True
-
-    if not map_added:
-        story.append(Paragraph(
-            "<i>Mapa niedostępna — brak współrzędnych GPS dla tej lokalizacji.</i>",
-            small
-        ))
-        story.append(Spacer(1, 5*mm))
-
-    story.append(Paragraph("Transakcje referencyjne", h2))
-    scope_txt = f"promień {used_radius} km" if used_radius else f"miasto {l.get('city') or '—'}"
-    story.append(Paragraph(f"Poniżej {min(10, len(local_offers))} podobnych <b>ofert sprzedaży</b> z okolicy ({scope_txt}):", small))
-    story.append(Spacer(1, 3*mm))
-
-    if local_offers[:10]:
-        ref_rows = [["Lp.", "Lokalizacja", "m²", "Cena", "zł/m²", "Odl."]]
-        for i, o in enumerate(local_offers[:10], 1):
-            dist_val = o.get('_dist')
-            dist_txt = f"{dist_val} km" if dist_val is not None else "—"
-            # Buduj lokalizację: miasto, dzielnica, sub_location (ulica/osiedle)
-            city_o = o.get("city") or ""
-            district_o = o.get("district") or ""
-            sub_o = o.get("sub_location") or ""
-            # location field zaczyna się od 📍 - wyczyść
-            loc_str = (o.get("location") or "").lstrip("📍 ").strip()
-            if sub_o:
-                # If sub_location already in loc_str, use loc_str; else build
-                if sub_o not in loc_str:
-                    parts = [p for p in [city_o, district_o, sub_o] if p]
-                    loc_str = ", ".join(parts)
-            elif not loc_str:
-                loc_str = city_o
-            # Try to extract street/estate from title if still no sub info
-            if not sub_o and o.get("title"):
-                title_o = o.get("title", "")
-                # Look for "ul. XYZ" or "os. XYZ" patterns
-                import re as _re
-                m = _re.search(r"\b(ul\.\s*[A-ZŁŚŻŹĆŃÓĄĘ][\w\-ąćęłńóśźż]+(?:\s+[A-ZŁŚŻŹĆŃÓĄĘ][\w\-ąćęłńóśźż]+)?)", title_o)
-                if not m:
-                    m = _re.search(r"\b(os\.\s*[A-ZŁŚŻŹĆŃÓĄĘ][\w\-ąćęłńóśźż]+(?:\s+[A-ZŁŚŻŹĆŃÓĄĘ][\w\-ąćęłńóśźż]+)?)", title_o)
-                if m:
-                    loc_str = f"{loc_str}, {m.group(1)}"
-            ref_rows.append([
-                str(i),
-                loc_str[:42] if loc_str else "—",
-                str(o.get("area_m2","—")),
-                fmt_pln(o.get("price")),
-                fmt_pm2(o.get("price_pm2")),
-                dist_txt,
-            ])
-        ref_tbl = Table(ref_rows, colWidths=[10*mm, 65*mm, 15*mm, 30*mm, 30*mm, 15*mm])
-        ref_tbl.setStyle(TableStyle([
-            ("FONTNAME", (0,0), (-1,-1), face),
-            ("FONTSIZE", (0,0), (-1,-1), 8),
-            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#0B1836")),
-            ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-            ("FONTNAME", (0,0), (-1,0), face_bold),
-            ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#c5d0e6")),
-            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ("LEFTPADDING", (0,0), (-1,-1), 5),
-            ("ALIGN", (2,1), (-1,-1), "RIGHT"),
-        ]))
-        story.append(ref_tbl)
-    else:
-        story.append(Paragraph("Brak wystarczających danych z okolicy do porównania.", small))
-
-    # === Page 3: Rozkłady rynkowe ===
-    # Compute city offers (same city, same type, SALE only)
-    city_offers_for_charts = [
+    # City-wide offers (SALE only, same type)
+    city_offers = [
         x for x in all_listings
         if x.get("city", "").lower() == (l.get("city") or "").lower()
         and x.get("type") == l.get("type")
@@ -1735,111 +1700,459 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         and x.get("price_pm2")
     ]
 
-    if len(city_offers_for_charts) >= 20:
+    # Compute medians
+    def _median(nums):
+        s = sorted(x for x in nums if x)
+        if not s:
+            return 0
+        n = len(s)
+        return s[n//2] if n % 2 == 1 else (s[n//2-1] + s[n//2]) / 2
+
+    ppm2_local = _median([o["price_pm2"] for o in local_offers])
+    ppm2_this = l.get("price_pm2") or 0
+    ppm2_rcn = int(ppm2_local * 0.94) if ppm2_local else 0
+
+    area = l.get("area_m2") or 0
+
+    # Prices
+    offer_price_mid = int(ppm2_local * area) if area and ppm2_local else 0
+    offer_price_low = int(offer_price_mid * 0.92)
+    offer_price_high = int(offer_price_mid * 1.08)
+    tx_price_mid = int(ppm2_rcn * area) if area and ppm2_rcn else 0
+    tx_price_low = int(tx_price_mid * 0.92)
+    tx_price_high = int(tx_price_mid * 1.08)
+
+    # Formatters
+    def fmt_pln(n):
+        try:
+            return f"{int(n):,}".replace(",", " ") + " zł"
+        except (ValueError, TypeError):
+            return "—"
+
+    def fmt_pm2(n):
+        try:
+            return f"{int(n):,}".replace(",", " ") + " zł / m²"
+        except (ValueError, TypeError):
+            return "—"
+
+    def fmt_pln_short(n):
+        """1 234 567 zł -> 1,23 mln zł"""
+        try:
+            v = int(n)
+            if v >= 1_000_000:
+                return f"{v/1_000_000:.2f}".replace(".", ",") + " mln zł"
+            elif v >= 1_000:
+                return f"{v/1_000:.0f}".replace(".", ",") + " tys. zł"
+            return f"{v} zł"
+        except (ValueError, TypeError):
+            return "—"
+
+    # === Styles ===
+    title_style = ParagraphStyle(
+        "title", fontName=face_bold, fontSize=13, leading=17,
+        textColor=TEXT_DARK, spaceAfter=2
+    )
+    subtitle_style = ParagraphStyle(
+        "sub", fontName=face_bold, fontSize=17, leading=22,
+        textColor=PRIMARY, spaceAfter=6
+    )
+    h2 = ParagraphStyle(
+        "h2", fontName=face_bold, fontSize=11, leading=15,
+        textColor=TEXT_DARK, spaceBefore=6, spaceAfter=4
+    )
+    h2_sub = ParagraphStyle(
+        "h2s", fontName=face, fontSize=8, leading=11,
+        textColor=TEXT_MUTED, spaceAfter=6
+    )
+    section_hdr = ParagraphStyle(
+        "sh", fontName=face_bold, fontSize=10, leading=13,
+        textColor=PRIMARY, spaceBefore=8, spaceAfter=3
+    )
+    normal = ParagraphStyle(
+        "n", fontName=face, fontSize=9, leading=13,
+        textColor=TEXT_DARK
+    )
+    small = ParagraphStyle(
+        "s", fontName=face, fontSize=7, leading=10,
+        textColor=TEXT_MUTED
+    )
+    big_num = ParagraphStyle(
+        "bn", fontName=face_bold, fontSize=18, leading=22,
+        textColor=PRIMARY, alignment=TA_CENTER, spaceAfter=2
+    )
+    med_num = ParagraphStyle(
+        "mn", fontName=face_bold, fontSize=14, leading=18,
+        textColor=PRIMARY, alignment=TA_CENTER, spaceAfter=2
+    )
+    card_label = ParagraphStyle(
+        "cl", fontName=face, fontSize=7, leading=10,
+        textColor=TEXT_MUTED, alignment=TA_CENTER, spaceAfter=1
+    )
+    card_range = ParagraphStyle(
+        "cr", fontName=face, fontSize=8, leading=11,
+        textColor=TEXT_DARK, alignment=TA_CENTER
+    )
+    footer_style = ParagraphStyle(
+        "f", fontName=face, fontSize=7, leading=10,
+        textColor=TEXT_MUTED, alignment=TA_LEFT
+    )
+    footer_brand = ParagraphStyle(
+        "fb", fontName=face_bold, fontSize=8, leading=11,
+        textColor=PRIMARY, alignment=TA_LEFT
+    )
+
+    # === Doc setup ===
+    out = io.BytesIO()
+
+    def _draw_footer(canvas, doc):
+        canvas.saveState()
+        # Bottom line
+        canvas.setStrokeColor(BORDER)
+        canvas.setLineWidth(0.5)
+        canvas.line(18*mm, 20*mm, A4[0] - 18*mm, 20*mm)
+        # Brand left
+        canvas.setFont(face_bold, 9)
+        canvas.setFillColor(PRIMARY)
+        canvas.drawString(18*mm, 14*mm, "FinderDom.pl")
+        canvas.setFont(face, 7)
+        canvas.setFillColor(TEXT_MUTED)
+        canvas.drawString(18*mm, 10*mm, "Wycena AI · Baza 40 000+ ofert · Aktualizacja 24h/dobę")
+        # Right: page + date
+        canvas.setFont(face, 7)
+        canvas.setFillColor(TEXT_MUTED)
+        gen_txt = f"Wygenerowano {datetime.now(timezone.utc).strftime('%d.%m.%Y')} · FinderDom.pl"
+        canvas.drawRightString(A4[0] - 18*mm, 14*mm, gen_txt)
+        canvas.drawRightString(A4[0] - 18*mm, 10*mm, f"Strona {doc.page}")
+        canvas.restoreState()
+
+    doc = SimpleDocTemplate(
+        out, pagesize=A4,
+        leftMargin=15*mm, rightMargin=15*mm,
+        topMargin=15*mm, bottomMargin=25*mm,
+        title="Szczegółowy raport wyceny"
+    )
+    story = []
+
+    # ============ PAGE 1: Cover + Prices + Parameters ============
+    story.append(Paragraph("Szczegółowy raport wyceny dla nieruchomości:", title_style))
+    loc_full = ", ".join(filter(None, [
+        l.get("sub_location") or "",
+        l.get("city") or "",
+        l.get("district") or "",
+    ])) or (l.get("location") or "").lstrip("📍 ").strip() or "—"
+    story.append(Paragraph(loc_full, subtitle_style))
+    story.append(Spacer(1, 5*mm))
+
+    # === Card 1: Szacowana cena transakcyjna ===
+    def _price_card(title_txt, subtitle_txt, price_mid, price_pm2, price_low, price_high, use_light_bg=True):
+        card_bg = BG_LIGHT if use_light_bg else colors.white
+        title_row = Table([[
+            Paragraph(f"<b>{title_txt}</b>", ParagraphStyle(
+                "ct", fontName=face_bold, fontSize=11, leading=14, textColor=TEXT_DARK)),
+        ]], colWidths=[180*mm])
+        title_row.setStyle(TableStyle([("BOTTOMPADDING", (0,0),(-1,-1), 2)]))
+        sub_row = Table([[
+            Paragraph(subtitle_txt, ParagraphStyle(
+                "csub", fontName=face, fontSize=8, leading=11, textColor=TEXT_MUTED))
+        ]], colWidths=[180*mm])
+        sub_row.setStyle(TableStyle([("BOTTOMPADDING", (0,0),(-1,-1), 4)]))
+
+        # 3-col card
+        col1 = [
+            Paragraph("Przeciętna cena", card_label),
+            Paragraph(fmt_pln_short(price_mid), big_num),
+        ]
+        col2 = [
+            Paragraph("Cena za m²", card_label),
+            Paragraph(fmt_pln_short(price_pm2), big_num),
+        ]
+        col3 = [
+            Paragraph("Szacowany zakres cen", card_label),
+            Paragraph(f"{fmt_pln_short(price_low)}<br/>—<br/>{fmt_pln_short(price_high)}", ParagraphStyle(
+                "cr2", fontName=face_bold, fontSize=10, leading=14,
+                textColor=PRIMARY, alignment=TA_CENTER, spaceAfter=2)),
+        ]
+        cards = Table([[col1, col2, col3]], colWidths=[60*mm, 60*mm, 60*mm])
+        cards.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,-1), card_bg),
+            ("BOX", (0,0),(-1,-1), 0.5, BORDER),
+            ("INNERGRID", (0,0),(-1,-1), 0.5, BORDER),
+            ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
+            ("TOPPADDING", (0,0),(-1,-1), 8),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 8),
+            ("LEFTPADDING", (0,0),(-1,-1), 6),
+            ("RIGHTPADDING", (0,0),(-1,-1), 6),
+        ]))
+        return [title_row, sub_row, cards, Spacer(1, 5*mm)]
+
+    # Transakcyjna (94% ofertowej)
+    for el in _price_card(
+        "Szacowana cena transakcyjna sprzedaży",
+        "kwota, za jaką sprzedano podobne nieruchomości.",
+        tx_price_mid, ppm2_rcn, tx_price_low, tx_price_high,
+    ):
+        story.append(el)
+
+    # Ofertowa
+    for el in _price_card(
+        "Szacowana cena ofertowa sprzedaży",
+        "kwota, za jaką wystawiono podobne nieruchomości na portalach ogłoszeniowych.",
+        offer_price_mid, ppm2_local, offer_price_low, offer_price_high,
+    ):
+        story.append(el)
+
+    # === Parametry nieruchomości ===
+    ptype_lbl = {"mieszkanie": "Mieszkanie", "dom": "Dom", "dzialka": "Działka"}.get(l.get("type",""), l.get("type",""))
+    market_lbl = {"pierwotny": "Rynek pierwotny", "wtorny": "Rynek wtórny"}.get(l.get("market_type",""), "—")
+    std_lbl = {"deweloperski": "Deweloperski", "wysoki": "Wysoki (Premium)",
+               "standardowy": "Standardowy", "do_odswiezenia": "Do odświeżenia",
+               "do_remontu": "Do remontu"}.get(l.get("standard",""), l.get("standard","") or "—")
+
+    param_rows = []
+    if l.get("floor") is not None:
+        max_f = l.get("max_floor")
+        floor_txt = f"{l['floor']}/{max_f}" if max_f else str(l["floor"])
+        param_rows.append(("Piętro", floor_txt))
+    if l.get("build_year"):
+        param_rows.append(("Rok budowy", str(l["build_year"])))
+    param_rows.append(("Rynek", market_lbl))
+    param_rows.append(("Stan nieruchomości", std_lbl))
+    if l.get("rooms"):
+        param_rows.append(("Liczba pokoi", str(l["rooms"])))
+    param_rows.append(("Typ nieruchomości", ptype_lbl))
+    if l.get("area_m2"):
+        area_str = f"{l['area_m2']:.2f}".replace(".", ",") + " m²"
+        param_rows.append(("Powierzchnia", area_str))
+    # Additional
+    extras = []
+    if l.get("elevator") == "tak": extras.append("Winda")
+    if l.get("parking") == "tak": extras.append("Parking")
+    if l.get("basement") == "tak": extras.append("Piwnica")
+    if l.get("garden") == "tak": extras.append("Ogród")
+    if l.get("attic") == "tak": extras.append("Poddasze")
+    if extras:
+        param_rows.append(("Dodatkowe", ", ".join(extras)))
+
+    if param_rows:
+        story.append(Paragraph("<b>Parametry nieruchomości</b>", ParagraphStyle(
+            "pp", fontName=face_bold, fontSize=11, leading=14, textColor=TEXT_DARK, spaceAfter=4)))
+        # 2-col grid
+        pdata = []
+        for i in range(0, len(param_rows), 2):
+            row = list(param_rows[i])
+            if i+1 < len(param_rows):
+                row.extend(list(param_rows[i+1]))
+            else:
+                row.extend(["", ""])
+            pdata.append([
+                Paragraph(row[0], ParagraphStyle("pl", fontName=face, fontSize=8, textColor=TEXT_MUTED)),
+                Paragraph(f"<b>{row[1]}</b>", ParagraphStyle("pv", fontName=face_bold, fontSize=9, textColor=TEXT_DARK)),
+                Paragraph(row[2], ParagraphStyle("pl", fontName=face, fontSize=8, textColor=TEXT_MUTED)),
+                Paragraph(f"<b>{row[3]}</b>", ParagraphStyle("pv", fontName=face_bold, fontSize=9, textColor=TEXT_DARK)),
+            ])
+        pt = Table(pdata, colWidths=[35*mm, 55*mm, 35*mm, 55*mm])
+        pt.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,-1), BG_LIGHT),
+            ("BOX", (0,0),(-1,-1), 0.5, BORDER),
+            ("LINEBELOW", (0,0),(-1,-2), 0.3, BORDER),
+            ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
+            ("TOPPADDING", (0,0),(-1,-1), 4),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 4),
+            ("LEFTPADDING", (0,0),(-1,-1), 8),
+        ]))
+        story.append(pt)
+
+    # ============ PAGE 2: Podobne oferty sprzedaży ============
+    story.append(PageBreak())
+    story.append(Paragraph("Podobne oferty sprzedaży", ParagraphStyle(
+        "p2t", fontName=face_bold, fontSize=15, leading=20, textColor=TEXT_DARK, spaceAfter=3)))
+    scope_txt = f"promień {used_radius} km" if used_radius else f"{l.get('city','—')}"
+    story.append(Paragraph(
+        f"Aktualne oferty sprzedaży w okolicy ({scope_txt}). "
+        f"Podane ceny to wartości ofertowe – ceny transakcyjne są zwykle 5-8% niższe.",
+        ParagraphStyle("p2s", fontName=face, fontSize=8, leading=11, textColor=TEXT_MUTED, spaceAfter=6)))
+
+    # Map with price labels
+    map_added = False
+    if l.get("lat") is not None and l.get("lon") is not None and local_offers:
+        offers_with_gps = [o for o in local_offers[:10]
+                           if o.get("lat") is not None and o.get("lon") is not None]
+        map_bytes = _build_map_with_price_labels(l["lat"], l["lon"], offers_with_gps,
+                                                  width=1000, height=560)
+        if map_bytes:
+            from reportlab.platypus import Image as RLImage
+            img = RLImage(io.BytesIO(map_bytes), width=180*mm, height=100*mm)
+            img.hAlign = "CENTER"
+            story.append(img)
+            story.append(Paragraph(
+                "© OpenStreetMap contributors · Etykiety cen: zł/m²",
+                ParagraphStyle("attr", fontName=face, fontSize=6, textColor=TEXT_MUTED, alignment=TA_CENTER)))
+            story.append(Spacer(1, 4*mm))
+            map_added = True
+
+    # Table: Adres | Powierzchnia | Pokoje | Piętro | Cena | Cena/m²
+    if local_offers:
+        tbl_data = [["Adres", "Powierzchnia", "Pokoje", "Piętro", "Cena", "Cena za m²"]]
+        for o in local_offers[:10]:
+            city_o = o.get("city") or ""
+            district_o = o.get("district") or ""
+            sub_o = o.get("sub_location") or ""
+            addr = ", ".join(filter(None, [sub_o, district_o, city_o])) or "—"
+            addr = addr[:40]
+            area_o = f"{o.get('area_m2','—')} m²" if o.get('area_m2') else "—"
+            rooms_o = str(o.get("rooms","—"))
+            floor_o = ""
+            if o.get("floor") is not None:
+                mf = o.get("max_floor")
+                floor_o = f"{o['floor']}/{mf}" if mf else str(o['floor'])
+            else:
+                floor_o = "—"
+            tbl_data.append([
+                addr, area_o, rooms_o, floor_o,
+                fmt_pln(o.get("price")), fmt_pm2(o.get("price_pm2"))
+            ])
+        tbl = Table(tbl_data, colWidths=[62*mm, 25*mm, 15*mm, 18*mm, 30*mm, 30*mm])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,0), PRIMARY),
+            ("TEXTCOLOR", (0,0),(-1,0), colors.white),
+            ("FONTNAME", (0,0),(-1,0), face_bold),
+            ("FONTSIZE", (0,0),(-1,0), 8),
+            ("FONTNAME", (0,1),(-1,-1), face),
+            ("FONTSIZE", (0,1),(-1,-1), 8),
+            ("TEXTCOLOR", (0,1),(-1,-1), TEXT_DARK),
+            ("ROWBACKGROUNDS", (0,1),(-1,-1), [colors.white, BG_LIGHT]),
+            ("BOX", (0,0),(-1,-1), 0.3, BORDER),
+            ("LINEBELOW", (0,0),(-1,0), 0.5, PRIMARY_DARK),
+            ("INNERGRID", (0,1),(-1,-1), 0.2, BORDER),
+            ("ALIGN", (1,0),(-1,-1), "CENTER"),
+            ("ALIGN", (0,0),(0,-1), "LEFT"),
+            ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
+            ("TOPPADDING", (0,0),(-1,-1), 5),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 5),
+            ("LEFTPADDING", (0,0),(-1,-1), 6),
+        ]))
+        story.append(tbl)
+    else:
+        story.append(Paragraph("Brak wystarczających danych z okolicy.", small))
+
+    # ============ PAGE 3: Porównywalne transakcje ============
+    story.append(PageBreak())
+    story.append(Paragraph("Porównywalne transakcje", ParagraphStyle(
+        "p3t", fontName=face_bold, fontSize=15, leading=20, textColor=TEXT_DARK, spaceAfter=3)))
+    story.append(Paragraph(
+        f"Szacowane ceny transakcyjne (94% cen ofertowych) — realne kwoty za jakie sprzedały się podobne nieruchomości.",
+        ParagraphStyle("p3s", fontName=face, fontSize=8, leading=11, textColor=TEXT_MUTED, spaceAfter=6)))
+
+    # Reuse map from page 2 (with tx prices instead of listing prices)
+    if l.get("lat") is not None and l.get("lon") is not None and local_offers:
+        offers_with_gps = [o for o in local_offers[:10]
+                           if o.get("lat") is not None and o.get("lon") is not None]
+        # Adjust prices to transaction (94%)
+        tx_offers = []
+        for o in offers_with_gps:
+            o2 = dict(o)
+            if o2.get("price_pm2"):
+                o2["price_pm2"] = int(o2["price_pm2"] * 0.94)
+            if o2.get("price"):
+                o2["price"] = int(o2["price"] * 0.94)
+            tx_offers.append(o2)
+        map_bytes2 = _build_map_with_price_labels(l["lat"], l["lon"], tx_offers,
+                                                   width=1000, height=560)
+        if map_bytes2:
+            from reportlab.platypus import Image as RLImage
+            img = RLImage(io.BytesIO(map_bytes2), width=180*mm, height=100*mm)
+            img.hAlign = "CENTER"
+            story.append(img)
+            story.append(Paragraph(
+                "© OpenStreetMap contributors · Szacunkowe ceny transakcyjne (zł/m²)",
+                ParagraphStyle("attr2", fontName=face, fontSize=6, textColor=TEXT_MUTED, alignment=TA_CENTER)))
+            story.append(Spacer(1, 4*mm))
+
+    if local_offers:
+        tbl_data = [["Adres", "Powierzchnia", "Pokoje", "Piętro", "Cena za m²", "Cena"]]
+        for o in local_offers[:10]:
+            city_o = o.get("city") or ""
+            district_o = o.get("district") or ""
+            sub_o = o.get("sub_location") or ""
+            addr = ", ".join(filter(None, [sub_o, district_o, city_o])) or "—"
+            addr = addr[:40]
+            area_o = f"{o.get('area_m2','—')} m²" if o.get('area_m2') else "—"
+            rooms_o = str(o.get("rooms","—"))
+            floor_o = ""
+            if o.get("floor") is not None:
+                mf = o.get("max_floor")
+                floor_o = f"{o['floor']}/{mf}" if mf else str(o['floor'])
+            else:
+                floor_o = "—"
+            tx_pm2 = int(o["price_pm2"] * 0.94) if o.get("price_pm2") else 0
+            tx_p = int(o["price"] * 0.94) if o.get("price") else 0
+            tbl_data.append([
+                addr, area_o, rooms_o, floor_o,
+                fmt_pm2(tx_pm2), fmt_pln(tx_p)
+            ])
+        tbl = Table(tbl_data, colWidths=[62*mm, 25*mm, 15*mm, 18*mm, 30*mm, 30*mm])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,0), PRIMARY),
+            ("TEXTCOLOR", (0,0),(-1,0), colors.white),
+            ("FONTNAME", (0,0),(-1,0), face_bold),
+            ("FONTSIZE", (0,0),(-1,0), 8),
+            ("FONTNAME", (0,1),(-1,-1), face),
+            ("FONTSIZE", (0,1),(-1,-1), 8),
+            ("TEXTCOLOR", (0,1),(-1,-1), TEXT_DARK),
+            ("ROWBACKGROUNDS", (0,1),(-1,-1), [colors.white, BG_LIGHT]),
+            ("BOX", (0,0),(-1,-1), 0.3, BORDER),
+            ("LINEBELOW", (0,0),(-1,0), 0.5, PRIMARY_DARK),
+            ("INNERGRID", (0,1),(-1,-1), 0.2, BORDER),
+            ("ALIGN", (1,0),(-1,-1), "CENTER"),
+            ("ALIGN", (0,0),(0,-1), "LEFT"),
+            ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
+            ("TOPPADDING", (0,0),(-1,-1), 5),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 5),
+            ("LEFTPADDING", (0,0),(-1,-1), 6),
+        ]))
+        story.append(tbl)
+
+    # ============ PAGE 4: Trendy rynkowe ============
+    if len(city_offers) >= 20:
         story.append(PageBreak())
-        story.append(Paragraph("Rozkłady rynkowe", h2))
-        story.append(Paragraph(
-            f"Poniższe wykresy pokazują jak Twoja nieruchomość plasuje się na tle "
-            f"<b>{len(city_offers_for_charts)} ofert sprzedaży {l.get('type','')}</b> w mieście {l.get('city','—')}. "
-            f"Niebieskim kolorem zaznaczony jest przedział, w którym znajduje się Twoja nieruchomość.",
-            small
-        ))
+
+        # City-level mini charts (2x2 grid)
+        story.append(Paragraph(f"Gmina {l.get('city','—')}, cena za m²", ParagraphStyle(
+            "mt", fontName=face_bold, fontSize=10, leading=13, textColor=TEXT_DARK, spaceAfter=3)))
+        story.append(_make_distribution_chart(
+            [o["price_pm2"] for o in city_offers if o.get("price_pm2")],
+            highlight_val=ppm2_this or ppm2_local, kind="price_pm2", face=face))
+        story.append(Spacer(1, 2*mm))
+
+        story.append(Paragraph(f"Gmina {l.get('city','—')}, cena całkowita", ParagraphStyle(
+            "mt2", fontName=face_bold, fontSize=10, leading=13, textColor=TEXT_DARK, spaceAfter=3)))
+        story.append(_make_distribution_chart(
+            [o["price"] for o in city_offers if o.get("price")],
+            highlight_val=offer_price_mid, kind="price", face=face))
+        story.append(Spacer(1, 2*mm))
+
+        story.append(Paragraph(f"Gmina {l.get('city','—')}, powierzchnia", ParagraphStyle(
+            "mt3", fontName=face_bold, fontSize=10, leading=13, textColor=TEXT_DARK, spaceAfter=3)))
+        story.append(_make_distribution_chart(
+            [o["area_m2"] for o in city_offers if o.get("area_m2")],
+            highlight_val=area, kind="area", face=face, ptype=l.get("type","")))
         story.append(Spacer(1, 4*mm))
 
-        # F: Median prices per district
-        district_data = _compute_district_prices(city_offers_for_charts, l.get("district"))
-        if district_data and len(district_data) >= 2:
-            story.append(Paragraph(
-                f"<b>F</b> Średnie ceny sprzedaży per dzielnica — <b>{l.get('city','')}</b>",
-                ParagraphStyle("fbold", fontName=face_bold, fontSize=10, textColor=colors.HexColor("#0B1836"))
-            ))
+        # District level (if we have district)
+        district_offers = [o for o in city_offers if (o.get("district") or "").lower() == (l.get("district") or "").lower()]
+        if len(district_offers) >= 8 and l.get("district"):
+            story.append(Paragraph(f"Dzielnica {l.get('district')}, cena za m²", ParagraphStyle(
+                "dt", fontName=face_bold, fontSize=10, leading=13, textColor=TEXT_DARK, spaceAfter=3)))
+            story.append(_make_distribution_chart(
+                [o["price_pm2"] for o in district_offers if o.get("price_pm2")],
+                highlight_val=ppm2_this or ppm2_local, kind="price_pm2", face=face))
             story.append(Spacer(1, 2*mm))
-            from reportlab.graphics.shapes import Drawing, String
-            from reportlab.graphics.charts.barcharts import HorizontalBarChart
-            from reportlab.lib import colors as _cc
-            dwidth, dheight = 480, 22 * len(district_data) + 20
-            drw = Drawing(dwidth, dheight)
-            bc = HorizontalBarChart()
-            bc.x = 105
-            bc.y = 10
-            bc.width = dwidth - 130
-            bc.height = dheight - 20
-            bc.data = [[d[1] for d in district_data]]
-            bc.categoryAxis.categoryNames = [d[0][:22] for d in district_data]
-            bc.categoryAxis.labels.fontName = face
-            bc.categoryAxis.labels.fontSize = 7
-            bc.categoryAxis.labels.dx = -3
-            bc.valueAxis.labels.fontName = face
-            bc.valueAxis.labels.fontSize = 6
-            max_v = max(d[1] for d in district_data)
-            bc.valueAxis.valueMin = 0
-            bc.valueAxis.valueMax = max_v * 1.2
-            bc.valueAxis.valueStep = max(int(max_v // 4 // 1000 * 1000), 1000)
-            bc.strokeColor = _cc.transparent
-            bc.bars[0].strokeColor = _cc.transparent
-            for i, (_, _, is_hl) in enumerate(district_data):
-                bc.bars[(0, i)].fillColor = _cc.HexColor("#3B82F6") if is_hl else _cc.HexColor("#9CA3AF")
-            bc.barLabelFormat = lambda v: f"{int(v):,}".replace(",", " ")
-            bc.barLabels.fontName = face
-            bc.barLabels.fontSize = 6
-            bc.barLabels.dx = 3
-            bc.barLabels.fillColor = _cc.HexColor("#0B1836")
-            bc.barLabels.nudge = 3
-            drw.add(bc)
-            story.append(drw)
-            story.append(Spacer(1, 6*mm))
 
-        # G1 + G2: Two histograms side by side
-        this_ppm2 = l.get("price_pm2") or 0
-        this_area = l.get("area_m2") or 0
-        # If user has no price, use city median for chart highlight
-        if not this_ppm2:
-            sorted_p = sorted(x["price_pm2"] for x in city_offers_for_charts)
-            this_ppm2 = sorted_p[len(sorted_p)//2] if sorted_p else 0
+            story.append(Paragraph(f"Dzielnica {l.get('district')}, powierzchnia", ParagraphStyle(
+                "dt2", fontName=face_bold, fontSize=10, leading=13, textColor=TEXT_DARK, spaceAfter=3)))
+            story.append(_make_distribution_chart(
+                [o["area_m2"] for o in district_offers if o.get("area_m2")],
+                highlight_val=area, kind="area", face=face, ptype=l.get("type","")))
 
-        g1_data, g1_labels, g1_hi = _compute_price_distribution(city_offers_for_charts, this_ppm2)
-        g2_data, g2_labels, g2_hi = _compute_area_distribution(city_offers_for_charts, this_area, l.get("type", ""))
-
-        if g1_data:
-            story.append(Paragraph(
-                f"<b>G1</b> Rozkład cen sprzedaży w mieście {l.get('city','')}",
-                ParagraphStyle("g1", fontName=face_bold, fontSize=10, textColor=colors.HexColor("#0B1836"))
-            ))
-            story.append(Spacer(1, 2*mm))
-            story.append(_make_bar_chart_drawing(g1_data, g1_labels, g1_hi, width=480, height=140, face=face))
-            story.append(Spacer(1, 4*mm))
-        if g2_data:
-            story.append(Paragraph(
-                f"<b>G2</b> Powierzchnia sprzedawanych {l.get('type','')} w mieście {l.get('city','')}",
-                ParagraphStyle("g2", fontName=face_bold, fontSize=10, textColor=colors.HexColor("#0B1836"))
-            ))
-            story.append(Spacer(1, 2*mm))
-            story.append(_make_bar_chart_drawing(g2_data, g2_labels, g2_hi, width=480, height=140, face=face))
-            story.append(Spacer(1, 3*mm))
-            story.append(Paragraph(
-                "Niebieski słupek to przedział, w którym znajduje się Twoja nieruchomość.",
-                small
-            ))
-
-    story.append(Spacer(1, 8*mm))
-    story.append(Paragraph("Informacje o raporcie", h2))
-    story.append(Paragraph(
-        f"<b>Data wygenerowania:</b> {datetime.now(timezone.utc).strftime('%d.%m.%Y %H:%M')}<br/>"
-        f"<b>Zamawiający:</b> {buyer_email or '—'}<br/>"
-        f"<b>Płatność:</b> Stripe (opłacone {VALUATION_PRICE} zł)<br/><br/>"
-        f"<b>Metodologia:</b> Wycena AI porównuje cenę ofertową z medianą aktualnych <b>ofert sprzedaży</b> "
-        f"{'w promieniu ' + str(used_radius) + ' km' if used_radius else 'z tego samego miasta'}. "
-        f"Uwzględniane są wyłącznie oferty tego samego typu nieruchomości (bez wynajmu, bez duplikatów). "
-        f"Szacowana wartość RCN (transakcje) to około 94% mediany ofertowej (typowa różnica między ceną wywoławczą a ceną transakcyjną). "
-        f"Raport ma charakter informacyjny i nie stanowi wyceny w rozumieniu ustawy o gospodarce nieruchomościami.", small
-    ))
-    story.append(Spacer(1, 10*mm))
-
-    footer = ParagraphStyle("f", fontName=face_bold, fontSize=10, leading=13, textColor=colors.HexColor("#FFB800"), alignment=TA_CENTER)
-    footer_small = ParagraphStyle("fs", fontName=face, fontSize=8, leading=11, textColor=colors.grey, alignment=TA_CENTER)
-    story.append(Paragraph(f"FinderDom.pl · {COMPANY_NAME}", footer))
-    if COMPANY_NIP:
-        story.append(Paragraph(f"NIP: {COMPANY_NIP} · {COMPANY_ADDRESS}", footer_small))
-
-    doc.build(story)
+    doc.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
     return out.getvalue()

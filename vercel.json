@@ -19,6 +19,7 @@
     { "source": "/api/invoices/:path*", "destination": "/api/index" },
     { "source": "/api/invoices", "destination": "/api/index" },
     { "source": "/api/leads/:path*", "destination": "/api/index" },
+    { "source": "/api/debug/:path*", "destination": "/api/index" },
     { "source": "/api/health", "destination": "/api/index" },
     { "source": "/api/docs", "destination": "/api/index" },
     { "source": "/platnosc-sukces", "destination": "/platnosc-sukces.html" },

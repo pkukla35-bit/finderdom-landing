@@ -1344,7 +1344,9 @@ def _build_map_png(main_lat, main_lon, offers, width=900, height=520):
         # Use tiles from OSM (default), with 2 max threads to be polite
         m = StaticMap(width, height,
                       url_template="https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-                      headers={"User-Agent": "FinderDom.pl/1.0"})
+                      headers={"User-Agent": "FinderDom.pl/1.0 (https://finderdom.pl)"},
+                      tile_request_timeout=8,
+                      delay_between_retries=200)
 
         # Add offer pins (red circles, smaller)
         offer_count = 0
@@ -1430,7 +1432,9 @@ def _build_map_with_price_labels(main_lat, main_lon, offers, width=1000, height=
 
         m = StaticMap(width, height,
                       url_template="https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-                      headers={"User-Agent": "FinderDom.pl/1.0"})
+                      headers={"User-Agent": "FinderDom.pl/1.0 (https://finderdom.pl)"},
+                      tile_request_timeout=8,
+                      delay_between_retries=200)
 
         # Add invisible markers to force auto-fit
         for o in offers[:10]:
@@ -1532,7 +1536,8 @@ def _build_map_with_price_labels(main_lat, main_lon, offers, width=1000, height=
         return buf.getvalue()
     except Exception as e:
         try:
-            logger.error("Map with labels failed: %s", str(e)[:200])
+            import traceback as _tb
+            logger.error("Map with labels failed: %s\n%s", str(e)[:200], _tb.format_exc()[:500])
         except Exception:
             pass
         return None
@@ -2281,13 +2286,17 @@ def build_valuation_pdf(l, all_listings, buyer_email):
 
     # Table: Adres | Powierzchnia | Pokoje | Piętro | Cena | Cena/m²
     if local_offers:
+        cell_style_p2 = ParagraphStyle("cellp2", fontName=face, fontSize=8, leading=11,
+                                        textColor=TEXT_DARK, alignment=TA_LEFT)
+        cell_center_p2 = ParagraphStyle("cellcp2", fontName=face, fontSize=8, leading=11,
+                                         textColor=TEXT_DARK, alignment=TA_CENTER)
         tbl_data = [["Adres", "Powierzchnia", "Pokoje", "Piętro", "Cena", "Cena za m²"]]
         for o in local_offers[:10]:
             city_o = o.get("city") or ""
             district_o = o.get("district") or ""
             sub_o = o.get("sub_location") or ""
-            addr = ", ".join(filter(None, [sub_o, district_o, city_o])) or "—"
-            addr = addr[:40]
+            addr_parts = [x for x in [sub_o, district_o, city_o] if x]
+            addr = ", ".join(addr_parts) or "—"
             area_o = f"{o.get('area_m2','—')} m²" if o.get('area_m2') else "—"
             rooms_o = str(o.get("rooms","—"))
             floor_o = ""
@@ -2297,8 +2306,12 @@ def build_valuation_pdf(l, all_listings, buyer_email):
             else:
                 floor_o = "—"
             tbl_data.append([
-                addr, area_o, rooms_o, floor_o,
-                fmt_pln(o.get("price")), fmt_pm2(o.get("price_pm2"))
+                Paragraph(addr, cell_style_p2),
+                Paragraph(area_o, cell_center_p2),
+                Paragraph(rooms_o, cell_center_p2),
+                Paragraph(floor_o, cell_center_p2),
+                Paragraph(fmt_pln(o.get("price")), cell_center_p2),
+                Paragraph(fmt_pm2(o.get("price_pm2")), cell_center_p2),
             ])
         tbl = Table(tbl_data, colWidths=[62*mm, 25*mm, 15*mm, 18*mm, 30*mm, 30*mm])
         tbl.setStyle(TableStyle([
@@ -2358,16 +2371,20 @@ def build_valuation_pdf(l, all_listings, buyer_email):
             story.append(Spacer(1, 4*mm))
 
     if local_offers:
-        tbl_data = [["Adres", "Data transakcji", "Powierzchnia", "Pokoje", "Piętro", "Cena za m²", "Cena"]]
+        tbl_data = [["Adres", "Data\ntransakcji", "Powierzchnia", "Pokoje", "Piętro", "Cena za m²", "Cena"]]
         # Deterministic synthetic dates (past 12 months) based on offer id
         from datetime import datetime as _dt2, timedelta as _td2
         _now2 = _dt2.utcnow()
+        cell_style = ParagraphStyle("cell", fontName=face, fontSize=7.5, leading=10,
+                                     textColor=TEXT_DARK, alignment=TA_LEFT)
+        cell_center = ParagraphStyle("cellc", fontName=face, fontSize=7.5, leading=10,
+                                      textColor=TEXT_DARK, alignment=TA_CENTER)
         for o in local_offers[:10]:
             city_o = o.get("city") or ""
             district_o = o.get("district") or ""
             sub_o = o.get("sub_location") or ""
-            addr = ", ".join(filter(None, [sub_o, district_o, city_o])) or "—"
-            addr = addr[:40]
+            addr_parts = [x for x in [sub_o, district_o, city_o] if x]
+            addr = ", ".join(addr_parts) or "—"
             area_o = f"{o.get('area_m2','—')} m²" if o.get('area_m2') else "—"
             rooms_o = str(o.get("rooms","—"))
             floor_o = ""
@@ -2378,14 +2395,18 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                 floor_o = "—"
             tx_pm2 = int(o["price_pm2"] * 0.94) if o.get("price_pm2") else 0
             tx_p = int(o["price"] * 0.94) if o.get("price") else 0
-            # Synthetic date - hash id to get day offset
             oid = str(o.get("id",""))
             days_back = (abs(hash(oid)) % 330) + 30
             tx_date = _now2 - _td2(days=days_back)
             date_str = f"{tx_date.day:02d}.{tx_date.month:02d}.{tx_date.year}"
             tbl_data.append([
-                addr, date_str, area_o, rooms_o, floor_o,
-                fmt_pm2(tx_pm2), fmt_pln(tx_p)
+                Paragraph(addr, cell_style),
+                Paragraph(date_str, cell_center),
+                Paragraph(area_o, cell_center),
+                Paragraph(rooms_o, cell_center),
+                Paragraph(floor_o, cell_center),
+                Paragraph(fmt_pm2(tx_pm2), cell_center),
+                Paragraph(fmt_pln(tx_p), cell_center),
             ])
         tbl = Table(tbl_data, colWidths=[52*mm, 22*mm, 22*mm, 14*mm, 15*mm, 27*mm, 28*mm])
         tbl.setStyle(TableStyle([

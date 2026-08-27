@@ -59,7 +59,6 @@ jobs:
           DETAIL_ONLY_TYPE: "mieszkanie"
           # Pomijaj już wzbogacone (kluczowe dla CRON)
           SKIP_ENRICHED: "1"
-          SKIP_MODE: "geo"
           # 🐝 ScrapingBee — provider dla mieszkań (osobny budżet niż domy/ZenRows)
           SCRAPINGBEE_API_KEY: ${{ secrets.SCRAPINGBEE_API_KEY }}
           SCRAPINGBEE_PREMIUM: "1"
@@ -88,4 +87,9 @@ jobs:
           ENRICHED=$(python -c "import json; d=json.load(open('data/listings.json')); print(d.get('details_enriched', 0))")
           THIS_RUN=$(python -c "import json; d=json.load(open('data/listings.json')); print(d.get('details_enriched_this_run', 0))")
           git commit -m "chore(data): enrich mieszkania (BEE) - +${THIS_RUN} (total ${ENRICHED}) [skip ci]"
-          git push
+          for i in 1 2 3 4 5; do
+            if git push; then exit 0; fi
+            git pull --rebase --autostash origin main || git rebase --abort
+            sleep $((RANDOM % 5 + 2))
+          done
+          exit 1

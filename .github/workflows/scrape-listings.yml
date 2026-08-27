@@ -119,4 +119,15 @@ jobs:
           git add data/listings.json
           COUNT=$(python -c "import json; print(json.load(open('data/listings.json'))['count'])")
           git commit -m "chore(data): scrape Otodom — ${COUNT} listings [skip ci]"
-          git push
+          # Retry push z rebase — zabezpieczenie przed race condition gdy ktos wpushowal w miedzyczasie
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "✅ Pushed on attempt $i"
+              exit 0
+            fi
+            echo "⚠️  Push rejected, pulling & retrying (attempt $i)..."
+            git pull --rebase --autostash origin main || git rebase --abort
+            sleep $((RANDOM % 5 + 2))
+          done
+          echo "❌ Push failed after 5 attempts"
+          exit 1

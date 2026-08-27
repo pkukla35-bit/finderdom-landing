@@ -1342,7 +1342,9 @@ def _build_map_png(main_lat, main_lon, offers, width=900, height=520):
         import io as _io
 
         # Use tiles from OSM (default), with 2 max threads to be polite
-        m = StaticMap(width, height, url_template="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png")
+        m = StaticMap(width, height,
+                      url_template="https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+                      headers={"User-Agent": "FinderDom.pl/1.0"})
 
         # Add offer pins (red circles, smaller)
         offer_count = 0
@@ -1426,7 +1428,9 @@ def _build_map_with_price_labels(main_lat, main_lon, offers, width=1000, height=
         from PIL import Image, ImageDraw, ImageFont
         import io as _io
 
-        m = StaticMap(width, height, url_template="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png")
+        m = StaticMap(width, height,
+                      url_template="https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+                      headers={"User-Agent": "FinderDom.pl/1.0"})
 
         # Add invisible markers to force auto-fit
         for o in offers[:10]:

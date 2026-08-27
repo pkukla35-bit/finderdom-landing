@@ -360,7 +360,8 @@ def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
         rooms = ROOMS_ENUM.get(rooms_raw, 0) if isinstance(rooms_raw, str) else (
             int(rooms_raw) if isinstance(rooms_raw, (int, float)) else 0)
 
-        floor_raw = item.get("floorNumber") or ""
+        # Try multiple fields for floor
+        floor_raw = item.get("floorNumber") or item.get("floor") or ""
         floor_num = 0
         if isinstance(floor_raw, str):
             m = re.search(r"(\d+)", floor_raw)
@@ -368,8 +369,28 @@ def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
                 floor_num = int(m.group(1))
             elif "GROUND" in floor_raw.upper() or "PARTER" in floor_raw.upper():
                 floor_num = 0
+            else:
+                # Common Otodom enum values
+                fmap = {"FIRST":1,"SECOND":2,"THIRD":3,"FOURTH":4,"FIFTH":5,"SIXTH":6,
+                        "SEVENTH":7,"EIGHTH":8,"NINTH":9,"TENTH":10,"ELEVENTH":11,
+                        "TWELFTH":12,"THIRTEENTH":13,"FOURTEENTH":14,"FIFTEENTH":15,
+                        "SIXTEENTH":16,"HIGHER":17,"CELLAR":-1,"GARRET":99,"ATTIC":99}
+                for k, v in fmap.items():
+                    if k in floor_raw.upper():
+                        floor_num = v
+                        break
         elif isinstance(floor_raw, (int, float)):
             floor_num = int(floor_raw)
+
+        # Building floors (max_floor)
+        max_floor = 0
+        bf = item.get("buildingFloorsNum") or item.get("buildingFloors") or item.get("floorsNumber")
+        if isinstance(bf, (int, float)):
+            max_floor = int(bf)
+        elif isinstance(bf, str):
+            m = re.search(r"(\d+)", bf)
+            if m:
+                max_floor = int(m.group(1))
 
         city, district, sub = extract_city_district(item)
         if not city:
@@ -421,7 +442,7 @@ def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
             "area_m2": round(float(area), 1),
             "rooms": rooms,
             "floor": floor_num,
-            "max_floor": 0,
+            "max_floor": max_floor,
             "year_built": 0,
             "standard": "",
             "price": int(price),

@@ -2298,13 +2298,11 @@ def build_valuation_pdf(l, all_listings, buyer_email):
             addr_parts = [x for x in [sub_o, district_o, city_o] if x]
             addr = ", ".join(addr_parts) or "—"
             area_o = f"{o.get('area_m2','—')} m²" if o.get('area_m2') else "—"
-            rooms_o = str(o.get("rooms","—"))
-            floor_o = ""
-            if o.get("floor") is not None:
+            rooms_o = str(o.get("rooms","—")) if o.get("rooms") else "—"
+            floor_o = "—"
+            if o.get("floor") is not None and o.get("floor") > 0:
                 mf = o.get("max_floor")
-                floor_o = f"{o['floor']}/{mf}" if mf else str(o['floor'])
-            else:
-                floor_o = "—"
+                floor_o = f"{o['floor']}/{mf}" if mf and mf > 0 else str(o['floor'])
             tbl_data.append([
                 Paragraph(addr, cell_style_p2),
                 Paragraph(area_o, cell_center_p2),
@@ -2386,13 +2384,11 @@ def build_valuation_pdf(l, all_listings, buyer_email):
             addr_parts = [x for x in [sub_o, district_o, city_o] if x]
             addr = ", ".join(addr_parts) or "—"
             area_o = f"{o.get('area_m2','—')} m²" if o.get('area_m2') else "—"
-            rooms_o = str(o.get("rooms","—"))
-            floor_o = ""
-            if o.get("floor") is not None:
+            rooms_o = str(o.get("rooms","—")) if o.get("rooms") else "—"
+            floor_o = "—"
+            if o.get("floor") is not None and o.get("floor") > 0:
                 mf = o.get("max_floor")
-                floor_o = f"{o['floor']}/{mf}" if mf else str(o['floor'])
-            else:
-                floor_o = "—"
+                floor_o = f"{o['floor']}/{mf}" if mf and mf > 0 else str(o['floor'])
             tx_pm2 = int(o["price_pm2"] * 0.94) if o.get("price_pm2") else 0
             tx_p = int(o["price"] * 0.94) if o.get("price") else 0
             oid = str(o.get("id",""))

@@ -152,8 +152,27 @@
             <input class="input" id="vRooms" type="number" min="1" max="20" placeholder="np. 3">
           </div>
           <div class="field only-flat only-house">
-            <label class="label" for="vFloor">Piętro <span class="only-flat" style="color:#8ba3d4">(na którym mieszkasz)</span><span class="only-house" style="color:#8ba3d4">(kondygnacja główna)</span></label>
-            <input class="input" id="vFloor" type="number" min="0" placeholder="np. 3">
+            <label class="label" for="vFloor" style="color:#FFB800;font-weight:700">🏠 <span class="only-flat">Na którym piętrze mieszkasz?</span><span class="only-house">Kondygnacja główna domu</span></label>
+            <select class="select" id="vFloor" style="border:2px solid rgba(255,184,0,0.35)">
+              <option value="">— wybierz —</option>
+              <option value="0">Parter</option>
+              <option value="1">1 piętro</option>
+              <option value="2">2 piętro</option>
+              <option value="3">3 piętro</option>
+              <option value="4">4 piętro</option>
+              <option value="5">5 piętro</option>
+              <option value="6">6 piętro</option>
+              <option value="7">7 piętro</option>
+              <option value="8">8 piętro</option>
+              <option value="9">9 piętro</option>
+              <option value="10">10 piętro</option>
+              <option value="11">11 piętro</option>
+              <option value="12">12 piętro</option>
+              <option value="13">13 piętro</option>
+              <option value="14">14 piętro</option>
+              <option value="15">15 piętro</option>
+              <option value="16">16+ piętro</option>
+            </select>
           </div>
           <div class="field only-flat">
             <label class="label" for="vMaxFloor">Liczba pięter w budynku</label>

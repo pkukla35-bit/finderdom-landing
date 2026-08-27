@@ -430,6 +430,25 @@ def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
 
         emoji = random.choice(TYPE_EMOJI.get(typ_out, ["🏢"]))
 
+        # Extract GPS coordinates from Otodom API location
+        lat, lon = None, None
+        try:
+            loc = item.get("location", {}) or {}
+            coords = loc.get("coordinates") or loc.get("geo") or {}
+            if isinstance(coords, dict):
+                lat = coords.get("latitude") or coords.get("lat")
+                lon = coords.get("longitude") or coords.get("lon") or coords.get("lng")
+            if isinstance(lat, (int, float)):
+                lat = float(lat)
+            else:
+                lat = None
+            if isinstance(lon, (int, float)):
+                lon = float(lon)
+            else:
+                lon = None
+        except (AttributeError, TypeError, KeyError):
+            pass
+
         return {
             "id": f"otodom-{item.get('id')}",
             "type": typ_out,
@@ -443,6 +462,8 @@ def transform(item: dict, transaction: str, typ_out: str) -> dict | None:
             "rooms": rooms,
             "floor": floor_num,
             "max_floor": max_floor,
+            "lat": lat,
+            "lon": lon,
             "year_built": 0,
             "standard": "",
             "price": int(price),

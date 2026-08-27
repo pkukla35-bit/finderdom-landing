@@ -1962,6 +1962,153 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         ]))
         story.append(pt)
 
+    # === Wpływ standardu na cenę (bar chart) ===
+    if l.get("type") == "mieszkanie" and len(city_offers) >= 30:
+        from collections import defaultdict as _dd
+        std_map = _dd(list)
+        std_labels_order = ["do_remontu", "do_odswiezenia", "standardowy", "wysoki", "deweloperski"]
+        std_display = {
+            "do_remontu": "Bardzo zły",
+            "do_odswiezenia": "Zły",
+            "standardowy": "Standardowy",
+            "wysoki": "Premium",
+            "deweloperski": "Luksusowy",
+        }
+        for o in city_offers:
+            s = o.get("standard") or ""
+            if s in std_labels_order and o.get("price_pm2"):
+                std_map[s].append(o["price_pm2"])
+
+        std_data = []
+        std_categories = []
+        highlight_std_idx = -1
+        for i, key in enumerate(std_labels_order):
+            arr = std_map.get(key, [])
+            if arr:
+                med = _median(arr)
+            else:
+                # Estimate: below/above median
+                base = ppm2_local or 10000
+                mults = {"do_remontu": 0.80, "do_odswiezenia": 0.90,
+                         "standardowy": 1.00, "wysoki": 1.15, "deweloperski": 1.30}
+                med = int(base * mults.get(key, 1.0))
+            std_data.append(int(med * (area or 50)))
+            std_categories.append(std_display[key])
+            if l.get("standard") == key:
+                highlight_std_idx = i
+
+        if std_data:
+            story.append(Spacer(1, 6*mm))
+            story.append(Paragraph("Wpływ standardu na cenę", ParagraphStyle(
+                "wsh", fontName=face_bold, fontSize=11, leading=14,
+                textColor=TEXT_DARK, spaceAfter=4)))
+
+            from reportlab.graphics.shapes import Drawing, String
+            from reportlab.graphics.charts.barcharts import VerticalBarChart
+            from reportlab.lib import colors as _c
+
+            dw, dh = 180*mm, 42*mm
+            drw = Drawing(dw, dh)
+            bc = VerticalBarChart()
+            bc.x = 25
+            bc.y = 28
+            bc.width = dw - 40
+            bc.height = dh - 42
+            bc.data = [std_data]
+            bc.strokeColor = _c.transparent
+            bc.categoryAxis.categoryNames = std_categories
+            bc.categoryAxis.labels.fontName = face
+            bc.categoryAxis.labels.fontSize = 7
+            bc.categoryAxis.labels.dy = -3
+            bc.categoryAxis.strokeColor = _c.HexColor("#E5E7EB")
+            bc.valueAxis.valueMin = 0
+            bc.valueAxis.valueMax = max(std_data) * 1.15
+            bc.valueAxis.labels.fontName = face
+            bc.valueAxis.labels.fontSize = 6
+            bc.valueAxis.labels.textAnchor = "end"
+            bc.valueAxis.labelTextFormat = lambda v: fmt_pln_short(v)
+            bc.valueAxis.strokeColor = _c.HexColor("#E5E7EB")
+            bc.bars[0].strokeColor = _c.transparent
+            for i in range(len(std_data)):
+                if i == highlight_std_idx:
+                    bc.bars[(0, i)].fillColor = _c.HexColor("#4F46E5")
+                else:
+                    bc.bars[(0, i)].fillColor = _c.HexColor("#C7D2FE")
+            bc.barLabelFormat = lambda v: fmt_pln_short(v)
+            bc.barLabels.fontName = face_bold
+            bc.barLabels.fontSize = 6
+            bc.barLabels.dy = 3
+            bc.barLabels.fillColor = TEXT_DARK
+            bc.barLabels.nudge = 3
+            drw.add(bc)
+            story.append(drw)
+
+    # === Wpływ parametrów na cenę za m² (list z arrows) ===
+    param_impacts = []
+    # Nowe budownictwo
+    if l.get("build_year") and l["build_year"] >= 2015:
+        param_impacts.append(("↑", "Nowe budownictwo (od 2015)", "+2%", SUCCESS))
+    elif l.get("build_year") and l["build_year"] < 1980:
+        param_impacts.append(("↓", "Starsze budownictwo (przed 1980)", "-3%", DANGER))
+    # Metraż (dla mieszkań)
+    if l.get("type") == "mieszkanie" and l.get("area_m2"):
+        a = l["area_m2"]
+        if 31 <= a <= 45:
+            param_impacts.append(("↑", "Mały metraż (31-45 m²)", "+2%", SUCCESS))
+        elif a > 80:
+            param_impacts.append(("↓", "Duży metraż (powyżej 80 m²)", "-2%", DANGER))
+    # Piętro
+    if l.get("floor") is not None:
+        if l["floor"] <= 4 and l["floor"] > 0:
+            param_impacts.append(("↑", "Niskie piętro (1-4)", "+1%", SUCCESS))
+        elif l["floor"] == 0:
+            param_impacts.append(("↓", "Parter", "-2%", DANGER))
+    # Winda
+    if l.get("elevator") == "tak":
+        param_impacts.append(("↑", "Winda w budynku", "+1%", SUCCESS))
+    elif l.get("elevator") == "nie" and l.get("floor", 0) >= 4:
+        param_impacts.append(("↓", "Brak windy przy wysokim piętrze", "-3%", DANGER))
+    # Parking
+    if l.get("parking") == "tak":
+        param_impacts.append(("↑", "Miejsce postojowe", "+2%", SUCCESS))
+    # Standard
+    if l.get("standard") == "wysoki":
+        param_impacts.append(("↑", "Wysoki standard (Premium)", "+8%", SUCCESS))
+    elif l.get("standard") == "deweloperski":
+        param_impacts.append(("↑", "Stan deweloperski", "+3%", SUCCESS))
+    elif l.get("standard") == "do_remontu":
+        param_impacts.append(("↓", "Do remontu", "-15%", DANGER))
+
+    if param_impacts:
+        story.append(Spacer(1, 5*mm))
+        story.append(Paragraph("Wpływ parametrów na cenę za m²", ParagraphStyle(
+            "wph", fontName=face_bold, fontSize=11, leading=14,
+            textColor=TEXT_DARK, spaceAfter=4)))
+        # 2 columns
+        rows = []
+        for i in range(0, len(param_impacts), 2):
+            row = []
+            for j in range(2):
+                if i+j < len(param_impacts):
+                    arrow, label, pct, color = param_impacts[i+j]
+                    cell = Paragraph(
+                        f'<font color="{color.hexval()}"><b>{arrow} {pct}</b></font> · <font color="#374151">{label}</font>',
+                        ParagraphStyle("pi", fontName=face, fontSize=8, leading=12, textColor=TEXT_DARK)
+                    )
+                    row.append(cell)
+                else:
+                    row.append("")
+            rows.append(row)
+        pt2 = Table(rows, colWidths=[90*mm, 90*mm])
+        pt2.setStyle(TableStyle([
+            ("VALIGN", (0,0),(-1,-1), "TOP"),
+            ("TOPPADDING", (0,0),(-1,-1), 3),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 3),
+            ("LEFTPADDING", (0,0),(-1,-1), 0),
+            ("RIGHTPADDING", (0,0),(-1,-1), 6),
+        ]))
+        story.append(pt2)
+
     # ============ PAGE 2: Podobne oferty sprzedaży ============
     story.append(PageBreak())
     story.append(Paragraph("Podobne oferty sprzedaży", ParagraphStyle(

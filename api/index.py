@@ -1077,6 +1077,55 @@ async def valuation_checkout(body: ValuationCheckoutReq):
     return {"url": session.url}
 
 
+@app.get("/api/debug/map")
+async def debug_map():
+    """Diagnose why map rendering fails on Vercel."""
+    result = {"steps": []}
+    try:
+        import staticmap
+        result["staticmap_version"] = getattr(staticmap, "__version__", "unknown")
+        result["steps"].append("staticmap imported OK")
+    except Exception as e:
+        result["staticmap_error"] = str(e)
+        return result
+    try:
+        from PIL import Image, ImageDraw
+        import PIL
+        result["pillow_version"] = PIL.__version__
+        result["steps"].append(f"Pillow {PIL.__version__} imported OK")
+    except Exception as e:
+        result["pillow_error"] = str(e)
+        return result
+    try:
+        async with httpx.AsyncClient(timeout=10, headers={"User-Agent": "FinderDom.pl/1.0"}) as c:
+            r = await c.get("https://a.basemaps.cartocdn.com/rastertiles/voyager/10/565/342.png")
+            result["cartodb_status"] = r.status_code
+            result["cartodb_bytes"] = len(r.content)
+            result["steps"].append(f"CartoDB tile fetch: {r.status_code}")
+    except Exception as e:
+        result["cartodb_error"] = str(e)[:200]
+    try:
+        from staticmap import StaticMap, CircleMarker
+        import time
+        t0 = time.time()
+        m = StaticMap(400, 300,
+                      url_template="https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+                      headers={"User-Agent": "FinderDom.pl/1.0"},
+                      tile_request_timeout=8)
+        m.add_marker(CircleMarker((19.94, 50.06), "#FF0000", 12))
+        img = m.render(zoom=12)
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        result["render_time_s"] = round(time.time() - t0, 2)
+        result["render_bytes"] = len(buf.getvalue())
+        result["steps"].append(f"Full render OK in {result['render_time_s']}s")
+    except Exception as e:
+        import traceback
+        result["render_error"] = str(e)[:200]
+        result["render_traceback"] = traceback.format_exc()[:600]
+    return result
+
+
 @app.get("/api/valuation/download")
 async def valuation_download(session_id: str):
     """Verify Stripe payment and stream PDF."""

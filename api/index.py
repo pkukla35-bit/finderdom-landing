@@ -2066,7 +2066,7 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     # Winda
     if l.get("elevator") == "tak":
         param_impacts.append(("↑", "Winda w budynku", "+1%", SUCCESS))
-    elif l.get("elevator") == "nie" and l.get("floor", 0) >= 4:
+    elif l.get("elevator") == "nie" and (l.get("floor") or 0) >= 4:
         param_impacts.append(("↓", "Brak windy przy wysokim piętrze", "-3%", DANGER))
     # Parking
     if l.get("parking") == "tak":

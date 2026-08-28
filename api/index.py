@@ -2536,6 +2536,17 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         city_key = _normalize_city_name(l.get("city") or "")
         if city_key in CITY_COORDS:
             map_lat, map_lon = CITY_COORDS[city_key]
+        elif local_offers:
+            # Use median lat/lon of local offers if available
+            lats = [o["lat"] for o in local_offers if o.get("lat") is not None]
+            lons = [o["lon"] for o in local_offers if o.get("lon") is not None]
+            if lats and lons:
+                lats.sort(); lons.sort()
+                map_lat = lats[len(lats)//2]
+                map_lon = lons[len(lons)//2]
+    # Absolute last resort: Poland center
+    if map_lat is None or map_lon is None:
+        map_lat, map_lon = 52.0693, 19.4803  # Central Poland
 
     map_added = False
     if map_lat is not None and map_lon is not None:

@@ -2250,25 +2250,31 @@ def build_valuation_pdf(l, all_listings, buyer_email):
             if not local_offers:
                 if prop_lat is not None and prop_lon is not None:
                     # Sort national offers by distance from our (possibly geocoded) location
+                    # HARD CAP at 50 km – if none within 50 km, do NOT show random offers from all of Poland
+                    MAX_FALLBACK_KM = 50
                     scored = []
                     for x in national_offers:
                         if x.get("lat") is not None and x.get("lon") is not None:
                             d = _haversine_km(prop_lat, prop_lon, x["lat"], x["lon"])
-                            scored.append((d, x))
+                            if d <= MAX_FALLBACK_KM:
+                                scored.append((d, x))
                     scored.sort(key=lambda t: t[0])
                     local_offers = [{**x, "_dist": round(d, 2)} for d, x in scored[:10]]
                     if scored:
                         _far_km = int(scored[min(9, len(scored) - 1)][0])
                         data_quality_warning = (
-                            f"ℹ️ W promieniu 10 km od '{l.get('city','—')}' brak ofert – "
-                            f"pokazujemy najbliższe podobne z bazy (najdalsza: {_far_km} km). "
+                            f"ℹ️ W promieniu 10 km od '{l.get('city','—')}' brak wystarczających ofert – "
+                            f"pokazujemy najbliższe {len(local_offers)} z okolicy (do {_far_km} km). "
                             f"Dokładność szacunku: ±15%."
                         )
-                if not local_offers:
-                    # No coords at all: just use first 10 nationals
-                    local_offers = national_offers[:10]
-                    for o in local_offers:
-                        o["_dist"] = None
+                    else:
+                        # No offers within 50 km – do NOT fake it with Warsaw/Poznan data.
+                        data_quality_warning = (
+                            f"⚠️ W promieniu 50 km od '{l.get('city','—')}' brak porównywalnych ofert w bazie. "
+                            f"Tabela porównawcza pominięta – szacunek oparty wyłącznie na medianie krajowej z {len(national_offers)} ofert. "
+                            f"Dokładność szacunku: ±20%."
+                        )
+                # If we STILL have no local_offers and no coords, leave empty (better than lying)
 
     area = l.get("area_m2") or 0
 
@@ -2846,28 +2852,21 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     if map_lat is not None and map_lon is not None:
         offers_with_gps = [o for o in local_offers[:10]
                            if o.get("lat") is not None and o.get("lon") is not None]
-        # If no offers have GPS, use synthetic points around city center
-        if not offers_with_gps and local_offers:
-            import random as _rmap
-            _rmap.seed(int((map_lat + map_lon) * 1000))
-            for o in local_offers[:10]:
-                offers_with_gps.append({
-                    **o,
-                    "lat": map_lat + (_rmap.random() - 0.5) * 0.03,
-                    "lon": map_lon + (_rmap.random() - 0.5) * 0.05,
-                })
-        map_bytes = _build_map_with_price_labels(map_lat, map_lon, offers_with_gps,
-                                                  width=1000, height=560)
-        if map_bytes:
-            from reportlab.platypus import Image as RLImage
-            img = RLImage(io.BytesIO(map_bytes), width=180*mm, height=100*mm)
-            img.hAlign = "CENTER"
-            story.append(img)
-            story.append(Paragraph(
-                "© Mapbox · © OpenStreetMap · Etykiety cen: zł/m²",
-                ParagraphStyle("attr", fontName=face, fontSize=6, textColor=TEXT_MUTED, alignment=TA_CENTER)))
-            story.append(Spacer(1, 4*mm))
-            map_added = True
+        # Only render the map if we have REAL offers with GPS nearby.
+        # Do NOT synthesize fake pins around the center — that misleads users.
+        if offers_with_gps:
+            map_bytes = _build_map_with_price_labels(map_lat, map_lon, offers_with_gps,
+                                                      width=1000, height=560)
+            if map_bytes:
+                from reportlab.platypus import Image as RLImage
+                img = RLImage(io.BytesIO(map_bytes), width=180*mm, height=100*mm)
+                img.hAlign = "CENTER"
+                story.append(img)
+                story.append(Paragraph(
+                    "© Mapbox · © OpenStreetMap · Etykiety cen: zł/m²",
+                    ParagraphStyle("attr", fontName=face, fontSize=6, textColor=TEXT_MUTED, alignment=TA_CENTER)))
+                story.append(Spacer(1, 4*mm))
+                map_added = True
 
     # Table: Adres | Powierzchnia | Pokoje | Piętro | Cena | Cena/m²
     if local_offers:
@@ -2948,35 +2947,28 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     if map_lat is not None and map_lon is not None:
         offers_with_gps = [o for o in local_offers[:10]
                            if o.get("lat") is not None and o.get("lon") is not None]
-        if not offers_with_gps and local_offers:
-            import random as _rmap2
-            _rmap2.seed(int((map_lat + map_lon) * 1000) + 42)
-            for o in local_offers[:10]:
-                offers_with_gps.append({
-                    **o,
-                    "lat": map_lat + (_rmap2.random() - 0.5) * 0.03,
-                    "lon": map_lon + (_rmap2.random() - 0.5) * 0.05,
-                })
-        # Adjust prices to transaction (94%)
-        tx_offers = []
-        for o in offers_with_gps:
-            o2 = dict(o)
-            if o2.get("price_pm2"):
-                o2["price_pm2"] = int(o2["price_pm2"] * 0.94)
-            if o2.get("price"):
-                o2["price"] = int(o2["price"] * 0.94)
-            tx_offers.append(o2)
-        map_bytes2 = _build_map_with_price_labels(map_lat, map_lon, tx_offers,
-                                                   width=1000, height=560)
-        if map_bytes2:
-            from reportlab.platypus import Image as RLImage
-            img = RLImage(io.BytesIO(map_bytes2), width=180*mm, height=100*mm)
-            img.hAlign = "CENTER"
-            story.append(img)
-            story.append(Paragraph(
-                "© Mapbox · © OpenStreetMap · Szacunkowe ceny transakcyjne (zł/m²)",
-                ParagraphStyle("attr2", fontName=face, fontSize=6, textColor=TEXT_MUTED, alignment=TA_CENTER)))
-            story.append(Spacer(1, 4*mm))
+        # Skip transaction map if no real GPS data (no synthetic pins)
+        if offers_with_gps:
+            # Adjust prices to transaction (94%)
+            tx_offers = []
+            for o in offers_with_gps:
+                o2 = dict(o)
+                if o2.get("price_pm2"):
+                    o2["price_pm2"] = int(o2["price_pm2"] * 0.94)
+                if o2.get("price"):
+                    o2["price"] = int(o2["price"] * 0.94)
+                tx_offers.append(o2)
+            map_bytes2 = _build_map_with_price_labels(map_lat, map_lon, tx_offers,
+                                                       width=1000, height=560)
+            if map_bytes2:
+                from reportlab.platypus import Image as RLImage
+                img = RLImage(io.BytesIO(map_bytes2), width=180*mm, height=100*mm)
+                img.hAlign = "CENTER"
+                story.append(img)
+                story.append(Paragraph(
+                    "© Mapbox · © OpenStreetMap · Szacunkowe ceny transakcyjne (zł/m²)",
+                    ParagraphStyle("attr2", fontName=face, fontSize=6, textColor=TEXT_MUTED, alignment=TA_CENTER)))
+                story.append(Spacer(1, 4*mm))
 
     if local_offers:
         # Check if any offer has valid floor data

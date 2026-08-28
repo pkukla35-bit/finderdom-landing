@@ -69,6 +69,10 @@ EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY", "")
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "FinderDom.pl")
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO", "")
 
+# Mapbox Static Images API (set MAPBOX_TOKEN env var in Vercel)
+MAPBOX_TOKEN = os.environ.get("MAPBOX_TOKEN", "")
+MAPBOX_STYLE = os.environ.get("MAPBOX_STYLE", "mapbox/streets-v12")
+
 # City coordinates fallback (top ~150 Polish cities)
 CITY_COORDS = {}
 
@@ -1425,6 +1429,56 @@ def _haversine_km(lat1, lon1, lat2, lon2):
     return 2 * R * math.asin(math.sqrt(a))
 
 
+def _mapbox_zoom_for_bounds(min_lat, max_lat, min_lon, max_lon, width, height, padding=1.2):
+    """Compute best zoom (Web Mercator) to fit bounds in a viewport of width x height px.
+    Returns (center_lat, center_lon, zoom)."""
+    import math as _m
+    center_lat = (min_lat + max_lat) / 2.0
+    center_lon = (min_lon + max_lon) / 2.0
+
+    def _lat_rad(lat):
+        s = _m.sin(_m.radians(lat))
+        s = max(min(s, 0.9999), -0.9999)
+        return _m.log((1 + s) / (1 - s)) / 2.0
+
+    lat_frac = (_lat_rad(max_lat) - _lat_rad(min_lat)) / _m.pi
+    lon_frac = (max_lon - min_lon) / 360.0
+    if lat_frac <= 0:
+        lat_frac = 1e-6
+    if lon_frac <= 0:
+        lon_frac = 1e-6
+
+    # Mapbox tile size is 512
+    zoom_x = _m.log2(width / 512.0 / lon_frac) if lon_frac > 0 else 18
+    zoom_y = _m.log2(height / 512.0 / lat_frac) if lat_frac > 0 else 18
+    zoom = min(zoom_x, zoom_y) - _m.log2(padding)
+    zoom = max(3.0, min(18.0, zoom))
+    return center_lat, center_lon, zoom
+
+
+def _mapbox_project(lat, lon, center_lat, center_lon, zoom, width, height):
+    """Project (lat, lon) to (px, py) pixel coords in a Mapbox static image
+    centered at (center_lat, center_lon) with given zoom (Web Mercator, tile=512)."""
+    import math as _m
+    scale = 512 * (2 ** zoom)
+
+    def _lon_to_worldx(lon_):
+        return (lon_ + 180.0) / 360.0 * scale
+
+    def _lat_to_worldy(lat_):
+        s = _m.sin(_m.radians(lat_))
+        s = max(min(s, 0.9999), -0.9999)
+        return (0.5 - _m.log((1 + s) / (1 - s)) / (4 * _m.pi)) * scale
+
+    cx = _lon_to_worldx(center_lon)
+    cy = _lat_to_worldy(center_lat)
+    x = _lon_to_worldx(lon)
+    y = _lat_to_worldy(lat)
+    px = width / 2.0 + (x - cx)
+    py = height / 2.0 + (y - cy)
+    return px, py
+
+
 def _build_map_png(main_lat, main_lon, offers, width=900, height=520):
     """Generate a static OpenStreetMap PNG with main property + offer pins.
     Returns bytes or None on failure. Uses staticmap library (no API key)."""
@@ -1435,8 +1489,8 @@ def _build_map_png(main_lat, main_lon, offers, width=900, height=520):
 
         # Use tiles from OSM (default), with 2 max threads to be polite
         m = StaticMap(width, height,
-                      url_template="https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-                      headers={"User-Agent": "FinderDom.pl/1.0 (https://finderdom.pl)"},
+                      url_template="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                      headers={"User-Agent": "FinderDom.pl/1.0 (kontakt@finderdom.pl)"},
                       tile_request_timeout=8,
                       delay_between_retries=200)
 
@@ -1515,6 +1569,166 @@ def _build_map_png(main_lat, main_lon, offers, width=900, height=520):
 
 
 def _build_map_with_price_labels(main_lat, main_lon, offers, width=1000, height=560):
+    """Map with price labels (propertly.io style) using Mapbox Static Images API.
+    Each offer gets a bubble with price/m² in tys. zł. Falls back to staticmap/OSM if Mapbox fails."""
+    if not MAPBOX_TOKEN:
+        try:
+            logger.error("Mapbox token missing (MAPBOX_TOKEN env var not set)")
+        except Exception:
+            pass
+        return None
+    try:
+        import httpx as _httpx
+        from PIL import Image, ImageDraw, ImageFont
+        import io as _io
+        import math as _m
+
+        # Collect all points (main + offers with GPS)
+        pts_lat = [main_lat]
+        pts_lon = [main_lon]
+        for o in offers[:10]:
+            if o.get("lat") is not None and o.get("lon") is not None:
+                pts_lat.append(o["lat"])
+                pts_lon.append(o["lon"])
+
+        if len(pts_lat) < 2:
+            # Only one point (main) - use fixed zoom 13
+            center_lat, center_lon = main_lat, main_lon
+            zoom = 13.0
+        else:
+            min_lat, max_lat = min(pts_lat), max(pts_lat)
+            min_lon, max_lon = min(pts_lon), max(pts_lon)
+            # Avoid too-tight bounds
+            if max_lat - min_lat < 0.01:
+                min_lat -= 0.01; max_lat += 0.01
+            if max_lon - min_lon < 0.01:
+                min_lon -= 0.01; max_lon += 0.01
+            center_lat, center_lon, zoom = _mapbox_zoom_for_bounds(
+                min_lat, max_lat, min_lon, max_lon, width, height, padding=1.35
+            )
+
+        # Fetch Mapbox static image (no @2x to keep filesize low for PDF)
+        url = (
+            f"https://api.mapbox.com/styles/v1/{MAPBOX_STYLE}/static/"
+            f"{center_lon:.6f},{center_lat:.6f},{zoom:.2f},0/"
+            f"{width}x{height}"
+            f"?access_token={MAPBOX_TOKEN}&logo=false&attribution=false"
+        )
+        try:
+            with _httpx.Client(timeout=10) as _c:
+                _r = _c.get(url)
+            if _r.status_code != 200 or not _r.content:
+                try:
+                    logger.error("Mapbox static fetch failed: %s %s", _r.status_code, _r.text[:200])
+                except Exception:
+                    pass
+                return None
+            img = Image.open(_io.BytesIO(_r.content)).convert("RGBA")
+        except Exception as _e:
+            try:
+                logger.error("Mapbox fetch exception: %s", str(_e)[:200])
+            except Exception:
+                pass
+            return None
+
+        # Overlay bubbles/labels via PIL
+        draw = ImageDraw.Draw(img, "RGBA")
+        font = None
+        font_bold = None
+        for fp in ["/app/finderdom-landing/api/fonts/DejaVuSans-Bold.ttf",
+                   "api/fonts/DejaVuSans-Bold.ttf",
+                   "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
+            try:
+                font_bold = ImageFont.truetype(fp, 14)
+                font = ImageFont.truetype(fp.replace("-Bold", ""), 12)
+                break
+            except Exception:
+                pass
+        if font is None:
+            font = font_bold = ImageFont.load_default()
+
+        def _fmt_short(v):
+            v = int(v)
+            if v >= 1000:
+                return f"{v/1000:.1f}".rstrip("0").rstrip(".").replace(".", ",") + " tys. zł/m²"
+            return f"{v} zł/m²"
+
+        # Draw offer bubbles
+        for o in offers[:10]:
+            olat, olon = o.get("lat"), o.get("lon")
+            if olat is None or olon is None or not o.get("price_pm2"):
+                continue
+            try:
+                px, py = _mapbox_project(olat, olon, center_lat, center_lon, zoom, width, height)
+                px, py = int(px), int(py)
+
+                # Small dot pin
+                draw.ellipse([px - 5, py - 5, px + 5, py + 5],
+                             fill=(220, 38, 38, 255), outline=(255, 255, 255, 255), width=1)
+
+                # Price bubble above pin
+                label = _fmt_short(o["price_pm2"])
+                bbox = draw.textbbox((0, 0), label, font=font_bold)
+                tw = bbox[2] - bbox[0]
+                th = bbox[3] - bbox[1]
+                pad_x, pad_y = 6, 3
+                rx, ry = px - tw // 2 - pad_x, py - th - 16
+                rw, rh = tw + 2 * pad_x, th + 2 * pad_y
+
+                draw.rounded_rectangle(
+                    [(rx, ry), (rx + rw, ry + rh)], radius=6,
+                    fill=(255, 255, 255, 240), outline=(79, 70, 229, 255), width=1
+                )
+                # Triangle connector
+                tip_y = ry + rh
+                draw.polygon([
+                    (px - 4, tip_y - 1),
+                    (px + 4, tip_y - 1),
+                    (px, tip_y + 5)
+                ], fill=(255, 255, 255, 240), outline=(79, 70, 229, 255))
+                # Text
+                draw.text((rx + pad_x, ry + pad_y - 1), label,
+                          fill=(31, 41, 55, 255), font=font_bold)
+            except Exception:
+                pass
+
+        # Main property marker
+        try:
+            px, py = _mapbox_project(main_lat, main_lon, center_lat, center_lon, zoom, width, height)
+            px, py = int(px), int(py)
+            draw.ellipse([px - 16, py - 16, px + 16, py + 16],
+                         fill=(79, 70, 229, 255), outline=(255, 255, 255, 255), width=2)
+            draw.ellipse([px - 6, py - 6, px + 6, py + 6], fill=(255, 255, 255, 255))
+            label = "TWOJA NIERUCHOMOŚĆ"
+            bbox = draw.textbbox((0, 0), label, font=font_bold)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            rx = px - tw // 2 - 8
+            ry = py + 18
+            rw = tw + 16
+            rh = th + 8
+            draw.rounded_rectangle(
+                [(rx, ry), (rx + rw, ry + rh)], radius=8,
+                fill=(79, 70, 229, 255)
+            )
+            draw.text((rx + 8, ry + 3), label, fill=(255, 255, 255, 255), font=font_bold)
+        except Exception:
+            pass
+
+        buf = _io.BytesIO()
+        img.convert("RGB").save(buf, "PNG", optimize=True)
+        buf.seek(0)
+        return buf.getvalue()
+    except Exception as e:
+        try:
+            import traceback as _tb
+            logger.error("Mapbox map with labels failed: %s\n%s", str(e)[:200], _tb.format_exc()[:500])
+        except Exception:
+            pass
+        return None
+
+
+def _build_map_with_price_labels_LEGACY(main_lat, main_lon, offers, width=1000, height=560):
     """Map with price labels (propertly.io style): each offer gets bubble with price/m² in tys. zł."""
     try:
         from staticmap import StaticMap, CircleMarker
@@ -1523,8 +1737,8 @@ def _build_map_with_price_labels(main_lat, main_lon, offers, width=1000, height=
         import io as _io
 
         m = StaticMap(width, height,
-                      url_template="https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-                      headers={"User-Agent": "FinderDom.pl/1.0 (https://finderdom.pl)"},
+                      url_template="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                      headers={"User-Agent": "FinderDom.pl/1.0 (kontakt@finderdom.pl)"},
                       tile_request_timeout=8,
                       delay_between_retries=200)
 
@@ -1890,11 +2104,67 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     if txn == "sale":
         txn = "sprzedaz"
 
+    # ---- STEP 1: Determine property coordinates (early, so we can filter offers geographically)
+    prop_lat = l.get("lat")
+    prop_lon = l.get("lon")
+    coords_source = "listing" if prop_lat is not None else None
+
+    if prop_lat is None or prop_lon is None:
+        # Try CITY_COORDS (top ~150 Polish cities)
+        city_key = _normalize_city_name(l.get("city") or "")
+        if city_key in CITY_COORDS:
+            prop_lat, prop_lon = CITY_COORDS[city_key]
+            coords_source = "city_dict"
+
+    if prop_lat is None or prop_lon is None:
+        # Try Nominatim (OSM) geocoding for small towns/villages
+        try:
+            city_name = l.get("city") or ""
+            powiat = l.get("powiat") or ""
+            q_parts = [city_name]
+            if powiat:
+                q_parts.append(f"powiat {powiat}")
+            q_parts.append("Polska")
+            q = ", ".join(x for x in q_parts if x)
+            if q.strip(", "):
+                with httpx.Client(timeout=6, headers={"User-Agent": "FinderDom.pl/1.0 (kontakt@finderdom.pl)"}) as _c:
+                    _r = _c.get("https://nominatim.openstreetmap.org/search",
+                                params={"q": q, "format": "json", "limit": 1, "countrycodes": "pl"})
+                    if _r.status_code == 200:
+                        _data = _r.json()
+                        if _data:
+                            prop_lat = float(_data[0]["lat"])
+                            prop_lon = float(_data[0]["lon"])
+                            coords_source = "nominatim"
+        except Exception as _e:
+            try:
+                logger.error("Nominatim geocode failed: %s", str(_e)[:100])
+            except Exception:
+                pass
+
+    if prop_lat is None or prop_lon is None:
+        # Powiat -> nearest city fallback
+        powiat_raw = _normalize_city_name(l.get("powiat") or "")
+        for suffix in ("-ziemski", "-grodzki", "ski", "cki", "nski", "wski"):
+            if powiat_raw.endswith(suffix):
+                stem = powiat_raw[:-len(suffix)]
+                for candidate in (stem, stem + "ow", stem + "no"):
+                    if candidate in CITY_COORDS:
+                        prop_lat, prop_lon = CITY_COORDS[candidate]
+                        coords_source = "powiat_stem"
+                        break
+                if prop_lat is not None:
+                    break
+
+    # ---- STEP 2: Find comparable local offers by distance
     local_offers = []
     used_radius = 0
-    if l.get("lat") is not None and l.get("lon") is not None:
+
+    if prop_lat is not None and prop_lon is not None:
+        # Compute distance from property to every candidate listing
         candidates_by_km = {}
-        max_km = 20
+        # For rural/geocoded coords, cast a wider net (up to 50km) as fewer listings nearby
+        max_km = 20 if coords_source == "listing" else 50
         for x in all_listings:
             if (x.get("id") != l.get("id")
                 and x.get("type") == l.get("type")
@@ -1902,11 +2172,18 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                 and x.get("is_original") is not False
                 and x.get("lat") is not None and x.get("lon") is not None
                 and x.get("price_pm2")):
-                d = _haversine_km(l["lat"], l["lon"], x["lat"], x["lon"])
+                d = _haversine_km(prop_lat, prop_lon, x["lat"], x["lon"])
                 if d <= max_km:
                     candidates_by_km[x["id"]] = (d, x)
-        min_km = 5  # start at 5km for wszystkie: mieszkanie/dom/działka
-        for km in [min_km, min_km + 3, min_km + 7, min_km + 15]:
+
+        # Progressive expansion until we get ≥3 offers
+        if coords_source == "listing":
+            radii = [5, 8, 12, 20]
+        else:
+            # Geocoded villages: 10 -> 25 -> 50 km
+            radii = [10, 25, 50]
+
+        for km in radii:
             local_offers = [{**x, "_dist": round(d, 2)}
                             for _, (d, x) in candidates_by_km.items() if d <= km]
             if len(local_offers) >= 3:
@@ -1920,6 +2197,7 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         local_offers = local_offers[:10]
 
     if not local_offers:
+        # Fallback: same city name match
         for x in all_listings:
             if (x.get("city", "").lower() == (l.get("city") or "").lower()
                 and x.get("type") == l.get("type")
@@ -1970,10 +2248,26 @@ def build_valuation_pdf(l, all_listings, buyer_email):
             )
             # Also use national offers as local_offers for tables
             if not local_offers:
-                # Prefer offers closest to Poland's center if we have no location
-                local_offers = national_offers[:10]
-                for o in local_offers:
-                    o["_dist"] = None
+                if prop_lat is not None and prop_lon is not None:
+                    # Sort national offers by distance from our (possibly geocoded) location
+                    scored = []
+                    for x in national_offers:
+                        if x.get("lat") is not None and x.get("lon") is not None:
+                            d = _haversine_km(prop_lat, prop_lon, x["lat"], x["lon"])
+                            scored.append((d, x))
+                    scored.sort(key=lambda t: t[0])
+                    local_offers = [{**x, "_dist": round(d, 2)} for d, x in scored[:10]]
+                    if scored:
+                        data_quality_warning = (
+                            f"ℹ️ W promieniu 50 km od '{l.get('city','—')}' brak ofert – "
+                            f"pokazujemy najbliższe podobne (najdalsza: {int(scored[min(9,len(scored)-1)][0])} km). "
+                            f"Dokładność szacunku: ±15%."
+                        )
+                if not local_offers:
+                    # No coords at all: just use first 10 nationals
+                    local_offers = national_offers[:10]
+                    for o in local_offers:
+                        o["_dist"] = None
 
     area = l.get("area_m2") or 0
 
@@ -2530,54 +2824,13 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         f"Podane ceny to wartości ofertowe – ceny transakcyjne są zwykle 5-8% niższe.",
         ParagraphStyle("p2s", fontName=face, fontSize=8, leading=11, textColor=TEXT_MUTED, spaceAfter=6)))
 
-    # Map with price labels (with city fallback if listing has no lat/lon)
-    map_lat = l.get("lat")
-    map_lon = l.get("lon")
+    # Map with price labels (uses prop_lat/prop_lon computed earlier)
+    map_lat = prop_lat
+    map_lon = prop_lon
+
     if map_lat is None or map_lon is None:
-        city_key = _normalize_city_name(l.get("city") or "")
-        if city_key in CITY_COORDS:
-            map_lat, map_lon = CITY_COORDS[city_key]
-        else:
-            # Try Nominatim geocoding (OpenStreetMap - darmowe)
-            try:
-                city_name = l.get("city") or ""
-                powiat = l.get("powiat") or ""
-                # Build query: "Głogoczów, powiat krakowski, Polska"
-                q_parts = [city_name]
-                if powiat:
-                    q_parts.append(f"powiat {powiat}")
-                q_parts.append("Polska")
-                q = ", ".join(x for x in q_parts if x)
-                if q.strip(", "):
-                    with httpx.Client(timeout=6, headers={"User-Agent": "FinderDom.pl/1.0 (kontakt@finderdom.pl)"}) as _c:
-                        _r = _c.get("https://nominatim.openstreetmap.org/search",
-                                    params={"q": q, "format": "json", "limit": 1, "countrycodes": "pl"})
-                        if _r.status_code == 200:
-                            _data = _r.json()
-                            if _data:
-                                map_lat = float(_data[0]["lat"])
-                                map_lon = float(_data[0]["lon"])
-            except Exception as _e:
-                try:
-                    logger.error("Nominatim geocode failed: %s", str(_e)[:100])
-                except Exception:
-                    pass
-
-        # Powiat -> miasto fallback (jesli Nominatim nie znalazl)
-        if map_lat is None:
-            powiat_raw = _normalize_city_name(l.get("powiat") or "")
-            for suffix in ("-ziemski", "-grodzki", "ski", "cki", "nski", "wski"):
-                if powiat_raw.endswith(suffix):
-                    stem = powiat_raw[:-len(suffix)]
-                    for candidate in (stem, stem + "ow", stem + "no"):
-                        if candidate in CITY_COORDS:
-                            map_lat, map_lon = CITY_COORDS[candidate]
-                            break
-                    if map_lat is not None:
-                        break
-
         # Mediana lat/lon z local_offers
-        if map_lat is None and local_offers:
+        if local_offers:
             lats = [o["lat"] for o in local_offers if o.get("lat") is not None]
             lons = [o["lon"] for o in local_offers if o.get("lon") is not None]
             if lats and lons:
@@ -2610,7 +2863,7 @@ def build_valuation_pdf(l, all_listings, buyer_email):
             img.hAlign = "CENTER"
             story.append(img)
             story.append(Paragraph(
-                "© OpenStreetMap contributors · Etykiety cen: zł/m²",
+                "© Mapbox · © OpenStreetMap · Etykiety cen: zł/m²",
                 ParagraphStyle("attr", fontName=face, fontSize=6, textColor=TEXT_MUTED, alignment=TA_CENTER)))
             story.append(Spacer(1, 4*mm))
             map_added = True
@@ -2720,7 +2973,7 @@ def build_valuation_pdf(l, all_listings, buyer_email):
             img.hAlign = "CENTER"
             story.append(img)
             story.append(Paragraph(
-                "© OpenStreetMap contributors · Szacunkowe ceny transakcyjne (zł/m²)",
+                "© Mapbox · © OpenStreetMap · Szacunkowe ceny transakcyjne (zł/m²)",
                 ParagraphStyle("attr2", fontName=face, fontSize=6, textColor=TEXT_MUTED, alignment=TA_CENTER)))
             story.append(Spacer(1, 4*mm))
 

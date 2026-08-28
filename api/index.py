@@ -2163,8 +2163,8 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     if prop_lat is not None and prop_lon is not None:
         # Compute distance from property to every candidate listing
         candidates_by_km = {}
-        # Keep search tight: 20km max for listing GPS, 5km max for geocoded rural
-        max_km = 20 if coords_source == "listing" else 5
+        # Keep search tight: 20km max for listing GPS, 10km max for geocoded rural
+        max_km = 20 if coords_source == "listing" else 10
         for x in all_listings:
             if (x.get("id") != l.get("id")
                 and x.get("type") == l.get("type")
@@ -2180,8 +2180,8 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         if coords_source == "listing":
             radii = [5, 8, 12, 20]
         else:
-            # Geocoded villages: tight 3km, then 5km
-            radii = [3, 5]
+            # Geocoded villages: try 5km first, then extend to 10km
+            radii = [5, 10]
 
         for km in radii:
             local_offers = [{**x, "_dist": round(d, 2)}
@@ -2260,7 +2260,7 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                     if scored:
                         _far_km = int(scored[min(9, len(scored) - 1)][0])
                         data_quality_warning = (
-                            f"ℹ️ W promieniu 5 km od '{l.get('city','—')}' brak ofert – "
+                            f"ℹ️ W promieniu 10 km od '{l.get('city','—')}' brak ofert – "
                             f"pokazujemy najbliższe podobne z bazy (najdalsza: {_far_km} km). "
                             f"Dokładność szacunku: ±15%."
                         )

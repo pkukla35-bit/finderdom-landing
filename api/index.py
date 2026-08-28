@@ -2156,56 +2156,62 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                 if prop_lat is not None:
                     break
 
-    # ---- STEP 2: Find comparable local offers by distance
-    local_offers = []
-    used_radius = 0
+    # ---- STEP 2: Find comparable local offers
+    # Strategy A: Match by city name (normalized, diacritic-insensitive) — ALWAYS included first
+    target_city_norm = _normalize_city_name(l.get("city") or "")
+    target_type = l.get("type")
 
-    if prop_lat is not None and prop_lon is not None:
-        # Compute distance from property to every candidate listing
-        candidates_by_km = {}
-        # Keep search tight: 20km max for listing GPS, 10km max for geocoded rural
-        max_km = 20 if coords_source == "listing" else 10
-        for x in all_listings:
-            if (x.get("id") != l.get("id")
-                and x.get("type") == l.get("type")
+    def _offer_matches(x):
+        return (x.get("id") != l.get("id")
+                and x.get("type") == target_type
                 and x.get("transaction") == "sprzedaz"
                 and x.get("is_original") is not False
-                and x.get("lat") is not None and x.get("lon") is not None
-                and x.get("price_pm2")):
+                and x.get("price_pm2"))
+
+    city_matches = [
+        {**x, "_dist": None}
+        for x in all_listings
+        if _offer_matches(x) and _normalize_city_name(x.get("city") or "") == target_city_norm
+    ]
+
+    local_offers = list(city_matches)
+    used_radius = 0
+
+    # Strategy B: If <10 city matches, extend with nearby offers by GPS distance
+    if len(local_offers) < 10 and prop_lat is not None and prop_lon is not None:
+        seen_ids = {o.get("id") for o in local_offers}
+        # Keep search tight: 20km max for listing GPS, 10km max for geocoded rural
+        max_km = 20 if coords_source == "listing" else 10
+        gps_candidates = []
+        for x in all_listings:
+            if (_offer_matches(x)
+                and x.get("id") not in seen_ids
+                and x.get("lat") is not None and x.get("lon") is not None):
                 d = _haversine_km(prop_lat, prop_lon, x["lat"], x["lon"])
                 if d <= max_km:
-                    candidates_by_km[x["id"]] = (d, x)
+                    gps_candidates.append({**x, "_dist": round(d, 2)})
 
-        # Progressive expansion until we get ≥3 offers
+        # Progressive expansion until total offers ≥ 3
+        gps_candidates.sort(key=lambda t: t["_dist"])
         if coords_source == "listing":
             radii = [5, 8, 12, 20]
         else:
-            # Geocoded villages: try 5km first, then extend to 10km
             radii = [5, 10]
 
         for km in radii:
-            local_offers = [{**x, "_dist": round(d, 2)}
-                            for _, (d, x) in candidates_by_km.items() if d <= km]
-            if len(local_offers) >= 3:
+            extra = [c for c in gps_candidates if c["_dist"] <= km]
+            combined = local_offers + extra
+            if len(combined) >= 3:
+                local_offers = combined
                 used_radius = km
                 break
         else:
-            local_offers = [{**x, "_dist": round(d, 2)}
-                            for _, (d, x) in candidates_by_km.items()]
+            local_offers = local_offers + gps_candidates
             used_radius = max_km
-        local_offers.sort(key=lambda x: x["_dist"])
-        local_offers = local_offers[:10]
 
-    if not local_offers:
-        # Fallback: same city name match
-        for x in all_listings:
-            if (x.get("city", "").lower() == (l.get("city") or "").lower()
-                and x.get("type") == l.get("type")
-                and x.get("transaction") == "sprzedaz"
-                and x.get("is_original") is not False
-                and x.get("price_pm2")):
-                local_offers.append({**x, "_dist": None})
-        local_offers = local_offers[:10]
+    # Sort: city matches first (dist=None) then by distance
+    local_offers.sort(key=lambda x: (x.get("_dist") if x.get("_dist") is not None else -1,))
+    local_offers = local_offers[:10]
 
     # City-wide offers (SALE only, same type)
     city_offers = [

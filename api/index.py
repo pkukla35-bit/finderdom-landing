@@ -1904,7 +1904,7 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                 d = _haversine_km(l["lat"], l["lon"], x["lat"], x["lon"])
                 if d <= max_km:
                     candidates_by_km[x["id"]] = (d, x)
-        min_km = 5 if l.get("type") == "mieszkanie" else 8
+        min_km = 5  # start at 5km for wszystkie: mieszkanie/dom/działka
         for km in [min_km, min_km + 3, min_km + 7, min_km + 15]:
             local_offers = [{**x, "_dist": round(d, 2)}
                             for _, (d, x) in candidates_by_km.items() if d <= km]
@@ -1949,6 +1949,30 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     ppm2_local = _median([o["price_pm2"] for o in local_offers])
     ppm2_this = l.get("price_pm2") or 0
     ppm2_rcn = int(ppm2_local * 0.94) if ppm2_local else 0
+
+    # If no local data at all, fall back to ANY matching type in database (national median)
+    data_quality_warning = None
+    if ppm2_local == 0:
+        national_offers = [
+            x for x in all_listings
+            if x.get("type") == l.get("type")
+            and x.get("transaction") == "sprzedaz"
+            and x.get("is_original") is not False
+            and x.get("price_pm2")
+        ]
+        if national_offers:
+            ppm2_local = int(_median([o["price_pm2"] for o in national_offers]))
+            ppm2_rcn = int(ppm2_local * 0.94)
+            data_quality_warning = (
+                f"⚠️ Mało ofert w '{l.get('city','—')}' – używamy mediany krajowej z {len(national_offers)} "
+                f"podobnych {l.get('type','nieruchomości')}. Dokładność szacunku: ±15%."
+            )
+            # Also use national offers as local_offers for tables
+            if not local_offers:
+                # Prefer offers closest to Poland's center if we have no location
+                local_offers = national_offers[:10]
+                for o in local_offers:
+                    o["_dist"] = None
 
     area = l.get("area_m2") or 0
 
@@ -2080,6 +2104,23 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     ])) or (l.get("location") or "").lstrip("📍 ").strip() or "—"
     story.append(Paragraph(loc_full, subtitle_style))
     story.append(Spacer(1, 3*mm))
+
+    # Data quality warning banner (if fallback to national median was used)
+    if data_quality_warning:
+        warn_box = Table([[Paragraph(data_quality_warning, ParagraphStyle(
+            "warn", fontName=face, fontSize=8, leading=11,
+            textColor=colors.HexColor("#78350F"), alignment=TA_LEFT))]], colWidths=[180*mm])
+        warn_box.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,-1), colors.HexColor("#FEF3C7")),
+            ("BOX", (0,0),(-1,-1), 0.5, colors.HexColor("#F59E0B")),
+            ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
+            ("TOPPADDING", (0,0),(-1,-1), 8),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 8),
+            ("LEFTPADDING", (0,0),(-1,-1), 10),
+            ("RIGHTPADDING", (0,0),(-1,-1), 10),
+        ]))
+        story.append(warn_box)
+        story.append(Spacer(1, 4*mm))
 
     # === Card 1: Szacowana cena transakcyjna ===
     def _price_card(title_txt, subtitle_txt, price_mid, price_pm2, price_low, price_high, use_light_bg=True):

@@ -2180,23 +2180,37 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     # Strategy B: If <10 city matches, extend with nearby offers by GPS distance
     if len(local_offers) < 10 and prop_lat is not None and prop_lon is not None:
         seen_ids = {o.get("id") for o in local_offers}
-        # Keep search tight: 20km max for listing GPS, 10km max for geocoded rural
-        max_km = 20 if coords_source == "listing" else 10
+        # 20km max for listing GPS, 30km max for geocoded rural (nearest bigger city)
+        max_km = 20 if coords_source == "listing" else 30
+
+        def _offer_coords(x):
+            """Prefer offer's own GPS, fall back to city-center coords."""
+            xlat, xlon = x.get("lat"), x.get("lon")
+            if xlat is not None and xlon is not None:
+                return xlat, xlon
+            ck = _normalize_city_name(x.get("city") or "")
+            if ck in CITY_COORDS:
+                return CITY_COORDS[ck]
+            return None, None
+
         gps_candidates = []
         for x in all_listings:
-            if (_offer_matches(x)
-                and x.get("id") not in seen_ids
-                and x.get("lat") is not None and x.get("lon") is not None):
-                d = _haversine_km(prop_lat, prop_lon, x["lat"], x["lon"])
-                if d <= max_km:
-                    gps_candidates.append({**x, "_dist": round(d, 2)})
+            if not (_offer_matches(x) and x.get("id") not in seen_ids):
+                continue
+            xlat, xlon = _offer_coords(x)
+            if xlat is None or xlon is None:
+                continue
+            d = _haversine_km(prop_lat, prop_lon, xlat, xlon)
+            if d <= max_km:
+                gps_candidates.append({**x, "_dist": round(d, 2)})
 
         # Progressive expansion until total offers ≥ 3
         gps_candidates.sort(key=lambda t: t["_dist"])
         if coords_source == "listing":
             radii = [5, 8, 12, 20]
         else:
-            radii = [5, 10]
+            # Geocoded villages: 10 → 20 → 30 km (typical distance to nearest city)
+            radii = [10, 20, 30]
 
         for km in radii:
             extra = [c for c in gps_candidates if c["_dist"] <= km]
@@ -2854,12 +2868,31 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     if map_lat is None or map_lon is None:
         map_lat, map_lon = 52.0693, 19.4803  # Central Poland
 
+    # Helper: get GPS for offer with city-fallback (same as in filter)
+    def _offer_gps(x):
+        xlat, xlon = x.get("lat"), x.get("lon")
+        if xlat is not None and xlon is not None:
+            return xlat, xlon
+        ck = _normalize_city_name(x.get("city") or "")
+        if ck in CITY_COORDS:
+            return CITY_COORDS[ck]
+        return None, None
+
     map_added = False
     if map_lat is not None and map_lon is not None:
-        offers_with_gps = [o for o in local_offers[:10]
-                           if o.get("lat") is not None and o.get("lon") is not None]
-        # Only render the map if we have REAL offers with GPS nearby.
-        # Do NOT synthesize fake pins around the center — that misleads users.
+        offers_with_gps = []
+        for o in local_offers[:10]:
+            olat, olon = _offer_gps(o)
+            if olat is not None and olon is not None:
+                # Add small jitter for offers falling on the same city-center coord
+                # (so bubbles don't stack on top of each other)
+                if o.get("lat") is None:
+                    import random as _rj
+                    _rj.seed(hash(str(o.get("id"))) & 0xFFFFFF)
+                    olat = olat + (_rj.random() - 0.5) * 0.008
+                    olon = olon + (_rj.random() - 0.5) * 0.012
+                offers_with_gps.append({**o, "lat": olat, "lon": olon})
+        # Only render the map if we have offers to place on it
         if offers_with_gps:
             map_bytes = _build_map_with_price_labels(map_lat, map_lon, offers_with_gps,
                                                       width=1000, height=560)
@@ -2951,9 +2984,16 @@ def build_valuation_pdf(l, all_listings, buyer_email):
 
     # Reuse map from page 2 (with tx prices instead of listing prices)
     if map_lat is not None and map_lon is not None:
-        offers_with_gps = [o for o in local_offers[:10]
-                           if o.get("lat") is not None and o.get("lon") is not None]
-        # Skip transaction map if no real GPS data (no synthetic pins)
+        offers_with_gps = []
+        for o in local_offers[:10]:
+            olat, olon = _offer_gps(o)
+            if olat is not None and olon is not None:
+                if o.get("lat") is None:
+                    import random as _rj2
+                    _rj2.seed((hash(str(o.get("id"))) & 0xFFFFFF) + 42)
+                    olat = olat + (_rj2.random() - 0.5) * 0.008
+                    olon = olon + (_rj2.random() - 0.5) * 0.012
+                offers_with_gps.append({**o, "lat": olat, "lon": olon})
         if offers_with_gps:
             # Adjust prices to transaction (94%)
             tx_offers = []

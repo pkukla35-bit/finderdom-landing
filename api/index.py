@@ -2347,6 +2347,129 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         ]))
         story.append(pt2)
 
+    # === Rekomendacja AI: kupić czy sprzedać? ===
+    # Rule-based verdict based on user's position in the market
+    ai_lines = []
+    ai_verdict_title = "💡 Rekomendacja AI"
+    ai_verdict_color = PRIMARY
+
+    if len(city_offers) >= 10 and ppm2_local > 0:
+        # Compute percentile of user's price in city
+        all_pm2 = sorted(o["price_pm2"] for o in city_offers if o.get("price_pm2"))
+        user_pm2 = ppm2_this or ppm2_local
+        percentile = 50
+        if all_pm2:
+            below = sum(1 for p in all_pm2 if p < user_pm2)
+            percentile = int(below / len(all_pm2) * 100)
+
+        # Reason from user's form
+        reason = (l.get("reason") or "").lower()
+
+        # Position analysis
+        if percentile <= 25:
+            pos_txt = f"<b>tanio na tle rynku</b> ({percentile}. percentyl — tańsza od {100-percentile}% podobnych ofert)"
+            pos_color = SUCCESS
+        elif percentile <= 45:
+            pos_txt = f"<b>lekko poniżej mediany</b> ({percentile}. percentyl)"
+            pos_color = SUCCESS
+        elif percentile <= 60:
+            pos_txt = f"<b>w średniej rynkowej</b> ({percentile}. percentyl — jak {100-percentile}% podobnych)"
+            pos_color = PRIMARY
+        elif percentile <= 80:
+            pos_txt = f"<b>powyżej mediany</b> ({percentile}. percentyl — droższa od {percentile}% ofert)"
+            pos_color = colors.HexColor("#F59E0B")
+        else:
+            pos_txt = f"<b>drogo na tle rynku</b> ({percentile}. percentyl — droższa od {percentile}% ofert)"
+            pos_color = DANGER
+
+        ai_lines.append(f'📊 Twoja nieruchomość jest wyceniona <font color="{pos_color.hexval()}">{pos_txt}</font>.')
+
+        # Recommendation based on reason
+        if reason == "sprzedaz":
+            if percentile <= 30:
+                ai_lines.append(
+                    f"🎯 <b>Rekomendacja: sprzedawaj strategicznie.</b> Twoja nieruchomość jest atrakcyjnie wyceniona — "
+                    f"celuj w <b>{fmt_pln_short(offer_price_mid)}</b> (najszybsza sprzedaż) lub "
+                    f"<b>{fmt_pln_short(offer_price_high)}</b> jeśli nie spieszy Ci się (ok. 2-4 miesięcy)."
+                )
+            elif percentile <= 60:
+                ai_lines.append(
+                    f"🎯 <b>Rekomendacja: sprzedawaj z lekką przewagą.</b> Cena w środku widełek "
+                    f"<b>{fmt_pln_short(offer_price_low)} – {fmt_pln_short(offer_price_high)}</b> "
+                    f"zwykle sprzedaje się w 6-8 tygodni. Środek widełek (~{fmt_pln_short(offer_price_mid)}) "
+                    f"to złoty środek między szybkością a maksymalizacją zysku."
+                )
+            else:
+                ai_lines.append(
+                    f"🎯 <b>Rekomendacja: rozważ obniżkę.</b> Cena powyżej mediany wydłuża czas sprzedaży. "
+                    f"Zejdź do <b>{fmt_pln_short(offer_price_mid)}</b> (mediana rynkowa), a sprzedasz w 4-6 tygodni. "
+                    f"Trzymanie ceny powyżej ryzykuje 6+ miesięcy bez zainteresowania."
+                )
+        elif reason == "ciekawosc":
+            if percentile <= 30:
+                ai_lines.append(
+                    f"🎯 <b>Wartość Twojej nieruchomości rośnie.</b> W obecnych warunkach rynkowych "
+                    f"(mediana Krakowa: {fmt_pm2(ppm2_local)}) Twoja nieruchomość ma <b>potencjał wzrostu</b>. "
+                    f"Trzymaj lub rozważ rynek najmu (typowe stopy zwrotu: 4-6% rocznie)."
+                )
+            elif percentile <= 60:
+                ai_lines.append(
+                    f"🎯 <b>Twoja nieruchomość jest wyceniona zgodnie z rynkiem.</b> Jeśli planujesz sprzedaż w ciągu 2-3 lat, "
+                    f"kalkuluj cenę wywoławczą w widełkach <b>{fmt_pln_short(offer_price_low)} – {fmt_pln_short(offer_price_high)}</b>. "
+                    f"Standard nieruchomości i ewentualny remont mogą podnieść wartość o 8-15%."
+                )
+            else:
+                ai_lines.append(
+                    f"🎯 <b>Twoja nieruchomość ma premium cenowe.</b> Prawdopodobnie wpływają na to: lokalizacja, standard, "
+                    f"lub niska liczba podobnych ofert. Utrzymanie tej wartości wymaga zachowania standardu — "
+                    f"remont co 5-7 lat pomaga zatrzymać premium."
+                )
+        elif reason == "agent":
+            ai_lines.append(
+                f"🎯 <b>Punkt startowy dla klienta:</b> mediana rynkowa {fmt_pln_short(offer_price_mid)} "
+                f"(zł/m²: {fmt_pm2(ppm2_local)}). Rekomendowana cena wywoławcza: <b>{fmt_pln_short(offer_price_high)}</b> "
+                f"(dla przestrzeni negocjacyjnej), cena szybkiej sprzedaży: <b>{fmt_pln_short(offer_price_mid)}</b>. "
+                f"Realny czas na rynku: 4-8 tygodni przy dobrym marketingu."
+            )
+        else:
+            ai_lines.append(
+                f"🎯 <b>Rekomendacja neutralna:</b> mediana rynkowa {fmt_pln_short(offer_price_mid)}, "
+                f"widełki cenowe <b>{fmt_pln_short(offer_price_low)} – {fmt_pln_short(offer_price_high)}</b>. "
+                f"Typowy czas sprzedaży w tej lokalizacji: 4-8 tygodni."
+            )
+
+        # Add trend hint
+        if l.get("build_year"):
+            by = l["build_year"]
+            if by >= 2020:
+                ai_lines.append(f"🏗️ Nowe budownictwo (od {by}) — utrzymuje wartość lepiej niż średnia rynkowa.")
+            elif by < 1990:
+                ai_lines.append(f"🏗️ Starsze budownictwo ({by}) — remont podnosi wartość o 8-15%.")
+
+    if ai_lines:
+        story.append(Spacer(1, 5*mm))
+        # Header with icon
+        story.append(Paragraph(ai_verdict_title, ParagraphStyle(
+            "aih", fontName=face_bold, fontSize=11, leading=14,
+            textColor=PRIMARY, spaceAfter=4)))
+        # Content in a light purple/indigo box
+        ai_content_parts = []
+        for line in ai_lines:
+            ai_content_parts.append(Paragraph(line, ParagraphStyle(
+                "aic", fontName=face, fontSize=9, leading=12,
+                textColor=TEXT_DARK, spaceAfter=3)))
+        ai_box = Table([[ai_content_parts]], colWidths=[180*mm])
+        ai_box.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,-1), colors.HexColor("#EEF2FF")),
+            ("BOX", (0,0),(-1,-1), 0.8, PRIMARY),
+            ("VALIGN", (0,0),(-1,-1), "TOP"),
+            ("TOPPADDING", (0,0),(-1,-1), 10),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 10),
+            ("LEFTPADDING", (0,0),(-1,-1), 12),
+            ("RIGHTPADDING", (0,0),(-1,-1), 12),
+        ]))
+        story.append(ai_box)
+
     # ============ PAGE 2: Podobne oferty sprzedaży ============
     story.append(PageBreak())
     story.append(Paragraph("Podobne oferty sprzedaży", ParagraphStyle(

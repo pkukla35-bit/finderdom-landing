@@ -2543,91 +2543,135 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         ]))
         story.append(tbl)
 
-    # ============ PAGE 4: Trendy rynkowe (2×3 area charts z time series) ============
+    # ============ PAGE 4: Ranking dzielnic ============
     if len(city_offers) >= 20:
         story.append(PageBreak())
-        story.append(Paragraph("Trendy rynkowe (ostatnie 12 miesięcy)", ParagraphStyle(
+        story.append(Paragraph(f"Ranking dzielnic w mieście {l.get('city','—')}", ParagraphStyle(
             "trh", fontName=face_bold, fontSize=13, leading=17, textColor=TEXT_DARK, spaceAfter=3)))
         story.append(Paragraph(
-            "Estymacja na bazie aktualnych ogłoszeń, cen historycznych i dynamiki polskiego rynku nieruchomości. "
-            "Czerwona linia to Twoja szacowana cena ofertowa.",
+            f"Aktualne mediany cen sprzedaży {ptype_lbl.lower()} per dzielnica. "
+            f"Niebieski słupek to Twoja dzielnica ({l.get('district') or '—'}).",
             ParagraphStyle("trs", fontName=face, fontSize=8, leading=11, textColor=TEXT_MUTED, spaceAfter=6)))
 
-        district_offers = [o for o in city_offers if (o.get("district") or "").lower() == (l.get("district") or "").lower()]
-        has_district = len(district_offers) >= 8 and l.get("district")
+        # Group offers by district
+        from collections import defaultdict as _dd
+        by_dist = _dd(list)
+        for o in city_offers:
+            d = o.get("district") or "Inne"
+            by_dist[d].append(o)
 
-        # Pre-compute stats
-        def _stats_from_offers(offers, kind):
-            """Return (median, p25, p75) for given kind."""
-            if kind == "price_pm2":
-                vs = [o["price_pm2"] for o in offers if o.get("price_pm2")]
-            elif kind == "price":
-                vs = [o["price"] for o in offers if o.get("price")]
-            else:  # area
-                vs = [o["area_m2"] for o in offers if o.get("area_m2")]
-            if not vs:
-                return 0, 0, 0
-            vs = sorted(vs)
-            n = len(vs)
-            return vs[n//2], vs[max(0,n//4)], vs[min(n-1,3*n//4)]
+        def _median_of(values):
+            s = sorted(x for x in values if x)
+            if not s:
+                return 0
+            n = len(s)
+            return s[n//2] if n % 2 == 1 else (s[n//2-1] + s[n//2]) / 2
 
-        city_stats = {
-            "price_pm2": _stats_from_offers(city_offers, "price_pm2"),
-            "price": _stats_from_offers(city_offers, "price"),
-            "area": _stats_from_offers(city_offers, "area"),
-        }
-        district_stats = {
-            "price_pm2": _stats_from_offers(district_offers, "price_pm2") if has_district else (0,0,0),
-            "price": _stats_from_offers(district_offers, "price") if has_district else (0,0,0),
-            "area": _stats_from_offers(district_offers, "area") if has_district else (0,0,0),
-        }
+        # Compute stats per district (min 3 offers to include)
+        rows = []
+        for d, offers in by_dist.items():
+            if len(offers) < 3:
+                continue
+            med_pm2 = _median_of([o.get("price_pm2") for o in offers])
+            med_price = _median_of([o.get("price") for o in offers])
+            med_area = _median_of([o.get("area_m2") for o in offers])
+            is_user_dist = d.lower() == (l.get("district") or "").lower()
+            rows.append((d, int(med_pm2), int(med_price), round(med_area, 1), len(offers), is_user_dist))
 
-        user_values = {
-            "price_pm2": ppm2_this or ppm2_local,
-            "price": offer_price_mid,
-            "area": area,
-        }
+        # Sort by price/m² ascending
+        rows.sort(key=lambda x: x[1])
 
-        titles_map = {
-            "price_pm2": ("cena za m²", "zł/m²"),
-            "price": ("cena", "zł"),
-            "area": ("powierzchnia", "m²"),
-        }
+        # Bar chart: median price/m² per district
+        story.append(Paragraph(
+            f"<b>A</b> Mediana cen za m² per dzielnica",
+            ParagraphStyle("chA", fontName=face_bold, fontSize=10, leading=13,
+                           textColor=TEXT_DARK, spaceBefore=4, spaceAfter=4)))
 
-        # Build grid: 3 rows x 2 cols
-        chart_rows = []
-        for kind in ["price_pm2", "price", "area"]:
-            label, unit = titles_map[kind]
-            row_cells = []
-            # Left: gmina
-            row_cells.append(_make_trend_area_chart(
-                city_stats[kind], user_values[kind], kind=kind, face=face,
-                title=f"Gmina {l.get('city','—')}, {label}"
-            ))
-            # Right: dzielnica (or placeholder)
-            if has_district:
-                row_cells.append(_make_trend_area_chart(
-                    district_stats[kind], user_values[kind], kind=kind, face=face,
-                    title=f"Dzielnica {l.get('district','—')}, {label}"
-                ))
-            else:
-                from reportlab.graphics.shapes import Drawing, String
-                d = Drawing(85*mm, 46*mm)
-                d.add(String(42*mm, 23*mm, "Za mało danych dla dzielnicy",
-                             fontName=face, fontSize=8, fillColor=TEXT_MUTED, textAnchor="middle"))
-                row_cells.append(d)
-            chart_rows.append(row_cells)
+        if rows:
+            from reportlab.graphics.shapes import Drawing, String
+            from reportlab.graphics.charts.barcharts import HorizontalBarChart
+            from reportlab.lib import colors as _cc
 
-        # Assemble as Table
-        tt = Table(chart_rows, colWidths=[90*mm, 90*mm], rowHeights=[52*mm, 52*mm, 52*mm])
-        tt.setStyle(TableStyle([
-            ("VALIGN", (0,0),(-1,-1), "TOP"),
-            ("LEFTPADDING", (0,0),(-1,-1), 0),
-            ("RIGHTPADDING", (0,0),(-1,-1), 0),
-            ("TOPPADDING", (0,0),(-1,-1), 0),
-            ("BOTTOMPADDING", (0,0),(-1,-1), 4),
-        ]))
-        story.append(tt)
+            top_rows = rows[:15]  # top 15 dzielnic
+            dw = 175*mm
+            dh = 4 * mm * len(top_rows) + 12 * mm
+
+            drw = Drawing(dw, dh)
+            bc = HorizontalBarChart()
+            bc.x = 130
+            bc.y = 8
+            bc.width = dw - 150
+            bc.height = dh - 20
+            bc.data = [[r[1] for r in top_rows]]
+            bc.categoryAxis.categoryNames = [r[0][:24] for r in top_rows]
+            bc.categoryAxis.labels.fontName = face
+            bc.categoryAxis.labels.fontSize = 7
+            bc.categoryAxis.labels.dx = -3
+            bc.valueAxis.labels.fontName = face
+            bc.valueAxis.labels.fontSize = 6
+            max_v = max(r[1] for r in top_rows) if top_rows else 1
+            bc.valueAxis.valueMin = 0
+            bc.valueAxis.valueMax = max_v * 1.20
+            bc.valueAxis.valueStep = max(int(max_v // 4 // 1000 * 1000), 1000)
+            bc.strokeColor = _cc.transparent
+            bc.bars[0].strokeColor = _cc.transparent
+            for i, r in enumerate(top_rows):
+                bc.bars[(0, i)].fillColor = _cc.HexColor("#4F46E5") if r[5] else _cc.HexColor("#C7D2FE")
+            bc.barLabelFormat = lambda v: f"{int(v):,}".replace(",", " ") + " zł"
+            bc.barLabels.fontName = face_bold
+            bc.barLabels.fontSize = 6
+            bc.barLabels.dx = 3
+            bc.barLabels.fillColor = _cc.HexColor("#111827")
+            bc.barLabels.nudge = 3
+            drw.add(bc)
+            story.append(drw)
+            story.append(Spacer(1, 6*mm))
+
+            # Summary table: district | median pm2 | median price | median area | count
+            story.append(Paragraph(
+                f"<b>B</b> Szczegółowe statystyki per dzielnica",
+                ParagraphStyle("chB", fontName=face_bold, fontSize=10, leading=13,
+                               textColor=TEXT_DARK, spaceBefore=2, spaceAfter=4)))
+
+            tbl_data = [["Dzielnica", "Mediana zł/m²", "Mediana ceny", "Mediana m²", "Liczba ofert"]]
+            cell_std = ParagraphStyle("cellS", fontName=face, fontSize=8, leading=11,
+                                       textColor=TEXT_DARK, alignment=TA_LEFT)
+            cell_std_bold = ParagraphStyle("cellSB", fontName=face_bold, fontSize=8, leading=11,
+                                            textColor=colors.HexColor("#4F46E5"), alignment=TA_LEFT)
+            cell_ctr = ParagraphStyle("cellC", fontName=face, fontSize=8, leading=11,
+                                       textColor=TEXT_DARK, alignment=TA_CENTER)
+            cell_ctr_bold = ParagraphStyle("cellCB", fontName=face_bold, fontSize=8, leading=11,
+                                            textColor=colors.HexColor("#4F46E5"), alignment=TA_CENTER)
+            for d, pm2, price, ar, cnt, is_you in rows[:20]:
+                marker = " ⭐" if is_you else ""
+                dc = cell_std_bold if is_you else cell_std
+                nc = cell_ctr_bold if is_you else cell_ctr
+                tbl_data.append([
+                    Paragraph(d + marker, dc),
+                    Paragraph(fmt_pm2(pm2), nc),
+                    Paragraph(fmt_pln(price), nc),
+                    Paragraph(f"{ar:.1f} m²", nc),
+                    Paragraph(str(cnt), nc),
+                ])
+            tbl = Table(tbl_data, colWidths=[55*mm, 34*mm, 34*mm, 26*mm, 26*mm])
+            tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0,0),(-1,0), PRIMARY),
+                ("TEXTCOLOR", (0,0),(-1,0), colors.white),
+                ("FONTNAME", (0,0),(-1,0), face_bold),
+                ("FONTSIZE", (0,0),(-1,0), 8),
+                ("ROWBACKGROUNDS", (0,1),(-1,-1), [colors.white, BG_LIGHT]),
+                ("BOX", (0,0),(-1,-1), 0.3, BORDER),
+                ("LINEBELOW", (0,0),(-1,0), 0.5, PRIMARY_DARK),
+                ("INNERGRID", (0,1),(-1,-1), 0.2, BORDER),
+                ("ALIGN", (0,0),(-1,0), "CENTER"),
+                ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
+                ("TOPPADDING", (0,0),(-1,-1), 4),
+                ("BOTTOMPADDING", (0,0),(-1,-1), 4),
+                ("LEFTPADDING", (0,0),(-1,-1), 6),
+            ]))
+            story.append(tbl)
+        else:
+            story.append(Paragraph("Brak wystarczających danych z dzielnic.", small))
 
     doc.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
     return out.getvalue()

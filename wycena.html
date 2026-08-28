@@ -139,6 +139,10 @@
             <label class="label" for="vDistrict">Dzielnica / osiedle</label>
             <input class="input" id="vDistrict" placeholder="np. Krowodrza">
           </div>
+          <div class="field only-house only-plot">
+            <label class="label" for="vPowiat">Powiat <span style="color:#8ba3d4;font-weight:400">(pomaga wycenie małych miejscowości)</span></label>
+            <input class="input" id="vPowiat" placeholder="np. krakowski, wielicki, tatrzański">
+          </div>
           <div class="field field-full">
             <label class="label" for="vLocation">Adres (opcjonalnie)</label>
             <input class="input" id="vLocation" placeholder="np. ul. Karmelicka 15">
@@ -386,6 +390,7 @@
       type: val('vType'),
       market_type: val('vMarket'),
       city, district: val('vDistrict'),
+      powiat: val('vPowiat'),
       location: val('vLocation'),
       area_m2: area,
       rooms: num('vRooms'),

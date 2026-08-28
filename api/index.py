@@ -2200,8 +2200,8 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         ]))
         story.append(pt)
 
-    # === Wpływ standardu na cenę (bar chart) ===
-    if l.get("type") == "mieszkanie" and len(city_offers) >= 30:
+    # === Wpływ standardu na cenę (bar chart) - dla mieszkań I domów ===
+    if l.get("type") in ("mieszkanie", "dom") and len(city_offers) >= 5:
         from collections import defaultdict as _dd
         std_map = _dd(list)
         std_labels_order = ["do_remontu", "do_odswiezenia", "standardowy", "wysoki", "deweloperski"]
@@ -2353,10 +2353,18 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     ai_verdict_title = "💡 Rekomendacja AI"
     ai_verdict_color = PRIMARY
 
-    if len(city_offers) >= 10 and ppm2_local > 0:
+    # Compute city median as fallback if local median is 0
+    ai_ppm2_ref = ppm2_local
+    if ai_ppm2_ref <= 0 and city_offers:
+        ai_ppm2_ref = int(_median([o["price_pm2"] for o in city_offers if o.get("price_pm2")]))
+    ai_offer_mid = int(ai_ppm2_ref * area) if area and ai_ppm2_ref else offer_price_mid
+    ai_offer_low = int(ai_offer_mid * 0.92)
+    ai_offer_high = int(ai_offer_mid * 1.08)
+
+    if len(city_offers) >= 3 and ai_ppm2_ref > 0:
         # Compute percentile of user's price in city
         all_pm2 = sorted(o["price_pm2"] for o in city_offers if o.get("price_pm2"))
-        user_pm2 = ppm2_this or ppm2_local
+        user_pm2 = ppm2_this or ai_ppm2_ref
         percentile = 50
         if all_pm2:
             below = sum(1 for p in all_pm2 if p < user_pm2)
@@ -2389,33 +2397,33 @@ def build_valuation_pdf(l, all_listings, buyer_email):
             if percentile <= 30:
                 ai_lines.append(
                     f"🎯 <b>Rekomendacja: sprzedawaj strategicznie.</b> Twoja nieruchomość jest atrakcyjnie wyceniona — "
-                    f"celuj w <b>{fmt_pln_short(offer_price_mid)}</b> (najszybsza sprzedaż) lub "
-                    f"<b>{fmt_pln_short(offer_price_high)}</b> jeśli nie spieszy Ci się (ok. 2-4 miesięcy)."
+                    f"celuj w <b>{fmt_pln_short(ai_offer_mid)}</b> (najszybsza sprzedaż) lub "
+                    f"<b>{fmt_pln_short(ai_offer_high)}</b> jeśli nie spieszy Ci się (ok. 2-4 miesięcy)."
                 )
             elif percentile <= 60:
                 ai_lines.append(
                     f"🎯 <b>Rekomendacja: sprzedawaj z lekką przewagą.</b> Cena w środku widełek "
-                    f"<b>{fmt_pln_short(offer_price_low)} – {fmt_pln_short(offer_price_high)}</b> "
-                    f"zwykle sprzedaje się w 6-8 tygodni. Środek widełek (~{fmt_pln_short(offer_price_mid)}) "
+                    f"<b>{fmt_pln_short(ai_offer_low)} – {fmt_pln_short(ai_offer_high)}</b> "
+                    f"zwykle sprzedaje się w 6-8 tygodni. Środek widełek (~{fmt_pln_short(ai_offer_mid)}) "
                     f"to złoty środek między szybkością a maksymalizacją zysku."
                 )
             else:
                 ai_lines.append(
                     f"🎯 <b>Rekomendacja: rozważ obniżkę.</b> Cena powyżej mediany wydłuża czas sprzedaży. "
-                    f"Zejdź do <b>{fmt_pln_short(offer_price_mid)}</b> (mediana rynkowa), a sprzedasz w 4-6 tygodni. "
+                    f"Zejdź do <b>{fmt_pln_short(ai_offer_mid)}</b> (mediana rynkowa), a sprzedasz w 4-6 tygodni. "
                     f"Trzymanie ceny powyżej ryzykuje 6+ miesięcy bez zainteresowania."
                 )
         elif reason == "ciekawosc":
             if percentile <= 30:
                 ai_lines.append(
                     f"🎯 <b>Wartość Twojej nieruchomości rośnie.</b> W obecnych warunkach rynkowych "
-                    f"(mediana Krakowa: {fmt_pm2(ppm2_local)}) Twoja nieruchomość ma <b>potencjał wzrostu</b>. "
+                    f"(mediana Krakowa: {fmt_pm2(ai_ppm2_ref)}) Twoja nieruchomość ma <b>potencjał wzrostu</b>. "
                     f"Trzymaj lub rozważ rynek najmu (typowe stopy zwrotu: 4-6% rocznie)."
                 )
             elif percentile <= 60:
                 ai_lines.append(
                     f"🎯 <b>Twoja nieruchomość jest wyceniona zgodnie z rynkiem.</b> Jeśli planujesz sprzedaż w ciągu 2-3 lat, "
-                    f"kalkuluj cenę wywoławczą w widełkach <b>{fmt_pln_short(offer_price_low)} – {fmt_pln_short(offer_price_high)}</b>. "
+                    f"kalkuluj cenę wywoławczą w widełkach <b>{fmt_pln_short(ai_offer_low)} – {fmt_pln_short(ai_offer_high)}</b>. "
                     f"Standard nieruchomości i ewentualny remont mogą podnieść wartość o 8-15%."
                 )
             else:
@@ -2426,15 +2434,15 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                 )
         elif reason == "agent":
             ai_lines.append(
-                f"🎯 <b>Punkt startowy dla klienta:</b> mediana rynkowa {fmt_pln_short(offer_price_mid)} "
-                f"(zł/m²: {fmt_pm2(ppm2_local)}). Rekomendowana cena wywoławcza: <b>{fmt_pln_short(offer_price_high)}</b> "
-                f"(dla przestrzeni negocjacyjnej), cena szybkiej sprzedaży: <b>{fmt_pln_short(offer_price_mid)}</b>. "
+                f"🎯 <b>Punkt startowy dla klienta:</b> mediana rynkowa {fmt_pln_short(ai_offer_mid)} "
+                f"(zł/m²: {fmt_pm2(ai_ppm2_ref)}). Rekomendowana cena wywoławcza: <b>{fmt_pln_short(ai_offer_high)}</b> "
+                f"(dla przestrzeni negocjacyjnej), cena szybkiej sprzedaży: <b>{fmt_pln_short(ai_offer_mid)}</b>. "
                 f"Realny czas na rynku: 4-8 tygodni przy dobrym marketingu."
             )
         else:
             ai_lines.append(
-                f"🎯 <b>Rekomendacja neutralna:</b> mediana rynkowa {fmt_pln_short(offer_price_mid)}, "
-                f"widełki cenowe <b>{fmt_pln_short(offer_price_low)} – {fmt_pln_short(offer_price_high)}</b>. "
+                f"🎯 <b>Rekomendacja neutralna:</b> mediana rynkowa {fmt_pln_short(ai_offer_mid)}, "
+                f"widełki cenowe <b>{fmt_pln_short(ai_offer_low)} – {fmt_pln_short(ai_offer_high)}</b>. "
                 f"Typowy czas sprzedaży w tej lokalizacji: 4-8 tygodni."
             )
 

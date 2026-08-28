@@ -2398,7 +2398,17 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                                         textColor=TEXT_DARK, alignment=TA_LEFT)
         cell_center_p2 = ParagraphStyle("cellcp2", fontName=face, fontSize=8, leading=11,
                                          textColor=TEXT_DARK, alignment=TA_CENTER)
-        tbl_data = [["Adres", "Powierzchnia", "Pokoje", "Piętro", "Cena", "Cena za m²"]]
+
+        # Check if any offer has valid floor data
+        has_floor_data = any(
+            o.get("floor") is not None and o.get("floor") > 0
+            for o in local_offers[:10]
+        )
+
+        if has_floor_data:
+            tbl_data = [["Adres", "Powierzchnia", "Pokoje", "Piętro", "Cena", "Cena za m²"]]
+        else:
+            tbl_data = [["Adres", "Powierzchnia", "Pokoje", "Cena", "Cena za m²"]]
         for o in local_offers[:10]:
             city_o = o.get("city") or ""
             district_o = o.get("district") or ""
@@ -2407,19 +2417,25 @@ def build_valuation_pdf(l, all_listings, buyer_email):
             addr = ", ".join(addr_parts) or "—"
             area_o = f"{o.get('area_m2','—')} m²" if o.get('area_m2') else "—"
             rooms_o = str(o.get("rooms","—")) if o.get("rooms") else "—"
-            floor_o = "—"
-            if o.get("floor") is not None and o.get("floor") > 0:
-                mf = o.get("max_floor")
-                floor_o = f"{o['floor']}/{mf}" if mf and mf > 0 else str(o['floor'])
-            tbl_data.append([
+            row = [
                 Paragraph(addr, cell_style_p2),
                 Paragraph(area_o, cell_center_p2),
                 Paragraph(rooms_o, cell_center_p2),
-                Paragraph(floor_o, cell_center_p2),
+            ]
+            if has_floor_data:
+                floor_o = "—"
+                if o.get("floor") is not None and o.get("floor") > 0:
+                    mf = o.get("max_floor")
+                    floor_o = f"{o['floor']}/{mf}" if mf and mf > 0 else str(o['floor'])
+                row.append(Paragraph(floor_o, cell_center_p2))
+            row.extend([
                 Paragraph(fmt_pln(o.get("price")), cell_center_p2),
                 Paragraph(fmt_pm2(o.get("price_pm2")), cell_center_p2),
             ])
-        tbl = Table(tbl_data, colWidths=[62*mm, 25*mm, 15*mm, 18*mm, 30*mm, 30*mm])
+            tbl_data.append(row)
+
+        col_widths = [62*mm, 25*mm, 15*mm, 18*mm, 30*mm, 30*mm] if has_floor_data else [70*mm, 30*mm, 20*mm, 30*mm, 30*mm]
+        tbl = Table(tbl_data, colWidths=col_widths)
         tbl.setStyle(TableStyle([
             ("BACKGROUND", (0,0),(-1,0), PRIMARY),
             ("TEXTCOLOR", (0,0),(-1,0), colors.white),
@@ -2486,7 +2502,15 @@ def build_valuation_pdf(l, all_listings, buyer_email):
             story.append(Spacer(1, 4*mm))
 
     if local_offers:
-        tbl_data = [["Adres", "Data\ntransakcji", "Powierzchnia", "Pokoje", "Piętro", "Cena za m²", "Cena"]]
+        # Check if any offer has valid floor data
+        has_floor_data3 = any(
+            o.get("floor") is not None and o.get("floor") > 0
+            for o in local_offers[:10]
+        )
+        if has_floor_data3:
+            tbl_data = [["Adres", "Data\ntransakcji", "Powierzchnia", "Pokoje", "Piętro", "Cena za m²", "Cena"]]
+        else:
+            tbl_data = [["Adres", "Data\ntransakcji", "Powierzchnia", "Pokoje", "Cena za m²", "Cena"]]
         # Deterministic synthetic dates (past 12 months) based on offer id
         from datetime import datetime as _dt2, timedelta as _td2
         _now2 = _dt2.utcnow()
@@ -2512,16 +2536,21 @@ def build_valuation_pdf(l, all_listings, buyer_email):
             days_back = (abs(hash(oid)) % 330) + 30
             tx_date = _now2 - _td2(days=days_back)
             date_str = f"{tx_date.day:02d}.{tx_date.month:02d}.{tx_date.year}"
-            tbl_data.append([
+            row = [
                 Paragraph(addr, cell_style),
                 Paragraph(date_str, cell_center),
                 Paragraph(area_o, cell_center),
                 Paragraph(rooms_o, cell_center),
-                Paragraph(floor_o, cell_center),
+            ]
+            if has_floor_data3:
+                row.append(Paragraph(floor_o, cell_center))
+            row.extend([
                 Paragraph(fmt_pm2(tx_pm2), cell_center),
                 Paragraph(fmt_pln(tx_p), cell_center),
             ])
-        tbl = Table(tbl_data, colWidths=[52*mm, 22*mm, 22*mm, 14*mm, 15*mm, 27*mm, 28*mm])
+            tbl_data.append(row)
+        col_widths_p3 = [52*mm, 22*mm, 22*mm, 14*mm, 15*mm, 27*mm, 28*mm] if has_floor_data3 else [58*mm, 24*mm, 24*mm, 16*mm, 29*mm, 29*mm]
+        tbl = Table(tbl_data, colWidths=col_widths_p3)
         tbl.setStyle(TableStyle([
             ("BACKGROUND", (0,0),(-1,0), PRIMARY),
             ("TEXTCOLOR", (0,0),(-1,0), colors.white),

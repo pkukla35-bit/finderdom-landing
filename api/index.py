@@ -2538,27 +2538,45 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         if city_key in CITY_COORDS:
             map_lat, map_lon = CITY_COORDS[city_key]
         else:
-            # Try powiat -> map "krakowski" to "krakow"
+            # Try Nominatim geocoding (OpenStreetMap - darmowe)
+            try:
+                city_name = l.get("city") or ""
+                powiat = l.get("powiat") or ""
+                # Build query: "Głogoczów, powiat krakowski, Polska"
+                q_parts = [city_name]
+                if powiat:
+                    q_parts.append(f"powiat {powiat}")
+                q_parts.append("Polska")
+                q = ", ".join(x for x in q_parts if x)
+                if q.strip(", "):
+                    with httpx.Client(timeout=6, headers={"User-Agent": "FinderDom.pl/1.0 (kontakt@finderdom.pl)"}) as _c:
+                        _r = _c.get("https://nominatim.openstreetmap.org/search",
+                                    params={"q": q, "format": "json", "limit": 1, "countrycodes": "pl"})
+                        if _r.status_code == 200:
+                            _data = _r.json()
+                            if _data:
+                                map_lat = float(_data[0]["lat"])
+                                map_lon = float(_data[0]["lon"])
+            except Exception as _e:
+                try:
+                    logger.error("Nominatim geocode failed: %s", str(_e)[:100])
+                except Exception:
+                    pass
+
+        # Powiat -> miasto fallback (jesli Nominatim nie znalazl)
+        if map_lat is None:
             powiat_raw = _normalize_city_name(l.get("powiat") or "")
-            # Strip common suffixes
             for suffix in ("-ziemski", "-grodzki", "ski", "cki", "nski", "wski"):
                 if powiat_raw.endswith(suffix):
                     stem = powiat_raw[:-len(suffix)]
-                    # Try common city name from powiat stem
-                    for candidate in (stem, stem + "ow", stem + "no", stem + "cin"):
+                    for candidate in (stem, stem + "ow", stem + "no"):
                         if candidate in CITY_COORDS:
                             map_lat, map_lon = CITY_COORDS[candidate]
                             break
                     if map_lat is not None:
                         break
-            # If still None, try substring match in CITY_COORDS keys
-            if map_lat is None and powiat_raw:
-                stem = powiat_raw.rstrip("i").rstrip("k").rstrip("s")[:5]
-                for name, (lat, lon) in CITY_COORDS.items():
-                    if name.startswith(stem):
-                        map_lat, map_lon = lat, lon
-                        break
-        # Use median from local_offers if we have GPS-tagged ones
+
+        # Mediana lat/lon z local_offers
         if map_lat is None and local_offers:
             lats = [o["lat"] for o in local_offers if o.get("lat") is not None]
             lons = [o["lon"] for o in local_offers if o.get("lon") is not None]
@@ -2566,6 +2584,7 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                 lats.sort(); lons.sort()
                 map_lat = lats[len(lats)//2]
                 map_lon = lons[len(lons)//2]
+
     if map_lat is None or map_lon is None:
         map_lat, map_lon = 52.0693, 19.4803  # Central Poland
 

@@ -760,7 +760,7 @@ function renderOffer(l, all) {
 
   // Specs grid
   const specs = [];
-  specs.push({label:'Powierzchnia', val: l.area_m2 + ' m²'});
+  specs.push({label:'Powierzchnia', val: (l.area_m2 && l.area_m2 > 0) ? (l.area_m2 + ' m²') : '— m²'});
   if (l.rooms > 0) specs.push({label:'Pokoje', val: l.rooms + (l.rooms === 1 ? ' pokój' : (l.rooms < 5 ? ' pokoje' : ' pokoi'))});
   if (l.floor > 0 || l.max_floor > 0) {
     const flStr = l.floor === 0 ? 'Parter' : (l.floor || '?');

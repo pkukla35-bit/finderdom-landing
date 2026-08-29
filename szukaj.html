@@ -570,7 +570,8 @@ function renderPage() {
   }
   const slice = CURRENT_FILTERED.slice(0, currentPage * PAGE_SIZE);
   const cardsHtml = slice.map((l, idx) => {
-    let specs = `📐 ${l.area_m2} m²`;
+    const areaTxt = (l.area_m2 && l.area_m2 > 0) ? `${l.area_m2} m²` : '— m²';
+    let specs = `📐 ${areaTxt}`;
     if (l.rooms > 0) specs += ` · 🛏️ ${l.rooms} pok.`;
     if (l.floor > 0) specs += ` · 🏢 ${l.floor} piętro`;
     if (l.type === 'dom') specs += ' · 🏡 Dom';

@@ -583,7 +583,7 @@ function renderPage() {
       : '';
     const emojiHtml = hasPhoto ? '' : `<span class="placeholder-emoji">${l.emoji}</span>`;
     const cardHtml = `
-      <a href="${targetUrl}" class="card">
+      <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="card">
         <div class="card-img ${l.img_class}${hasPhoto ? ' has-photo' : ''}">
           ${photoHtml}
           ${emojiHtml}

@@ -33,6 +33,8 @@
   .nav-links{display:flex;gap:20px;align-items:center;font-size:14px}
   .nav-links a{color:#c5d0e6;text-decoration:none;font-weight:600;transition:color 0.15s}
   .nav-links a:hover,.nav-links a.active{color:#FFB800}
+  .nav-links a.a-wycena{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;padding:7px 14px;border-radius:8px;font-weight:800;font-size:13px;box-shadow:0 3px 10px rgba(255,184,0,0.2);transition:transform .15s ease}
+  .nav-links a.a-wycena:hover{color:#0B1836;transform:translateY(-1px);box-shadow:0 5px 14px rgba(255,184,0,0.3)}
   .auth-widget{display:inline-flex;gap:10px;align-items:center}
   .auth-widget .a-login{color:#c5d0e6;font-weight:700;font-size:14px;text-decoration:none}
   .auth-widget .a-login:hover{color:#FFB800}
@@ -179,6 +181,7 @@
     </a>
     <div class="nav-links">
       <a href="/szukaj.html" class="active">Wyszukiwarka</a>
+      <a href="/wycena.html" class="a-wycena">💰 Wyceń nieruchomość</a>
       <a href="/oferta.html" class="hide-mob">Przykład oferty</a>
       <span id="authWidget" class="auth-widget"></span>
     </div>

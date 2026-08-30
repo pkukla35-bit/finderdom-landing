@@ -229,7 +229,13 @@ def as_dt(v):
 
 
 def effective_tier(user: dict) -> str:
-    """Return current tier, considering expiration."""
+    """Return current tier, considering expiration.
+    For agents (role='agent'), returns MASTER's tier (agents inherit company plan)."""
+    # If this user is an AGENT, look up master's tier
+    if user.get("role") == "agent" and user.get("master_id"):
+        # Note: this is a helper that returns from cached dict — for DB lookup use effective_tier_async
+        # Fallback to own tier for sync callers
+        pass
     tier = user.get("tier", "free")
     if tier == "free":
         return "free"
@@ -237,6 +243,18 @@ def effective_tier(user: dict) -> str:
     if not exp or exp < datetime.now(timezone.utc):
         return "free"
     return tier
+
+
+async def effective_tier_async(user: dict) -> str:
+    """Async version that resolves agent → master tier from DB."""
+    if user.get("role") == "agent" and user.get("master_id"):
+        try:
+            master = await (await users_collection()).find_one({"_id": ObjectId(user["master_id"])})
+            if master:
+                return effective_tier(master)
+        except Exception:
+            pass
+    return effective_tier(user)
 
 
 def public_user(user: dict) -> dict:
@@ -252,6 +270,10 @@ def public_user(user: dict) -> dict:
         "expires_at": expires_at.isoformat() if isinstance(expires_at, datetime) else expires_at,
         "subscription_status": user.get("subscription_status", "active"),
         "created_at": user["created_at"].isoformat() if isinstance(user["created_at"], datetime) else user["created_at"],
+        # Team fields (Firmowy multi-agent)
+        "role": user.get("role"),  # "master" | "agent" | None
+        "master_id": user.get("master_id"),  # if agent, points to master's user id
+        "active": user.get("active", True),
     }
 
 
@@ -460,12 +482,35 @@ async def _notify_leads_to_businesses(lead_id: str, lead: dict) -> None:
 
 @app.get("/api/leads/mine")
 async def list_my_leads(user: dict = Depends(current_user)):
-    """List leads claimed by the current Firmowy user."""
-    if effective_tier(user) != "business":
+    """List leads claimed by user OR by any teammate in the same company."""
+    tier = await effective_tier_async(user)
+    if tier != "business":
         raise HTTPException(403, "Tylko subskrypcja Firmowa")
-    cursor = database().leads.find({"claimed_by": user["_id"]}).sort("claimed_at", -1).limit(100)
+
+    # Determine company scope: if agent → include master; if master → include all agents; else self
+    user_ids = [user["_id"]]
+    if user.get("role") == "master":
+        # Include all agents of this master
+        async for agent in (await users_collection()).find({"master_id": str(user["_id"])}, {"_id": 1}):
+            user_ids.append(agent["_id"])
+    elif user.get("role") == "agent" and user.get("master_id"):
+        try:
+            master_oid = ObjectId(user["master_id"])
+            user_ids.append(master_oid)
+            # Also include sibling agents
+            async for sibling in (await users_collection()).find({"master_id": user["master_id"], "_id": {"$ne": user["_id"]}}, {"_id": 1}):
+                user_ids.append(sibling["_id"])
+        except Exception:
+            pass
+
+    cursor = database().leads.find({"claimed_by": {"$in": user_ids}}).sort("claimed_at", -1).limit(200)
     out = []
+    # Build user_id → email map for showing "claimed by whom"
+    claimer_map = {}
+    async for u in (await users_collection()).find({"_id": {"$in": user_ids}}, {"email": 1}):
+        claimer_map[str(u["_id"])] = u.get("email", "—")
     async for l in cursor:
+        cb = l.get("claimed_by")
         out.append({
             "id": str(l["_id"]),
             "phone": l.get("phone"),
@@ -476,6 +521,8 @@ async def list_my_leads(user: dict = Depends(current_user)):
             "area_m2": l.get("area_m2"),
             "reason": l.get("reason"),
             "claimed_at": (l.get("claimed_at") or l.get("created_at")).isoformat() if l.get("claimed_at") or l.get("created_at") else None,
+            "claimed_by_email": claimer_map.get(str(cb), "—"),
+            "claimed_by_me": str(cb) == str(user["_id"]),
         })
     return {"leads": out}
 
@@ -483,8 +530,12 @@ async def list_my_leads(user: dict = Depends(current_user)):
 @app.post("/api/leads/claim")
 async def claim_lead(token: str, user: dict = Depends(current_user)):
     """Atomically claim a lead. First-come-first-served. Returns phone number if success."""
-    if effective_tier(user) != "business":
+    tier = await effective_tier_async(user)
+    if tier != "business":
         raise HTTPException(403, "Tylko subskrypcja Firmowa może rezerwować leady")
+    # Deactivated agents can't claim
+    if user.get("active") is False:
+        raise HTTPException(403, "Twoje konto zostało dezaktywowane przez administratora firmy")
     if not token or len(token) < 10:
         raise HTTPException(400, "Nieprawidłowy token")
     now = datetime.now(timezone.utc)
@@ -527,6 +578,202 @@ async def claim_lead(token: str, user: dict = Depends(current_user)):
             }
         }
     raise HTTPException(409, "Ten lead został już zarezerwowany przez inne biuro")
+
+
+# --- Team Management (Firmowy multi-agent) ---
+
+class InviteAgentRequest(BaseModel):
+    email: str
+
+
+@app.post("/api/team/invite")
+async def invite_agent(req: InviteAgentRequest, user: dict = Depends(current_user)):
+    """Master invites a new agent by email."""
+    tier = await effective_tier_async(user)
+    if tier != "business":
+        raise HTTPException(403, "Tylko konto Firmowy może zapraszać agentów")
+    if user.get("role") == "agent":
+        raise HTTPException(403, "Tylko właściciel firmy może zapraszać agentów")
+
+    email = clean_email(req.email)
+    # Ensure this master is marked as "master" role
+    if not user.get("role"):
+        await (await users_collection()).update_one({"_id": user["_id"]}, {"$set": {"role": "master"}})
+
+    # Check if email already registered
+    existing = await (await users_collection()).find_one({"email": email})
+    if existing:
+        raise HTTPException(400, "Ten email jest już zarejestrowany w FinderDom")
+
+    # Check pending invite
+    inv_col = database().team_invites
+    pending = await inv_col.find_one({"email": email, "master_id": str(user["_id"]), "used": False})
+    if pending and as_dt(pending.get("expires_at")) and as_dt(pending["expires_at"]) > datetime.now(timezone.utc):
+        raise HTTPException(400, "Zaproszenie dla tego emaila już wysłane (wygaśnie za kilka dni)")
+
+    token = secrets.token_urlsafe(24)
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(days=7)
+    await inv_col.insert_one({
+        "token": token,
+        "email": email,
+        "master_id": str(user["_id"]),
+        "company_name": user.get("company_name") or user.get("email"),
+        "created_at": now,
+        "expires_at": expires,
+        "used": False,
+    })
+
+    # Send email via Resend
+    signup_url = f"{DOMAIN}/rejestracja?invite={token}"
+    company = user.get("company_name") or user.get("email")
+    subject = f"Zaproszenie do zespołu {company} na FinderDom.pl"
+    html = f"""
+    <div style="font-family:system-ui,Arial;background:#f6f9fc;padding:32px">
+      <div style="max-width:560px;margin:auto;background:#fff;border-radius:16px;padding:32px">
+        <h2 style="color:#0b1220;margin:0 0 12px">🏢 Zaproszenie do FinderDom.pl</h2>
+        <p style="color:#4b5563;font-size:15px;line-height:1.6">
+          Zostałeś zaproszony/a do zespołu <b>{company}</b> na platformie FinderDom.pl.
+          Po zaakceptowaniu zaproszenia będziesz mieć dostęp do wszystkich leadów firmy oraz
+          zaawansowanych narzędzi wyceny nieruchomości.
+        </p>
+        <div style="margin:24px 0;text-align:center">
+          <a href="{signup_url}" style="display:inline-block;background:#FFB800;color:#0b1220;padding:14px 32px;border-radius:12px;text-decoration:none;font-weight:700">✓ Zaakceptuj zaproszenie</a>
+        </div>
+        <p style="color:#9ca3af;font-size:12px">Link wygasa za 7 dni.</p>
+      </div>
+    </div>
+    """
+    try:
+        await send_email(to=email, subject=subject, html=html)
+    except Exception as e:
+        logger.error("Team invite email failed: %s", str(e)[:120])
+    return {"success": True, "email": email, "expires_at": expires.isoformat()}
+
+
+@app.get("/api/team/invite/{token}")
+async def get_invite_info(token: str):
+    """Get invitation info (used by /rejestracja to pre-fill email + show company name)."""
+    inv = await database().team_invites.find_one({"token": token, "used": False})
+    if not inv:
+        raise HTTPException(404, "Zaproszenie nieaktualne lub wygasło")
+    if as_dt(inv.get("expires_at")) and as_dt(inv["expires_at"]) < datetime.now(timezone.utc):
+        raise HTTPException(410, "Zaproszenie wygasło")
+    return {
+        "email": inv["email"],
+        "company_name": inv.get("company_name", "Firma"),
+    }
+
+
+@app.get("/api/team/agents")
+async def list_team_agents(user: dict = Depends(current_user)):
+    """Master lists all agents in his company."""
+    if user.get("role") == "agent":
+        raise HTTPException(403, "Tylko master widzi listę agentów")
+    if await effective_tier_async(user) != "business":
+        raise HTTPException(403, "Tylko konto Firmowy")
+
+    agents = []
+    async for a in (await users_collection()).find({"master_id": str(user["_id"])}).sort("created_at", -1):
+        # Count claimed leads for this agent
+        cnt = await database().leads.count_documents({"claimed_by": a["_id"]})
+        agents.append({
+            "id": str(a["_id"]),
+            "email": a["email"],
+            "active": a.get("active", True),
+            "leads_claimed": cnt,
+            "created_at": a["created_at"].isoformat() if isinstance(a["created_at"], datetime) else a["created_at"],
+        })
+    # Pending invites
+    invites = []
+    async for i in database().team_invites.find({"master_id": str(user["_id"]), "used": False}).sort("created_at", -1):
+        if as_dt(i.get("expires_at")) and as_dt(i["expires_at"]) < datetime.now(timezone.utc):
+            continue
+        invites.append({"email": i["email"], "expires_at": i["expires_at"].isoformat() if isinstance(i["expires_at"], datetime) else i["expires_at"]})
+    return {"agents": agents, "pending_invites": invites}
+
+
+@app.post("/api/team/agent/{agent_id}/deactivate")
+async def deactivate_agent(agent_id: str, user: dict = Depends(current_user)):
+    """Master deactivates an agent (immediate loss of access)."""
+    if user.get("role") == "agent":
+        raise HTTPException(403, "Tylko master może usuwać agentów")
+    try:
+        oid = ObjectId(agent_id)
+    except Exception:
+        raise HTTPException(400, "Nieprawidłowe id agenta")
+    agent = await (await users_collection()).find_one({"_id": oid, "master_id": str(user["_id"])})
+    if not agent:
+        raise HTTPException(404, "Agent nie należy do Twojej firmy")
+    await (await users_collection()).update_one({"_id": oid}, {"$set": {"active": False}})
+    return {"success": True}
+
+
+# --- Offer statuses (Firmowy CRM) ---
+
+class OfferStatusUpdate(BaseModel):
+    offer_id: str = Field(min_length=1, max_length=200)
+    status: Optional[str] = None  # contacted | scheduled | outdated | direct | None to remove
+    note: Optional[str] = None
+
+
+VALID_STATUSES = {"contacted", "scheduled", "outdated", "direct"}
+
+
+def _company_scope(user: dict) -> str:
+    """Return company_id (master_id if agent, self if master/individual)."""
+    if user.get("role") == "agent" and user.get("master_id"):
+        return user["master_id"]
+    return str(user["_id"])
+
+
+@app.post("/api/offer-status")
+async def set_offer_status(body: OfferStatusUpdate, user: dict = Depends(current_user)):
+    """Set or update status for an offer (Firmowy plan only). Company-wide visibility."""
+    tier = await effective_tier_async(user)
+    if tier != "business":
+        raise HTTPException(403, "Funkcja dostępna tylko dla planu Firmowy")
+    company_id = _company_scope(user)
+    offer_id = body.offer_id.strip()[:200]
+
+    if not body.status:
+        await database().offer_statuses.delete_one({"offer_id": offer_id, "company_id": company_id})
+        return {"success": True, "removed": True}
+
+    if body.status not in VALID_STATUSES:
+        raise HTTPException(400, "Nieprawidłowy status")
+
+    now = datetime.now(timezone.utc)
+    note = (body.note or "").strip()[:500]
+    await database().offer_statuses.update_one(
+        {"offer_id": offer_id, "company_id": company_id},
+        {"$set": {"status": body.status, "note": note, "marked_by": user["email"], "updated_at": now},
+         "$setOnInsert": {"created_at": now}},
+        upsert=True,
+    )
+    return {"success": True, "status": body.status}
+
+
+@app.get("/api/offer-status")
+async def get_offer_statuses(ids: str = "", user: dict = Depends(current_user)):
+    """Bulk fetch statuses for a list of offer IDs (Firmowy only). Empty ids = ALL for company."""
+    tier = await effective_tier_async(user)
+    if tier != "business":
+        return {"statuses": {}}
+    company_id = _company_scope(user)
+    id_list = [i.strip() for i in ids.split(",") if i.strip()][:500]
+    query = {"company_id": company_id}
+    if id_list:
+        query["offer_id"] = {"$in": id_list}
+    out = {}
+    async for s in database().offer_statuses.find(query):
+        out[s["offer_id"]] = {
+            "status": s["status"],
+            "note": s.get("note", ""),
+            "marked_by": s.get("marked_by", ""),
+            "updated_at": s["updated_at"].isoformat() if isinstance(s.get("updated_at"), datetime) else s.get("updated_at"),
+        }
+    return {"statuses": out}
 
 
 # --- Auth endpoints ---

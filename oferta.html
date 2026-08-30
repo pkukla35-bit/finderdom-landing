@@ -630,38 +630,53 @@ async function initCrmBar(offerId) {
     const bar = el('crmBar');
     if (!bar) return;
     bar.style.display = 'block';
-    // Fetch current status
-    const r = await fetch(`/api/offer-status?ids=${encodeURIComponent(offerId)}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (r.ok) {
-      const data = await r.json();
-      const cur = (data.statuses || {})[offerId];
-      updateCrmBadge(cur);
-      const noteEl = el('crmNote');
-      if (noteEl) noteEl.value = (cur && cur.note) ? cur.note : '';
-    }
-    // Wire buttons
+
+    // Wire buttons FIRST (so they work even if status fetch fails)
     document.querySelectorAll('.crm-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const status = btn.dataset.status;
         const note = (el('crmNote')?.value || '').slice(0, 500);
+        console.log('[CRM] Click:', { offerId, status, note });
         try {
           const res = await fetch('/api/offer-status', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ offer_id: offerId, status: status || null, note })
           });
+          console.log('[CRM] POST response:', res.status);
           if (res.ok) {
             updateCrmBadge(status ? { status, note, marked_by: user.email } : null);
             if (!status && el('crmNote')) el('crmNote').value = '';
           } else {
-            const err = await res.json();
-            alert(err.detail || 'Nie udało się zapisać statusu');
+            const err = await res.json().catch(() => ({}));
+            alert(err.detail || `Błąd ${res.status}: nie udało się zapisać statusu`);
           }
-        } catch (e) { console.error(e); }
+        } catch (e) {
+          console.error('[CRM] POST error:', e);
+          alert('Błąd sieci: ' + e.message);
+        }
       });
     });
+
+    // Fetch current status (non-blocking for button wiring)
+    try {
+      const r = await fetch(`/api/offer-status?ids=${encodeURIComponent(offerId)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (r.ok) {
+        const data = await r.json();
+        const cur = (data.statuses || {})[offerId];
+        updateCrmBadge(cur);
+        const noteEl = el('crmNote');
+        if (noteEl) noteEl.value = (cur && cur.note) ? cur.note : '';
+      } else {
+        console.warn('[CRM] status fetch failed:', r.status);
+        updateCrmBadge(null);
+      }
+    } catch (e) {
+      console.warn('[CRM] status fetch error:', e);
+      updateCrmBadge(null);
+    }
   } catch (e) { console.error('CRM init:', e); }
 }
 

@@ -288,6 +288,9 @@
         <button class="crm-btn" data-status="" style="background:rgba(139,163,212,0.1);border:1px solid rgba(139,163,212,0.3);color:#8ba3d4;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">✕ Usuń</button>
       </div>
       <textarea id="crmNote" placeholder="📝 Notatka (opcjonalnie): np. 'Umówione na środę 14:00, klient bardzo zainteresowany'" style="width:100%;box-sizing:border-box;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;font-size:13px;font-family:inherit;min-height:60px;resize:vertical" maxlength="500"></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px">
+        <button id="crmSaveNote" style="background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;border:none;padding:8px 20px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer">💾 Zapisz notatkę</button>
+      </div>
     </div>
 
     <!-- AI Analysis -->
@@ -632,31 +635,51 @@ async function initCrmBar(offerId) {
     bar.style.display = 'block';
 
     // Wire buttons FIRST (so they work even if status fetch fails)
+    let currentStatus = null;
+
+    async function saveCrm(status, note) {
+      const res = await fetch('/api/offer-status', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ offer_id: offerId, status: status || null, note: note || '' })
+      });
+      if (res.ok) {
+        updateCrmBadge(status ? { status, note, marked_by: user.email } : null);
+        currentStatus = status || null;
+        return true;
+      }
+      const err = await res.json().catch(() => ({}));
+      alert(err.detail || `Błąd ${res.status}: nie udało się zapisać`);
+      return false;
+    }
+
     document.querySelectorAll('.crm-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const status = btn.dataset.status;
         const note = (el('crmNote')?.value || '').slice(0, 500);
-        console.log('[CRM] Click:', { offerId, status, note });
-        try {
-          const res = await fetch('/api/offer-status', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ offer_id: offerId, status: status || null, note })
-          });
-          console.log('[CRM] POST response:', res.status);
-          if (res.ok) {
-            updateCrmBadge(status ? { status, note, marked_by: user.email } : null);
-            if (!status && el('crmNote')) el('crmNote').value = '';
-          } else {
-            const err = await res.json().catch(() => ({}));
-            alert(err.detail || `Błąd ${res.status}: nie udało się zapisać statusu`);
-          }
-        } catch (e) {
-          console.error('[CRM] POST error:', e);
-          alert('Błąd sieci: ' + e.message);
-        }
+        console.log('[CRM] Status click:', { offerId, status, note });
+        const ok = await saveCrm(status, note);
+        if (ok && !status && el('crmNote')) el('crmNote').value = '';
       });
     });
+
+    // Save note button (keeps current status)
+    const saveNoteBtn = el('crmSaveNote');
+    if (saveNoteBtn) {
+      saveNoteBtn.addEventListener('click', async () => {
+        const note = (el('crmNote')?.value || '').slice(0, 500);
+        if (!currentStatus) {
+          alert('Najpierw wybierz status (Był kontakt, Umówione, itp.)');
+          return;
+        }
+        console.log('[CRM] Save note:', { offerId, currentStatus, note });
+        const ok = await saveCrm(currentStatus, note);
+        if (ok) {
+          saveNoteBtn.textContent = '✓ Zapisano';
+          setTimeout(() => { saveNoteBtn.textContent = '💾 Zapisz notatkę'; }, 1500);
+        }
+      });
+    }
 
     // Fetch current status (non-blocking for button wiring)
     try {
@@ -667,6 +690,7 @@ async function initCrmBar(offerId) {
         const data = await r.json();
         const cur = (data.statuses || {})[offerId];
         updateCrmBadge(cur);
+        currentStatus = cur ? cur.status : null;
         const noteEl = el('crmNote');
         if (noteEl) noteEl.value = (cur && cur.note) ? cur.note : '';
       } else {

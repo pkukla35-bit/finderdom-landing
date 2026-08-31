@@ -95,18 +95,22 @@ LAYER_CANDIDATES: List[Tuple[str, str]] = [
 
 # ------------------------------------------------------------------ mongo
 def get_mongo():
-    url = os.environ.get("MONGO_URL")
+    # Accept either MONGO_URL (our convention) or MONGODB_URI (Vercel/Atlas standard).
+    url = os.environ.get("MONGO_URL") or os.environ.get("MONGODB_URI")
     if not url:
         # Attempt to read from backend/.env for convenience.
         env_path = os.path.join(os.path.dirname(__file__), "..", "backend", ".env")
         if os.path.isfile(env_path):
             with open(env_path) as fh:
                 for line in fh:
-                    if line.startswith("MONGO_URL="):
-                        url = line.strip().split("=", 1)[1].strip('"').strip("'")
+                    for key in ("MONGO_URL=", "MONGODB_URI="):
+                        if line.startswith(key):
+                            url = line.strip().split("=", 1)[1].strip('"').strip("'")
+                            break
+                    if url:
                         break
     if not url:
-        log.error("MONGO_URL is not set. Export it or put it in backend/.env")
+        log.error("MONGO_URL / MONGODB_URI is not set. Export it or put it in backend/.env")
         sys.exit(1)
     client = MongoClient(url, serverSelectionTimeoutMS=8000)
     # verify connection

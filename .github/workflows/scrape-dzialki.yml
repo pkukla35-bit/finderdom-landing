@@ -1,0 +1,34 @@
+name: Scrape działki (Otodom)
+
+on:
+  workflow_dispatch:
+    inputs:
+      city:
+        description: 'One city slug (empty = all 20)'
+        required: false
+        type: string
+      max_pages:
+        description: 'Max pages per city (default 15)'
+        required: false
+        type: string
+        default: '15'
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r scripts/requirements.txt
+      - name: Run scraper
+        run: |
+          ARGS="--max-pages ${{ inputs.max_pages || '15' }}"
+          if [ -n "${{ inputs.city }}" ]; then ARGS="$ARGS --city ${{ inputs.city }}"; fi
+          python scripts/scrape_dzialki.py $ARGS
+        env:
+          SCRAPINGBEE_API_KEY: ${{ secrets.SCRAPINGBEE_API_KEY }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}

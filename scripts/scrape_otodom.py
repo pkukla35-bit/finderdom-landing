@@ -113,12 +113,12 @@ def _num(v) -> Optional[float]:
 
 
 DZIALKA_SUBTYPES = [
-    ("budowlana",   ["budowlan"]),
-    ("rolna",       ["rolna", "rolne", "rolny"]),
-    ("rekreacyjna", ["rekreacyj"]),
-    ("siedliskowa", ["siedlisk"]),
-    ("leśna",       ["leśn", "lesn"]),
-    ("usługowa",    ["usługow", "uslugow", "komercyj", "inwestycyj"]),
+    ("budowlana",    ["budowlan"]),
+    ("rolna",        ["rolna", "rolne", "rolny"]),
+    ("rekreacyjna",  ["rekreacyj"]),
+    ("siedliskowa",  ["siedlisk"]),
+    ("lesna",        ["leśn", "lesn"]),
+    ("inwestycyjna", ["usługow", "uslugow", "komercyj", "inwestycyj"]),
 ]
 DOM_SUBTYPES = [
     ("wolnostojący", ["wolnostoj"]),

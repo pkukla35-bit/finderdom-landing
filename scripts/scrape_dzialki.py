@@ -128,31 +128,20 @@ def normalize(item: Dict[str, Any], city_name: str) -> Optional[Dict[str, Any]]:
         return None
     url = f"https://www.otodom.pl/pl/oferta/{slug}" if not slug.startswith("http") else slug
 
-    # ── Detect subtype (budowlana / rolna / rekreacyjna / siedliskowa / leśna / usługowa) ──
+    # ── Detect subtype: budowlana / rolna / inne (as requested) ──
     title = item.get("title") or "Działka"
     text_blob = f"{title} {item.get('shortDescription', '')} {item.get('description', '')}".lower()
-    subtype = None
-    subtype_keys = [
-        ("budowlana",   ["budowlan"]),
-        ("rolna",       ["rolna", "rolne", "rolny"]),
-        ("rekreacyjna", ["rekreacyj", "rekreacja"]),
-        ("siedliskowa", ["siedlisk"]),
-        ("leśna",       ["leśn", "lesn"]),
-        ("usługowa",    ["usługow", "uslugow", "komercyj", "inwestycyj"]),
-    ]
-    # First from Otodom's own field
     ot_type = str(item.get("dzialkaType") or item.get("estateType") or "").lower()
-    for label, kws in subtype_keys:
-        if any(kw in ot_type for kw in kws):
-            subtype = label
-            break
-    if not subtype:
-        for label, kws in subtype_keys:
-            if any(kw in text_blob for kw in kws):
-                subtype = label
-                break
+    combined = f"{ot_type} {text_blob}"
 
-    prop_type = f"działka {subtype}" if subtype else "działka"
+    if "budowlan" in combined:
+        subtype = "budowlana"
+    elif "roln" in combined:
+        subtype = "rolna"
+    else:
+        subtype = "inne"   # rekreacyjna, leśna, siedliskowa, komercyjna, ...
+
+    prop_type = f"działka {subtype}"
 
     # price
     price = None
@@ -187,11 +176,20 @@ def normalize(item: Dict[str, Any], city_name: str) -> Optional[Dict[str, Any]]:
     if images and isinstance(images[0], dict):
         img_url = images[0].get("large") or images[0].get("medium") or images[0].get("small")
 
+    # Seller type (pośrednik vs prywatna)
+    seller_type = None
+    adv_type = str(item.get("advertType") or item.get("advertiserType") or "").upper()
+    if adv_type in ("PRIVATE", "OWNER", "PRYWATNA", "PRIVATE_OWNER"):
+        seller_type = "prywatna"
+    elif adv_type in ("AGENCY", "AGENT", "BUSINESS", "DEVELOPER"):
+        seller_type = "pośrednik"
+
     return {
         "source": "otodom",
         "external_id": ext_id,
         "type": prop_type,             # "działka budowlana" / "działka rolna" / …
         "dzialka_type": subtype,       # tylko podtyp (do filtrowania w UI)
+        "seller_type": seller_type,    # "prywatna" / "pośrednik"
         "title": title,
         "url": url,
         "location": location,

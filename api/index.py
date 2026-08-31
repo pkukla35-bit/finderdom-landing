@@ -787,6 +787,28 @@ async def health():
         raise HTTPException(500, f"DB error: {str(e)[:100]}")
 
 
+@app.get("/api/rcn/stats")
+async def rcn_stats_endpoint(city: str, type: str, area: Optional[float] = None):
+    """Public RCN transaction statistics for a given city + property type.
+
+    Args:
+        city: e.g. Warszawa
+        type: mieszkanie | dom | dzialka
+        area: optional subject area in m² (filter comparables to ±25%)
+    """
+    stats = await get_rcn_stats(city=city, prop_type=type, area_m2=area)
+    if not stats:
+        # also expose sample count so frontend can show "not enough data yet"
+        try:
+            total = await database().rcn_transactions.count_documents({
+                "city": {"$regex": "^" + re.escape(city) + "$", "$options": "i"},
+            })
+        except Exception:
+            total = 0
+        return {"ok": False, "reason": "not_enough_data", "city_total": total}
+    return {"ok": True, **stats}
+
+
 @app.post("/api/auth/register", status_code=201)
 async def register(body: RegisterRequest):
     email = clean_email(body.email)
@@ -1528,7 +1550,16 @@ async def valuation_download(session_id: str):
             median = sorted_p[n//2] if n % 2 == 1 else (sorted_p[n//2-1] + sorted_p[n//2]) / 2
             listing["ai_rcn_pm2"] = int(median * 0.94)
 
-    pdf_data = await asyncio.to_thread(build_valuation_pdf, listing, all_listings, md.get("email", ""))
+    # Fetch RCN transactional stats (real notary deals from GUGiK) before entering
+    # the thread pool — get_rcn_stats is async and must run in the event loop.
+    rcn_stats = await get_rcn_stats(
+        city=listing.get("city") or "",
+        prop_type=listing.get("type") or "",
+        area_m2=listing.get("area_m2"),
+        min_sample=5,
+    )
+
+    pdf_data = await asyncio.to_thread(build_valuation_pdf, listing, all_listings, md.get("email", ""), rcn_stats)
     fname = f"wycena-{listing.get('id','custom')}.pdf".replace("/", "-")
     return StreamingResponse(
         io.BytesIO(pdf_data),
@@ -1711,6 +1742,111 @@ def _haversine_km(lat1, lon1, lat2, lon2):
     dl = math.radians(lon2 - lon1)
     a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
     return 2 * R * math.asin(math.sqrt(a))
+
+
+# ─────────────────────────────────────────────────────────────
+# RCN (Rejestr Cen Nieruchomości) — official government data
+# ─────────────────────────────────────────────────────────────
+async def get_rcn_stats(city: str, prop_type: str, area_m2: Optional[float] = None,
+                        min_sample: int = 5) -> Optional[Dict[str, Any]]:
+    """
+    Fetch median transactional price per m² from the RCN collection.
+    Falls back to None if insufficient data.
+
+    Args:
+        city: city name (e.g. "Warszawa") — matched case-insensitively
+        prop_type: our internal type: "mieszkanie" | "dom" | "dzialka"
+        area_m2: subject property area — used to filter comparables within ±25%
+        min_sample: minimum number of transactions for the median to be trusted
+    Returns:
+        dict with median_pm2, min_pm2, max_pm2, n_transactions, avg_area, last_data_date
+        or None if not enough data.
+    """
+    # Map our types to RCN kinds (rodzaj_nieruchomosci)
+    kind_map = {
+        "mieszkanie": "lokal",
+        "lokal":      "lokal",
+        "dom":        "budynek",
+        "budynek":    "budynek",
+        "dzialka":    "dzialka",
+        "działka":    "dzialka",
+    }
+    kind = kind_map.get((prop_type or "").lower())
+    if not kind:
+        return None
+    try:
+        coll = database().rcn_transactions
+    except Exception as e:
+        logger.debug("get_rcn_stats: no rcn_transactions collection: %s", e)
+        return None
+
+    # Regex to match city case-insensitively without escaping issues
+    city_regex = re.compile("^" + re.escape((city or "").strip()) + "$", re.IGNORECASE)
+
+    # Only use transactions from the last 3 years, with valid cena_m2 and area
+    now = datetime.now(timezone.utc)
+    since = (now.replace(year=now.year - 3)).strftime("%Y-%m-%d")
+
+    query: Dict[str, Any] = {
+        "city": {"$regex": city_regex},
+        "rodzaj_nieruchomosci": kind,
+        "cena_m2": {"$gt": 0},
+        "data_zawarcia": {"$gte": since},
+    }
+
+    # Constrain by area ±25% when subject area is known
+    if area_m2 and area_m2 > 0:
+        query["powierzchnia"] = {"$gte": area_m2 * 0.75, "$lte": area_m2 * 1.25}
+
+    try:
+        docs = await coll.find(
+            query,
+            {"cena_m2": 1, "powierzchnia": 1, "data_zawarcia": 1, "_id": 0}
+        ).limit(500).to_list(length=500)
+    except Exception as e:
+        logger.debug("get_rcn_stats query failed: %s", e)
+        return None
+
+    # If ±25% area constraint returned too few, retry without area constraint
+    if len(docs) < min_sample and "powierzchnia" in query:
+        query.pop("powierzchnia", None)
+        try:
+            docs = await coll.find(
+                query,
+                {"cena_m2": 1, "powierzchnia": 1, "data_zawarcia": 1, "_id": 0}
+            ).limit(500).to_list(length=500)
+        except Exception as e:
+            logger.debug("get_rcn_stats query (no area) failed: %s", e)
+            return None
+
+    if len(docs) < min_sample:
+        return None
+
+    pm2_values = sorted(float(d["cena_m2"]) for d in docs if d.get("cena_m2"))
+    if len(pm2_values) < min_sample:
+        return None
+
+    # Robust median + trimmed range (5%..95%)
+    n = len(pm2_values)
+    median_pm2 = pm2_values[n // 2] if n % 2 else (pm2_values[n // 2 - 1] + pm2_values[n // 2]) / 2
+    p5_idx = max(0, int(n * 0.05))
+    p95_idx = min(n - 1, int(n * 0.95))
+    min_pm2 = pm2_values[p5_idx]
+    max_pm2 = pm2_values[p95_idx]
+
+    areas = [float(d["powierzchnia"]) for d in docs if d.get("powierzchnia")]
+    avg_area = round(sum(areas) / len(areas), 1) if areas else None
+    last_date = max((d.get("data_zawarcia") for d in docs if d.get("data_zawarcia")), default=None)
+
+    return {
+        "median_pm2": int(median_pm2),
+        "min_pm2":    int(min_pm2),
+        "max_pm2":    int(max_pm2),
+        "n":          n,
+        "avg_area":   avg_area,
+        "last_date":  last_date,
+        "source":     "RCN (akty notarialne, GUGiK)",
+    }
 
 
 def _mapbox_zoom_for_bounds(min_lat, max_lat, min_lon, max_lon, width, height, padding=1.2):
@@ -2353,7 +2489,7 @@ def _make_distribution_chart(values, highlight_val, kind="price", face="Helvetic
     return d
 
 
-def build_valuation_pdf(l, all_listings, buyer_email):
+def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
     """
     Wycena nieruchomości w stylu propertly.io - profesjonalny raport 4-stronicowy.
     Kolorystyka: głęboki indygo/purpura, białe karty na jasnym tle.
@@ -2531,7 +2667,21 @@ def build_valuation_pdf(l, all_listings, buyer_email):
 
     ppm2_local = _median([o["price_pm2"] for o in local_offers])
     ppm2_this = l.get("price_pm2") or 0
-    ppm2_rcn = int(ppm2_local * 0.94) if ppm2_local else 0
+
+    # ── RCN transactional prices (real notary deals from GUGiK) ────────
+    # rcn_stats is prefetched by caller (async endpoint) and passed in.
+    # This is more accurate than 0.94×asking because it's based on actual
+    # notarial acts (Rejestr Cen Nieruchomości, free from Feb 2026).
+    rcn_source_label = None  # e.g. "RCN — 35 aktów notarialnych" or None
+    if rcn_stats and rcn_stats.get("median_pm2", 0) > 0:
+        ppm2_rcn = int(rcn_stats["median_pm2"])
+        rcn_source_label = f"RCN — {rcn_stats['n']} aktów notarialnych"
+        logger.info("RCN: %s %s → median %d zł/m² (n=%d, last=%s)",
+                    l.get("city"), l.get("type"), ppm2_rcn,
+                    rcn_stats["n"], rcn_stats.get("last_date"))
+    else:
+        # Fallback: estimate as 94% of asking price median
+        ppm2_rcn = int(ppm2_local * 0.94) if ppm2_local else 0
 
     # If no local data at all, fall back to ANY matching type in database (national median)
     data_quality_warning = None
@@ -2545,7 +2695,9 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         ]
         if national_offers:
             ppm2_local = int(_median([o["price_pm2"] for o in national_offers]))
-            ppm2_rcn = int(ppm2_local * 0.94)
+            # Only recalculate ppm2_rcn from national offers if RCN data was not available.
+            if not rcn_source_label:
+                ppm2_rcn = int(ppm2_local * 0.94)
             data_quality_warning = (
                 f"⚠️ Mało ofert w '{l.get('city','—')}' – używamy mediany krajowej z {len(national_offers)} "
                 f"podobnych {l.get('type','nieruchomości')}. Dokładność szacunku: ±15%."
@@ -2770,10 +2922,14 @@ def build_valuation_pdf(l, all_listings, buyer_email):
         ]))
         return [title_row, sub_row, cards, Spacer(1, 3*mm)]
 
-    # Transakcyjna (94% ofertowej)
+    # Transakcyjna (RCN akty notarialne LUB szacunek 94% ofertowej)
+    _tx_title = "Realna cena transakcyjna" if rcn_source_label else "Szacowana cena transakcyjna sprzedaży"
+    _tx_sub   = (f"mediana z {rcn_stats['n']} aktów notarialnych — Rejestr Cen Nieruchomości (GUGiK)."
+                 if rcn_source_label and rcn_stats else
+                 "kwota, za jaką sprzedano podobne nieruchomości.")
     for el in _price_card(
-        "Szacowana cena transakcyjna sprzedaży",
-        "kwota, za jaką sprzedano podobne nieruchomości.",
+        _tx_title,
+        _tx_sub,
         tx_price_mid, ppm2_rcn, tx_price_low, tx_price_high,
     ):
         story.append(el)
@@ -3262,8 +3418,13 @@ def build_valuation_pdf(l, all_listings, buyer_email):
     story.append(PageBreak())
     story.append(Paragraph("Porównywalne transakcje", ParagraphStyle(
         "p3t", fontName=face_bold, fontSize=15, leading=20, textColor=TEXT_DARK, spaceAfter=3)))
+    _p3_subtitle = (
+        f"Realne ceny transakcyjne z Rejestru Cen Nieruchomości (RCN) — {rcn_stats['n']} aktów notarialnych z okolicy."
+        if rcn_source_label and rcn_stats else
+        f"Szacowane ceny transakcyjne (94% cen ofertowych) — realne kwoty za jakie sprzedały się podobne nieruchomości."
+    )
     story.append(Paragraph(
-        f"Szacowane ceny transakcyjne (94% cen ofertowych) — realne kwoty za jakie sprzedały się podobne nieruchomości.",
+        _p3_subtitle,
         ParagraphStyle("p3s", fontName=face, fontSize=8, leading=11, textColor=TEXT_MUTED, spaceAfter=6)))
 
     # Reuse map from page 2 (with tx prices instead of listing prices)
@@ -3296,7 +3457,7 @@ def build_valuation_pdf(l, all_listings, buyer_email):
                 img.hAlign = "CENTER"
                 story.append(img)
                 story.append(Paragraph(
-                    "© Mapbox · © OpenStreetMap · Szacunkowe ceny transakcyjne (zł/m²)",
+                    "© Mapbox · © OpenStreetMap · " + ("Realne ceny transakcyjne z RCN (zł/m²)" if rcn_source_label else "Szacunkowe ceny transakcyjne (zł/m²)"),
                     ParagraphStyle("attr2", fontName=face, fontSize=6, textColor=TEXT_MUTED, alignment=TA_CENTER)))
                 story.append(Spacer(1, 4*mm))
 

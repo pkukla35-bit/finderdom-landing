@@ -24,6 +24,7 @@
     { "source": "/api/team/:path*", "destination": "/api/index" },
     { "source": "/api/debug/:path*", "destination": "/api/index" },
     { "source": "/api/health", "destination": "/api/index" },
+    { "source": "/api/rcn/:path*", "destination": "/api/index" },
     { "source": "/api/docs", "destination": "/api/index" },
     { "source": "/platnosc-sukces", "destination": "/platnosc-sukces.html" },
     { "source": "/platnosc-anulowana", "destination": "/platnosc-anulowana.html" },

@@ -160,11 +160,43 @@ def discover_typenames(capabilities: str) -> List[str]:
     return [n for n in names if "rcn" in n.lower() or n.lower() in ("lokale", "budynki", "dzialki")]
 
 
+def _parse_gml_features(gml_text: str) -> List[Dict[str, Any]]:
+    """
+    Minimal GML 3.2 parser: extracts <ms:xxx> or <feature-name> elements as
+    dict of {tag: text}. Works for RCN which returns flat property lists
+    per feature.
+    """
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.fromstring(gml_text)
+    except ET.ParseError as e:
+        log.debug("GML parse error: %s", e)
+        return []
+    # Feature members are anywhere under root — iterate all element with children
+    features: List[Dict[str, Any]] = []
+    # Namespace-agnostic: find any element that has 'featureMember' in tag OR
+    # is a direct child of gml:featureMembers
+    for elem in root.iter():
+        tag_local = elem.tag.rsplit("}", 1)[-1].lower()
+        if tag_local in ("featuremember", "member", "featuremembers"):
+            for child in elem:
+                # child is the feature itself, its subchildren are properties
+                props: Dict[str, Any] = {}
+                for prop in child:
+                    p_tag = prop.tag.rsplit("}", 1)[-1]
+                    txt = (prop.text or "").strip()
+                    if txt and p_tag.lower() not in ("geometry", "shape", "boundedby", "the_geom"):
+                        props[p_tag] = txt
+                if props:
+                    features.append({"properties": props})
+    return features
+
+
 def wfs_fetch(typename: str, bbox: Tuple[float, float, float, float],
               limit: int = 5000, start: int = 0) -> Optional[dict]:
-    """Fetch a batch of features from WFS as GeoJSON."""
+    """Fetch a batch of features from WFS as GeoJSON or GML."""
     minx, miny, maxx, maxy = bbox
-    params = {
+    common = {
         "SERVICE": "WFS",
         "VERSION": "2.0.0",
         "REQUEST": "GetFeature",
@@ -173,21 +205,29 @@ def wfs_fetch(typename: str, bbox: Tuple[float, float, float, float],
         "STARTINDEX": start,
         "SRSNAME": "EPSG:4326",
         "BBOX": f"{miny},{minx},{maxy},{maxx},EPSG:4326",  # WFS 2.0 order = lat,lon
-        "OUTPUTFORMAT": "application/json",
     }
+    # Try JSON first
     try:
+        params = {**common, "OUTPUTFORMAT": "application/json"}
         r = requests.get(WFS_URL, params=params, timeout=WFS_TIMEOUT)
-        if r.status_code >= 400:
-            log.debug("WFS %s -> HTTP %s (%s)", typename, r.status_code, r.text[:200])
-            return None
-        # Some servers return application/gml if json unsupported
-        ctype = r.headers.get("content-type", "")
-        if "json" not in ctype and not r.text.lstrip().startswith("{"):
-            log.debug("WFS %s -> non-JSON response (%s)", typename, ctype)
-            return None
-        return r.json()
+        if r.status_code == 200 and r.text.lstrip().startswith("{"):
+            return r.json()
     except Exception as e:
-        log.debug("WFS fetch failed (%s): %s", typename, e)
+        log.debug("WFS fetch JSON failed (%s): %s", typename, e)
+
+    # Fallback: GML (default WFS 2.0 format)
+    try:
+        r = requests.get(WFS_URL, params=common, timeout=WFS_TIMEOUT)
+        if r.status_code >= 400:
+            log.debug("WFS GML %s -> HTTP %s (%s)", typename, r.status_code, r.text[:200])
+            return None
+        features = _parse_gml_features(r.text)
+        if not features and start == 0:
+            # log a snippet for debugging on first batch
+            log.debug("WFS returned no features from GML; sample: %s", r.text[:400])
+        return {"features": features}
+    except Exception as e:
+        log.debug("WFS GML fetch failed (%s): %s", typename, e)
         return None
 
 
@@ -366,23 +406,12 @@ def resolve_typenames(city_bbox: Tuple[float, float, float, float]) -> Dict[str,
         found: Dict[str, str] = {}
         for kind, keywords in keyword_map.items():
             candidates = [t for t in typenames if any(kw in t.lower() for kw in keywords)]
-            for cand in candidates:
-                # verify by asking for 1 feature
-                params = {
-                    "SERVICE": "WFS", "VERSION": "2.0.0", "REQUEST": "GetFeature",
-                    "TYPENAMES": cand, "COUNT": 1, "SRSNAME": "EPSG:4326",
-                    "BBOX": f"{city_bbox[1]},{city_bbox[0]},{city_bbox[3]},{city_bbox[2]},EPSG:4326",
-                    "OUTPUTFORMAT": "application/json",
-                }
-                try:
-                    rr = requests.get(endpoint, params=params, timeout=25)
-                    if rr.status_code == 200 and (rr.text.lstrip().startswith("{") or "features" in rr.text[:400] or "gml" in rr.text[:200]):
-                        found[kind] = cand
-                        log.info("  ✓ %s -> %s", kind, cand)
-                        break
-                except Exception as e:
-                    log.debug("    probe %s failed: %s", cand, e)
-                    continue
+            if candidates:
+                # Trust GetCapabilities — take the first matching layer without probing.
+                # Some WFS servers return GML instead of JSON for GetFeature, which
+                # would fail our JSON-only probe. We'll retry with GML in wfs_fetch.
+                found[kind] = candidates[0]
+                log.info("  ✓ %s -> %s", kind, candidates[0])
 
         if found:
             log.info("Using endpoint: %s", endpoint)

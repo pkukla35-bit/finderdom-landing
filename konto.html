@@ -132,6 +132,7 @@
       <button type="button" class="tab" data-tab="subscription">💎 Subskrypcja</button>
       <button type="button" class="tab" data-tab="invoices">📄 Faktury</button>
       <button type="button" class="tab biz-only-tab" data-tab="leads" style="display:none">📞 Leady</button>
+      <a href="/zespol.html" class="tab biz-only-tab" id="teamTabLink" style="display:none;text-decoration:none">👥 Zespół</a>
       <button type="button" class="tab" data-tab="favorites">❤️ Ulubione</button>
     </div>
 
@@ -294,6 +295,11 @@
       // Show Leady tab only for active Firmowy subscribers
       if (u.tier === 'business'){
         document.querySelectorAll('.biz-only-tab').forEach(el => el.style.display = '');
+      }
+      // Hide "Zespół" tab for agents — only master sees the panel
+      if (u.role === 'agent') {
+        const teamLink = document.getElementById('teamTabLink');
+        if (teamLink) teamLink.style.display = 'none';
       }
 
       tierBadge(u.tier);

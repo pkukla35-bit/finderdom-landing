@@ -83,10 +83,17 @@
 
   <div class="card">
     <a href="/" class="back">← Powrót</a>
-    <h1>Załóż konto</h1>
-    <p class="subtitle">Zapisuj oferty i korzystaj z pełnej analizy AI.</p>
 
-    <div class="tabs" role="tablist">
+    <!-- Invite banner (visible only when ?invite=xxx) -->
+    <div id="inviteBanner" style="display:none;padding:14px 16px;margin-bottom:20px;background:linear-gradient(135deg,rgba(255,184,0,0.15),rgba(74,144,226,0.08));border:1px solid rgba(255,184,0,0.4);border-radius:12px">
+      <div style="font-size:13px;font-weight:800;color:#FFB800;margin-bottom:4px">🏢 Zaproszenie do zespołu</div>
+      <div id="inviteInfo" style="font-size:14px;color:#e6e9f2;line-height:1.5"></div>
+    </div>
+
+    <h1 id="cardTitle">Załóż konto</h1>
+    <p class="subtitle" id="cardSub">Zapisuj oferty i korzystaj z pełnej analizy AI.</p>
+
+    <div class="tabs" role="tablist" id="tabsRow">
       <button type="button" class="tab active" data-type="personal">Osobiste</button>
       <button type="button" class="tab" data-type="business">Firmowe</button>
     </div>
@@ -95,6 +102,7 @@
 
     <form id="regForm" autocomplete="on" novalidate>
       <input type="hidden" name="account_type" id="account_type" value="personal">
+      <input type="hidden" name="invite_token" id="invite_token" value="">
 
       <div class="field">
         <label class="label" for="email">Email</label>
@@ -132,8 +140,13 @@
   const tabs = document.querySelectorAll('.tab');
   const bizFields = document.getElementById('bizFields');
   const accountTypeInput = document.getElementById('account_type');
+  const inviteTokenInput = document.getElementById('invite_token');
   const alertBox = document.getElementById('alert');
   const submitBtn = document.getElementById('submitBtn');
+  const inviteBanner = document.getElementById('inviteBanner');
+  const inviteInfo = document.getElementById('inviteInfo');
+  const tabsRow = document.getElementById('tabsRow');
+  const emailInput = document.getElementById('email');
 
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
@@ -151,6 +164,42 @@
   }
   function hideAlert() { alertBox.className = 'alert'; }
 
+  // ─────────────────────────────────────────────────────────────────
+  // Team invite flow: ?invite=xxx → agent joining company
+  // ─────────────────────────────────────────────────────────────────
+  const urlParams = new URLSearchParams(location.search);
+  const inviteToken = urlParams.get('invite');
+  if (inviteToken) {
+    inviteTokenInput.value = inviteToken;
+    (async () => {
+      try {
+        const r = await fetch('/api/team/invite/' + encodeURIComponent(inviteToken));
+        const data = await r.json();
+        if (r.ok) {
+          inviteBanner.style.display = 'block';
+          inviteInfo.innerHTML = `Dołączasz do firmy <b>${data.company_name}</b>. Zaproszenie na email: <b>${data.email}</b>. Ustaw hasło aby zaakceptować.`;
+          emailInput.value = data.email;
+          emailInput.readOnly = true;
+          emailInput.style.opacity = '0.7';
+          emailInput.style.cursor = 'not-allowed';
+          // Force personal, hide tabs
+          accountTypeInput.value = 'personal';
+          tabsRow.style.display = 'none';
+          bizFields.classList.remove('show');
+          document.getElementById('cardTitle').textContent = '✓ Zaakceptuj zaproszenie';
+          document.getElementById('cardSub').textContent = 'Ostatni krok — ustaw hasło aby zalogować się jako agent.';
+          submitBtn.textContent = 'Dołącz do zespołu';
+        } else {
+          inviteBanner.style.display = 'block';
+          inviteBanner.style.background = 'rgba(239,68,68,0.15)';
+          inviteBanner.style.borderColor = 'rgba(239,68,68,0.4)';
+          inviteInfo.innerHTML = `<b style="color:#fca5a5">⚠️ ${data.detail || 'Zaproszenie nieprawidłowe lub wygasło'}</b>`;
+          inviteTokenInput.value = '';
+        }
+      } catch (e) { /* ignore */ }
+    })();
+  }
+
   document.getElementById('regForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     hideAlert();
@@ -161,8 +210,11 @@
       password: document.getElementById('password').value,
       account_type: accountType,
     };
+    if (inviteTokenInput.value) {
+      payload.invite_token = inviteTokenInput.value;
+    }
 
-    if (accountType === 'business') {
+    if (accountType === 'business' && !payload.invite_token) {
       const nipRaw = document.getElementById('nip').value.replace(/[\s-]/g, '');
       const companyName = document.getElementById('company_name').value.trim();
       if (!companyName) {
@@ -198,12 +250,12 @@
     } catch (err) {
       showAlert(err.message || 'Nie udało się utworzyć konta.', 'error');
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Zarejestruj się';
+      submitBtn.textContent = inviteTokenInput.value ? 'Dołącz do zespołu' : 'Zarejestruj się';
     }
   });
 
-  // Redirect if already logged in
-  if (localStorage.getItem('finderdom_token')) {
+  // Redirect if already logged in (but not if joining via invite — let them see the invite flow)
+  if (localStorage.getItem('finderdom_token') && !inviteToken) {
     window.location.href = '/konto';
   }
 </script>

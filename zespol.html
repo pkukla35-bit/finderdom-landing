@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zespół — FinderDom.pl</title>
+<meta name="description" content="Zarządzaj zespołem agentów w koncie Firmowym FinderDom.pl. Zapraszaj współpracowników, kontroluj dostęp do leadów i CRM.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0B1836;color:#fff;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  .bg-orbs{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+  .orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.3}
+  .orb1{width:500px;height:500px;background:#FFB800;top:-100px;left:-100px}
+  .orb2{width:400px;height:400px;background:#4A90E2;bottom:-100px;right:-100px}
+
+  .wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:32px 20px 60px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;flex-wrap:wrap;gap:12px}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-mini{width:44px;height:44px;background:linear-gradient(135deg,#1a2e5c 0%,#2d4a8a 100%);border-radius:12px;display:flex;align-items:center;justify-content:center}
+  .brand{font-size:18px;font-weight:900;letter-spacing:-0.5px}
+  .brand .accent{color:#FFB800}
+  .top-actions{display:flex;align-items:center;gap:12px}
+  .top-actions a{color:#a3b3d1;font-size:14px;font-weight:700;text-decoration:none}
+  .top-actions a:hover{color:#FFB800}
+  .btn-outline{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:9px 16px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit}
+  .btn-outline:hover{border-color:#FFB800;color:#FFB800}
+
+  .breadcrumb{font-size:13px;color:#8ba3d4;margin-bottom:20px}
+  .breadcrumb a{color:#8ba3d4;text-decoration:none}
+  .breadcrumb a:hover{color:#FFB800}
+
+  h1{font-size:clamp(28px,3.5vw,36px);font-weight:900;letter-spacing:-0.5px;margin-bottom:8px;line-height:1.15}
+  .lead{color:#c5d0e6;font-size:16px;margin-bottom:28px;line-height:1.6}
+
+  .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:28px;margin-bottom:20px;backdrop-filter:blur(10px)}
+  .card h2{font-size:18px;font-weight:900;color:#FFB800;margin-bottom:16px}
+  .card p{color:#c5d0e6;font-size:14px;margin-bottom:16px;line-height:1.6}
+
+  /* Invite form */
+  .invite-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:stretch}
+  @media(max-width:520px){.invite-row{grid-template-columns:1fr}}
+  .input{padding:14px 16px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:#fff;font-size:15px;font-family:inherit;transition:border 0.2s}
+  .input:focus{outline:none;border-color:#FFB800;background:rgba(0,0,0,0.35)}
+  .input::placeholder{color:#5e6d8e}
+  .btn-primary{padding:14px 24px;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;border:none;border-radius:12px;font-size:14px;font-weight:900;cursor:pointer;transition:transform 0.15s ease;font-family:inherit;white-space:nowrap}
+  .btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 20px rgba(255,184,0,0.35)}
+  .btn-primary:disabled{opacity:0.6;cursor:not-allowed}
+  .btn-danger{padding:8px 14px;background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;transition:all 0.15s}
+  .btn-danger:hover{background:rgba(239,68,68,0.3);color:#fff}
+
+  .alert{padding:12px 14px;border-radius:10px;font-size:13px;margin-top:12px;display:none;line-height:1.5}
+  .alert.show{display:block}
+  .alert.error{background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#fca5a5}
+  .alert.success{background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#86efac}
+
+  /* Agent/invite list */
+  .member-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+  .member{background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .member .avatar{width:38px;height:38px;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;font-size:15px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .member .info{flex:1;min-width:180px}
+  .member .em{font-weight:800;font-size:14px;color:#fff;word-break:break-all}
+  .member .meta{font-size:12px;color:#8ba3d4;margin-top:2px}
+  .member .status{padding:3px 10px;border-radius:100px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.3px}
+  .status.active{background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.35)}
+  .status.deactivated{background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.35)}
+  .status.pending{background:rgba(255,184,0,0.15);color:#FFB800;border:1px solid rgba(255,184,0,0.35)}
+  .empty{padding:24px;text-align:center;color:#8ba3d4;font-size:14px;font-style:italic}
+
+  /* Loading spinner */
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.25);border-top-color:#0B1836;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .loading{text-align:center;padding:60px 20px;color:#8ba3d4}
+
+  .gate{max-width:560px;margin:60px auto;padding:36px;text-align:center;background:linear-gradient(135deg,rgba(255,184,0,0.12),rgba(74,144,226,0.06));border:2px solid rgba(255,184,0,0.35);border-radius:20px}
+  .gate .icon{font-size:52px;margin-bottom:14px}
+  .gate h2{font-size:22px;font-weight:900;margin-bottom:10px;color:#fff}
+  .gate p{color:#c5d0e6;font-size:14px;line-height:1.6;margin-bottom:20px}
+  .gate .btn-primary{display:inline-block;padding:14px 32px;text-decoration:none}
+
+  .feature-list{list-style:none;padding:0;margin:12px 0 0;display:grid;gap:8px}
+  .feature-list li{padding:10px 14px 10px 34px;background:rgba(0,0,0,0.2);border-radius:8px;font-size:13px;color:#c5d0e6;position:relative}
+  .feature-list li::before{content:"✓";position:absolute;left:12px;color:#FFB800;font-weight:900}
+</style>
+</head>
+<body>
+<div class="bg-orbs"><div class="orb orb1"></div><div class="orb orb2"></div></div>
+
+<div class="wrap">
+  <div class="topbar">
+    <a href="/" class="logo">
+      <div class="logo-mini">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#FFB800" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg>
+      </div>
+      <div class="brand">Finder<span class="accent">Dom</span>.pl</div>
+    </a>
+    <div class="top-actions">
+      <a href="/pomoc.html">💬 Pomoc</a>
+      <a href="/konto">👤 Moje konto</a>
+      <button class="btn-outline" id="logoutBtn">Wyloguj</button>
+    </div>
+  </div>
+
+  <div class="breadcrumb">
+    <a href="/">Strona główna</a> › <a href="/konto">Moje konto</a> › <span>Zespół</span>
+  </div>
+
+  <div id="loading" class="loading">
+    <div class="spinner" style="width:24px;height:24px;border-top-color:#FFB800"></div>
+    <div style="margin-top:12px">Ładowanie…</div>
+  </div>
+
+  <!-- Gate: only Firmowy owners see the panel -->
+  <div id="gate" class="gate" style="display:none">
+    <div class="icon">🏢</div>
+    <h2>Zarządzanie zespołem — konto Firmowe</h2>
+    <p>Ta funkcja jest dostępna tylko dla właścicieli kont <b>Firmowych</b> (199 zł/mies). Zapraszaj agentów, dziel się leadami i wspólnie prowadźcie CRM ofert.</p>
+    <ul class="feature-list">
+      <li>Zaproszenia po email — agent tworzy własne konto pod Twoją firmą</li>
+      <li>Wspólna pula leadów z wycen (first-come-first-served)</li>
+      <li>Wspólne oznaczenia ofert w CRM (Był kontakt, Umówione, itd.)</li>
+      <li>Bez dodatkowych opłat — agenci nie płacą osobno</li>
+    </ul>
+    <p style="margin-top:20px"><a href="/konto" class="btn-primary" style="display:inline-block;text-decoration:none;padding:14px 32px">💎 Aktywuj plan Firmowy</a></p>
+  </div>
+
+  <!-- Panel: Firmowy owner only -->
+  <div id="panel" style="display:none">
+    <h1>👥 Zespół — <span id="companyName" style="color:#FFB800">…</span></h1>
+    <div class="lead">Zapraszaj agentów swojej firmy. Będą mieli własne loginy, ale wspólny dostęp do leadów i CRM ofert. Bez dodatkowych opłat.</div>
+
+    <div class="card">
+      <h2>✉️ Zaproś agenta</h2>
+      <p>Wprowadź email agenta — otrzyma na niego link do rejestracji. Po założeniu konta automatycznie dołączy do Twojej firmy.</p>
+      <form id="inviteForm" class="invite-row">
+        <input type="email" class="input" id="inviteEmail" placeholder="np. anna@abc-nieruchomosci.pl" required autocomplete="email">
+        <button type="submit" class="btn-primary" id="inviteBtn">Wyślij zaproszenie</button>
+      </form>
+      <div id="inviteAlert" class="alert"></div>
+    </div>
+
+    <div class="card">
+      <h2>👤 Aktywni agenci <span id="agentCount" style="color:#8ba3d4;font-weight:600;font-size:14px;margin-left:6px"></span></h2>
+      <div id="agentList" class="member-list">
+        <div class="empty">Nie masz jeszcze żadnych agentów. Wyślij pierwsze zaproszenie ↑</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>⏳ Oczekujące zaproszenia <span id="inviteCount" style="color:#8ba3d4;font-weight:600;font-size:14px;margin-left:6px"></span></h2>
+      <div id="inviteList" class="member-list">
+        <div class="empty">Brak oczekujących zaproszeń.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const token = localStorage.getItem('finderdom_token');
+if (!token) { window.location.href = '/logowanie'; }
+
+const $ = id => document.getElementById(id);
+
+function initial(email) {
+  return (email || '?').charAt(0).toUpperCase();
+}
+function formatDate(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('pl-PL', { day:'numeric', month:'short', year:'numeric' });
+  } catch(e) { return iso; }
+}
+function daysUntil(iso) {
+  if (!iso) return null;
+  const d = new Date(iso), now = new Date();
+  const days = Math.ceil((d - now) / (24*3600*1000));
+  return days > 0 ? days : 0;
+}
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
+    ...opts,
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/json',
+      ...(opts.headers || {})
+    }
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || `Błąd ${r.status}`);
+  return data;
+}
+
+async function loadPage() {
+  try {
+    // Get current user
+    const meRes = await api('/api/auth/me');
+    const user = meRes.user;
+    // Gate: only Firmowy master (not agents)
+    const isBusinessMaster = user.tier === 'business' && user.role !== 'agent';
+    if (!isBusinessMaster) {
+      $('loading').style.display = 'none';
+      $('gate').style.display = 'block';
+      return;
+    }
+    $('companyName').textContent = user.company_name || user.email;
+    // Load team
+    await loadTeam();
+    $('loading').style.display = 'none';
+    $('panel').style.display = 'block';
+  } catch(e) {
+    console.error(e);
+    $('loading').innerHTML = '<div style="color:#f87171">⚠️ ' + e.message + '</div><a href="/konto" style="color:#FFB800;display:inline-block;margin-top:14px">Wróć do konta →</a>';
+  }
+}
+
+async function loadTeam() {
+  const data = await api('/api/team/agents');
+  const agents = data.agents || [];
+  const invites = data.pending_invites || [];
+
+  // Agents
+  $('agentCount').textContent = agents.length ? `(${agents.length})` : '';
+  const agentList = $('agentList');
+  if (agents.length === 0) {
+    agentList.innerHTML = '<div class="empty">Nie masz jeszcze żadnych agentów. Wyślij pierwsze zaproszenie ↑</div>';
+  } else {
+    agentList.innerHTML = agents.map(a => `
+      <div class="member">
+        <div class="avatar">${initial(a.email)}</div>
+        <div class="info">
+          <div class="em">${a.email}</div>
+          <div class="meta">Dołączył ${formatDate(a.created_at)} · Odebrał <b style="color:#FFB800">${a.leads_claimed}</b> ${a.leads_claimed === 1 ? 'lead' : 'leadów'}</div>
+        </div>
+        <div class="status ${a.active ? 'active' : 'deactivated'}">${a.active ? '● Aktywny' : '○ Wyłączony'}</div>
+        ${a.active ? `<button class="btn-danger" data-deactivate="${a.id}" data-email="${a.email}">Wyłącz dostęp</button>` : ''}
+      </div>
+    `).join('');
+    // Wire deactivate buttons
+    agentList.querySelectorAll('[data-deactivate]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.deactivate;
+        const email = btn.dataset.email;
+        if (!confirm(`Wyłączyć dostęp dla ${email}? Agent natychmiast straci możliwość odbierania leadów i CRM.`)) return;
+        btn.disabled = true;
+        btn.textContent = 'Wyłączam…';
+        try {
+          await api(`/api/team/agent/${encodeURIComponent(id)}/deactivate`, { method: 'POST' });
+          await loadTeam();
+        } catch(e) {
+          alert('Błąd: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = 'Wyłącz dostęp';
+        }
+      });
+    });
+  }
+
+  // Pending invites
+  $('inviteCount').textContent = invites.length ? `(${invites.length})` : '';
+  const inviteList = $('inviteList');
+  if (invites.length === 0) {
+    inviteList.innerHTML = '<div class="empty">Brak oczekujących zaproszeń.</div>';
+  } else {
+    inviteList.innerHTML = invites.map(inv => {
+      const days = daysUntil(inv.expires_at);
+      const daysLabel = days === null ? '' : (days > 0 ? `wygasa za ${days} ${days === 1 ? 'dzień' : 'dni'}` : 'wygasa dziś');
+      return `
+        <div class="member">
+          <div class="avatar" style="background:rgba(255,184,0,0.2);color:#FFB800">${initial(inv.email)}</div>
+          <div class="info">
+            <div class="em">${inv.email}</div>
+            <div class="meta">📮 ${daysLabel}</div>
+          </div>
+          <div class="status pending">● Oczekuje</div>
+        </div>
+      `;
+    }).join('');
+  }
+}
+
+// Invite form
+$('inviteForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const alertBox = $('inviteAlert');
+  alertBox.className = 'alert';
+  const email = $('inviteEmail').value.trim();
+  if (!email) return;
+  const btn = $('inviteBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Wysyłam…';
+  try {
+    await api('/api/team/invite', { method: 'POST', body: JSON.stringify({ email }) });
+    alertBox.textContent = `✓ Zaproszenie wysłane na ${email}. Link jest ważny 7 dni.`;
+    alertBox.className = 'alert show success';
+    $('inviteEmail').value = '';
+    await loadTeam();
+  } catch(err) {
+    alertBox.textContent = '⚠️ ' + err.message;
+    alertBox.className = 'alert show error';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Wyślij zaproszenie';
+});
+
+// Logout
+$('logoutBtn').addEventListener('click', () => {
+  localStorage.removeItem('finderdom_token');
+  localStorage.removeItem('finderdom_user');
+  window.location.href = '/';
+});
+
+loadPage();
+</script>
+</body>
+</html>

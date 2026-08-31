@@ -34,6 +34,7 @@
     { "source": "/pomoc/rejestracja", "destination": "/pomoc-rejestracja.html" },
     { "source": "/pomoc/szukaj", "destination": "/pomoc-szukaj.html" },
     { "source": "/pomoc/wycena", "destination": "/pomoc-wycena.html" },
+    { "source": "/zespol", "destination": "/zespol.html" },
     { "source": "/regulamin", "destination": "/regulamin.html" },
     { "source": "/polityka-prywatnosci", "destination": "/polityka-prywatnosci.html" }
   ],

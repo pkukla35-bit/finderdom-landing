@@ -194,6 +194,7 @@ class RegisterRequest(BaseModel):
     account_type: str
     nip: Optional[str] = None
     company_name: Optional[str] = None
+    invite_token: Optional[str] = None  # agent joins company via invite link
 
 
 class LoginRequest(BaseModel):
@@ -793,6 +794,21 @@ async def register(body: RegisterRequest):
     if account_type not in ("personal", "business"):
         raise HTTPException(400, "account_type musi być 'personal' lub 'business'")
 
+    # --- Team invite flow: if invite_token present, register as agent under master ---
+    invite = None
+    if body.invite_token:
+        invite = await database().team_invites.find_one({"token": body.invite_token, "used": False})
+        if not invite:
+            raise HTTPException(400, "Zaproszenie jest nieprawidłowe lub zostało już wykorzystane")
+        exp = invite.get("expires_at")
+        if exp and isinstance(exp, datetime) and exp < datetime.now(timezone.utc):
+            raise HTTPException(400, "Zaproszenie wygasło. Poproś swojego administratora o nowe.")
+        # Force email match with invite (case-insensitive)
+        if clean_email(invite["email"]) != email:
+            raise HTTPException(400, f"Zaproszenie zostało wysłane na inny email ({invite['email']}). Zarejestruj się na ten sam adres.")
+        # Agent = personal account_type (no NIP required), inherits master's tier
+        account_type = "personal"
+
     nip = None
     company_name = None
     if account_type == "business":
@@ -824,6 +840,16 @@ async def register(body: RegisterRequest):
         "created_at": now,
         "updated_at": now,
     }
+    # Set team fields if joining via invite
+    if invite:
+        user["role"] = "agent"
+        user["master_id"] = invite["master_id"]
+        user["active"] = True
+    else:
+        # Firmowy owner registration → role=master (only real Firmowe subscriptions become master when they pay)
+        if account_type == "business":
+            user["role"] = "master"
+
     try:
         result = await users.insert_one(user)
     except Exception as exc:
@@ -831,6 +857,17 @@ async def register(body: RegisterRequest):
             raise HTTPException(409, "Ten email jest już zarejestrowany")
         raise
     user["_id"] = result.inserted_id
+
+    # Mark invite as used
+    if invite:
+        try:
+            await database().team_invites.update_one(
+                {"_id": invite["_id"]},
+                {"$set": {"used": True, "used_at": now, "used_by": str(result.inserted_id)}}
+            )
+        except Exception as e:
+            logger.warning("Could not mark invite as used: %s", str(e)[:120])
+
     return {"token": token_for(user), "user": public_user(user)}
 
 

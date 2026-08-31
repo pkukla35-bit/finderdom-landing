@@ -52,6 +52,16 @@
   .contact-box h3{margin:0 0 8px;font-size:18px;font-weight:900}
   .contact-box p{color:#c5d0e6;margin:0 0 14px}
   .btn-cta{display:inline-block;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:800;font-size:14px}
+  /* Annotated screenshots */
+  .help-shot{position:relative;margin:14px 0 6px;border-radius:12px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);background:#0B1836}
+  .help-shot img{display:block;width:100%;height:auto}
+  .help-shot .pin{position:absolute;width:34px;height:34px;background:#FFB800;color:#0B1836;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;box-shadow:0 4px 14px rgba(255,184,0,0.7),0 0 0 5px rgba(255,184,0,0.22);transform:translate(-50%,-50%);animation:pinPulse 2s ease-in-out infinite;z-index:2}
+  .help-shot .pin::after{content:'';position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:12px solid #FFB800;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3))}
+  @keyframes pinPulse{0%,100%{box-shadow:0 4px 14px rgba(255,184,0,0.7),0 0 0 5px rgba(255,184,0,0.22)}50%{box-shadow:0 4px 14px rgba(255,184,0,0.9),0 0 0 10px rgba(255,184,0,0.1)}}
+  .shot-legend{list-style:none;padding:0;margin:10px 0 4px;display:grid;gap:8px;counter-reset:none}
+  .shot-legend li{padding:12px 14px 12px 50px;background:rgba(255,184,0,0.06);border:1px solid rgba(255,184,0,0.22);border-radius:10px;font-size:13px;color:#c5d0e6;position:relative;line-height:1.55}
+  .shot-legend li .n{position:absolute;left:10px;top:10px;width:28px;height:28px;background:#FFB800;color:#0B1836;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900}
+  .shot-legend li strong{color:#FFB800}
   #authWidget .a-login{color:#c5d0e6;font-weight:600;font-size:13px;text-decoration:none;padding:6px 10px}
   #authWidget .a-login:hover{color:#FFB800}
   #authWidget .a-cta{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836 !important;padding:7px 14px;border-radius:8px;font-weight:800;font-size:13px;text-decoration:none;box-shadow:0 3px 10px rgba(255,184,0,0.2)}
@@ -135,13 +145,21 @@
   <details id="faq-register" style="margin-top:16px">
     <summary>Jak założyć konto i się zalogować?</summary>
     <div class="qa-body">
-      <p><strong>Rejestracja</strong> zajmuje 30 sekund — potrzebujesz tylko emaila i hasła:</p>
-      <p>1. Kliknij <a href="/rejestracja" style="color:#FFB800">"Zarejestruj"</a> w prawym górnym rogu.</p>
-      <p>2. Wybierz typ konta:</p>
-      <p>• <strong>Osobiste</strong> — dla kupujących / szukających mieszkania (darmowe konto free lub Premium 35 zł/mies).</p>
-      <p>• <strong>Firmowe</strong> — dla pośredników i biur nieruchomości (Premium 199 zł/mies z leadami CRM).</p>
-      <p>3. Podaj email, hasło (min. 8 znaków), a Firmowy dodatkowo NIP i nazwę firmy.</p>
-      <p>4. Zaloguj się przez <a href="/logowanie" style="color:#FFB800">"Zaloguj"</a> i gotowe.</p>
+      <p><strong>Rejestracja</strong> zajmuje 30 sekund — potrzebujesz tylko emaila i hasła. Wejdź na <a href="/rejestracja" style="color:#FFB800">/rejestracja</a>:</p>
+
+      <div class="help-shot">
+        <img src="/help/screen-register.jpg" alt="Formularz rejestracji FinderDom.pl" loading="lazy">
+        <div class="pin" style="top:39%;left:41%">1</div>
+        <div class="pin" style="top:53%;left:50%">2</div>
+        <div class="pin" style="top:67%;left:50%">3</div>
+      </div>
+      <ol class="shot-legend">
+        <li><span class="n">1</span><strong>Wybierz typ konta:</strong> <em>Osobiste</em> (dla kupujących / szukających — free lub Premium 35 zł/mies) albo <em>Firmowe</em> (dla pośredników i biur — 199 zł/mies z leadami i CRM).</li>
+        <li><span class="n">2</span><strong>Podaj email</strong> — na niego wyślemy potwierdzenie i tam trafią wszystkie powiadomienia.</li>
+        <li><span class="n">3</span><strong>Ustaw hasło</strong> (min. 8 znaków). Nie używaj tego samego co gdzie indziej. Kliknij <strong>Zarejestruj się</strong> — konto gotowe.</li>
+      </ol>
+
+      <p style="margin-top:14px">Zaloguj się przez <a href="/logowanie" style="color:#FFB800">"Zaloguj"</a> w prawym górnym rogu.</p>
       <p style="margin-top:10px;padding:10px;background:rgba(255,184,0,0.08);border-radius:8px">💡 <strong>Zapomniałeś hasła?</strong> Na stronie logowania kliknij "Nie pamiętam hasła" — wyślemy link resetujący na email.</p>
     </div>
   </details>
@@ -183,6 +201,27 @@
     </div>
   </details>
 
+  <details id="faq-how-to-search">
+    <summary>Jak wyszukiwać oferty krok po kroku?</summary>
+    <div class="qa-body">
+      <p>Wejdź na <a href="/szukaj.html" style="color:#FFB800">Wyszukiwarkę</a>. Podpowiadamy 3 najważniejsze pola:</p>
+
+      <div class="help-shot">
+        <img src="/help/screen-search.jpg" alt="Wyszukiwarka FinderDom.pl — filtry i wyniki" loading="lazy">
+        <div class="pin" style="top:14%;left:11%">1</div>
+        <div class="pin" style="top:39%;left:87%">2</div>
+        <div class="pin" style="top:66%;left:30%">3</div>
+      </div>
+      <ol class="shot-legend">
+        <li><span class="n">1</span><strong>Wpisz miasto</strong> i opcjonalnie promień w km — pokażemy oferty w okolicy (np. Kraków +30 km). Wybierz typ nieruchomości i cenę maksymalną.</li>
+        <li><span class="n">2</span><strong>Wybierz sortowanie:</strong> "AI — najlepsze okazje" na górze pokaże oferty najtańsze względem rynku. Możesz też sortować po cenie, powierzchni albo dacie dodania.</li>
+        <li><span class="n">3</span><strong>Zwracaj uwagę na kolorowe badge:</strong> 🔥 <strong>OKAZJA</strong> (zielony) = cena wyraźnie poniżej rynku, ✓ <strong>W NORMIE</strong> = zgodna z medianą, ⚠️ <strong>ZAWYŻONA</strong> = powyżej realnych transakcji.</li>
+      </ol>
+
+      <p style="margin-top:12px">Po lewej masz <strong>filtry zaawansowane</strong> — powierzchnia, liczba pokoi, rok budowy, standard, typ budynku, rynek pierwotny/wtórny, kto oferuje (prywatnie / pośrednik) i wiele więcej.</p>
+    </div>
+  </details>
+
   <details>
     <summary>Co oznacza badge "OKAZJA", "W normie", "ZAWYŻONA"?</summary>
     <div class="qa-body">
@@ -211,6 +250,27 @@
   <h2 id="wycena">💰 Wycena nieruchomości</h2>
 
   <details id="faq-valuation">
+    <summary>Jak zamówić wycenę PDF krok po kroku?</summary>
+    <div class="qa-body">
+      <p>Wejdź na <a href="/wycena" style="color:#FFB800">/wycena</a>, wypełnij dane nieruchomości i zapłać kartą / BLIK-iem. Raport wygenerujemy w ~30 sekund i wyślemy PDF na email.</p>
+
+      <div class="help-shot">
+        <img src="/help/screen-valuation.jpg" alt="Formularz wyceny FinderDom.pl" loading="lazy">
+        <div class="pin" style="top:47%;left:22%">1</div>
+        <div class="pin" style="top:60%;left:22%">2</div>
+        <div class="pin" style="top:44%;left:75%">3</div>
+      </div>
+      <ol class="shot-legend">
+        <li><span class="n">1</span><strong>Wybierz typ i rynek:</strong> Mieszkanie / Dom / Działka; rynek pierwotny (deweloper) lub wtórny. To decyduje o tym, z jakich transakcji będziemy liczyć wartość.</li>
+        <li><span class="n">2</span><strong>Podaj lokalizację i parametry:</strong> miasto, dzielnica, adres (opcjonalnie — dokładniej = precyzyjniejsza wycena), powierzchnia w m², liczba pokoi, piętro, rok budowy, standard.</li>
+        <li><span class="n">3</span><strong>Zapłać 32 zł jednorazowo</strong> (Stripe: karta / BLIK / Apple Pay / Google Pay). Po opłacie automatycznie generujemy 4-stronicowy PDF: rekomendacja cenowa, mapa Mapbox z porównywalnymi, tabela transakcyjna, wykresy standard/metraż.</li>
+      </ol>
+
+      <p style="margin-top:12px">Raport przyjdzie <strong>na email</strong> (upewnij się, że wpisałeś dobry adres) i będzie dostępny do pobrania z <a href="/konto" style="color:#FFB800">Twojego konta</a>.</p>
+    </div>
+  </details>
+
+  <details>
     <summary>Co zawiera raport wyceny PDF (32 zł)?</summary>
     <div class="qa-body">
       <p>Otrzymujesz profesjonalny 4-stronicowy dokument PDF ze:</p>

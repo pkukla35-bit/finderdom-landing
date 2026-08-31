@@ -49,7 +49,11 @@ logging.basicConfig(
 )
 log = logging.getLogger("rcn")
 
-WFS_URL = "https://mapy.geoportal.gov.pl/wss/service/rcn"
+WFS_ENDPOINTS = [
+    "https://services.gugik.gov.pl/cgi-bin/KrajowaIntegracjaCenNieruchomosci",
+    "https://mapy.geoportal.gov.pl/wss/service/rcn",
+]
+WFS_URL = WFS_ENDPOINTS[0]  # active endpoint — overridden after probe
 WFS_TIMEOUT = 90  # seconds
 
 # Bounding boxes (min_lon, min_lat, max_lon, max_lat) for top 20 Polish cities.
@@ -320,28 +324,71 @@ def ingest_city(coll, city: str, cfg: Dict[str, Any], typenames_by_kind: Dict[st
 
 def resolve_typenames(city_bbox: Tuple[float, float, float, float]) -> Dict[str, str]:
     """
-    Probe candidate typenames against real WFS to find which ones actually work.
-    Uses a small BBOX (Warszawa) to test with COUNT=1.
+    Discover the real RCN feature type names by:
+      1. Trying multiple WFS endpoints,
+      2. Reading GetCapabilities XML to list all layers,
+      3. Filtering for RCN-related names (cen, rcn, transak, cena, lokal, budynek, dzialka),
+      4. Verifying each candidate returns features for a probe BBOX,
+      5. Selecting one per kind (lokal / budynek / dzialka).
+
+    Sets the module-level WFS_URL to the endpoint that actually responds.
     """
-    found: Dict[str, str] = {}
-    for kind, tn in LAYER_CANDIDATES:
-        if kind in found:
-            continue
-        # try count=1
-        params = {
-            "SERVICE": "WFS", "VERSION": "2.0.0", "REQUEST": "GetFeature",
-            "TYPENAMES": tn, "COUNT": 1, "SRSNAME": "EPSG:4326",
-            "BBOX": f"{city_bbox[1]},{city_bbox[0]},{city_bbox[3]},{city_bbox[2]},EPSG:4326",
-            "OUTPUTFORMAT": "application/json",
-        }
+    global WFS_URL
+    for endpoint in WFS_ENDPOINTS:
+        log.info("Trying endpoint: %s", endpoint)
         try:
-            r = requests.get(WFS_URL, params=params, timeout=25)
-            if r.status_code == 200 and (r.text.lstrip().startswith("{") or "features" in r.text[:200]):
-                found[kind] = tn
-                log.info("Layer detected: %s -> %s", kind, tn)
-        except Exception:
+            r = requests.get(endpoint, params={
+                "SERVICE": "WFS", "REQUEST": "GetCapabilities", "VERSION": "2.0.0"
+            }, timeout=30)
+        except Exception as e:
+            log.warning("  GetCapabilities failed: %s", e)
             continue
-    return found
+        if r.status_code != 200 or "<" not in (r.text or "")[:400]:
+            log.warning("  Bad response: HTTP %s (%s bytes)", r.status_code, len(r.text or ""))
+            continue
+
+        # Extract all typenames from GetCapabilities XML
+        typenames = re.findall(r"<(?:Name|(?:\w+:)?Name)>([^<]+)</(?:\w+:)?Name>", r.text)
+        typenames = [t.strip() for t in typenames if t and ":" in t]
+        if not typenames:
+            # fallback: also accept unqualified names
+            typenames = re.findall(r"<Name>([^<]+)</Name>", r.text)
+        log.info("  Feature types found: %s", typenames[:20])
+
+        # Keyword sets that map RCN kinds to layer name substrings
+        keyword_map = {
+            "lokal":   ["lokal", "mieszkan"],
+            "budynek": ["budynek", "dom"],
+            "dzialka": ["dzialk", "działk"],
+        }
+
+        WFS_URL = endpoint
+        found: Dict[str, str] = {}
+        for kind, keywords in keyword_map.items():
+            candidates = [t for t in typenames if any(kw in t.lower() for kw in keywords)]
+            for cand in candidates:
+                # verify by asking for 1 feature
+                params = {
+                    "SERVICE": "WFS", "VERSION": "2.0.0", "REQUEST": "GetFeature",
+                    "TYPENAMES": cand, "COUNT": 1, "SRSNAME": "EPSG:4326",
+                    "BBOX": f"{city_bbox[1]},{city_bbox[0]},{city_bbox[3]},{city_bbox[2]},EPSG:4326",
+                    "OUTPUTFORMAT": "application/json",
+                }
+                try:
+                    rr = requests.get(endpoint, params=params, timeout=25)
+                    if rr.status_code == 200 and (rr.text.lstrip().startswith("{") or "features" in rr.text[:400] or "gml" in rr.text[:200]):
+                        found[kind] = cand
+                        log.info("  ✓ %s -> %s", kind, cand)
+                        break
+                except Exception as e:
+                    log.debug("    probe %s failed: %s", cand, e)
+                    continue
+
+        if found:
+            log.info("Using endpoint: %s", endpoint)
+            return found
+
+    return {}
 
 
 def main():

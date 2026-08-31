@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jak zamówić wycenę PDF · Pomoc · FinderDom.pl</title>
+<meta name="description" content="Instrukcja zamawiania wyceny nieruchomości PDF (32 zł) na FinderDom.pl. Formularz, płatność Stripe, generowanie raportu w 30 sekund.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#0B1836;color:#e6e9f2;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.6}
+  a{color:#FFB800}
+  .topnav{background:rgba(11,24,54,0.95);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.08);position:sticky;top:0;z-index:100;padding:14px 20px}
+  .nav-inner{max-width:1200px;margin:auto;display:flex;align-items:center;gap:24px}
+  .logo{font-size:18px;font-weight:900;color:#FFB800;text-decoration:none}
+  .nav-links{display:flex;gap:18px;align-items:center;flex:1;font-size:14px;flex-wrap:wrap}
+  .nav-links a{color:#c5d0e6;text-decoration:none;font-weight:600}
+  .nav-links a:hover{color:#FFB800}
+  .nav-links a.active{color:#FFB800}
+  main{max-width:1100px;margin:auto;padding:24px 20px 80px}
+  .breadcrumb{font-size:13px;color:#8ba3d4;margin-bottom:20px}
+  .breadcrumb a{color:#8ba3d4;text-decoration:none}
+  .breadcrumb a:hover{color:#FFB800}
+  h1{font-size:clamp(28px,4vw,42px);font-weight:900;line-height:1.15;margin:0 0 12px}
+  .lead{color:#c5d0e6;font-size:17px;margin-bottom:32px;line-height:1.6}
+  h2{font-size:22px;font-weight:900;margin:40px 0 16px;border-left:4px solid #FFB800;padding-left:12px}
+  p{margin:10px 0}
+  strong{color:#FFB800}
+  .help-shot{position:relative;margin:20px 0 10px;border-radius:14px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);background:#0B1836}
+  .help-shot img{display:block;width:100%;height:auto}
+  .help-shot .pin{position:absolute;width:38px;height:38px;background:#FFB800;color:#0B1836;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:17px;box-shadow:0 4px 14px rgba(255,184,0,0.7),0 0 0 6px rgba(255,184,0,0.22);transform:translate(-50%,-50%);animation:pinPulse 2s ease-in-out infinite;z-index:2}
+  .help-shot .pin::after{content:'';position:absolute;bottom:-15px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:14px solid #FFB800;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3))}
+  @keyframes pinPulse{0%,100%{box-shadow:0 4px 14px rgba(255,184,0,0.7),0 0 0 6px rgba(255,184,0,0.22)}50%{box-shadow:0 4px 14px rgba(255,184,0,0.95),0 0 0 12px rgba(255,184,0,0.1)}}
+  .shot-legend{list-style:none;padding:0;margin:16px 0 24px;display:grid;gap:10px}
+  .shot-legend li{padding:14px 16px 14px 56px;background:rgba(255,184,0,0.07);border:1px solid rgba(255,184,0,0.25);border-radius:12px;font-size:14px;color:#c5d0e6;position:relative;line-height:1.6}
+  .shot-legend li .n{position:absolute;left:12px;top:12px;width:32px;height:32px;background:#FFB800;color:#0B1836;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900}
+  .shot-legend li strong{color:#FFB800}
+  .tip{padding:14px 16px;background:rgba(255,184,0,0.08);border-left:4px solid #FFB800;border-radius:8px;margin:16px 0;color:#c5d0e6;font-size:14px}
+  .cta-box{background:linear-gradient(135deg,rgba(255,184,0,0.12),rgba(74,144,226,0.06));border:2px solid rgba(255,184,0,0.4);border-radius:16px;padding:24px;text-align:center;margin:32px 0}
+  .cta-box h3{margin:0 0 8px;font-size:20px;font-weight:900}
+  .cta-box p{color:#c5d0e6;margin:0 0 16px}
+  .cta-btn{display:inline-block;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;padding:14px 32px;border-radius:12px;text-decoration:none;font-weight:900;font-size:15px;box-shadow:0 6px 20px rgba(255,184,0,0.35)}
+  .related{margin-top:48px;padding-top:24px;border-top:1px solid rgba(255,255,255,0.08)}
+  .related h3{font-size:14px;color:#FFB800;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px}
+  .related-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+  .related-item{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 16px;text-decoration:none;color:inherit;transition:all .15s;display:block}
+  .related-item:hover{background:rgba(255,184,0,0.08);border-color:rgba(255,184,0,0.4)}
+  .related-item .rt{font-weight:800;color:#fff;font-size:14px}
+  .related-item .rd{font-size:12px;color:#8ba3d4;margin-top:2px}
+  .back-cta{display:inline-flex;align-items:center;gap:6px;margin-top:20px;color:#FFB800;font-weight:700;text-decoration:none;font-size:14px}
+  footer{max-width:1100px;margin:40px auto 24px;padding:24px 20px 0;border-top:1px solid rgba(255,255,255,0.08);display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;color:#8ba3d4;font-size:13px}
+  footer a{color:#a3b3d1;text-decoration:none}
+  footer a:hover{color:#FFB800}
+  #authWidget{display:inline-flex;gap:8px;align-items:center;margin-left:auto}
+  #authWidget a{color:#c5d0e6;font-weight:600;font-size:13px;text-decoration:none;padding:6px 10px}
+  #authWidget a:hover{color:#FFB800}
+  #authWidget .a-cta{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836 !important;padding:7px 14px;border-radius:8px;font-weight:800;font-size:13px;box-shadow:0 3px 10px rgba(255,184,0,0.2)}
+  @media(max-width:640px){#authWidget a:not(.a-cta){display:none}}
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <div class="nav-inner">
+    <a href="/" class="logo">🏠 FinderDom.pl</a>
+    <div class="nav-links">
+      <a href="/szukaj.html">Wyszukiwarka</a>
+      <a href="/wycena.html">💰 Wyceń nieruchomość</a>
+      <a href="/pomoc.html" class="active">💬 Pomoc</a>
+      <span id="authWidget"></span>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <div class="breadcrumb">
+    <a href="/">Strona główna</a> › <a href="/pomoc.html">Pomoc</a> › <span>Wycena PDF</span>
+  </div>
+
+  <h1>💰 Jak zamówić wycenę PDF krok po kroku</h1>
+  <div class="lead">Sprzedajesz albo kupujesz nieruchomość i chcesz sprawdzić jej realną wartość rynkową? Zamów profesjonalny raport PDF za 32 zł. Generujemy w ~30 sekund i wysyłamy na email.</div>
+
+  <h2>Formularz wyceny</h2>
+  <p>Wejdź na <a href="/wycena">/wycena</a> i wypełnij pola. Zaznaczyliśmy 3 kluczowe:</p>
+
+  <div class="help-shot">
+    <img src="/help/screen-valuation.jpg" alt="Formularz wyceny FinderDom.pl">
+    <div class="pin" style="top:47%;left:22%">1</div>
+    <div class="pin" style="top:60%;left:22%">2</div>
+    <div class="pin" style="top:44%;left:75%">3</div>
+  </div>
+  <ol class="shot-legend">
+    <li><span class="n">1</span><strong>Wybierz typ i rynek.</strong> Mieszkanie / Dom / Działka; rynek pierwotny (deweloper) lub wtórny. To decyduje o tym, z jakich transakcji porównawczych będziemy liczyć wartość — mieszanie ich dałoby błędny wynik.</li>
+    <li><span class="n">2</span><strong>Podaj lokalizację i parametry.</strong> Miasto (wymagane), dzielnica, adres (opcjonalnie, ale dokładniejszy adres = precyzyjniejsza wycena), powierzchnia w m², liczba pokoi, piętro, rok budowy, standard. Im więcej danych — tym trafniejszy raport.</li>
+    <li><span class="n">3</span><strong>Zapłać 32 zł jednorazowo</strong> przez Stripe (karta / BLIK / Apple Pay / Google Pay). Po zaksięgowaniu wpłaty automatycznie generujemy 4-stronicowy PDF.</li>
+  </ol>
+
+  <h2>Co zawiera raport?</h2>
+  <p>Profesjonalny dokument PDF (4 strony) zawiera:</p>
+  <ul>
+    <li><strong>Rekomendację cenową AI</strong> — widełki cen wywoławczej i transakcyjnej (min / średnia / max)</li>
+    <li><strong>Mapę Mapbox</strong> z lokalizacją Twojej nieruchomości i punktami porównywalnych ofert w promieniu</li>
+    <li><strong>Tabelę porównawczą</strong> — 10 podobnych ofert (ceny wywoławcze) w okolicy</li>
+    <li><strong>Tabelę transakcyjną</strong> (szacunkowe ceny sprzedaży ~94% wywoławczej — na podstawie danych RCN)</li>
+    <li><strong>Wykresy</strong> — wpływ standardu, powierzchni, roku budowy na cenę za m²</li>
+    <li><strong>Ranking dzielnic</strong> w mieście (dla mieszkań)</li>
+    <li><strong>Strategia negocjacyjna</strong> (dla kupna) albo <strong>rekomendowana cena ofertowa</strong> (dla sprzedaży)</li>
+  </ul>
+
+  <div class="tip">💡 <strong>Wskazówka:</strong> Wpisz dokładny adres (ulica + numer). Nawet jeśli nie podasz numeru, nazwa ulicy pozwala nam wybrać właściwą dzielnicę i lokalne ceny — precyzja wyceny znacząco rośnie.</div>
+
+  <h2>Kiedy dostanę raport?</h2>
+  <p>Raport generuje się <strong>natychmiast po opłaceniu</strong> (do ~30 sekund). Automatycznie wysyłamy PDF na email podany w formularzu. Kopia dostępna też w <a href="/konto">Moje konto → Moje wyceny</a>.</p>
+
+  <h2>Dla jakich nieruchomości działa wycena?</h2>
+  <p><strong>Mieszkania, domy, działki</strong> — na terenie całej Polski. Wycena działa najlepiej dla większych miast (Warszawa, Kraków, Wrocław, Poznań, Gdańsk) gdzie mamy dużą bazę porównawczą.</p>
+  <p>Dla małych wsi (poniżej 1000 mieszkańców) używamy ofert z najbliższego dużego miasta w promieniu 5–50 km — otrzymasz informację o metodologii w raporcie.</p>
+
+  <h2>Faktura VAT</h2>
+  <p>Jeśli podałeś NIP w koncie Firmowym, automatycznie wystawiamy fakturę VAT dostępną w <a href="/konto">Moje konto → Faktury</a>. Osoby prywatne dostają zwykły paragon.</p>
+
+  <div class="cta-box">
+    <h3>💎 Zamów wycenę teraz</h3>
+    <p>Profesjonalny raport PDF za 32 zł. PDF w 30 sekund. Bez rejestracji.</p>
+    <a href="/wycena" class="cta-btn">Przejdź do formularza →</a>
+  </div>
+
+  <div class="related">
+    <h3>Powiązane artykuły</h3>
+    <div class="related-list">
+      <a href="/pomoc-szukaj.html" class="related-item">
+        <div class="rt">🔍 Jak wyszukiwać oferty</div>
+        <div class="rd">Filtry, sortowanie, badge AI okazje</div>
+      </a>
+      <a href="/pomoc-rejestracja.html" class="related-item">
+        <div class="rt">📝 Rejestracja i logowanie</div>
+        <div class="rd">Konto Osobiste vs Firmowe</div>
+      </a>
+    </div>
+    <a href="/pomoc.html" class="back-cta">← Wróć do Centrum pomocy</a>
+  </div>
+</main>
+
+<footer>
+  <div>© 2026 FinderDom.pl</div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px">
+    <a href="/">Strona główna</a>
+    <a href="/pomoc.html">Pomoc</a>
+    <a href="/regulamin">Regulamin</a>
+    <a href="/polityka-prywatnosci">Polityka prywatności</a>
+    <a href="mailto:kontakt@finderdom.pl">Kontakt</a>
+  </div>
+</footer>
+
+<script>
+  (function renderAuthWidget(){
+    const el = document.getElementById('authWidget');
+    if (!el) return;
+    const token = localStorage.getItem('finderdom_token');
+    if (token) {
+      el.innerHTML = '<a href="/konto" class="a-cta">👤 Moje konto</a>';
+    } else {
+      el.innerHTML = '<a href="/logowanie">Zaloguj</a><a href="/rejestracja" class="a-cta">Zarejestruj</a>';
+    }
+  })();
+</script>
+
+</body>
+</html>

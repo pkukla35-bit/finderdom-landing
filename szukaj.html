@@ -270,58 +270,8 @@
       </div>
     </div>
 
-    <!-- Media/Uzbrojenie - only for działka -->
-    <div class="filter-group" id="mediaGroup" style="display:none">
-      <div class="filter-title">💧 Uzbrojenie działki</div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">💧 Woda</div>
-        <div class="chip-group">
-          <div class="chip" data-media="woda-w-dzialce">✓ W działce</div>
-          <div class="chip" data-media="woda-w-drodze">🛣️ W drodze</div>
-          <div class="chip" data-media="woda-studnia">⛲ Studnia</div>
-          <div class="chip" data-media="woda-brak">✗ Brak</div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">⚡ Prąd</div>
-        <div class="chip-group">
-          <div class="chip" data-media="prad-w-dzialce">✓ W działce</div>
-          <div class="chip" data-media="prad-w-drodze">🛣️ W drodze</div>
-          <div class="chip" data-media="prad-brak">✗ Brak</div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">🔥 Gaz</div>
-        <div class="chip-group">
-          <div class="chip" data-media="gaz-w-dzialce">✓ W działce</div>
-          <div class="chip" data-media="gaz-w-drodze">🛣️ W drodze</div>
-          <div class="chip" data-media="gaz-brak">✗ Brak</div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">🚽 Kanalizacja</div>
-        <div class="chip-group">
-          <div class="chip" data-media="kan-miejska">🏙️ Miejska</div>
-          <div class="chip" data-media="kan-w-drodze">🛣️ W drodze</div>
-          <div class="chip" data-media="kan-szambo">🕳️ Szambo</div>
-          <div class="chip" data-media="kan-oczyszczalnia">♻️ Oczyszczalnia</div>
-          <div class="chip" data-media="kan-brak">✗ Brak</div>
-        </div>
-      </div>
-
-      <div>
-        <div style="font-size:11px;color:#8ba3d4;font-weight:700;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase">📜 Warunki zabudowy</div>
-        <div class="chip-group">
-          <div class="chip" data-media="wz-mpzp">✓ MPZP (plan miejscowy)</div>
-          <div class="chip" data-media="wz-wydane">✓ WZ wydane</div>
-          <div class="chip" data-media="wz-brak">⏳ Brak / wymagane</div>
-        </div>
-      </div>
-    </div>
+    <!-- (Usunięto sekcję Uzbrojenie działki: WODA/PRĄD/GAZ/KANALIZACJA/WARUNKI ZABUDOWY —
+         dane te nie są dostępne w Otodom API, filtry generowały fałszywe wyniki) -->
 
     <div class="filter-group">
       <div class="filter-title">💰 Cena za m² (zł)</div>
@@ -971,19 +921,17 @@ function updateSubType(type){
     });
   });
 
-  // Show/hide media/uzbrojenie section (only for działka)
-  document.getElementById('mediaGroup').style.display = (type === 'dzialka') ? 'block' : 'none';
+  // (Sekcja uzbrojenia działki usunięta — Otodom nie udostępnia tych danych)
 
   // Show/hide filters based on context
   const hiddenTitles = HIDDEN_FOR_TYPE[type] || [];
   document.querySelectorAll('.filter-group').forEach(g => {
     const title = g.querySelector('.filter-title');
     if (!title) return;
-    const isMediaGroup = g.id === 'mediaGroup';
     const isMainType = g.querySelector('#propertyType');
     const isSubType = g.id === 'subTypeGroup';
     const isRadiusSidebar = g.id === 'radiusSidebarGroup'; // trzymany ukryty (dane dla filtra z hero)
-    if (isMediaGroup || isMainType || isSubType || isRadiusSidebar) return; // handled separately
+    if (isMainType || isSubType || isRadiusSidebar) return; // handled separately
     const titleText = title.textContent;
     const isHidden = hiddenTitles.some(h => titleText.includes(h));
     g.style.display = isHidden ? 'none' : 'block';

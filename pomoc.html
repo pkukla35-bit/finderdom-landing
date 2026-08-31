@@ -126,11 +126,52 @@
 
   <h2 id="pierwsze-kroki">🚀 Pierwsze kroki</h2>
   <div class="articles">
-    <a href="#" class="article"><span class="article-emoji">📝</span><div class="article-content"><div class="article-title">Rejestracja i logowanie</div><div class="article-desc">Konto Osobiste vs Firmowe — którą opcję wybrać?</div></div><span class="article-arrow">›</span></a>
+    <a href="#faq-register" class="article"><span class="article-emoji">📝</span><div class="article-content"><div class="article-title">Rejestracja i logowanie</div><div class="article-desc">Konto Osobiste vs Firmowe — którą opcję wybrać?</div></div><span class="article-arrow">›</span></a>
     <a href="#faq-search" class="article"><span class="article-emoji">🔍</span><div class="article-content"><div class="article-title">Jak wyszukiwać ofert</div><div class="article-desc">Filtry, sortowanie, wyszukiwanie po lokalizacji</div></div><span class="article-arrow">›</span></a>
     <a href="#faq-valuation" class="article"><span class="article-emoji">💰</span><div class="article-content"><div class="article-title">Jak zamówić wycenę PDF (32 zł)</div><div class="article-desc">Formularz, płatność, pobieranie raportu</div></div><span class="article-arrow">›</span></a>
     <a href="#faq-plans" class="article"><span class="article-emoji">💎</span><div class="article-content"><div class="article-title">Osobisty vs Firmowy — porównanie</div><div class="article-desc">Które funkcje dostępne w każdym planie</div></div><span class="article-arrow">›</span></a>
   </div>
+
+  <details id="faq-register" style="margin-top:16px">
+    <summary>Jak założyć konto i się zalogować?</summary>
+    <div class="qa-body">
+      <p><strong>Rejestracja</strong> zajmuje 30 sekund — potrzebujesz tylko emaila i hasła:</p>
+      <p>1. Kliknij <a href="/rejestracja" style="color:#FFB800">"Zarejestruj"</a> w prawym górnym rogu.</p>
+      <p>2. Wybierz typ konta:</p>
+      <p>• <strong>Osobiste</strong> — dla kupujących / szukających mieszkania (darmowe konto free lub Premium 35 zł/mies).</p>
+      <p>• <strong>Firmowe</strong> — dla pośredników i biur nieruchomości (Premium 199 zł/mies z leadami CRM).</p>
+      <p>3. Podaj email, hasło (min. 8 znaków), a Firmowy dodatkowo NIP i nazwę firmy.</p>
+      <p>4. Zaloguj się przez <a href="/logowanie" style="color:#FFB800">"Zaloguj"</a> i gotowe.</p>
+      <p style="margin-top:10px;padding:10px;background:rgba(255,184,0,0.08);border-radius:8px">💡 <strong>Zapomniałeś hasła?</strong> Na stronie logowania kliknij "Nie pamiętam hasła" — wyślemy link resetujący na email.</p>
+    </div>
+  </details>
+
+  <details id="faq-plans">
+    <summary>Osobisty vs Firmowy — porównanie planów</summary>
+    <div class="qa-body">
+      <p><strong>Konto Osobiste (35 zł/mies)</strong> — dla kupujących:</p>
+      <p>• Analiza AI ceny w promieniu 5-8 km (okazja/w normie/zawyżona)</p>
+      <p>• Podobne oferty w okolicy (klikalna lista)</p>
+      <p>• Ulubione oferty i alerty cenowe</p>
+      <p>• Bez reklam</p>
+      <p>• Wyceny PDF 32 zł/szt (bez limitu)</p>
+
+      <p style="margin-top:12px"><strong>Konto Firmowe (199 zł/mies)</strong> — dla pośredników i biur:</p>
+      <p>• Wszystko z Osobistego +</p>
+      <p>• <strong>Leady od klientów</strong> — użytkownicy zamawiający wycenę zostawiają telefon (email do biur z okolicy)</p>
+      <p>• <strong>CRM statusów ofert</strong> — oznaczaj oferty: ☎️ Był kontakt, 📅 Umówione, 🚷 Bez pośrednika, 🚫 Nieaktualna + notatki</p>
+      <p>• <strong>Dostęp zespołu</strong> — cała firma widzi wspólną pulę leadów i oznaczeń</p>
+      <p>• 20 wycen PDF miesięcznie w cenie subskrypcji</p>
+      <p>• Faktura VAT automatyczna (po NIP)</p>
+
+      <p style="margin-top:12px"><strong>Konto Free (0 zł)</strong> — bez logowania lub podstawowe:</p>
+      <p>• Podgląd wszystkich ofert bez analizy AI</p>
+      <p>• Bez podobnych ofert i alertów</p>
+      <p>• Reklamy AdSense na stronach</p>
+
+      <p style="margin-top:12px;padding:10px;background:rgba(74,222,128,0.08);border-radius:8px">💡 <strong>Testujesz?</strong> Zamów jedną wycenę za 32 zł — nie potrzeba subskrypcji.</p>
+    </div>
+  </details>
 
   <h2 id="wyszukiwarka">🔍 Wyszukiwarka — najczęstsze pytania</h2>
 
@@ -291,6 +332,41 @@
       el.innerHTML = '<a href="/logowanie" class="a-login">Zaloguj</a><a href="/rejestracja" class="a-cta">Zarejestruj</a>';
     }
   })();
+
+  // Auto-open <details> when linked via anchor (#faq-xxx)
+  function openFromHash(){
+    const hash = window.location.hash;
+    if (!hash) return;
+    const target = document.querySelector(hash);
+    if (!target) return;
+    // If it's a <details>, open it
+    if (target.tagName === 'DETAILS') {
+      target.setAttribute('open', '');
+    }
+    // Also open any parent <details>
+    let parent = target.closest('details');
+    while (parent) {
+      parent.setAttribute('open', '');
+      parent = parent.parentElement?.closest('details');
+    }
+    // Smooth scroll
+    setTimeout(() => target.scrollIntoView({behavior: 'smooth', block: 'start'}), 100);
+  }
+  window.addEventListener('hashchange', openFromHash);
+  openFromHash(); // On load
+
+  // Also intercept clicks on article/category anchor links for smooth UX
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      const href = a.getAttribute('href');
+      if (href.length < 2) return;
+      const target = document.querySelector(href);
+      if (!target) return;
+      e.preventDefault();
+      history.pushState(null, '', href);
+      openFromHash();
+    });
+  });
 </script>
 </body>
 </html>

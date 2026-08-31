@@ -203,7 +203,7 @@ def normalize(item: Dict[str, Any], city_name: str) -> Optional[Dict[str, Any]]:
         "lng": lon,
         "image": img_url,
         "transaction_type": "sprzedaz",
-        "added_at": datetime.now(timezone.utc),
+        "added_at": datetime.now(timezone.utc).isoformat(),
         "scraped_via": "scrapingbee",
     }
 

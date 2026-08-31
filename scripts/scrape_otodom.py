@@ -205,7 +205,7 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         "lng": lon,
         "image": img_url,
         "transaction_type": "sprzedaz",
-        "added_at": datetime.now(timezone.utc),
+        "added_at": datetime.now(timezone.utc).isoformat(),
         "scraped_via": "scrapingbee",
     }
     if subtype_field and subtype:
@@ -233,6 +233,19 @@ def main():
 
     db = get_mongo()
     coll = db["listings"]
+
+    # ── One-time migration: convert datetime added_at → ISO string ──
+    # (needed because frontend filters expect string date)
+    try:
+        migrated = coll.update_many(
+            {"scraped_via": "scrapingbee", "added_at": {"$type": "date"}},
+            [{"$set": {"added_at": {"$dateToString": {
+                "format": "%Y-%m-%dT%H:%M:%S.%LZ", "date": "$added_at"}}}}]
+        ).modified_count
+        if migrated:
+            log.info("Migrated %d docs: added_at datetime → ISO string", migrated)
+    except Exception as e:
+        log.warning("added_at migration skipped: %s", e)
 
     cities = CITIES
     if args.city:

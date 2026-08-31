@@ -24,7 +24,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from html import escape
 from html.parser import HTMLParser
-from typing import Optional
+from typing import Optional, Dict, Any, List, Tuple
 from urllib.parse import urlparse
 
 import bcrypt

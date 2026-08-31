@@ -553,10 +553,25 @@ async function loadListings() {
   const count = document.getElementById('count');
   try {
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8ba3d4">⏳ Wczytuję oferty...</div>';
-    const res = await fetch('/data/listings.json?v=' + Date.now());
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    LISTINGS = data.listings || [];
+    // Fetch BOTH static + freshly scraped listings in parallel
+    const [staticRes, scrapedRes] = await Promise.allSettled([
+      fetch('/data/listings.json?v=' + Date.now()),
+      fetch('/api/listings-scraped')
+    ]);
+    let staticList = [];
+    if (staticRes.status === 'fulfilled' && staticRes.value.ok) {
+      const d = await staticRes.value.json();
+      staticList = d.listings || [];
+    }
+    let scrapedList = [];
+    if (scrapedRes.status === 'fulfilled' && scrapedRes.value.ok) {
+      const d = await scrapedRes.value.json();
+      scrapedList = d.listings || [];
+    }
+    // Merge with dedup by URL (scraped takes priority — fresher data)
+    const seen = new Set(scrapedList.map(l => l.url));
+    LISTINGS = [...scrapedList, ...staticList.filter(l => !seen.has(l.url))];
+    console.log(`Loaded: ${staticList.length} static + ${scrapedList.length} scraped = ${LISTINGS.length} total`);
     count.textContent = LISTINGS.length;
     // Load CRM statuses for Firmowy user (async, non-blocking)
     loadCrmStatuses().then(() => {

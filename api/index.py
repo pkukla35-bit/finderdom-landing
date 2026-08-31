@@ -787,6 +787,21 @@ async def health():
         raise HTTPException(500, f"DB error: {str(e)[:100]}")
 
 
+@app.get("/api/listings-scraped")
+async def listings_scraped_endpoint():
+    """Returns listings scraped via ScrapingBee (freshly added, not yet in static JSON)."""
+    try:
+        coll = database().listings
+        docs = await coll.find(
+            {"scraped_via": "scrapingbee"},
+            {"_id": 0}
+        ).to_list(length=20000)
+        return {"listings": docs, "count": len(docs)}
+    except Exception as e:
+        logger.warning("listings-scraped error: %s", e)
+        return {"listings": [], "count": 0, "error": str(e)[:200]}
+
+
 @app.get("/api/rcn/stats")
 async def rcn_stats_endpoint(city: str, type: str, area: Optional[float] = None):
     """Public RCN transaction statistics for a given city + property type.

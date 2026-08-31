@@ -252,7 +252,23 @@ def _parse_props(props: Dict[str, Any], kind: str, city: str) -> Optional[Dict[s
     """
     Normalize a single RCN feature's properties to our schema.
     RCN attribute names differ per powiat schema — we probe multiple variants.
+
+    If kind == '__unified__', we infer the kind from the 'rodzaj_nieruchomosci'
+    property in the feature itself.
     """
+    # ── Infer kind from properties when using unified 'transakcje' layer ──
+    if kind == "__unified__":
+        inferred_kind = None
+        for k in ("rodzaj_nieruchomosci", "rodzajNieruchomosci", "rodzaj",
+                  "typ_nieruchomosci", "typNieruchomosci", "typ"):
+            v = str(props.get(k, "")).lower()
+            if "lokal" in v or "mieszk" in v:
+                inferred_kind = "lokal"; break
+            if "budynek" in v or "dom" in v:
+                inferred_kind = "budynek"; break
+            if "dzialk" in v or "działk" in v or "grunt" in v:
+                inferred_kind = "dzialka"; break
+        kind = inferred_kind or "unknown"
     # Cena brutto — variants: cena_brutto, cena, cena_pln, cenaBrutto, cena_transakcji
     cena_keys = ("cena_brutto", "cenaBrutto", "cena_transakcji", "cena", "cena_pln",
                  "cena_calkowita", "brutto")
@@ -370,12 +386,13 @@ def ingest_city(coll, city: str, cfg: Dict[str, Any], typenames_by_kind: Dict[st
 
 def resolve_typenames(city_bbox: Tuple[float, float, float, float]) -> Dict[str, str]:
     """
-    Discover the real RCN feature type names by:
-      1. Trying multiple WFS endpoints,
-      2. Reading GetCapabilities XML to list all layers,
-      3. Filtering for RCN-related names (cen, rcn, transak, cena, lokal, budynek, dzialka),
-      4. Verifying each candidate returns features for a probe BBOX,
-      5. Selecting one per kind (lokal / budynek / dzialka).
+    Discover the real RCN feature type names.
+
+    Priority:
+      1. If any endpoint exposes a unified 'transakcje' layer → use it for
+         all kinds (classification happens later per feature property).
+      2. Otherwise fall back to keyword-matching separate lokal/budynek/dzialka
+         layers.
 
     Sets the module-level WFS_URL to the endpoint that actually responds.
     """
@@ -393,32 +410,33 @@ def resolve_typenames(city_bbox: Tuple[float, float, float, float]) -> Dict[str,
             log.warning("  Bad response: HTTP %s (%s bytes)", r.status_code, len(r.text or ""))
             continue
 
-        # Extract all typenames from GetCapabilities XML
         typenames = re.findall(r"<(?:Name|(?:\w+:)?Name)>([^<]+)</(?:\w+:)?Name>", r.text)
         typenames = [t.strip() for t in typenames if t and ":" in t]
         if not typenames:
-            # fallback: also accept unqualified names
             typenames = re.findall(r"<Name>([^<]+)</Name>", r.text)
         log.info("  Feature types found: %s", typenames[:20])
 
-        # Keyword sets that map RCN kinds to layer name substrings
+        # ── Priority 1: unified 'transakcje' layer (RCN via KICN) ────
+        unified = [t for t in typenames if "transak" in t.lower() and "koszyk" not in t.lower()]
+        if unified:
+            WFS_URL = endpoint
+            log.info("  ✓ UNIFIED transakcje layer -> %s", unified[0])
+            log.info("Using endpoint: %s", endpoint)
+            return {"__unified__": unified[0]}
+
+        # ── Priority 2: separate layers per kind ──────────────────────
         keyword_map = {
             "lokal":   ["lokal", "mieszkan"],
             "budynek": ["budynek", "dom"],
             "dzialka": ["dzialk", "działk"],
         }
-
         WFS_URL = endpoint
         found: Dict[str, str] = {}
         for kind, keywords in keyword_map.items():
             candidates = [t for t in typenames if any(kw in t.lower() for kw in keywords)]
             if candidates:
-                # Trust GetCapabilities — take the first matching layer without probing.
-                # Some WFS servers return GML instead of JSON for GetFeature, which
-                # would fail our JSON-only probe. We'll retry with GML in wfs_fetch.
                 found[kind] = candidates[0]
                 log.info("  ✓ %s -> %s", kind, candidates[0])
-
         if found:
             log.info("Using endpoint: %s", endpoint)
             return found

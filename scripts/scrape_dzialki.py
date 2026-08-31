@@ -128,6 +128,32 @@ def normalize(item: Dict[str, Any], city_name: str) -> Optional[Dict[str, Any]]:
         return None
     url = f"https://www.otodom.pl/pl/oferta/{slug}" if not slug.startswith("http") else slug
 
+    # ── Detect subtype (budowlana / rolna / rekreacyjna / siedliskowa / leśna / usługowa) ──
+    title = item.get("title") or "Działka"
+    text_blob = f"{title} {item.get('shortDescription', '')} {item.get('description', '')}".lower()
+    subtype = None
+    subtype_keys = [
+        ("budowlana",   ["budowlan"]),
+        ("rolna",       ["rolna", "rolne", "rolny"]),
+        ("rekreacyjna", ["rekreacyj", "rekreacja"]),
+        ("siedliskowa", ["siedlisk"]),
+        ("leśna",       ["leśn", "lesn"]),
+        ("usługowa",    ["usługow", "uslugow", "komercyj", "inwestycyj"]),
+    ]
+    # First from Otodom's own field
+    ot_type = str(item.get("dzialkaType") or item.get("estateType") or "").lower()
+    for label, kws in subtype_keys:
+        if any(kw in ot_type for kw in kws):
+            subtype = label
+            break
+    if not subtype:
+        for label, kws in subtype_keys:
+            if any(kw in text_blob for kw in kws):
+                subtype = label
+                break
+
+    prop_type = f"działka {subtype}" if subtype else "działka"
+
     # price
     price = None
     total_price = item.get("totalPrice") or {}
@@ -164,8 +190,9 @@ def normalize(item: Dict[str, Any], city_name: str) -> Optional[Dict[str, Any]]:
     return {
         "source": "otodom",
         "external_id": ext_id,
-        "type": "działka",
-        "title": item.get("title") or "Działka",
+        "type": prop_type,             # "działka budowlana" / "działka rolna" / …
+        "dzialka_type": subtype,       # tylko podtyp (do filtrowania w UI)
+        "title": title,
         "url": url,
         "location": location,
         "city": city_name,
@@ -247,16 +274,31 @@ def main():
                 d = normalize(it, city["name"])
                 if d:
                     docs.append(d)
+            batch_inserted = 0
+            batch_updated = 0
             if docs:
+                from pymongo import UpdateOne
+                ops = [UpdateOne(
+                    {"source": d["source"], "external_id": d["external_id"]},
+                    {"$set": d},
+                    upsert=True) for d in docs]
                 try:
-                    result = coll.insert_many(docs, ordered=False)
-                    total["inserted"] += len(result.inserted_ids)
-                except BulkWriteError as bwe:
-                    total["inserted"] += bwe.details.get("nInserted", 0)
+                    result = coll.bulk_write(ops, ordered=False)
+                    batch_inserted = result.upserted_count
+                    batch_updated = result.modified_count
+                    total["inserted"] += batch_inserted
                 except Exception as e:
-                    log.warning("  insert error: %s", e)
-            log.info("  page %d: %d items → inserted=%d (total=%d)",
-                     page, len(items), len(docs), total["inserted"])
+                    log.warning("  bulk_write error: %s", e)
+            log.info("  page %d: %d items → new=%d, updated=%d (total_new=%d)",
+                     page, len(items), batch_inserted, batch_updated, total["inserted"])
+            # Early stop: if 0 new AND 0 updated (i.e. same 37 rec. items) for 2 pages → break
+            if batch_inserted == 0 and batch_updated == 0:
+                empty_streak = empty_streak + 1 if 'empty_streak' in dir() else 1
+                if empty_streak >= 2:
+                    log.info("  → 2 empty pages, moving to next city")
+                    break
+            else:
+                empty_streak = 0
             time.sleep(0.5)   # gentle
 
     log.info("═══ DONE: pages=%d parsed=%d inserted=%d credits≈%d ═══",

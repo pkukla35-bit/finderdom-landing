@@ -119,7 +119,7 @@ def get_mongo():
     except Exception as e:
         log.error("MongoDB connection failed: %s", e)
         sys.exit(1)
-    db_name = os.environ.get("MONGO_DB", "finderdom")
+    db_name = os.environ.get("MONGODB_DB") or os.environ.get("MONGO_DB", "finderdom")
     return client[db_name]
 
 

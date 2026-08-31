@@ -1780,15 +1780,16 @@ async def get_rcn_stats(city: str, prop_type: str, area_m2: Optional[float] = No
         logger.debug("get_rcn_stats: no rcn_transactions collection: %s", e)
         return None
 
-    # Regex to match city case-insensitively without escaping issues
-    city_regex = re.compile("^" + re.escape((city or "").strip()) + "$", re.IGNORECASE)
+    # Regex to match city case-insensitively — use string pattern (Motor doesn't
+    # accept compiled regex in $regex operator).
+    city_regex = "^" + re.escape((city or "").strip()) + "$"
 
     # Only use transactions from the last 3 years, with valid cena_m2 and area
     now = datetime.now(timezone.utc)
     since = (now.replace(year=now.year - 3)).strftime("%Y-%m-%d")
 
     query: Dict[str, Any] = {
-        "city": {"$regex": city_regex},
+        "city": {"$regex": city_regex, "$options": "i"},
         "rodzaj_nieruchomosci": kind,
         "cena_m2": {"$gt": 0},
         "data_zawarcia": {"$gte": since},

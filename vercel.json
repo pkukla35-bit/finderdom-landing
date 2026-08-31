@@ -30,6 +30,7 @@
     { "source": "/wycena-sukces", "destination": "/wycena-sukces.html" },
     { "source": "/wycena", "destination": "/wycena.html" },
     { "source": "/lead-claim", "destination": "/lead-claim.html" },
+    { "source": "/pomoc", "destination": "/pomoc.html" },
     { "source": "/regulamin", "destination": "/regulamin.html" },
     { "source": "/polityka-prywatnosci", "destination": "/polityka-prywatnosci.html" }
   ],

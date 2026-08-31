@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pomoc · FinderDom.pl — Wyszukiwarka i wycena nieruchomości</title>
+<meta name="description" content="Centrum pomocy FinderDom.pl. Poradniki, FAQ, wyjaśnienia dotyczące wyszukiwarki ofert, wyceny nieruchomości, planów Osobistego i Firmowego.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#0B1836;color:#e6e9f2;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
+  .topnav{background:rgba(11,24,54,0.95);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.08);position:sticky;top:0;z-index:100;padding:14px 20px}
+  .nav-inner{max-width:1200px;margin:auto;display:flex;align-items:center;gap:24px}
+  .logo{font-size:18px;font-weight:900;color:#FFB800;text-decoration:none}
+  .nav-links{display:flex;gap:18px;align-items:center;flex:1;font-size:14px;flex-wrap:wrap}
+  .nav-links a{color:#c5d0e6;text-decoration:none;font-weight:600}
+  .nav-links a:hover{color:#FFB800}
+  .nav-links a.active{color:#FFB800}
+  main{max-width:1000px;margin:auto;padding:32px 20px 80px}
+  h1{font-size:clamp(28px,4vw,42px);font-weight:900;line-height:1.15;margin:0 0 8px}
+  .sub{color:#8ba3d4;font-size:16px;margin-bottom:32px}
+  .search-box{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;margin-bottom:40px;display:flex;gap:10px}
+  .search-box input{flex:1;background:transparent;border:none;color:#fff;font-size:15px;outline:none}
+  .search-box svg{color:#8ba3d4}
+  .cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:40px}
+  .cat{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:24px;text-decoration:none;color:inherit;transition:all .2s}
+  .cat:hover{background:rgba(255,184,0,0.08);border-color:rgba(255,184,0,0.4);transform:translateY(-2px)}
+  .cat-icon{font-size:32px;margin-bottom:12px}
+  .cat-title{font-size:16px;font-weight:800;margin-bottom:6px;color:#fff}
+  .cat-desc{font-size:13px;color:#8ba3d4;line-height:1.5}
+  .cat-count{margin-top:12px;font-size:11px;color:#FFB800;font-weight:700}
+  h2{font-size:22px;font-weight:900;margin:40px 0 20px;border-left:4px solid #FFB800;padding-left:12px}
+  .articles{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden}
+  .article{padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.06);text-decoration:none;color:inherit;display:flex;align-items:center;gap:12px;transition:background .15s}
+  .article:last-child{border-bottom:none}
+  .article:hover{background:rgba(255,184,0,0.06)}
+  .article-emoji{font-size:20px;flex-shrink:0}
+  .article-content{flex:1;min-width:0}
+  .article-title{font-weight:700;font-size:14px;color:#fff;margin-bottom:2px}
+  .article-desc{font-size:12px;color:#8ba3d4}
+  .article-arrow{color:#8ba3d4;font-size:18px}
+  details{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;margin-bottom:10px;padding:0}
+  summary{padding:14px 18px;cursor:pointer;font-weight:700;font-size:14px;color:#fff;list-style:none;display:flex;justify-content:space-between;align-items:center}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:'+';color:#FFB800;font-size:20px;font-weight:900}
+  details[open] summary::after{content:'−'}
+  details[open] summary{border-bottom:1px solid rgba(255,255,255,0.06)}
+  .qa-body{padding:12px 18px 16px;color:#c5d0e6;font-size:13px;line-height:1.7}
+  .qa-body p{margin:6px 0}
+  .qa-body strong{color:#FFB800}
+  .contact-box{margin-top:40px;padding:24px;background:linear-gradient(135deg,rgba(79,70,229,0.15),rgba(255,184,0,0.08));border:1px solid rgba(255,184,0,0.3);border-radius:14px;text-align:center}
+  .contact-box h3{margin:0 0 8px;font-size:18px;font-weight:900}
+  .contact-box p{color:#c5d0e6;margin:0 0 14px}
+  .btn-cta{display:inline-block;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:800;font-size:14px}
+  #authWidget .a-login{color:#c5d0e6;font-weight:600;font-size:13px;text-decoration:none;padding:6px 10px}
+  #authWidget .a-login:hover{color:#FFB800}
+  #authWidget .a-cta{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836 !important;padding:7px 14px;border-radius:8px;font-weight:800;font-size:13px;text-decoration:none;box-shadow:0 3px 10px rgba(255,184,0,0.2)}
+  #authWidget .a-cta:hover{color:#0B1836 !important;transform:translateY(-1px)}
+  @media(max-width:640px){
+    .nav-links{gap:12px;font-size:13px}
+    #authWidget .a-login{display:none}
+  }
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <div class="nav-inner">
+    <a href="/" class="logo">🏠 FinderDom.pl</a>
+    <div class="nav-links">
+      <a href="/szukaj.html">Wyszukiwarka</a>
+      <a href="/wycena.html">💰 Wyceń nieruchomość</a>
+      <a href="/pomoc.html" class="active">💬 Pomoc</a>
+      <span id="authWidget" style="display:inline-flex;gap:8px;align-items:center;margin-left:auto"></span>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <h1>💬 Centrum pomocy</h1>
+  <div class="sub">Znajdź odpowiedź lub napisz do nas. Poradniki, FAQ, informacje o planach i funkcjach.</div>
+
+  <div class="search-box">
+    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+    <input type="text" id="qHelp" placeholder="Wyszukaj w pomocy… np. 'jak działa wycena'">
+  </div>
+
+  <div class="cats">
+    <a href="#pierwsze-kroki" class="cat">
+      <div class="cat-icon">🚀</div>
+      <div class="cat-title">Pierwsze kroki</div>
+      <div class="cat-desc">Jak zacząć korzystać z FinderDom.pl — rejestracja, wyszukiwanie, wycena.</div>
+      <div class="cat-count">5 artykułów</div>
+    </a>
+    <a href="#wyszukiwarka" class="cat">
+      <div class="cat-icon">🔍</div>
+      <div class="cat-title">Wyszukiwarka ofert</div>
+      <div class="cat-desc">Filtry, mapa, agregacja z 7 portali, deduplikacja, verdicty AI.</div>
+      <div class="cat-count">6 artykułów</div>
+    </a>
+    <a href="#wycena" class="cat">
+      <div class="cat-icon">💰</div>
+      <div class="cat-title">Wycena nieruchomości</div>
+      <div class="cat-desc">Jak zamawiam wycenę PDF (32 zł), co zawiera raport, dla kogo.</div>
+      <div class="cat-count">7 artykułów</div>
+    </a>
+    <a href="#konto-firmowe" class="cat">
+      <div class="cat-icon">🏢</div>
+      <div class="cat-title">Konto Firmowe (B2B)</div>
+      <div class="cat-desc">Plan 199 zł/mies, leady od klientów, CRM statusów ofert.</div>
+      <div class="cat-count">6 artykułów</div>
+    </a>
+    <a href="#platnosci" class="cat">
+      <div class="cat-icon">💳</div>
+      <div class="cat-title">Płatności i faktury</div>
+      <div class="cat-desc">Stripe, VAT, faktury automatyczne, anulowanie subskrypcji.</div>
+      <div class="cat-count">5 artykułów</div>
+    </a>
+    <a href="#konto" class="cat">
+      <div class="cat-icon">👤</div>
+      <div class="cat-title">Moje konto</div>
+      <div class="cat-desc">Zmiana hasła, dane firmy, plany, subskrypcja, usuwanie konta.</div>
+      <div class="cat-count">4 artykuły</div>
+    </a>
+  </div>
+
+  <h2 id="pierwsze-kroki">🚀 Pierwsze kroki</h2>
+  <div class="articles">
+    <a href="#" class="article"><span class="article-emoji">📝</span><div class="article-content"><div class="article-title">Rejestracja i logowanie</div><div class="article-desc">Konto Osobiste vs Firmowe — którą opcję wybrać?</div></div><span class="article-arrow">›</span></a>
+    <a href="#faq-search" class="article"><span class="article-emoji">🔍</span><div class="article-content"><div class="article-title">Jak wyszukiwać ofert</div><div class="article-desc">Filtry, sortowanie, wyszukiwanie po lokalizacji</div></div><span class="article-arrow">›</span></a>
+    <a href="#faq-valuation" class="article"><span class="article-emoji">💰</span><div class="article-content"><div class="article-title">Jak zamówić wycenę PDF (32 zł)</div><div class="article-desc">Formularz, płatność, pobieranie raportu</div></div><span class="article-arrow">›</span></a>
+    <a href="#faq-plans" class="article"><span class="article-emoji">💎</span><div class="article-content"><div class="article-title">Osobisty vs Firmowy — porównanie</div><div class="article-desc">Które funkcje dostępne w każdym planie</div></div><span class="article-arrow">›</span></a>
+  </div>
+
+  <h2 id="wyszukiwarka">🔍 Wyszukiwarka — najczęstsze pytania</h2>
+
+  <details id="faq-search">
+    <summary>Z jakich portali agregujecie oferty?</summary>
+    <div class="qa-body">
+      <p>Baza FinderDom.pl agreguje oferty z <strong>7 największych portali</strong> nieruchomości w Polsce:</p>
+      <p>Otodom, Morizon, Gratka, OLX, Nieruchomości-online, Adresowo, Domiporta.</p>
+      <p>Automatycznie <strong>deduplikujemy</strong> — jeśli ta sama oferta jest na 3 portalach, zobaczysz ją jako <strong>jedną</strong> pozycję z oznaczeniem "portale: Otodom, Morizon, Gratka".</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Co oznacza badge "OKAZJA", "W normie", "ZAWYŻONA"?</summary>
+    <div class="qa-body">
+      <p>Nasz algorytm AI porównuje cenę oferty do lokalnego rynku (promień 5km lub w tym samym mieście).</p>
+      <p><strong>OKAZJA</strong> (zielony) — cena poniżej realnych transakcji o więcej niż 10%.</p>
+      <p><strong>W NORMIE</strong> (żółty) — cena zgodna z lokalnym rynkiem (±10%).</p>
+      <p><strong>ZAWYŻONA</strong> (czerwony) — oferent liczy więcej niż 10% powyżej realnych transakcji w okolicy.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Jak działa filtr "Tylko oryginały"?</summary>
+    <div class="qa-body">
+      <p>Gdy ta sama nieruchomość jest wystawiona przez różnych pośredników (np. 3 biura wystawiają ten sam dom), oznaczamy jedną jako <strong>oryginał</strong> a pozostałe jako <strong>duplikaty</strong>.</p>
+      <p>Filtr "✨ Tylko oryginały" pokazuje po jednej ofercie z każdej grupy. Wyłącz go, żeby zobaczyć wszystkie warianty.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Jak często aktualizujecie bazę?</summary>
+    <div class="qa-body">
+      <p>Automatyczne scrape'y uruchamiają się <strong>codziennie o 3:00 rano</strong>. Nowe oferty pojawiają się w bazie do 24h od publikacji na portalach źródłowych.</p>
+    </div>
+  </details>
+
+  <h2 id="wycena">💰 Wycena nieruchomości</h2>
+
+  <details id="faq-valuation">
+    <summary>Co zawiera raport wyceny PDF (32 zł)?</summary>
+    <div class="qa-body">
+      <p>Otrzymujesz profesjonalny 4-stronicowy dokument PDF ze:</p>
+      <p>• <strong>Rekomendacją cenową AI</strong> (widełki cen wywoławczej i transakcyjnej)</p>
+      <p>• <strong>Mapą Mapbox</strong> z lokalizacją i punktami porównywalnych ofert</p>
+      <p>• <strong>Tabelą porównawczą</strong> ofert (ceny wywoławcze) w okolicy</p>
+      <p>• <strong>Tabelą transakcyjną</strong> (szacunkowe ceny sprzedaży ~94% wywoławczej)</p>
+      <p>• <strong>Wykresami</strong> — wpływ standardu, powierzchni, roku budowy na cenę za m²</p>
+      <p>• <strong>Rankingiem dzielnic</strong> w mieście (dla mieszkań)</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Jak długo czekam na raport?</summary>
+    <div class="qa-body">
+      <p>Raport generuje się <strong>natychmiast po opłaceniu</strong> (do 30 sekund). Zostaje wysłany na Twój email + dostępny do pobrania z panelu konta.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Dla jakich nieruchomości działa wycena?</summary>
+    <div class="qa-body">
+      <p><strong>Mieszkania, domy, działki</strong> — na terenie całej Polski. Wycena działa najlepiej dla większych miast (Warszawa, Kraków, Wrocław, Poznań, Gdańsk) gdzie mamy dużą bazę porównawczą.</p>
+      <p>Dla małych wsi (poniżej 1000 mieszkańców) używamy ofert z najbliższego dużego miasta (30 km promień) — otrzymasz informację o metodologii.</p>
+    </div>
+  </details>
+
+  <h2 id="konto-firmowe">🏢 Konto Firmowe (B2B)</h2>
+
+  <details>
+    <summary>Co daje plan Firmowy 199 zł/mies?</summary>
+    <div class="qa-body">
+      <p>• <strong>Leady od klientów</strong> — użytkownicy zamawiający wycenę zostawiają telefon. Otrzymujesz maila z możliwością "przypisania sobie" leada.</p>
+      <p>• <strong>CRM statusów ofert</strong> — oznaczaj oferty: ☎️ Był kontakt, 📅 Umówione, 🚷 Bez pośrednika, 🚫 Nieaktualna + notatki.</p>
+      <p>• <strong>Dostęp zespołu</strong> — cała firma widzi wspólną pulę leadów i oznaczeń ofert.</p>
+      <p>• <strong>Brak reklam</strong> na całej platformie.</p>
+      <p>• <strong>Wyceny PDF w cenie</strong> (do 20 miesięcznie).</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Jak działa dystrybucja leadów?</summary>
+    <div class="qa-body">
+      <p>Gdy klient zamówi wycenę (32 zł) i pozostawi telefon, <strong>wszystkie</strong> biura Firmowe w okolicy dostają email z informacją. Kto pierwszy kliknie "Zarezerwuj leada" — dostaje kontakt.</p>
+      <p>Zasada <strong>first-come-first-served</strong> nagradza szybkie biura. W praktyce leady rozchodzą się w ciągu 5-15 minut.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Czym są statusy CRM ofert?</summary>
+    <div class="qa-body">
+      <p>Otwierając ofertę pod jej zdjęciem widzisz panel <strong>🏢 CRM firmy</strong> z 4 statusami:</p>
+      <p>• <strong>☎️ Był kontakt</strong> — dzwonił, ktoś odpisał, ale sprawa otwarta</p>
+      <p>• <strong>📅 Umówione</strong> — spotkanie w kalendarzu / oglądanie potwierdzone</p>
+      <p>• <strong>🚷 Bez pośrednika</strong> — sprawdzone, ogłoszenie prywatne</p>
+      <p>• <strong>🚫 Nieaktualna</strong> — wycofana / sprzedana</p>
+      <p>Każdy status możesz opisać krótką <strong>notatką</strong>. Wszyscy koledzy z firmy widzą co i kto oznaczył.</p>
+    </div>
+  </details>
+
+  <h2 id="platnosci">💳 Płatności i faktury</h2>
+
+  <details>
+    <summary>Jakie formy płatności akceptujecie?</summary>
+    <div class="qa-body">
+      <p>Wszystkie karty przez Stripe: <strong>Visa, Mastercard, Maestro, American Express</strong>, BLIK, Apple Pay, Google Pay.</p>
+      <p>Dla firm z NIP automatycznie wystawiamy fakturę VAT.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Czy mogę anulować subskrypcję Firmowy w każdej chwili?</summary>
+    <div class="qa-body">
+      <p>Tak. Wchodzisz w <a href="/konto.html" style="color:#FFB800">Moje konto</a> → Subskrypcja → "Anuluj". Dostęp do funkcji Firmowych zachowasz do końca opłaconego miesiąca.</p>
+    </div>
+  </details>
+
+  <div class="contact-box">
+    <h3>Nie znalazłeś odpowiedzi?</h3>
+    <p>Napisz do nas — odpisujemy w ciągu 24h w dni robocze.</p>
+    <a href="mailto:kontakt@finderdom.pl" class="btn-cta">✉ kontakt@finderdom.pl</a>
+  </div>
+</main>
+
+<footer style="max-width:1000px;margin:40px auto 24px;padding:24px 20px 0;border-top:1px solid rgba(255,255,255,0.08);display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;color:#8ba3d4;font-size:13px">
+  <div>© 2026 FinderDom.pl</div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px">
+    <a href="/" style="color:#a3b3d1;text-decoration:none">Strona główna</a>
+    <a href="/szukaj.html" style="color:#a3b3d1;text-decoration:none">Wyszukiwarka</a>
+    <a href="/wycena.html" style="color:#a3b3d1;text-decoration:none">Wycena PDF</a>
+    <a href="/regulamin" style="color:#a3b3d1;text-decoration:none">Regulamin</a>
+    <a href="/polityka-prywatnosci" style="color:#a3b3d1;text-decoration:none">Polityka prywatności</a>
+    <a href="mailto:kontakt@finderdom.pl" style="color:#a3b3d1;text-decoration:none">Kontakt</a>
+  </div>
+</footer>
+
+<script>
+  // Simple search-in-page filter
+  const q = document.getElementById('qHelp');
+  const details = document.querySelectorAll('details');
+  q.addEventListener('input', () => {
+    const term = q.value.toLowerCase().trim();
+    details.forEach(d => {
+      const text = d.textContent.toLowerCase();
+      d.style.display = (!term || text.includes(term)) ? '' : 'none';
+      if (term && text.includes(term)) d.setAttribute('open', '');
+    });
+  });
+
+  // Auth widget
+  (function renderAuthWidget(){
+    const el = document.getElementById('authWidget');
+    if (!el) return;
+    const token = localStorage.getItem('finderdom_token');
+    if (token) {
+      el.innerHTML = '<a href="/konto" class="a-cta">👤 Moje konto</a>';
+    } else {
+      el.innerHTML = '<a href="/logowanie" class="a-login">Zaloguj</a><a href="/rejestracja" class="a-cta">Zarejestruj</a>';
+    }
+  })();
+</script>
+</body>
+</html>

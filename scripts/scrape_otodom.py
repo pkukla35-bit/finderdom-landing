@@ -137,6 +137,34 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
     title = item.get("title") or PROPERTY_LABELS[prop].capitalize()
     text_blob = f"{title} {item.get('shortDescription','')} {item.get('description','')}".lower()
 
+    # ── Prawdziwa data publikacji z Otodomu ──
+    # Otodom podaje: "dateCreated" (YYYY-MM-DD HH:MM:SS) i "createdAtFirst" (ISO).
+    # Preferujemy pierwsze wystawienie ("createdAtFirst"), fallback do "dateCreated".
+    date_raw = item.get("createdAtFirst") or item.get("dateCreated") or item.get("createdAt") or ""
+    posted_iso = None
+    if date_raw:
+        s = str(date_raw).replace("T", " ").replace("Z", "")[:19]
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                dt = datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
+                posted_iso = dt.isoformat()
+                break
+            except (ValueError, TypeError):
+                pass
+
+    # ── Seller type detection ──
+    seller_type = "posrednik"
+    if item.get("isPrivateOwner"):
+        seller_type = "prywatna"
+    elif item.get("isDeveloperOwner"):
+        seller_type = "deweloper"
+    else:
+        adv_type = (item.get("extendedAdvertiserType") or item.get("advertiserType") or "").upper()
+        if adv_type == "PRIVATE":
+            seller_type = "prywatna"
+        elif adv_type == "DEVELOPER":
+            seller_type = "deweloper"
+
     # Subtype detection
     subtype = None
     subtype_field = None
@@ -189,6 +217,7 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
     if images and isinstance(images[0], dict):
         img_url = images[0].get("large") or images[0].get("medium") or images[0].get("small")
 
+    now_iso = datetime.now(timezone.utc).isoformat()
     doc = {
         "source": "otodom",
         "external_id": ext_id,
@@ -205,7 +234,11 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         "lng": lon,
         "image": img_url,
         "transaction_type": "sprzedaz",
-        "added_at": datetime.now(timezone.utc).isoformat(),
+        "seller_type": seller_type,
+        # added_at = prawdziwa data publikacji na Otodomie (fallback: teraz jeśli nie ma daty)
+        "added_at": posted_iso or now_iso,
+        "posted_at": posted_iso,          # oryginalna data ISO z Otodomu (jeśli była)
+        "last_seen_at": now_iso,          # kiedy ostatnio widzieliśmy ofertę (live)
         "scraped_via": "scrapingbee",
     }
     if subtype_field and subtype:
@@ -272,6 +305,8 @@ def main():
             docs = [d for d in (normalize(it, city["name"], args.property) for it in items) if d]
             batch_new = batch_upd = 0
             if docs:
+                # added_at = zawsze prawdziwa data z Otodomu (posted_at) — pozwala poprawnie działać
+                # filtrom "dziś / 3 dni / 7 dni" nawet po wielokrotnych scrape'ach.
                 ops = [UpdateOne({"source": d["source"], "external_id": d["external_id"]},
                                  {"$set": d}, upsert=True) for d in docs]
                 try:

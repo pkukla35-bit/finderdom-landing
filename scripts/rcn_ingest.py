@@ -219,15 +219,21 @@ def wfs_fetch(typename: str, bbox: Tuple[float, float, float, float],
     try:
         r = requests.get(WFS_URL, params=common, timeout=WFS_TIMEOUT)
         if r.status_code >= 400:
-            log.debug("WFS GML %s -> HTTP %s (%s)", typename, r.status_code, r.text[:200])
+            log.warning("WFS GML %s -> HTTP %s (%s)", typename, r.status_code, r.text[:200])
             return None
         features = _parse_gml_features(r.text)
         if not features and start == 0:
-            # log a snippet for debugging on first batch
-            log.debug("WFS returned no features from GML; sample: %s", r.text[:400])
+            # First batch and empty — log a lot for debugging
+            log.warning("WFS %s returned NO features. HTTP=%s size=%d bytes",
+                        typename, r.status_code, len(r.text))
+            log.warning("  first 800 chars: %s", r.text[:800].replace("\n", " ")[:800])
+            # Also try to extract member-like tags for diagnostics
+            import re as _re
+            all_tags = _re.findall(r"<(/?\w[\w:-]*)\b", r.text)[:30]
+            log.warning("  first 30 tags: %s", all_tags)
         return {"features": features}
     except Exception as e:
-        log.debug("WFS GML fetch failed (%s): %s", typename, e)
+        log.warning("WFS GML fetch failed (%s): %s", typename, e)
         return None
 
 

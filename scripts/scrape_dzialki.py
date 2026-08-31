@@ -244,6 +244,18 @@ def main():
     ensure_indexes(coll)
     log.info("MongoDB: %s.listings", db.name)
 
+    # ── One-time migration: datetime added_at → ISO string ──
+    try:
+        migrated = coll.update_many(
+            {"scraped_via": "scrapingbee", "added_at": {"$type": "date"}},
+            [{"$set": {"added_at": {"$dateToString": {
+                "format": "%Y-%m-%dT%H:%M:%S.%LZ", "date": "$added_at"}}}}]
+        ).modified_count
+        if migrated:
+            log.info("Migrated %d docs: added_at datetime → ISO string", migrated)
+    except Exception as e:
+        log.warning("added_at migration skipped: %s", e)
+
     cities = CITIES
     if args.city:
         cities = [c for c in CITIES if c["name"].lower().replace("ł", "l") == args.city.lower() or

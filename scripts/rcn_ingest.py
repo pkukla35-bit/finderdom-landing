@@ -192,9 +192,41 @@ def _parse_gml_features(gml_text: str) -> List[Dict[str, Any]]:
     return features
 
 
+def _bbox_2180(bbox_4326: Tuple[float, float, float, float]) -> Tuple[float, float, float, float]:
+    """Convert WGS84 BBOX (lon,lat) to EPSG:2180 (Poland CS92, meters).
+    Uses a simple approximation: 1° lat ≈ 111 km; 1° lon ≈ 111*cos(lat) km.
+    Poland's EPSG:2180 origin ~ 19°E, 0°N with false easting/northing.
+    Accuracy: ±few km — enough for BBOX filtering (we want a rough envelope
+    of the city, not surveying precision).
+    """
+    import math
+    minlon, minlat, maxlon, maxlat = bbox_4326
+    cx_lon = (minlon + maxlon) / 2
+    cx_lat = (minlat + maxlat) / 2
+    # Approx EPSG:2180 coordinates via projection center ~19°E, 52°N
+    def to_2180(lon: float, lat: float) -> Tuple[float, float]:
+        dx_km = (lon - 19.0) * 111.32 * math.cos(math.radians(lat))
+        dy_km = (lat - 0.0) * 111.32
+        # false easting +500km, so central meridian → x=500000
+        x = 500000.0 + dx_km * 1000
+        # y from equator; PL-1992 doesn't use false northing
+        y = dy_km * 1000 - 5300000  # approx offset to match EPSG:2180
+        return x, y
+    x1, y1 = to_2180(minlon, minlat)
+    x2, y2 = to_2180(maxlon, maxlat)
+    return (min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2))
+
+
 def wfs_fetch(typename: str, bbox: Tuple[float, float, float, float],
               limit: int = 5000, start: int = 0) -> Optional[dict]:
-    """Fetch a batch of features from WFS as GeoJSON or GML."""
+    """Fetch a batch of features from WFS as GeoJSON or GML.
+
+    Tries in order:
+      1. BBOX EPSG:2180 + native CRS (KICN)
+      2. BBOX EPSG:4326 + JSON
+      3. BBOX EPSG:4326 + GML
+      4. Without BBOX (fallback — small COUNT for smoke test)
+    """
     minx, miny, maxx, maxy = bbox
     common = {
         "SERVICE": "WFS",
@@ -203,38 +235,78 @@ def wfs_fetch(typename: str, bbox: Tuple[float, float, float, float],
         "TYPENAMES": typename,
         "COUNT": limit,
         "STARTINDEX": start,
-        "SRSNAME": "EPSG:4326",
-        "BBOX": f"{miny},{minx},{maxy},{maxx},EPSG:4326",  # WFS 2.0 order = lat,lon
     }
-    # Try JSON first
+
+    # ── Attempt 1: EPSG:2180 (native for KICN) ─────────────────────────
     try:
-        params = {**common, "OUTPUTFORMAT": "application/json"}
+        b2180 = _bbox_2180(bbox)
+        params = {
+            **common,
+            "SRSNAME": "EPSG:2180",
+            "BBOX": f"{b2180[0]:.0f},{b2180[1]:.0f},{b2180[2]:.0f},{b2180[3]:.0f},EPSG:2180",
+        }
+        r = requests.get(WFS_URL, params=params, timeout=WFS_TIMEOUT)
+        if r.status_code == 200:
+            if r.text.lstrip().startswith("{"):
+                return r.json()
+            features = _parse_gml_features(r.text)
+            if features:
+                if start == 0:
+                    log.info("  ✓ EPSG:2180 BBOX returned %d features (batch)", len(features))
+                return {"features": features}
+        elif start == 0:
+            log.warning("  attempt EPSG:2180 -> HTTP %s: %s", r.status_code, r.text[:400])
+    except Exception as e:
+        log.debug("  attempt EPSG:2180 failed: %s", e)
+
+    # ── Attempt 2: EPSG:4326 + JSON ────────────────────────────────────
+    try:
+        params = {
+            **common,
+            "SRSNAME": "EPSG:4326",
+            "BBOX": f"{miny},{minx},{maxy},{maxx},EPSG:4326",
+            "OUTPUTFORMAT": "application/json",
+        }
         r = requests.get(WFS_URL, params=params, timeout=WFS_TIMEOUT)
         if r.status_code == 200 and r.text.lstrip().startswith("{"):
             return r.json()
     except Exception as e:
-        log.debug("WFS fetch JSON failed (%s): %s", typename, e)
+        log.debug("  attempt EPSG:4326 JSON failed: %s", e)
 
-    # Fallback: GML (default WFS 2.0 format)
+    # ── Attempt 3: EPSG:4326 GML ───────────────────────────────────────
     try:
-        r = requests.get(WFS_URL, params=common, timeout=WFS_TIMEOUT)
-        if r.status_code >= 400:
-            log.warning("WFS GML %s -> HTTP %s (%s)", typename, r.status_code, r.text[:200])
-            return None
-        features = _parse_gml_features(r.text)
-        if not features and start == 0:
-            # First batch and empty — log a lot for debugging
-            log.warning("WFS %s returned NO features. HTTP=%s size=%d bytes",
-                        typename, r.status_code, len(r.text))
-            log.warning("  first 800 chars: %s", r.text[:800].replace("\n", " ")[:800])
-            # Also try to extract member-like tags for diagnostics
-            import re as _re
-            all_tags = _re.findall(r"<(/?\w[\w:-]*)\b", r.text)[:30]
-            log.warning("  first 30 tags: %s", all_tags)
-        return {"features": features}
+        params = {
+            **common,
+            "SRSNAME": "EPSG:4326",
+            "BBOX": f"{miny},{minx},{maxy},{maxx},EPSG:4326",
+        }
+        r = requests.get(WFS_URL, params=params, timeout=WFS_TIMEOUT)
+        if r.status_code == 200:
+            features = _parse_gml_features(r.text)
+            if features:
+                return {"features": features}
     except Exception as e:
-        log.warning("WFS GML fetch failed (%s): %s", typename, e)
-        return None
+        log.debug("  attempt EPSG:4326 GML failed: %s", e)
+
+    # ── Attempt 4: NO BBOX (small smoke test) ──────────────────────────
+    if start == 0:
+        try:
+            params = {**common, "COUNT": 100}
+            r = requests.get(WFS_URL, params=params, timeout=WFS_TIMEOUT)
+            log.warning("  no-BBOX fallback -> HTTP %s size=%d", r.status_code, len(r.text))
+            if r.status_code == 200:
+                if r.text.lstrip().startswith("{"):
+                    return r.json()
+                features = _parse_gml_features(r.text)
+                if features:
+                    log.warning("  ⚠ no-BBOX returned %d features (server-side BBOX unsupported)", len(features))
+                    return {"features": features}
+                # log full response for debug
+                log.warning("  no-BBOX first 1000 chars: %s", r.text[:1000].replace("\n", " ")[:1000])
+        except Exception as e:
+            log.warning("  no-BBOX fetch failed: %s", e)
+
+    return None
 
 
 # ------------------------------------------------------------------ parse

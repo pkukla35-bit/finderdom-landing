@@ -138,10 +138,29 @@ def normalize(item: Dict[str, Any], city_name: str) -> Optional[Dict[str, Any]]:
         subtype = "budowlana"
     elif "roln" in combined:
         subtype = "rolna"
+    elif "rekreacyj" in combined:
+        subtype = "rekreacyjna"
+    elif "leśn" in combined or "lesn" in combined:
+        subtype = "lesna"
+    elif "usługow" in combined or "uslugow" in combined or "komercyj" in combined or "inwestycyj" in combined:
+        subtype = "inwestycyjna"
     else:
-        subtype = "inne"   # rekreacyjna, leśna, siedliskowa, komercyjna, ...
+        subtype = "inne"
 
     prop_type = f"działka {subtype}"
+
+    # ── Real Otodom publication date (dateCreated / createdAtFirst / createdAt) ──
+    date_raw = item.get("createdAtFirst") or item.get("dateCreated") or item.get("createdAt") or ""
+    posted_iso = None
+    if date_raw:
+        s = str(date_raw).replace("T", " ").replace("Z", "")[:19]
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                dt = datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
+                posted_iso = dt.isoformat()
+                break
+            except (ValueError, TypeError):
+                pass
 
     # price
     price = None
@@ -176,20 +195,26 @@ def normalize(item: Dict[str, Any], city_name: str) -> Optional[Dict[str, Any]]:
     if images and isinstance(images[0], dict):
         img_url = images[0].get("large") or images[0].get("medium") or images[0].get("small")
 
-    # Seller type (pośrednik vs prywatna)
-    seller_type = None
-    adv_type = str(item.get("advertType") or item.get("advertiserType") or "").upper()
-    if adv_type in ("PRIVATE", "OWNER", "PRYWATNA", "PRIVATE_OWNER"):
+    # Seller type (pośrednik vs prywatna vs deweloper)
+    seller_type = "posrednik"
+    if item.get("isPrivateOwner"):
         seller_type = "prywatna"
-    elif adv_type in ("AGENCY", "AGENT", "BUSINESS", "DEVELOPER"):
-        seller_type = "pośrednik"
+    elif item.get("isDeveloperOwner"):
+        seller_type = "deweloper"
+    else:
+        adv_type = str(item.get("extendedAdvertiserType") or item.get("advertiserType") or item.get("advertType") or "").upper()
+        if adv_type in ("PRIVATE", "OWNER", "PRYWATNA", "PRIVATE_OWNER"):
+            seller_type = "prywatna"
+        elif adv_type == "DEVELOPER":
+            seller_type = "deweloper"
 
+    now_iso = datetime.now(timezone.utc).isoformat()
     return {
         "source": "otodom",
         "external_id": ext_id,
         "type": prop_type,             # "działka budowlana" / "działka rolna" / …
-        "dzialka_type": subtype,       # tylko podtyp (do filtrowania w UI)
-        "seller_type": seller_type,    # "prywatna" / "pośrednik"
+        "dzialka_type": subtype,       # podtyp (budowlana/rolna/rekreacyjna/lesna/inwestycyjna/inne)
+        "seller_type": seller_type,    # "prywatna" / "posrednik" / "deweloper"
         "title": title,
         "url": url,
         "location": location,
@@ -201,7 +226,10 @@ def normalize(item: Dict[str, Any], city_name: str) -> Optional[Dict[str, Any]]:
         "lng": lon,
         "image": img_url,
         "transaction_type": "sprzedaz",
-        "added_at": datetime.now(timezone.utc).isoformat(),
+        # added_at = prawdziwa data publikacji z Otodomu (fallback: teraz)
+        "added_at": posted_iso or now_iso,
+        "posted_at": posted_iso,       # oryginalna data ISO z Otodomu
+        "last_seen_at": now_iso,       # kiedy ostatnio widzieliśmy ofertę
         "scraped_via": "scrapingbee",
     }
 

@@ -535,7 +535,19 @@ function normalizeScrapedListing(raw) {
     'rolna': 'rolna',
     'rekreacyjna': 'rekreacyjna',
   };
-  const dtRaw = String(raw.dzialka_type || raw.land_purpose || (baseType === 'dzialka' ? subtype : '')).toLowerCase().trim();
+  let dtRaw = String(raw.dzialka_type || raw.land_purpose || (baseType === 'dzialka' ? subtype : '')).toLowerCase().trim();
+  // ── Fallback: wykryj podtyp z tytułu jeśli brak w DB ──
+  if (baseType === 'dzialka' && !dtRaw) {
+    const tb = String(raw.title || '').toLowerCase()
+                 .replace(/ą/g,'a').replace(/ę/g,'e').replace(/ś/g,'s')
+                 .replace(/ł/g,'l').replace(/ń/g,'n').replace(/ó/g,'o')
+                 .replace(/ż/g,'z').replace(/ź/g,'z').replace(/ć/g,'c');
+    if      (/budowlan/.test(tb))                             dtRaw = 'budowlana';
+    else if (/rolna|rolne|rolny|orna/.test(tb))               dtRaw = 'rolna';
+    else if (/rekreac|letnisk/.test(tb))                      dtRaw = 'rekreacyjna';
+    else if (/lesna|lasu|w lesie/.test(tb))                   dtRaw = 'lesna';
+    else if (/inwestyc|komercyj|uslugow|przemyslow/.test(tb)) dtRaw = 'inwestycyjna';
+  }
   const landPurpose = DZIALKA_TYPE_ALIAS[dtRaw] || (baseType === 'dzialka' ? dtRaw : '');
   const buildingType = raw.building_type || (baseType === 'dom' ? subtype : '');
 

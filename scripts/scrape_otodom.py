@@ -170,16 +170,25 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
     subtype_field = None
     if prop == "dzialka":
         subtype_source = str(item.get("dzialkaType") or item.get("estateType") or "").lower()
+        # Najpierw próba po polu z Otodomu, potem ZAWSZE fallback do tekstu (title+desc)
         for label, kws in DZIALKA_SUBTYPES:
-            if any(kw in subtype_source for kw in kws) or (not subtype_source and any(kw in text_blob for kw in kws)):
+            if any(kw in subtype_source for kw in kws):
                 subtype = label; break
+        if not subtype:
+            for label, kws in DZIALKA_SUBTYPES:
+                if any(kw in text_blob for kw in kws):
+                    subtype = label; break
         subtype_field = "dzialka_type"
         base = "działka"
     elif prop == "dom":
         subtype_source = str(item.get("buildingType") or item.get("houseType") or "").lower()
         for label, kws in DOM_SUBTYPES:
-            if any(kw in subtype_source for kw in kws) or (not subtype_source and any(kw in text_blob for kw in kws)):
+            if any(kw in subtype_source for kw in kws):
                 subtype = label; break
+        if not subtype:
+            for label, kws in DOM_SUBTYPES:
+                if any(kw in text_blob for kw in kws):
+                    subtype = label; break
         subtype_field = "building_type"
         base = "dom"
     else:  # mieszkanie

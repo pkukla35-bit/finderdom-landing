@@ -659,6 +659,23 @@ async function loadListings() {
     // Merge with dedup by URL (scraped takes priority — fresher data)
     const seenUrls = new Set(scrapedList.map(l => l.source_url || l.url));
     LISTINGS = [...scrapedList, ...staticList.filter(l => !seenUrls.has(l.source_url || l.url))];
+    // ── Enrich: uzupelnij land_purpose/dzialka_type dla static działek z tytulu ──
+    // (static listings.json nie ma tego pola, wiec autodetekcja z title)
+    LISTINGS.forEach(l => {
+      if (l.type !== 'dzialka') return;
+      if (l.land_purpose || l.dzialka_type) return;
+      const tb = String(l.title || '').toLowerCase()
+        .replace(/ą/g,'a').replace(/ę/g,'e').replace(/ś/g,'s')
+        .replace(/ł/g,'l').replace(/ń/g,'n').replace(/ó/g,'o')
+        .replace(/ż/g,'z').replace(/ź/g,'z').replace(/ć/g,'c');
+      let purpose = '';
+      if      (/budowlan/.test(tb))                             purpose = 'budowlana';
+      else if (/rolna|rolne|rolny|orna|uprawn/.test(tb))        purpose = 'rolna';
+      else if (/rekreac|letnisk|weekend|dzialka rod|ogrodow/.test(tb)) purpose = 'rekreacyjna';
+      else if (/lesna|lasu|w lesie|zalesion/.test(tb))          purpose = 'lesna';
+      else if (/inwestyc|komercyj|uslugow|przemyslow|zabudowa uslug/.test(tb)) purpose = 'inwestycyjna';
+      if (purpose) { l.land_purpose = purpose; l.dzialka_type = purpose; }
+    });
     console.log(`Loaded: ${staticList.length} static + ${scrapedList.length} scraped = ${LISTINGS.length} total`);
     count.textContent = LISTINGS.length;
     // Load CRM statuses for Firmowy user (async, non-blocking)

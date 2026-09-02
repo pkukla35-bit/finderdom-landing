@@ -1,0 +1,39 @@
+name: Backfill obrazków (Otodom)
+
+on:
+  workflow_dispatch:
+    inputs:
+      property:
+        description: 'Typ (empty = wszystkie)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - dzialka
+          - dom
+          - mieszkanie
+        default: ''
+      limit:
+        description: 'Max liczba ofert w tym run (default 1500)'
+        required: false
+        type: string
+        default: '1500'
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests pymongo
+      - name: Run backfill
+        run: |
+          ARGS="--limit ${{ inputs.limit || '1500' }} --workers 8"
+          if [ -n "${{ inputs.property }}" ]; then ARGS="$ARGS --property ${{ inputs.property }}"; fi
+          python scripts/backfill_images.py $ARGS
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}

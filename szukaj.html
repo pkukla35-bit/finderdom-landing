@@ -1350,17 +1350,19 @@ function applyAllFilters() {
   // Sortowanie
   const sortFuncs = {
     ai: (a, b) => {
+      // 1) FRESH multi-photo Apify listings ALWAYS win — świeże, wieloświatowe, z galerią
+      const freshA = (a.scraped_via === 'apify' && (a.images || []).length > 1) ? 0 : 1;
+      const freshB = (b.scraped_via === 'apify' && (b.images || []).length > 1) ? 0 : 1;
+      if (freshA !== freshB) return freshA - freshB;
+      // 2) W obrębie tej samej grupy — sortuj po verdict (okazje > normal > over)
       const order = { deal: 0, normal: 1, over: 2, outlier: 3 };
       const oa = order[a.verdict_badge] ?? 1, ob = order[b.verdict_badge] ?? 1;
       if (oa !== ob) return oa - ob;
-      // W tym samym tier: promuj świeże scraped oferty z wieloma zdjęciami (Apify > ScrapingBee > static)
-      const richA = (a.scraped_via === 'apify' && (a.images || []).length > 1) ? 0
-                  : (a.scraped_via === 'apify') ? 1
-                  : (a.scraped_via === 'scrapingbee') ? 2 : 3;
-      const richB = (b.scraped_via === 'apify' && (b.images || []).length > 1) ? 0
-                  : (b.scraped_via === 'apify') ? 1
-                  : (b.scraped_via === 'scrapingbee') ? 2 : 3;
+      // 3) Potem pozostałe scraped (Apify single-img, ScrapingBee) nad statycznymi
+      const richA = (a.scraped_via === 'apify') ? 0 : (a.scraped_via === 'scrapingbee') ? 1 : 2;
+      const richB = (b.scraped_via === 'apify') ? 0 : (b.scraped_via === 'scrapingbee') ? 1 : 2;
       if (richA !== richB) return richA - richB;
+      // 4) Wreszcie po AI delta
       return (a.ai_delta_pct || 0) - (b.ai_delta_pct || 0);
     },
     newest: (a, b) => (b.added_at || '').localeCompare(a.added_at || ''),

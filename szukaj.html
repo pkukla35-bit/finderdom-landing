@@ -122,6 +122,20 @@
   .card-img img.photo:not([src]),.card-img img.photo[src=""]{opacity:0}
   .card-img::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 40%,rgba(0,0,0,0.55));pointer-events:none;z-index:1}
   .card-img > *{position:relative;z-index:2}
+  /* ── Carousel arrows dla zdjęć Apify (multi-image) ── */
+  .card-img-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:3;
+    width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,0.55);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;
+    font-weight:700;cursor:pointer;opacity:0;transition:opacity .18s, background .18s;
+    border:none;line-height:1}
+  .card-img-nav:hover{background:rgba(255,184,0,0.9);color:#0B1836}
+  .card-img-nav.prev{left:8px}
+  .card-img-nav.next{right:8px}
+  .card-img:hover .card-img-nav{opacity:1}
+  .card-img-dots{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+    z-index:3;display:flex;gap:4px;opacity:0.9}
+  .card-img-dots .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.5);transition:background .15s}
+  .card-img-dots .dot.active{background:#FFB800}
   /* ── Elegancki placeholder gdy Otodom nie udostepnil zdjecia w API listy ── */
   .placeholder-box{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:rgba(255,255,255,0.85);text-align:center;padding:16px}
   .placeholder-box .ph-icon{font-size:52px;line-height:1;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.4));animation:phBob 3s ease-in-out infinite}
@@ -590,45 +604,28 @@ function normalizeScrapedListing(raw) {
   const imgClass = IMG_CLASSES[h % IMG_CLASSES.length];
 
   return {
-    id,
-    source: 'otodom',
-    source_url: raw.url,
-    url: raw.url,
-    type: baseType,
-    title: raw.title || 'Oferta',
-    location: '📍 ' + locStr,
-    city,
-    district,
-    price,
-    price_display: fmtPln(price),
+    id, source: 'otodom', source_url: raw.url, url: raw.url,
+    type: baseType, title: raw.title || 'Oferta',
+    location: '📍 ' + locStr, city, district,
+    price, price_display: fmtPln(price),
     price_pm2: ppm2,
     price_pm2_display: ppm2 ? (ppm2.toLocaleString('pl-PL').replace(/,/g,' ') + ' zł/m²') : '',
-    area_m2: area,
-    rooms: raw.rooms || 0,
-    floor: 0,
-    max_floor: 0,
-    year_built: 0,
-    build_year: 0,
-    standard: '',
+    area_m2: area, rooms: raw.rooms || 0,
+    floor: 0, max_floor: 0, year_built: 0, build_year: 0, standard: '',
     market_type: raw.market_type || '',
     transaction: raw.transaction_type || raw.transaction || 'sprzedaz',
     added_at: raw.added_at || new Date().toISOString(),
     image_url: raw.image || raw.image_url || '',
+    images: (raw.images && raw.images.length) ? raw.images.slice(0, 20) : (raw.image ? [raw.image] : []),
     emoji: TYPE_EMOJI[baseType] || '🏠',
-    img_class: imgClass,
-    portal: 'Otodom',
-    is_original: true,
-    seller_type: sellerType,
-    seller_label: sellerLabel,
-    verdict_badge: 'normal',
-    verdict_text: '✨ Nowa',
-    verdict_full: 'Świeżo zescrapowana',
-    ai_delta_pct: 0,
-    // subtype fields understood by filters
+    img_class: imgClass, portal: 'Otodom', is_original: true,
+    seller_type: sellerType, seller_label: sellerLabel,
+    verdict_badge: 'normal', verdict_text: '✨ Nowa',
+    verdict_full: 'Świeżo zescrapowana', ai_delta_pct: 0,
     dzialka_type: landPurpose || undefined,
     land_purpose: landPurpose || undefined,
     building_type: buildingType || undefined,
-    scraped_via: 'scrapingbee',
+    scraped_via: raw.scraped_via || 'scrapingbee',
   };
 }
 
@@ -736,10 +733,17 @@ function renderPage() {
     if (l.type === 'dom') specs += ' · 🏡 Dom';
     if (l.type === 'dzialka') specs += ' · 🌳 Działka';
     const targetUrl = `/oferta.html?id=${l.id}`;
-    const hasPhoto = !!l.image_url;
+    const allImages = (l.images && l.images.length > 0) ? l.images : (l.image_url ? [l.image_url] : []);
+    const hasPhoto = allImages.length > 0;
+    const imgList = allImages.slice(0, 15);  // max 15 zdjec per karta
     const photoHtml = hasPhoto
-      ? `<img class="photo" src="${l.image_url}" alt="" loading="lazy" decoding="async" onerror="this.remove();this.parentElement.classList.remove('has-photo')">`
+      ? `<img class="photo" data-imgs='${JSON.stringify(imgList).replace(/'/g, "&#39;")}' data-idx="0" src="${imgList[0]}" alt="" loading="lazy" decoding="async" onerror="this.remove();this.parentElement.classList.remove('has-photo')">`
       : '';
+    const carouselHtml = (hasPhoto && imgList.length > 1) ? `
+      <button class="card-img-nav prev" data-nav="prev" aria-label="Poprzednie zdjęcie">‹</button>
+      <button class="card-img-nav next" data-nav="next" aria-label="Następne zdjęcie">›</button>
+      <div class="card-img-dots">${imgList.map((_, i) => `<span class="dot${i===0?' active':''}"></span>`).join('')}</div>
+    ` : '';
     const emojiHtml = hasPhoto ? '' : `
       <div class="placeholder-box">
         <div class="ph-icon">${l.emoji || '🏠'}</div>
@@ -762,6 +766,7 @@ function renderPage() {
       <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="card">
         <div class="card-img ${l.img_class}${hasPhoto ? ' has-photo' : ''}">
           ${photoHtml}
+          ${carouselHtml}
           ${emojiHtml}
           <div class="card-badge b-${l.verdict_badge}">${l.verdict_text}</div>
           <div class="card-portal">${l.portal}</div>
@@ -787,6 +792,28 @@ function renderPage() {
     return cardHtml;
   }).join('');
   grid.innerHTML = cardsHtml;
+  // Delegated carousel navigation — click prev/next zmieniają zdjęcie bez otwierania oferty
+  if (!grid.dataset.carouselBound) {
+    grid.addEventListener('click', function(e) {
+      const btn = e.target.closest('[data-nav]');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const cardImg = btn.closest('.card-img');
+      const img = cardImg && cardImg.querySelector('img.photo');
+      if (!img) return;
+      let imgs;
+      try { imgs = JSON.parse(img.dataset.imgs || '[]'); } catch { imgs = []; }
+      if (imgs.length < 2) return;
+      let idx = parseInt(img.dataset.idx || '0', 10);
+      idx = btn.dataset.nav === 'next' ? (idx + 1) % imgs.length : (idx - 1 + imgs.length) % imgs.length;
+      img.dataset.idx = idx;
+      img.src = imgs[idx];
+      // update dots
+      cardImg.querySelectorAll('.card-img-dots .dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+    }, true);
+    grid.dataset.carouselBound = '1';
+  }
   // Reload ad slots after re-render
   if (window.FD_renderAllAds) window.FD_renderAllAds();
   // Load more button

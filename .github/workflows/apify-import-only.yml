@@ -1,0 +1,29 @@
+name: Apify import only (istniejący dataset)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dataset_id:
+        description: 'Dataset ID z Apify'
+        required: true
+        type: string
+      property:
+        description: 'Typ (hint)'
+        required: false
+        type: string
+        default: 'dzialka'
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pymongo
+      - env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+        run: python scripts/import_apify.py --dataset-id ${{ inputs.dataset_id }} --property ${{ inputs.property }}

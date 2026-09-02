@@ -40,6 +40,8 @@
     { "source": "/zespol", "destination": "/zespol.html" },
     { "source": "/blog", "destination": "/blog.html" },
     { "source": "/blog/:slug", "destination": "/blog/:slug.html" },
+    { "source": "/o-nas", "destination": "/o-nas.html" },
+    { "source": "/kontakt", "destination": "/kontakt.html" },
     { "source": "/regulamin", "destination": "/regulamin.html" },
     { "source": "/polityka-prywatnosci", "destination": "/polityka-prywatnosci.html" }
   ],

@@ -795,7 +795,7 @@ async def listings_scraped_endpoint():
         docs = await coll.find(
             {"scraped_via": "scrapingbee"},
             {"_id": 0}
-        ).to_list(length=20000)
+        ).to_list(length=60000)
         return {"listings": docs, "count": len(docs)}
     except Exception as e:
         logger.warning("listings-scraped error: %s", e)

@@ -190,10 +190,23 @@ def normalize(item: Dict[str, Any], city_name: str) -> Optional[Dict[str, Any]]:
     lon = _num((coords or {}).get("longitude"))
 
     # image
-    images = item.get("images") or []
+    # ── Obrazek — próba wielu wariantów Otodom API ──
     img_url = None
-    if images and isinstance(images[0], dict):
-        img_url = images[0].get("large") or images[0].get("medium") or images[0].get("small")
+    images = item.get("images") or item.get("photos") or []
+    if isinstance(images, list) and images:
+        if isinstance(images[0], dict):
+            img_url = (images[0].get("large") or images[0].get("medium")
+                       or images[0].get("small") or images[0].get("url"))
+        elif isinstance(images[0], str) and images[0].startswith("http"):
+            img_url = images[0]
+    if not img_url:
+        for key in ("image", "mainImage", "photoUrl", "thumbnail", "coverImage", "previewImage"):
+            v = item.get(key)
+            if isinstance(v, str) and v.startswith("http"):
+                img_url = v; break
+            if isinstance(v, dict):
+                img_url = v.get("large") or v.get("medium") or v.get("url") or v.get("src")
+                if img_url: break
 
     # Seller type (pośrednik vs prywatna vs deweloper)
     seller_type = "posrednik"

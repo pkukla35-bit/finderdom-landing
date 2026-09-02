@@ -31,10 +31,29 @@ USER_AGENTS = [
 
 OG_IMAGE_RE = re.compile(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', re.IGNORECASE)
 OG_IMAGE_REV_RE = re.compile(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']', re.IGNORECASE)
+OG_DESC_RE = re.compile(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']', re.IGNORECASE)
+OG_DESC_REV_RE = re.compile(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:description["\']', re.IGNORECASE)
+
+DZIALKA_KEYWORDS = [
+    ("budowlana",    [r"budowlan"]),
+    ("rolna",        [r"\brolna\b", r"\brolne\b", r"\brolny\b", r"\borna\b", r"uprawn"]),
+    ("rekreacyjna",  [r"rekreacyj", r"letnisk", r"weekend", r"\brod\b", r"ogrodow"]),
+    ("lesna",        [r"lesn", r"leśn", r"\blasu\b", r"w lesie", r"zalesion"]),
+    ("inwestycyjna", [r"inwestycyj", r"komercyj", r"usługow", r"uslugow", r"przemyslow", r"przemysłow"]),
+]
+
+def detect_purpose(text: str) -> str | None:
+    if not text: return None
+    t = text.lower()
+    for label, kws in DZIALKA_KEYWORDS:
+        for kw in kws:
+            if re.search(kw, t):
+                return label
+    return None
 
 
-def fetch_og_image(url: str, timeout: int = 10) -> tuple[str | None, str]:
-    """Pobierz og:image z strony Otodom. Zwraca (image_url, error_or_ok)."""
+def fetch_page(url: str, timeout: int = 10) -> tuple[str | None, str | None, str]:
+    """Pobierz stronę Otodom, zwróć (og:image, og:description, status)."""
     try:
         import random
         headers = {
@@ -45,22 +64,19 @@ def fetch_og_image(url: str, timeout: int = 10) -> tuple[str | None, str]:
         }
         r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
         if r.status_code != 200:
-            return None, f"HTTP {r.status_code}"
+            return None, None, f"HTTP {r.status_code}"
         html = r.text
-        m = OG_IMAGE_RE.search(html) or OG_IMAGE_REV_RE.search(html)
-        if not m:
-            return None, "no og:image"
-        img = m.group(1).strip()
-        # Filtruj placeholdery Otodom
-        if "no-thumbnail" in img.lower() or "placeholder" in img.lower():
-            return None, "placeholder"
-        if not img.startswith("http"):
-            return None, "invalid url"
-        return img, "ok"
+        m_img = OG_IMAGE_RE.search(html) or OG_IMAGE_REV_RE.search(html)
+        img = m_img.group(1).strip() if m_img else None
+        if img and ("no-thumbnail" in img.lower() or "placeholder" in img.lower() or not img.startswith("http")):
+            img = None
+        m_desc = OG_DESC_RE.search(html) or OG_DESC_REV_RE.search(html)
+        desc = m_desc.group(1).strip() if m_desc else None
+        return img, desc, "ok"
     except requests.Timeout:
-        return None, "timeout"
+        return None, None, "timeout"
     except Exception as e:
-        return None, f"err: {type(e).__name__}"
+        return None, None, f"err: {type(e).__name__}"
 
 
 def main():
@@ -78,47 +94,73 @@ def main():
     db = client[db_name]
     coll = db.listings
 
-    # Znajdz oferty z brakujacym obrazkiem
-    filt = {
-        "scraped_via": "scrapingbee",
-        "$or": [{"image": None}, {"image": ""}, {"image": {"$exists": False}}],
-    }
+    # Znajdz oferty do przetworzenia:
+    # - brak obrazka LUB (dzialka + brak dzialka_type)
+    filt = {"scraped_via": "scrapingbee"}
     if args.property:
-        # np. "dzialka" → dokumenty gdzie type zaczyna sie od "dzia" lub "dom" lub "mieszk"
         prefix = args.property[:4]
         filt["type"] = {"$regex": f"^{prefix}", "$options": "i"}
+    filt["$or"] = [
+        {"image": None}, {"image": ""}, {"image": {"$exists": False}},
+        # dzialki bez sklasyfikowanego przeznaczenia
+        {"$and": [
+            {"type": {"$regex": "^dzia", "$options": "i"}},
+            {"$or": [
+                {"dzialka_type": None},
+                {"dzialka_type": ""},
+                {"dzialka_type": {"$in": ["inne", "siedliskowa"]}},
+                {"dzialka_type": {"$exists": False}},
+            ]}
+        ]}
+    ]
 
     total = coll.count_documents(filt)
-    log.info(f"Znaleziono {total} ofert bez obrazka (limit: {args.limit})")
+    log.info(f"Znaleziono {total} ofert do backfillu (limit: {args.limit})")
 
-    docs = list(coll.find(filt, {"_id": 1, "url": 1, "external_id": 1}).limit(args.limit))
+    docs = list(coll.find(filt, {"_id": 1, "url": 1, "external_id": 1, "type": 1, "image": 1, "dzialka_type": 1, "title": 1}).limit(args.limit))
     if not docs:
         log.info("Nic do zrobienia."); return
 
     log.info(f"Przetwarzam {len(docs)} ofert w {args.workers} watkach…")
     ops = []
-    stats = {"ok": 0, "fail": 0}
+    stats = {"img_ok": 0, "purpose_ok": 0, "fail": 0}
     start = time.time()
 
     def process(doc):
         url = doc.get("url")
-        if not url: return doc, None, "no url"
-        img, status = fetch_og_image(url)
-        return doc, img, status
+        if not url: return doc, None, None, "no url"
+        img, desc, status = fetch_page(url)
+        return doc, img, desc, status
 
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         futures = {ex.submit(process, d): d for d in docs}
         for i, fut in enumerate(as_completed(futures), 1):
-            doc, img, status = fut.result()
-            if img:
-                ops.append(UpdateOne({"_id": doc["_id"]}, {"$set": {"image": img, "image_backfilled_at": datetime.now(timezone.utc).isoformat()}}))
-                stats["ok"] += 1
+            doc, img, desc, status = fut.result()
+            update = {}
+            # Obrazek (tylko jeśli brakuje)
+            if img and not doc.get("image"):
+                update["image"] = img
+                stats["img_ok"] += 1
+            # Przeznaczenie dzialki (tylko jeśli brakuje / inne / siedliskowa)
+            is_dzialka = str(doc.get("type","")).lower().startswith("dzia")
+            current_dt = doc.get("dzialka_type")
+            needs_purpose = is_dzialka and (not current_dt or current_dt in ("inne", "siedliskowa"))
+            if needs_purpose:
+                # Combine title + description for keyword scan
+                combined = (doc.get("title") or "") + " " + (desc or "")
+                purpose = detect_purpose(combined)
+                if purpose:
+                    update["dzialka_type"] = purpose
+                    stats["purpose_ok"] += 1
+            if update:
+                update["backfilled_at"] = datetime.now(timezone.utc).isoformat()
+                ops.append(UpdateOne({"_id": doc["_id"]}, {"$set": update}))
             else:
                 stats["fail"] += 1
             if i % 100 == 0:
                 elapsed = time.time() - start
                 rate = i / elapsed if elapsed > 0 else 0
-                log.info(f"  progress {i}/{len(docs)} | ok={stats['ok']} fail={stats['fail']} | {rate:.1f}/s")
+                log.info(f"  progress {i}/{len(docs)} | img={stats['img_ok']} purpose={stats['purpose_ok']} fail={stats['fail']} | {rate:.1f}/s")
 
     # Batch update MongoDB
     if ops:
@@ -131,7 +173,7 @@ def main():
                 log.warning(f"  bulk_write error: {e}")
 
     elapsed = time.time() - start
-    log.info(f"KONIEC: ok={stats['ok']} fail={stats['fail']} time={elapsed:.1f}s")
+    log.info(f"KONIEC: img_ok={stats['img_ok']} purpose_ok={stats['purpose_ok']} fail={stats['fail']} time={elapsed:.1f}s")
 
 
 if __name__ == "__main__":

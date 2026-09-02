@@ -38,6 +38,8 @@
     { "source": "/pomoc/wycena", "destination": "/pomoc-wycena.html" },
     { "source": "/pomoc/plany", "destination": "/pomoc-plany.html" },
     { "source": "/zespol", "destination": "/zespol.html" },
+    { "source": "/blog", "destination": "/blog.html" },
+    { "source": "/blog/:slug", "destination": "/blog/:slug.html" },
     { "source": "/regulamin", "destination": "/regulamin.html" },
     { "source": "/polityka-prywatnosci", "destination": "/polityka-prywatnosci.html" }
   ],

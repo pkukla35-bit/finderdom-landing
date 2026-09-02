@@ -109,7 +109,7 @@
   .results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
   .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;overflow:hidden;transition:all 0.25s;cursor:pointer;text-decoration:none;color:inherit;display:block}
   .card:hover{transform:translateY(-3px);border-color:rgba(255,184,0,0.35);box-shadow:0 12px 32px rgba(0,0,0,0.4)}
-  .card-img{width:100%;height:180px;position:relative;display:flex;align-items:center;justify-content:center;font-size:56px;background-size:cover;background-position:center;background-color:#0d1233}
+  .card-img{width:100%;height:180px;position:relative;display:flex;align-items:center;justify-content:center;background-size:cover;background-position:center;background-color:#0d1233;overflow:hidden}
   .card-img.i1{background:linear-gradient(135deg,#1a2e5c,#2d4a8a)}
   .card-img.i2{background:linear-gradient(135deg,#3d1e6b,#6b3aa8)}
   .card-img.i3{background:linear-gradient(135deg,#1e3a3d,#3a7b6b)}
@@ -117,11 +117,24 @@
   .card-img.i5{background:linear-gradient(135deg,#2a1e3d,#5a3a6b)}
   .card-img.i6{background:linear-gradient(135deg,#1a3d3a,#3a7b6b)}
   .card-img.has-photo{background-image:none;background-color:#0d1233}
-  .card-img.has-photo .placeholder-emoji{display:none}
+  .card-img.has-photo .placeholder-box{display:none}
   .card-img img.photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#0d1233;transition:opacity 0.2s}
   .card-img img.photo:not([src]),.card-img img.photo[src=""]{opacity:0}
   .card-img::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 40%,rgba(0,0,0,0.55));pointer-events:none;z-index:1}
   .card-img > *{position:relative;z-index:2}
+  /* ── Elegancki placeholder gdy Otodom nie udostepnil zdjecia w API listy ── */
+  .placeholder-box{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:rgba(255,255,255,0.85);text-align:center;padding:16px}
+  .placeholder-box .ph-icon{font-size:52px;line-height:1;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.4));animation:phBob 3s ease-in-out infinite}
+  .placeholder-box .ph-txt{font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.7);text-shadow:0 1px 2px rgba(0,0,0,0.5)}
+  .placeholder-box .ph-sub{font-size:10px;color:rgba(255,255,255,0.55);font-weight:600}
+  @keyframes phBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+  /* Subtelny pattern na tle placeholderów – rustykalne kropki */
+  .card-img:not(.has-photo)::before{content:"";position:absolute;inset:0;
+    background-image:radial-gradient(circle at 25% 30%,rgba(255,255,255,0.06) 1px,transparent 1px),
+                     radial-gradient(circle at 70% 65%,rgba(255,255,255,0.05) 1.5px,transparent 1.5px),
+                     radial-gradient(circle at 90% 15%,rgba(255,184,0,0.08) 1px,transparent 1px);
+    background-size:40px 40px, 60px 60px, 50px 50px;
+    opacity:0.9;z-index:1;pointer-events:none}
   .card-badge{position:absolute;top:10px;left:10px;padding:5px 10px;border-radius:100px;font-size:10px;font-weight:900;letter-spacing:0.5px;text-transform:uppercase;backdrop-filter:blur(10px)}
   .b-deal{background:rgba(34,197,94,0.95);color:#052e16}
   .b-normal{background:rgba(59,130,246,0.95);color:#0c1a3d}
@@ -710,7 +723,12 @@ function renderPage() {
     const photoHtml = hasPhoto
       ? `<img class="photo" src="${l.image_url}" alt="" loading="lazy" decoding="async" onerror="this.remove();this.parentElement.classList.remove('has-photo')">`
       : '';
-    const emojiHtml = hasPhoto ? '' : `<span class="placeholder-emoji">${l.emoji}</span>`;
+    const emojiHtml = hasPhoto ? '' : `
+      <div class="placeholder-box">
+        <div class="ph-icon">${l.emoji || '🏠'}</div>
+        <div class="ph-txt">${l.type === 'dzialka' ? 'Działka' : l.type === 'dom' ? 'Dom' : l.type === 'mieszkanie' ? 'Mieszkanie' : 'Nieruchomość'}</div>
+        <div class="ph-sub">📸 Zdjęcia u sprzedającego</div>
+      </div>`;
     // CRM status badge (Firmowy only)
     const crmSt = (window.CRM_STATUSES || {})[l.id];
     const crmBadgeHtml = crmSt ? (() => {

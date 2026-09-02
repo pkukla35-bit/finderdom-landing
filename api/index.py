@@ -793,7 +793,7 @@ async def listings_scraped_endpoint():
     try:
         coll = database().listings
         docs = await coll.find(
-            {"scraped_via": "scrapingbee"},
+            {"scraped_via": {"$in": ["scrapingbee", "apify"]}},
             {"_id": 0}
         ).to_list(length=60000)
         return {"listings": docs, "count": len(docs)}

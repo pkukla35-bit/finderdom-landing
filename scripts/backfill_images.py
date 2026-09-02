@@ -33,6 +33,12 @@ OG_IMAGE_RE = re.compile(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\
 OG_IMAGE_REV_RE = re.compile(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']', re.IGNORECASE)
 OG_DESC_RE = re.compile(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']', re.IGNORECASE)
 OG_DESC_REV_RE = re.compile(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:description["\']', re.IGNORECASE)
+NEXT_DATA_RE = re.compile(r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>([\s\S]+?)</script>', re.IGNORECASE)
+
+# Otodom zwraca w Next Data pole "typeLandName" po polsku lub "typeLand" po angielsku
+NEXT_LAND_TYPE_RE = re.compile(r'"(?:typeLand|typeLandName|landType|purposeType|estateType|buildingType|dzialkaType)"\s*:\s*"([^"]+)"', re.IGNORECASE)
+# Slowa w opisie/tytule sekcji "Rodzaj działki"
+RODZAJ_DZIALKI_RE = re.compile(r'rodzaj[^<:]{0,20}?dzia[lł]ki?[^<]{0,10}?[:<][^<]{0,60}?(budowl|roln|rekreacyj|leśn|lesn|inwestycyj|komercyj|usług|uslug|siedlisk)', re.IGNORECASE)
 
 DZIALKA_KEYWORDS = [
     ("budowlana",    [r"budowlan"]),
@@ -41,6 +47,17 @@ DZIALKA_KEYWORDS = [
     ("lesna",        [r"lesn", r"leśn", r"\blasu\b", r"w lesie", r"zalesion"]),
     ("inwestycyjna", [r"inwestycyj", r"komercyj", r"usługow", r"uslugow", r"przemyslow", r"przemysłow"]),
 ]
+
+# Mapowanie Otodom API typeLand → nasze
+OTODOM_LAND_MAP = {
+    "buildingland": "budowlana", "building_land": "budowlana", "budowlana": "budowlana",
+    "agriculturalland": "rolna", "agricultural_land": "rolna", "rolna": "rolna",
+    "recreationalland": "rekreacyjna", "recreational_land": "rekreacyjna", "rekreacyjna": "rekreacyjna",
+    "forestland": "lesna", "forest_land": "lesna", "leśna": "lesna", "lesna": "lesna",
+    "investmentland": "inwestycyjna", "commercialland": "inwestycyjna", "commercial_land": "inwestycyjna",
+    "usługowa": "inwestycyjna", "uslugowa": "inwestycyjna", "inwestycyjna": "inwestycyjna",
+    "otherland": None, "siedliskowa": None,
+}
 
 def detect_purpose(text: str) -> str | None:
     if not text: return None
@@ -52,8 +69,8 @@ def detect_purpose(text: str) -> str | None:
     return None
 
 
-def fetch_page(url: str, timeout: int = 10) -> tuple[str | None, str | None, str]:
-    """Pobierz stronę Otodom, zwróć (og:image, og:description, status)."""
+def fetch_page(url: str, timeout: int = 10) -> tuple[str | None, str | None, str | None, str]:
+    """Pobierz stronę Otodom. Zwraca (og:image, og:description, land_purpose_from_json, status)."""
     try:
         import random
         headers = {
@@ -64,19 +81,37 @@ def fetch_page(url: str, timeout: int = 10) -> tuple[str | None, str | None, str
         }
         r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
         if r.status_code != 200:
-            return None, None, f"HTTP {r.status_code}"
+            return None, None, None, f"HTTP {r.status_code}"
         html = r.text
+        # Image
         m_img = OG_IMAGE_RE.search(html) or OG_IMAGE_REV_RE.search(html)
         img = m_img.group(1).strip() if m_img else None
         if img and ("no-thumbnail" in img.lower() or "placeholder" in img.lower() or not img.startswith("http")):
             img = None
+        # Description
         m_desc = OG_DESC_RE.search(html) or OG_DESC_REV_RE.search(html)
         desc = m_desc.group(1).strip() if m_desc else None
-        return img, desc, "ok"
+        # Land purpose z __NEXT_DATA__ JSON (najbardziej wiarygodne)
+        purpose_from_json = None
+        m_next = NEXT_DATA_RE.search(html)
+        if m_next:
+            for m in NEXT_LAND_TYPE_RE.finditer(m_next.group(1)):
+                v = m.group(1).lower().strip()
+                mapped = OTODOM_LAND_MAP.get(v) or detect_purpose(v)
+                if mapped:
+                    purpose_from_json = mapped
+                    break
+        # Fallback: sekcja "Rodzaj działki" w HTML
+        if not purpose_from_json:
+            m_rodzaj = RODZAJ_DZIALKI_RE.search(html)
+            if m_rodzaj:
+                key = m_rodzaj.group(1).lower()
+                purpose_from_json = detect_purpose(key)
+        return img, desc, purpose_from_json, "ok"
     except requests.Timeout:
-        return None, None, "timeout"
+        return None, None, None, "timeout"
     except Exception as e:
-        return None, None, f"err: {type(e).__name__}"
+        return None, None, None, f"err: {type(e).__name__}"
 
 
 def main():
@@ -128,27 +163,30 @@ def main():
 
     def process(doc):
         url = doc.get("url")
-        if not url: return doc, None, None, "no url"
-        img, desc, status = fetch_page(url)
-        return doc, img, desc, status
+        if not url: return doc, None, None, None, "no url"
+        img, desc, purpose_json, status = fetch_page(url)
+        return doc, img, desc, purpose_json, status
 
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         futures = {ex.submit(process, d): d for d in docs}
         for i, fut in enumerate(as_completed(futures), 1):
-            doc, img, desc, status = fut.result()
+            doc, img, desc, purpose_json, status = fut.result()
             update = {}
             # Obrazek (tylko jeśli brakuje)
             if img and not doc.get("image"):
                 update["image"] = img
                 stats["img_ok"] += 1
-            # Przeznaczenie dzialki (tylko jeśli brakuje / inne / siedliskowa)
+            # Przeznaczenie dzialki
             is_dzialka = str(doc.get("type","")).lower().startswith("dzia")
             current_dt = doc.get("dzialka_type")
             needs_purpose = is_dzialka and (not current_dt or current_dt in ("inne", "siedliskowa"))
             if needs_purpose:
-                # Combine title + description for keyword scan
-                combined = (doc.get("title") or "") + " " + (desc or "")
-                purpose = detect_purpose(combined)
+                # 1) __NEXT_DATA__ (najbardziej wiarygodne)
+                purpose = purpose_json
+                # 2) title + description keywords
+                if not purpose:
+                    combined = (doc.get("title") or "") + " " + (desc or "")
+                    purpose = detect_purpose(combined)
                 if purpose:
                     update["dzialka_type"] = purpose
                     stats["purpose_ok"] += 1

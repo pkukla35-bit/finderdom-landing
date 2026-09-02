@@ -99,16 +99,42 @@
 
   /* Photos */
   .gallery{background:rgba(255,255,255,0.03);border-radius:20px;overflow:hidden}
-  .gallery-main{width:100%;height:480px;background:linear-gradient(135deg,#1a2e5c,#2d4a8a);display:flex;align-items:center;justify-content:center;font-size:120px;position:relative}
-  .gallery-badges{position:absolute;top:16px;left:16px;display:flex;gap:8px;flex-wrap:wrap}
+  .gallery-main{width:100%;height:480px;background:linear-gradient(135deg,#1a2e5c,#2d4a8a);display:flex;align-items:center;justify-content:center;font-size:120px;position:relative;cursor:zoom-in;user-select:none}
+  .gallery-badges{position:absolute;top:16px;left:16px;display:flex;gap:8px;flex-wrap:wrap;z-index:3}
   .gallery-badges .b{padding:6px 12px;border-radius:100px;font-size:11px;font-weight:900;letter-spacing:0.5px;text-transform:uppercase;backdrop-filter:blur(10px)}
   .b-deal{background:rgba(34,197,94,0.95);color:#052e16}
   .b-portal{background:rgba(0,0,0,0.7);color:#fff}
   .b-source{position:absolute !important;top:16px;right:16px;background:rgba(0,0,0,0.7);color:#FFB800 !important;padding:8px 14px;border-radius:10px;font-size:11px;font-weight:800;letter-spacing:0.5px;text-decoration:none !important;text-transform:uppercase;backdrop-filter:blur(10px);z-index:5}
   .b-source:hover{background:#FFB800;color:#0B1836 !important}
-  .gallery-thumbs{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;padding:8px}
-  .thumb{aspect-ratio:1;background:linear-gradient(135deg,#2d4a8a,#1a2e5c);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;transition:opacity 0.2s;opacity:0.7}
-  .thumb:hover,.thumb.active{opacity:1;box-shadow:0 0 0 2px #FFB800}
+  /* Nav arrows */
+  .gallery-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:4;
+    width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,0.65);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:30px;
+    font-weight:700;cursor:pointer;opacity:0.9;transition:opacity .18s,background .18s,transform .12s;
+    border:none;line-height:1;padding:0;backdrop-filter:blur(4px);
+    box-shadow:0 4px 12px rgba(0,0,0,0.4);-webkit-tap-highlight-color:transparent}
+  .gallery-nav:hover{background:rgba(255,184,0,0.95);color:#0B1836;opacity:1;transform:translateY(-50%) scale(1.06)}
+  .gallery-nav:active{transform:translateY(-50%) scale(0.94)}
+  .gallery-nav.prev{left:16px}
+  .gallery-nav.next{right:16px}
+  .gallery-nav[disabled]{opacity:0.3;cursor:default;pointer-events:none}
+  .gallery-count{position:absolute;bottom:16px;right:16px;z-index:3;background:rgba(0,0,0,0.75);color:#fff;padding:6px 14px;border-radius:100px;font-size:13px;font-weight:800;display:flex;align-items:center;gap:6px;backdrop-filter:blur(6px);pointer-events:none}
+  .gallery-dots{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:3;display:flex;gap:6px;background:rgba(0,0,0,0.4);padding:6px 10px;border-radius:100px;backdrop-filter:blur(6px);pointer-events:none;max-width:70%;overflow:hidden}
+  .gallery-dots .dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,0.55);flex-shrink:0;transition:background .15s,width .15s}
+  .gallery-dots .dot.active{background:#FFB800;width:20px;border-radius:8px}
+  .gallery-thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;padding:10px;background:rgba(0,0,0,0.25)}
+  .thumb{aspect-ratio:4/3;background:linear-gradient(135deg,#2d4a8a,#1a2e5c);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;transition:opacity 0.2s, transform .15s;opacity:0.65;position:relative;overflow:hidden;border:none;padding:0}
+  .thumb:hover{opacity:0.9;transform:translateY(-2px)}
+  .thumb.active{opacity:1;box-shadow:0 0 0 3px #FFB800}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  /* Lightbox */
+  .lightbox{position:fixed;inset:0;background:rgba(0,0,0,0.94);z-index:9999;display:none;align-items:center;justify-content:center;padding:20px}
+  .lightbox.open{display:flex}
+  .lightbox img{max-width:100%;max-height:100%;object-fit:contain;user-select:none;box-shadow:0 8px 32px rgba(0,0,0,0.6)}
+  .lightbox-close{position:absolute;top:20px;right:24px;width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,0.15);color:#fff;font-size:28px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);z-index:10000;line-height:1}
+  .lightbox-close:hover{background:rgba(255,184,0,0.9);color:#0B1836}
+  .lightbox .gallery-nav{background:rgba(255,255,255,0.15);width:56px;height:56px;font-size:36px}
+  .lightbox .gallery-count{bottom:24px;font-size:14px}
 
   /* Title bar */
   .title-block{margin-top:24px;padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.08)}
@@ -263,7 +289,20 @@
           <span class="b b-portal" id="portalBadge">Otodom</span>
         </div>
         <a id="sourceLink" href="#" target="_blank" rel="noopener" class="b-source">Zobacz na Otodom ↗</a>
+        <button class="gallery-nav prev" id="galPrev" type="button" aria-label="Poprzednie zdjęcie" style="display:none">‹</button>
+        <button class="gallery-nav next" id="galNext" type="button" aria-label="Następne zdjęcie" style="display:none">›</button>
+        <div class="gallery-count" id="galCount" style="display:none">📸 <span id="galCurNum">1</span>/<span id="galTotalNum">1</span></div>
+        <div class="gallery-dots" id="galDots" style="display:none"></div>
       </div>
+      <div class="gallery-thumbs" id="galleryThumbs" style="display:none"></div>
+    </div>
+    <!-- Lightbox (fullscreen zoom) -->
+    <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Podgląd zdjęcia">
+      <button class="lightbox-close" id="lbClose" type="button" aria-label="Zamknij">✕</button>
+      <button class="gallery-nav prev" id="lbPrev" type="button" aria-label="Poprzednie zdjęcie">‹</button>
+      <img id="lbImg" alt="">
+      <button class="gallery-nav next" id="lbNext" type="button" aria-label="Następne zdjęcie">›</button>
+      <div class="gallery-count" id="lbCount">📸 <span id="lbCurNum">1</span>/<span id="lbTotalNum">1</span></div>
     </div>
 
     <!-- Title -->
@@ -697,6 +736,7 @@ function normalizeScrapedListing(raw) {
     transaction: raw.transaction_type || raw.transaction || 'sprzedaz',
     added_at: raw.added_at || new Date().toISOString(),
     image_url: raw.image || raw.image_url || '',
+    images: (Array.isArray(raw.images) && raw.images.length) ? raw.images.slice(0, 30) : ((raw.image || raw.image_url) ? [raw.image || raw.image_url] : []),
     emoji: TYPE_EMOJI_OFF[baseType] || '🏠',
     img_class: imgClass, portal: 'Otodom', is_original: true,
     seller_type: sellerType, seller_label: sellerLabel,
@@ -705,7 +745,7 @@ function normalizeScrapedListing(raw) {
     dzialka_type: landPurpose || undefined,
     land_purpose: landPurpose || undefined,
     building_type: buildingType || undefined,
-    scraped_via: 'scrapingbee',
+    scraped_via: raw.scraped_via || 'scrapingbee',
   };
 }
 
@@ -828,17 +868,148 @@ function renderOffer(l, all) {
   el('pageTitle').textContent = document.title;
   el('bcType').textContent = TYPE_LABEL[l.type] || 'Oferta';
 
-  // Photo
-  if (l.image_url) {
-    el('galleryPhoto').src = l.image_url;
-    el('galleryPhoto').style.display = 'block';
-    el('galleryEmoji').style.display = 'none';
-    el('galleryPhoto').onerror = () => {
-      el('galleryPhoto').style.display = 'none';
-      el('galleryEmoji').style.display = 'block';
+  // Photo gallery — supports multi-image (Apify) + fallback do jednego zdjecia / emoji
+  const galleryImgs = (Array.isArray(l.images) && l.images.length > 0)
+    ? l.images.filter(Boolean)
+    : (l.image_url ? [l.image_url] : []);
+  window.__galImgs = galleryImgs;
+  window.__galIdx = 0;
+  const galPhoto = el('galleryPhoto');
+  const galEmoji = el('galleryEmoji');
+  const galPrev = el('galPrev');
+  const galNext = el('galNext');
+  const galCount = el('galCount');
+  const galDots = el('galDots');
+  const galThumbs = el('galleryThumbs');
+
+  function showGalIdx(i) {
+    const imgs = window.__galImgs || [];
+    if (!imgs.length) return;
+    window.__galIdx = ((i % imgs.length) + imgs.length) % imgs.length;
+    galPhoto.src = imgs[window.__galIdx];
+    el('galCurNum').textContent = String(window.__galIdx + 1);
+    // update dots
+    galDots.querySelectorAll('.dot').forEach((d, di) => d.classList.toggle('active', di === window.__galIdx));
+    // update thumbs
+    galThumbs.querySelectorAll('.thumb').forEach((t, ti) => t.classList.toggle('active', ti === window.__galIdx));
+    // scroll active thumb into view horizontally
+    const activeThumb = galThumbs.querySelector('.thumb.active');
+    if (activeThumb && activeThumb.scrollIntoView) {
+      try { activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }); } catch(e){}
+    }
+    // update lightbox if open
+    if (el('lightbox').classList.contains('open')) {
+      el('lbImg').src = imgs[window.__galIdx];
+      el('lbCurNum').textContent = String(window.__galIdx + 1);
+    }
+  }
+
+  if (galleryImgs.length > 0) {
+    galPhoto.src = galleryImgs[0];
+    galPhoto.style.display = 'block';
+    galEmoji.style.display = 'none';
+    galPhoto.onerror = () => {
+      // If image fails, try next; if all fail — fallback emoji
+      const imgs = window.__galImgs || [];
+      if (imgs.length > 1 && window.__galIdx < imgs.length - 1) {
+        showGalIdx(window.__galIdx + 1);
+      } else {
+        galPhoto.style.display = 'none';
+        galEmoji.style.display = 'block';
+      }
     };
   } else {
-    el('galleryEmoji').textContent = l.emoji || '🏢';
+    galEmoji.textContent = l.emoji || '🏢';
+    galEmoji.style.display = 'block';
+    galPhoto.style.display = 'none';
+  }
+
+  // Show/hide multi-image controls
+  if (galleryImgs.length > 1) {
+    galPrev.style.display = 'flex';
+    galNext.style.display = 'flex';
+    galCount.style.display = 'flex';
+    el('galTotalNum').textContent = String(galleryImgs.length);
+    // Render dots (max 10 wizualnie, wyciszenie żeby nie zapełniało)
+    const maxDots = Math.min(galleryImgs.length, 12);
+    galDots.innerHTML = Array.from({length: galleryImgs.length}, (_, i) => `<span class="dot${i===0?' active':''}"></span>`).join('');
+    galDots.style.display = 'flex';
+    // Render thumbnails
+    galThumbs.innerHTML = galleryImgs.map((src, i) =>
+      `<button class="thumb${i===0?' active':''}" type="button" data-thumb-idx="${i}" aria-label="Zdjęcie ${i+1}"><img src="${src}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'"></button>`
+    ).join('');
+    galThumbs.style.display = 'grid';
+  } else {
+    galPrev.style.display = 'none';
+    galNext.style.display = 'none';
+    galCount.style.display = 'none';
+    galDots.style.display = 'none';
+    galThumbs.style.display = 'none';
+  }
+
+  // Bind gallery navigation (once)
+  if (!window.__galBound) {
+    window.__galBound = true;
+    galPrev.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); showGalIdx((window.__galIdx || 0) - 1); });
+    galNext.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); showGalIdx((window.__galIdx || 0) + 1); });
+    // Thumb clicks
+    galThumbs.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-thumb-idx]');
+      if (!t) return;
+      e.preventDefault();
+      showGalIdx(parseInt(t.dataset.thumbIdx, 10));
+    });
+    // Keyboard arrows
+    document.addEventListener('keydown', (e) => {
+      if (!window.__galImgs || window.__galImgs.length < 2) return;
+      const isLbOpen = el('lightbox').classList.contains('open');
+      if (e.key === 'ArrowLeft')  { showGalIdx((window.__galIdx || 0) - 1); }
+      else if (e.key === 'ArrowRight') { showGalIdx((window.__galIdx || 0) + 1); }
+      else if (e.key === 'Escape' && isLbOpen) { closeLightbox(); }
+    });
+    // Touch swipe on main image
+    let tsX = 0, tsY = 0, tsActive = false;
+    el('galleryMain').addEventListener('touchstart', (e) => {
+      if (!window.__galImgs || window.__galImgs.length < 2) return;
+      tsX = e.touches[0].clientX; tsY = e.touches[0].clientY; tsActive = true;
+    }, { passive: true });
+    el('galleryMain').addEventListener('touchend', (e) => {
+      if (!tsActive) return;
+      tsActive = false;
+      const dx = e.changedTouches[0].clientX - tsX;
+      const dy = e.changedTouches[0].clientY - tsY;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        showGalIdx((window.__galIdx || 0) + (dx < 0 ? 1 : -1));
+      }
+    });
+    // Lightbox — open on main-image click
+    el('galleryMain').addEventListener('click', (e) => {
+      if (e.target.closest('.gallery-nav')) return;
+      if (e.target.closest('.b-source')) return;
+      if (!window.__galImgs || !window.__galImgs.length) return;
+      openLightbox();
+    });
+    el('lbClose').addEventListener('click', closeLightbox);
+    el('lightbox').addEventListener('click', (e) => {
+      if (e.target === el('lightbox')) closeLightbox();
+    });
+    el('lbPrev').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); showGalIdx((window.__galIdx || 0) - 1); });
+    el('lbNext').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); showGalIdx((window.__galIdx || 0) + 1); });
+  }
+
+  window.__showGalIdx = showGalIdx;
+  function openLightbox() {
+    const imgs = window.__galImgs || [];
+    if (!imgs.length) return;
+    el('lbImg').src = imgs[window.__galIdx || 0];
+    el('lbCurNum').textContent = String((window.__galIdx || 0) + 1);
+    el('lbTotalNum').textContent = String(imgs.length);
+    el('lightbox').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeLightbox() {
+    el('lightbox').classList.remove('open');
+    document.body.style.overflow = '';
   }
 
   // Verdict badge

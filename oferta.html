@@ -582,10 +582,22 @@ async function loadOffer() {
   let id = params.get('id');
 
   try {
-    const r = await fetch('/data/listings.json?v=' + Date.now());
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const data = await r.json();
-    const listings = data.listings || [];
+    const [staticRes, scrapedRes] = await Promise.allSettled([
+      fetch('/data/listings.json?v=' + Date.now()),
+      fetch('/api/listings-scraped')
+    ]);
+    if (staticRes.status !== 'fulfilled' || !staticRes.value.ok) throw new Error('static fail');
+    const data = await staticRes.value.json();
+    const staticList = data.listings || [];
+    // Load scraped and normalize to same schema
+    let scrapedList = [];
+    if (scrapedRes.status === 'fulfilled' && scrapedRes.value.ok) {
+      const d = await scrapedRes.value.json();
+      scrapedList = (d.listings || []).map(normalizeScrapedListing).filter(Boolean);
+    }
+    // Dedup by URL: scraped priority
+    const scrapedUrls = new Set(scrapedList.map(l => l.source_url || l.url));
+    const listings = [...scrapedList, ...staticList.filter(l => !scrapedUrls.has(l.source_url || l.url))];
     if (!listings.length) { showError(); return; }
 
     let offer;
@@ -615,6 +627,88 @@ async function loadOffer() {
     showError();
   }
 }
+
+// ─── Normalize scraped MongoDB listing → same schema as static listings.json ───
+// (kopia z szukaj.html — trzymamy jedna zrodlowa logike w obu miejscach)
+const TYPE_EMOJI_OFF = { mieszkanie: '🏢', dom: '🏡', dzialka: '🌳', lokal: '🏪', garaz: '🅿️', magazyn: '🏭' };
+const IMG_CLASSES_OFF = ['i1','i2','i3','i4','i5','i6','i7','i8'];
+const DZIALKA_TYPE_ALIAS_OFF = {
+  'lesna': 'lesna', 'leśna': 'lesna', 'leśn': 'lesna',
+  'usługowa': 'inwestycyjna', 'uslugowa': 'inwestycyjna',
+  'komercyjna': 'inwestycyjna', 'inwestycyjna': 'inwestycyjna',
+  'budowlana': 'budowlana', 'rolna': 'rolna', 'rekreacyjna': 'rekreacyjna',
+};
+function fmtPlnOff(n) {
+  if (n == null || !isFinite(n)) return '';
+  return Math.round(n).toLocaleString('pl-PL').replace(/,/g, ' ') + ' zł';
+}
+function normalizeScrapedListing(raw) {
+  if (!raw || !raw.external_id) return null;
+  const t = String(raw.type || '').toLowerCase();
+  let baseType = 'mieszkanie', subtype = '';
+  if (t.includes('dzia') || t.includes('działk')) baseType = 'dzialka';
+  else if (t.startsWith('dom'))                    baseType = 'dom';
+  else if (t.startsWith('mieszk'))                 baseType = 'mieszkanie';
+  else if (t.includes('lokal'))                    baseType = 'lokal';
+  else if (t.includes('garaz') || t.includes('garaż')) baseType = 'garaz';
+  else if (t.includes('magazyn'))                  baseType = 'magazyn';
+  const parts = t.split(/\s+/);
+  if (parts.length > 1) subtype = parts.slice(1).join(' ');
+  let dtRaw = String(raw.dzialka_type || raw.land_purpose || (baseType === 'dzialka' ? subtype : '')).toLowerCase().trim();
+  if (baseType === 'dzialka' && !dtRaw) {
+    const tb = String(raw.title || '').toLowerCase()
+      .replace(/ą/g,'a').replace(/ę/g,'e').replace(/ś/g,'s')
+      .replace(/ł/g,'l').replace(/ń/g,'n').replace(/ó/g,'o')
+      .replace(/ż/g,'z').replace(/ź/g,'z').replace(/ć/g,'c');
+    if      (/budowlan/.test(tb)) dtRaw = 'budowlana';
+    else if (/rolna|rolne|rolny|orna/.test(tb)) dtRaw = 'rolna';
+    else if (/rekreac|letnisk/.test(tb)) dtRaw = 'rekreacyjna';
+    else if (/lesna|lasu|w lesie/.test(tb)) dtRaw = 'lesna';
+    else if (/inwestyc|komercyj|uslugow|przemyslow/.test(tb)) dtRaw = 'inwestycyjna';
+  }
+  const landPurpose = DZIALKA_TYPE_ALIAS_OFF[dtRaw] || (baseType === 'dzialka' ? dtRaw : '');
+  const buildingType = raw.building_type || (baseType === 'dom' ? subtype : '');
+  const id = 'otodom-' + raw.external_id;
+  const price = Number(raw.price) || 0;
+  const area  = Number(raw.area_m2) || 0;
+  const ppm2  = Number(raw.price_pm2) || (price && area ? Math.round(price / area) : 0);
+  const city = raw.city || '';
+  let district = '';
+  if (raw.location && raw.location.includes(',')) {
+    const p = raw.location.split(',').map(s => s.trim()).filter(Boolean);
+    if (p.length >= 2) district = p.slice(1).join(', ');
+  }
+  const locStr = raw.location || city || '';
+  const sellerType = raw.seller_type || 'posrednik';
+  const sellerLabel = sellerType === 'prywatna' ? '👨‍👩‍👧 Prywatna' : '🏢 Pośrednik';
+  let h = 0;
+  for (let i = 0; i < raw.external_id.length; i++) h = (h * 31 + raw.external_id.charCodeAt(i)) & 0xffff;
+  const imgClass = IMG_CLASSES_OFF[h % IMG_CLASSES_OFF.length];
+  return {
+    id, source: 'otodom', source_url: raw.url, url: raw.url,
+    type: baseType, title: raw.title || 'Oferta',
+    location: '📍 ' + locStr, city, district,
+    price, price_display: fmtPlnOff(price),
+    price_pm2: ppm2,
+    price_pm2_display: ppm2 ? (ppm2.toLocaleString('pl-PL').replace(/,/g,' ') + ' zł/m²') : '',
+    area_m2: area, rooms: raw.rooms || 0,
+    floor: 0, max_floor: 0, year_built: 0, build_year: 0, standard: '',
+    market_type: raw.market_type || '',
+    transaction: raw.transaction_type || raw.transaction || 'sprzedaz',
+    added_at: raw.added_at || new Date().toISOString(),
+    image_url: raw.image || raw.image_url || '',
+    emoji: TYPE_EMOJI_OFF[baseType] || '🏠',
+    img_class: imgClass, portal: 'Otodom', is_original: true,
+    seller_type: sellerType, seller_label: sellerLabel,
+    verdict_badge: 'normal', verdict_text: '✨ Nowa',
+    verdict_full: 'Świeżo zescrapowana', ai_delta_pct: 0,
+    dzialka_type: landPurpose || undefined,
+    land_purpose: landPurpose || undefined,
+    building_type: buildingType || undefined,
+    scraped_via: 'scrapingbee',
+  };
+}
+
 
 // --- CRM Statuses (Firmowy) ---
 const CRM_LABELS = {

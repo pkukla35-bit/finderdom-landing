@@ -659,8 +659,21 @@ async function loadListings() {
     if (scrapedRes.status === 'fulfilled' && scrapedRes.value.ok) {
       const d = await scrapedRes.value.json();
       const raw = d.listings || [];
-      scrapedList = raw.map(normalizeScrapedListing).filter(Boolean);
-      console.log(`Scraped raw=${raw.length} normalized=${scrapedList.length}`);
+      // ── Dedup wewnątrz scraped: apify > scrapingbee dla tego samego URL/external_id
+      const scrapedByKey = new Map();
+      for (const r of raw) {
+        const key = r.url || r.external_id;
+        if (!key) continue;
+        const existing = scrapedByKey.get(key);
+        if (!existing) { scrapedByKey.set(key, r); continue; }
+        const priorityOf = (x) => x.scraped_via === 'apify' ? 2 : x.scraped_via === 'scrapingbee' ? 1 : 0;
+        const pE = priorityOf(existing), pR = priorityOf(r);
+        if (pR > pE) { scrapedByKey.set(key, r); }
+        else if (pR === pE && (r.added_at || '') > (existing.added_at || '')) { scrapedByKey.set(key, r); }
+      }
+      const deduped = Array.from(scrapedByKey.values());
+      scrapedList = deduped.map(normalizeScrapedListing).filter(Boolean);
+      console.log(`Scraped raw=${raw.length} deduped=${deduped.length} normalized=${scrapedList.length}`);
       if (raw[0]) console.log('sample raw:', raw[0]);
       if (scrapedList[0]) console.log('sample normalized:', scrapedList[0]);
     }

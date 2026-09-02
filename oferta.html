@@ -629,11 +629,25 @@ async function loadOffer() {
     const data = await staticRes.value.json();
     const staticList = data.listings || [];
     // Load scraped and normalize to same schema
-    let scrapedList = [];
+    let scrapedRaw = [];
     if (scrapedRes.status === 'fulfilled' && scrapedRes.value.ok) {
       const d = await scrapedRes.value.json();
-      scrapedList = (d.listings || []).map(normalizeScrapedListing).filter(Boolean);
+      scrapedRaw = d.listings || [];
     }
+    // ── Dedup wewnątrz scraped: apify > scrapingbee dla tego samego URL/external_id
+    const scrapedByKey = new Map();
+    for (const raw of scrapedRaw) {
+      const key = raw.url || raw.external_id;
+      if (!key) continue;
+      const existing = scrapedByKey.get(key);
+      if (!existing) { scrapedByKey.set(key, raw); continue; }
+      // Priorytety: apify > scrapingbee; przy remisie - nowszy added_at
+      const priorityOf = (r) => r.scraped_via === 'apify' ? 2 : r.scraped_via === 'scrapingbee' ? 1 : 0;
+      const pE = priorityOf(existing), pR = priorityOf(raw);
+      if (pR > pE) { scrapedByKey.set(key, raw); }
+      else if (pR === pE && (raw.added_at || '') > (existing.added_at || '')) { scrapedByKey.set(key, raw); }
+    }
+    const scrapedList = Array.from(scrapedByKey.values()).map(normalizeScrapedListing).filter(Boolean);
     // Dedup by URL: scraped priority
     const scrapedUrls = new Set(scrapedList.map(l => l.source_url || l.url));
     const listings = [...scrapedList, ...staticList.filter(l => !scrapedUrls.has(l.source_url || l.url))];

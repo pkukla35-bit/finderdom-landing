@@ -1,0 +1,66 @@
+name: Cleanup old Apify offers (>30 days)
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Wyrzuc oferty starsze niz N dni'
+        required: true
+        type: string
+        default: '30'
+      dry_run:
+        description: 'Tylko podglad (nie usuwaj)'
+        required: false
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+        default: 'no'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pymongo
+      - name: Cleanup
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+        run: |
+          python3 <<'EOF'
+          import os
+          from datetime import datetime, timezone, timedelta
+          from pymongo import MongoClient
+
+          days = int(os.environ.get('DAYS', '${{ inputs.days }}'))
+          dry = '${{ inputs.dry_run }}' == 'yes'
+          cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+          print(f'Cutoff: {cutoff}  (usuwam apify offers z posted_at < cutoff)')
+
+          client = MongoClient(os.environ['MONGODB_URI'])
+          db = client[os.environ.get('MONGODB_DB', 'finderdom')]
+
+          # 1) apify + posted_at zbyt stary
+          q1 = {'scraped_via': 'apify', 'posted_at': {'$ne': None, '$lt': cutoff}}
+          n1 = db.listings.count_documents(q1)
+          print(f'  posted_at < {days}d: {n1} do usuniecia')
+
+          # 2) apify + posted_at == None (niedatowane) - te tez usuwamy
+          q2 = {'scraped_via': 'apify', 'posted_at': None}
+          n2 = db.listings.count_documents(q2)
+          print(f'  posted_at IS NULL: {n2} do usuniecia (undated)')
+
+          if not dry:
+              r1 = db.listings.delete_many(q1)
+              print(f'  Usunieto starych: {r1.deleted_count}')
+              r2 = db.listings.delete_many(q2)
+              print(f'  Usunieto undated: {r2.deleted_count}')
+              # Ile zostalo apify
+              total_remaining = db.listings.count_documents({'scraped_via': 'apify'})
+              print(f'  Pozostalo apify: {total_remaining}')
+          else:
+              print(f'  DRY RUN - nic nie usunieto')
+          EOF

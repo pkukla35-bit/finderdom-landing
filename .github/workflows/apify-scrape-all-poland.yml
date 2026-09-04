@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       property:
-        description: 'Typ nieruchomości'
+        description: 'Typ nieruchomosci'
         required: true
         type: choice
         options:
@@ -23,9 +23,27 @@ on:
         required: false
         type: string
         default: '85'
+      days:
+        description: 'Ostatnie N dni (dateFrom = today - N)'
+        required: false
+        type: string
+        default: '30'
 
 jobs:
+  compute-date:
+    runs-on: ubuntu-latest
+    outputs:
+      date_from: ${{ steps.d.outputs.date_from }}
+    steps:
+      - id: d
+        run: |
+          DAYS="${{ inputs.days }}"
+          DATE_FROM=$(date -u -d "$DAYS days ago" +%Y-%m-%d)
+          echo "date_from=$DATE_FROM" >> $GITHUB_OUTPUT
+          echo "🗓️  dateFrom: $DATE_FROM (ostatnie $DAYS dni)"
+
   scrape:
+    needs: compute-date
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
@@ -72,36 +90,46 @@ jobs:
       - name: Odpal Apify actor dla ${{ matrix.city }}
         id: run_actor
         run: |
+          DATE_FROM="${{ needs.compute-date.outputs.date_from }}"
+          echo "📅 dateFrom=$DATE_FROM"
           RESP=$(curl -s -X POST "https://api.apify.com/v2/acts/trev0n~polish-real-estate-aggregator/runs?token=${{ secrets.APIFY_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "city": "${{ matrix.city }}",
-              "propertyType": "${{ inputs.property }}",
-              "searchType": "sprzedaz",
-              "maxItemsPerPortal": ${{ inputs.max_items_per_portal }},
-              "sellerType": "all",
-              "scoreThreshold": ${{ inputs.score_threshold }},
-              "portals": ["otodom","morizon","gratka","olx","nol","adresowo","domiporta"],
-              "dateBasis": "created",
-              "undatedListings": "keep",
-              "otodomProxy": {"useApifyProxy": true, "apifyProxyGroups": ["RESIDENTIAL"], "apifyProxyCountry": "PL"}
-            }')
+            -d "{
+              \"city\": \"${{ matrix.city }}\",
+              \"propertyType\": \"${{ inputs.property }}\",
+              \"searchType\": \"sprzedaz\",
+              \"maxItemsPerPortal\": ${{ inputs.max_items_per_portal }},
+              \"sellerType\": \"all\",
+              \"scoreThreshold\": ${{ inputs.score_threshold }},
+              \"portals\": [\"otodom\",\"morizon\",\"gratka\",\"olx\",\"nol\",\"adresowo\",\"domiporta\"],
+              \"dateFrom\": \"$DATE_FROM\",
+              \"dateBasis\": \"created\",
+              \"undatedListings\": \"drop\",
+              \"otodomProxy\": {\"useApifyProxy\": true, \"apifyProxyGroups\": [\"RESIDENTIAL\"], \"apifyProxyCountry\": \"PL\"}
+            }")
           echo "Response: $RESP"
           RUN_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['data']['id'])")
           DATASET_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['data']['defaultDatasetId'])")
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
           echo "dataset_id=$DATASET_ID" >> $GITHUB_OUTPUT
           echo "🚀 [${{ matrix.city }}] Run: $RUN_ID | Dataset: $DATASET_ID"
-      - name: Poczekaj na zakończenie
+      - name: Poczekaj na zakonczenie
         run: |
-          for i in {1..120}; do
+          STATUS="UNKNOWN"
+          for i in $(seq 1 120); do
             STATUS=$(curl -s "https://api.apify.com/v2/actor-runs/${{ steps.run_actor.outputs.run_id }}?token=${{ secrets.APIFY_TOKEN }}" \
-              | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['data']['status'])")
-            echo "  [${{ matrix.city }}] status: $STATUS"
-            if [ "$STATUS" = "SUCCEEDED" ] || [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "ABORTED" ] || [ "$STATUS" = "TIMED-OUT" ]; then break; fi
+              | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['data']['status'])" 2>/dev/null || echo "PARSE_ERR")
+            echo "  [${{ matrix.city }}] status: $STATUS (iter $i)"
+            case "$STATUS" in
+              SUCCEEDED|FAILED|ABORTED|TIMED-OUT|TIMEOUT) break ;;
+            esac
             sleep 15
           done
-          if [ "$STATUS" != "SUCCEEDED" ]; then echo "❌ [${{ matrix.city }}] Run failed"; exit 1; fi
+          echo "FINAL_STATUS=$STATUS"
+          if [ "$STATUS" != "SUCCEEDED" ]; then
+            echo "❌ [${{ matrix.city }}] Run zakonczony z: $STATUS"
+            exit 1
+          fi
       - name: Import do MongoDB
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}

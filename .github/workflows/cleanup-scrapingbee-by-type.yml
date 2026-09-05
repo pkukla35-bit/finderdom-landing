@@ -1,0 +1,75 @@
+name: Cleanup scrapingbee by type
+
+on:
+  workflow_dispatch:
+    inputs:
+      type:
+        description: 'Typ ofert do usuniecia (dzialka/mieszkanie/dom/lokal)'
+        required: true
+        type: choice
+        options:
+          - dzialka
+          - dom
+          - mieszkanie
+          - lokal
+        default: dzialka
+      dry_run:
+        description: 'Tylko podglad (nie usuwaj)'
+        required: false
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+        default: 'no'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pymongo
+      - name: Cleanup ScrapingBee
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+        run: |
+          python3 <<'EOF'
+          import os
+          from pymongo import MongoClient
+          import re
+
+          type_input = '${{ inputs.type }}'
+          dry = '${{ inputs.dry_run }}' == 'yes'
+
+          client = MongoClient(os.environ['MONGODB_URI'])
+          db = client[os.environ.get('MONGODB_DB', 'finderdom')]
+
+          # Match scrapingbee + type (obsluguje warianty: "dzialka", "działka budowlana", itd.)
+          if type_input == 'dzialka':
+              q = {'scraped_via': 'scrapingbee', 'type': {'$regex': '^dzia', '$options': 'i'}}
+          elif type_input == 'dom':
+              q = {'scraped_via': 'scrapingbee', 'type': {'$regex': '^dom', '$options': 'i'}}
+          elif type_input == 'mieszkanie':
+              q = {'scraped_via': 'scrapingbee', 'type': {'$regex': '^mieszk', '$options': 'i'}}
+          elif type_input == 'lokal':
+              q = {'scraped_via': 'scrapingbee', 'type': {'$regex': 'lokal|magazyn', '$options': 'i'}}
+          else:
+              print(f'Unknown type: {type_input}')
+              exit(1)
+
+          n = db.listings.count_documents(q)
+          print(f'ScrapingBee {type_input} do usuniecia: {n}')
+
+          if not dry:
+              r = db.listings.delete_many(q)
+              print(f'Usunieto: {r.deleted_count}')
+              # Statystyki po
+              total = db.listings.count_documents({})
+              apify = db.listings.count_documents({'scraped_via': 'apify'})
+              sb = db.listings.count_documents({'scraped_via': 'scrapingbee'})
+              print(f'Po cleanupie - total: {total}, apify: {apify}, scrapingbee: {sb}')
+          else:
+              print('DRY RUN - nic nie usunieto')
+          EOF

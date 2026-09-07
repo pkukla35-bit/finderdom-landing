@@ -60,6 +60,12 @@
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
+    },
+    {
+      "source": "/api/listings-scraped",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, s-maxage=300, max-age=60, stale-while-revalidate=120" }
+      ]
     }
   ]
 }

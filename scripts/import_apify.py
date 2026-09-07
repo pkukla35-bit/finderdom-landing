@@ -27,12 +27,12 @@ DZIALKA_KEYWORDS = [
 ]
 
 DOM_TYPE_KEYWORDS = [
-    ("wolnostojacy", [r"wolno.?stoj", r"wolnostoj"]),
-    ("blizniak",     [r"bli[zź]niak", r"bli[zź]niaczy", r"pół.?bli[zź]niaka", r"pol.?blizniaka"]),
-    ("szeregowiec",  [r"szereg(?:ow|owc|owy|owe)", r"dom\s+szereg", r"domek\s+szereg"]),
-    ("siedliskowy",  [r"siedlisk", r"zabudowa\s+zagrodow"]),
-    ("rezydencja",   [r"rezydencj", r"\bwilla\b", r"dwor(?:ek|ku|em)"]),
-    ("letniskowy",   [r"letnisk", r"domek\s+rekreac", r"caloroczn", r"całoroczn"]),
+    ("wolnostojacy", [r"wolno.?stoj", r"wolnostoj", r"jednorodzinn(?:y|ego|ym)", r"parterow(?:y|ego|ym)\s+dom", r"dom\s+jednorodzin"]),
+    ("blizniak",     [r"bli[zź]niak", r"bli[zź]niaczy", r"pół.?bli[zź]niaka", r"pol.?blizniaka", r"zabudowa\s+bli[zź]niacz", r"dwurodzinn"]),
+    ("szeregowiec",  [r"szereg(?:ow|owc|owy|owe)", r"dom\s+szereg", r"domek\s+szereg", r"\bsegment(?:\s|,|\.|$)", r"segmentow", r"zabudowa\s+szereg"]),
+    ("siedliskowy",  [r"siedlisk", r"zabudowa\s+zagrodow", r"gospodarstw"]),
+    ("rezydencja",   [r"rezydencj", r"\bwilla\b", r"willow", r"dwor(?:ek|ku|em)"]),
+    ("letniskowy",   [r"letnisk", r"domek\s+rekreac", r"caloroczn", r"całoroczn", r"\bROD\b", r"rekreacyjn"]),
 ]
 
 def detect_dom_type(text: str) -> str | None:

@@ -92,7 +92,7 @@ jobs:
         run: |
           DATE_FROM="${{ needs.compute-date.outputs.date_from }}"
           echo "📅 dateFrom=$DATE_FROM"
-          RESP=$(curl -s -X POST "https://api.apify.com/v2/acts/trev0n~polish-real-estate-aggregator/runs?token=${{ secrets.APIFY_TOKEN }}" \
+          RESP=$(curl -s -X POST "https://api.apify.com/v2/acts/trev0n~polish-real-estate-aggregator/runs?token=${{ secrets.APIFY_TOKEN }}&memory=4096&timeout=3600" \
             -H "Content-Type: application/json" \
             -d "{
               \"city\": \"${{ matrix.city }}\",

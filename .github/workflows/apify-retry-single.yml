@@ -54,7 +54,9 @@ jobs:
         id: run_actor
         run: |
           DATE_FROM="${{ steps.dt.outputs.date_from }}"
-          RESP=$(curl -s -X POST "https://api.apify.com/v2/acts/trev0n~polish-real-estate-aggregator/runs?token=${{ secrets.APIFY_TOKEN }}" \
+          echo "📅 dateFrom=$DATE_FROM"
+          # memory=4096 (4GB) - actor OOM przy 1GB default dla wojewodztw
+          RESP=$(curl -s -X POST "https://api.apify.com/v2/acts/trev0n~polish-real-estate-aggregator/runs?token=${{ secrets.APIFY_TOKEN }}&memory=4096&timeout=3600" \
             -H "Content-Type: application/json" \
             -d "{
               \"city\": \"${{ inputs.city }}\",
@@ -69,7 +71,6 @@ jobs:
               \"undatedListings\": \"drop\",
               \"otodomProxy\": {\"useApifyProxy\": true, \"apifyProxyGroups\": [\"RESIDENTIAL\"], \"apifyProxyCountry\": \"PL\"}
             }")
-          echo "$RESP" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(f'RUN: {d[\"data\"][\"id\"]}')"
           RUN_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['data']['id'])")
           DATASET_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['data']['defaultDatasetId'])")
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT

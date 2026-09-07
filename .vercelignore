@@ -1,0 +1,4 @@
+# Wielkie static JSON files - historyczne, zastapione przez MongoDB (Apify)
+# Pliki nadal sa w git repo, ale nie deploy'uja sie na Vercel (oszczedza storage)
+data/listings.json
+data/listings2.json

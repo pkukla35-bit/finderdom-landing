@@ -26,6 +26,24 @@ DZIALKA_KEYWORDS = [
     ("inwestycyjna", [r"inwestycyj", r"komercyj", r"usługow", r"uslugow", r"przemysłow", r"przemyslow"]),
 ]
 
+DOM_TYPE_KEYWORDS = [
+    ("wolnostojacy", [r"wolno.?stoj", r"wolnostoj"]),
+    ("blizniak",     [r"bli[zź]niak", r"bli[zź]niaczy", r"pół.?bli[zź]niaka", r"pol.?blizniaka"]),
+    ("szeregowiec",  [r"szereg(?:ow|owc|owy|owe)", r"dom\s+szereg", r"domek\s+szereg"]),
+    ("siedliskowy",  [r"siedlisk", r"zabudowa\s+zagrodow"]),
+    ("rezydencja",   [r"rezydencj", r"\bwilla\b", r"dwor(?:ek|ku|em)"]),
+    ("letniskowy",   [r"letnisk", r"domek\s+rekreac", r"caloroczn", r"całoroczn"]),
+]
+
+def detect_dom_type(text: str) -> str | None:
+    if not text: return None
+    t = text.lower()
+    for label, kws in DOM_TYPE_KEYWORDS:
+        for kw in kws:
+            if re.search(kw, t):
+                return label
+    return None
+
 def detect_purpose(text: str) -> str | None:
     if not text: return None
     t = text.lower()
@@ -66,6 +84,12 @@ def normalize(item: dict, prop_type_hint: str = None) -> dict | None:
     if ptype == "dzialka":
         combined = f"{item.get('title','')} {item.get('descriptionText','')}"
         dzialka_type = detect_purpose(combined)
+
+    # Dom subtype (wolnostojacy/blizniak/szeregowiec/etc) - z title+description
+    building_type = None
+    if ptype == "dom":
+        combined_dom = f"{item.get('title','')} {item.get('descriptionText','')}"
+        building_type = detect_dom_type(combined_dom)
 
     # Seller type mapping
     st = str(item.get("sellerType") or item.get("sellerCategory") or "").lower()
@@ -131,6 +155,7 @@ def normalize(item: dict, prop_type_hint: str = None) -> dict | None:
         "posted_at": posted,
         "last_seen_at": now_iso,
         "dzialka_type": dzialka_type,
+        "building_type": building_type,
         "scraped_via": "apify",
     }
 

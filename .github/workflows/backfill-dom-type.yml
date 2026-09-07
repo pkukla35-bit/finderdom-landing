@@ -1,0 +1,102 @@
+name: Backfill building_type dla domów (Apify)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Tylko podglad (nie zapisuj)'
+        required: false
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+        default: 'no'
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install pymongo
+      - name: Backfill building_type
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+        run: |
+          python3 <<'EOF'
+          import os, re
+          from pymongo import MongoClient, UpdateOne
+          from collections import Counter
+
+          dry = '${{ inputs.dry_run }}' == 'yes'
+          client = MongoClient(os.environ['MONGODB_URI'])
+          db = client[os.environ.get('MONGODB_DB', 'finderdom')]
+
+          DOM_TYPE_KEYWORDS = [
+              ("wolnostojacy", [r"wolno.?stoj", r"wolnostoj"]),
+              ("blizniak",     [r"bli[zź]niak", r"bli[zź]niaczy", r"pół.?bli[zź]niaka", r"pol.?blizniaka"]),
+              ("szeregowiec",  [r"szereg(?:ow|owc|owy|owe)", r"dom\s+szereg", r"domek\s+szereg"]),
+              ("siedliskowy",  [r"siedlisk", r"zabudowa\s+zagrodow"]),
+              ("rezydencja",   [r"rezydencj", r"\bwilla\b", r"dwor(?:ek|ku|em)"]),
+              ("letniskowy",   [r"letnisk", r"domek\s+rekreac", r"caloroczn", r"całoroczn"]),
+          ]
+          def detect(text):
+              if not text: return None
+              t = text.lower()
+              for label, kws in DOM_TYPE_KEYWORDS:
+                  for kw in kws:
+                      if re.search(kw, t):
+                          return label
+              return None
+
+          # Znajdz Apify domy bez building_type
+          q = {
+              'scraped_via': 'apify',
+              'type': {'$regex': '^dom', '$options': 'i'},
+              '$or': [{'building_type': None}, {'building_type': {'$exists': False}}, {'building_type': ''}]
+          }
+          cursor = db.listings.find(q, {'_id': 1, 'external_id': 1, 'title': 1, 'description': 1})
+          docs = list(cursor)
+          print(f'Kandydaci do backfill: {len(docs)}')
+
+          updates = []
+          stats = Counter()
+          nomatch = 0
+          for d in docs:
+              text = f"{d.get('title', '')} {d.get('description', '')}"
+              bt = detect(text)
+              if bt:
+                  stats[bt] += 1
+                  updates.append(UpdateOne({'_id': d['_id']}, {'$set': {'building_type': bt}}))
+              else:
+                  nomatch += 1
+
+          print(f'\nDetected:')
+          for k, v in stats.most_common():
+              print(f'  {k}: {v}')
+          print(f'  BRAK MATCHA: {nomatch}')
+          print(f'  DO UPDATE: {len(updates)}')
+
+          if not dry and updates:
+              # Batch update
+              chunk = 500
+              total = 0
+              for i in range(0, len(updates), chunk):
+                  r = db.listings.bulk_write(updates[i:i+chunk], ordered=False)
+                  total += r.modified_count
+              print(f'\nUpdated: {total}')
+          elif dry:
+              print('\nDRY RUN')
+
+          # Final stats
+          print('\n=== Final building_type distribution (Apify domy) ===')
+          pipeline = [
+              {'$match': {'scraped_via': 'apify', 'type': {'$regex': '^dom', '$options': 'i'}}},
+              {'$group': {'_id': '$building_type', 'count': {'$sum': 1}}},
+              {'$sort': {'count': -1}}
+          ]
+          for r in db.listings.aggregate(pipeline):
+              print(f"  {r['_id']}: {r['count']}")
+          EOF

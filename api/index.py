@@ -792,40 +792,21 @@ async def health():
 
 
 @app.get("/api/listings-scraped")
-async def listings_scraped_endpoint(response: Response, limit: int = 15000):
+async def listings_scraped_endpoint(response: Response, limit: int = 60000):
     """Returns listings scraped via ScrapingBee/Apify.
 
     Optimized:
-    - Only fields used by frontend (skips heavy `description`, `sources` unless requested)
-    - Sorted by posted_at desc (newest first) so if limit hit, shows freshest
-    - Cache-Control: 5 min (both browser + Vercel CDN)
+    - Gzip compression (added at middleware level, ~82% reduction)
+    - Cache-Control: 5 min CDN + 1 min browser
+    - Full document returned (needed by oferta.html for description)
     """
     try:
         coll = database().listings
-        # Lekki payload - tylko potrzebne pola dla listingu w szukaj.html
-        projection = {
-            "_id": 0,
-            "external_id": 1, "type": 1, "title": 1, "url": 1, "source_url": 1,
-            "image": 1, "images": 1,
-            "location": 1, "city": 1, "district": 1,
-            "price": 1, "area_m2": 1, "price_pm2": 1, "area": 1,
-            "rooms": 1, "floor": 1, "max_floor": 1,
-            "build_year": 1, "year_built": 1,
-            "lat": 1, "lng": 1, "latitude": 1, "longitude": 1,
-            "transaction_type": 1, "transaction": 1,
-            "market_type": 1,
-            "seller_type": 1, "sellerType": 1,
-            "posted_at": 1, "added_at": 1,
-            "dzialka_type": 1, "land_purpose": 1,
-            "building_type": 1, "house_type": 1,
-            "scraped_via": 1,
-        }
         docs = await coll.find(
             {"scraped_via": {"$in": ["scrapingbee", "apify"]}},
-            projection
-        ).sort("posted_at", -1).to_list(length=min(limit, 30000))
-        # Cache: 5 min browser + 5 min CDN, stale-while-revalidate 60s
-        response.headers["Cache-Control"] = "public, max-age=300, s-maxage=300, stale-while-revalidate=60"
+            {"_id": 0}
+        ).to_list(length=min(limit, 60000))
+        response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=120"
         return {"listings": docs, "count": len(docs)}
     except Exception as e:
         logger.warning("listings-scraped error: %s", e)

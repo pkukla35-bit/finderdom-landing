@@ -646,6 +646,8 @@ function normalizeScrapedListing(raw) {
     floor: raw.floor || 0, max_floor: raw.max_floor || 0,
     year_built: raw.build_year || raw.year_built || 0,
     build_year: raw.build_year || raw.year_built || 0,
+    lat: raw.lat || raw.latitude || null,
+    lng: raw.lng || raw.longitude || null,
     standard: '',
     market_type: raw.market_type || '',
     transaction: raw.transaction_type || raw.transaction || 'sprzedaz',
@@ -1365,12 +1367,18 @@ function applyAllFilters() {
       if (explicitVerdicts.length > 0 && !explicitVerdicts.includes(v)) return false;
     }
 
-    // Promień od miasta centralnego (haversine city→city)
+    // Promień od miasta centralnego (haversine) — priorytet: lat/lng oferty; fallback: CITY_COORDS po miescie
     if (f.radiusCenter && f.radiusKm > 0) {
-      const key = normalizeCity(l.city || '');
-      const c = window.CITY_COORDS?.[key];
-      if (!c) return false;  // miasto oferty nie ma w słowniku → ukrywamy
-      const d = haversineKm(f.radiusCenter[0], f.radiusCenter[1], c[0], c[1]);
+      let ofLat = null, ofLng = null;
+      if (l.lat && l.lng) {
+        ofLat = Number(l.lat); ofLng = Number(l.lng);
+      } else {
+        const key = normalizeCity(l.city || '');
+        const c = window.CITY_COORDS?.[key];
+        if (c) { ofLat = c[0]; ofLng = c[1]; }
+      }
+      if (ofLat == null || ofLng == null) return false;  // brak wsp - pomijamy
+      const d = haversineKm(f.radiusCenter[0], f.radiusCenter[1], ofLat, ofLng);
       if (d > f.radiusKm) return false;
     }
 

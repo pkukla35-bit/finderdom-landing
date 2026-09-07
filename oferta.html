@@ -771,6 +771,8 @@ function normalizeScrapedListing(raw) {
     floor: raw.floor || 0, max_floor: raw.max_floor || 0,
     year_built: raw.build_year || raw.year_built || 0,
     build_year: raw.build_year || raw.year_built || 0,
+    lat: raw.lat || raw.latitude || null,
+    lng: raw.lng || raw.longitude || null,
     standard: '',
     market_type: raw.market_type || '',
     transaction: raw.transaction_type || raw.transaction || 'sprzedaz',

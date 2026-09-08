@@ -1253,10 +1253,12 @@ function collectFilterState() {
   const radiusCityRaw = (document.getElementById('fRadiusCity')?.value?.trim() || document.getElementById('q')?.value?.trim() || '');
   const radiusKm = parseFloat(document.getElementById('fRadiusKm')?.value || document.getElementById('heroRadiusKm')?.value || '0');
   let radiusCenter = null;
+  let radiusCityKey = null;
   if (radiusCityRaw && radiusKm > 0) {
     const key = normalizeCity(radiusCityRaw);
     if (window.CITY_COORDS && window.CITY_COORDS[key]) {
       radiusCenter = window.CITY_COORDS[key];
+      radiusCityKey = key;
     }
   }
 
@@ -1271,7 +1273,7 @@ function collectFilterState() {
   return { q, type, trans, priceMax, priceFrom, priceTo, heroMarket, activeSellers, onlyOrig,
            ppm2From, ppm2To, areaFrom, areaTo, yearFrom, yearTo, dynamic,
            activeRooms, activeFloors, activeVerdicts,
-           radiusCenter, radiusKm,
+           radiusCenter, radiusKm, radiusCityKey,
            crmStatuses: Array.from(document.querySelectorAll('.chip.active[data-crm]')).map(c => c.dataset.crm),
            dateFromMs, dateToMs, sortMode };
 }
@@ -1369,17 +1371,23 @@ function applyAllFilters() {
 
     // Promień od miasta centralnego (haversine) — priorytet: lat/lng oferty; fallback: CITY_COORDS po miescie
     if (f.radiusCenter && f.radiusKm > 0) {
-      let ofLat = null, ofLng = null;
-      if (l.lat && l.lng) {
-        ofLat = Number(l.lat); ofLng = Number(l.lng);
+      // Zawsze pokazuj oferty z TEGO SAMEGO miasta co centrum promienia (intuicyjne UX)
+      const centerCityKey = f.radiusCityKey;
+      const ofCityKey = normalizeCity(l.city || '');
+      if (centerCityKey && ofCityKey === centerCityKey) {
+        // w tym samym mieście - przepuść bez geo check
       } else {
-        const key = normalizeCity(l.city || '');
-        const c = window.CITY_COORDS?.[key];
-        if (c) { ofLat = c[0]; ofLng = c[1]; }
+        let ofLat = null, ofLng = null;
+        if (l.lat && l.lng) {
+          ofLat = Number(l.lat); ofLng = Number(l.lng);
+        } else {
+          const c = window.CITY_COORDS?.[ofCityKey];
+          if (c) { ofLat = c[0]; ofLng = c[1]; }
+        }
+        if (ofLat == null || ofLng == null) return false;
+        const d = haversineKm(f.radiusCenter[0], f.radiusCenter[1], ofLat, ofLng);
+        if (d > f.radiusKm) return false;
       }
-      if (ofLat == null || ofLng == null) return false;  // brak wsp - pomijamy
-      const d = haversineKm(f.radiusCenter[0], f.radiusCenter[1], ofLat, ofLng);
-      if (d > f.radiusKm) return false;
     }
 
     // Data dodania

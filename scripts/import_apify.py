@@ -26,16 +26,135 @@ DZIALKA_KEYWORDS = [
     ("inwestycyjna", [r"inwestycyj", r"komercyj", r"usługow", r"uslugow", r"przemysłow", r"przemyslow"]),
 ]
 
+# UWAGA: kolejność ma znaczenie! Najbardziej specyficzne PIERWSZE.
+# "Dom jednorodzinny w zabudowie szeregowej" → matchujemy szeregowca, NIE wolnostojącego.
 DOM_TYPE_KEYWORDS = [
-    ("wolnostojacy", [r"wolno.?stoj", r"wolnostoj", r"jednorodzinn(?:y|ego|ym)", r"parterow(?:y|ego|ym)\s+dom", r"dom\s+jednorodzin"]),
-    ("blizniak",     [r"bli[zź]niak", r"bli[zź]niaczy", r"pół.?bli[zź]niaka", r"pol.?blizniaka", r"zabudowa\s+bli[zź]niacz", r"dwurodzinn"]),
-    ("szeregowiec",  [r"szereg(?:ow|owc|owy|owe)", r"dom\s+szereg", r"domek\s+szereg", r"\bsegment(?:\s|,|\.|$)", r"segmentow", r"zabudowa\s+szereg"]),
-    ("siedliskowy",  [r"siedlisk", r"zabudowa\s+zagrodow", r"gospodarstw"]),
-    ("rezydencja",   [r"rezydencj", r"\bwilla\b", r"willow", r"dwor(?:ek|ku|em)"]),
-    ("letniskowy",   [r"letnisk", r"domek\s+rekreac", r"caloroczn", r"całoroczn", r"\bROD\b", r"rekreacyjn"]),
+    # 1. SZEREGOWIEC - specyficzne wzorce
+    ("szeregowiec",  [
+        r"\bszeregow(?:iec|y|ego|ym|ej|a|e)\b",
+        r"\bszeregowc(?:e|ów|ow|em|a)\b",
+        r"szereg[oó]wk",                     # szeregówka
+        r"dom(?:ek)?\s+w\s+szeregu",
+        r"zabudow(?:a|ie|y)\s+szereg",
+        r"\bw\s+szeregu\b",
+        r"\bsegment(?:\s|,|\.|$|ow|em|u|y|owo)",
+        r"townhouse", r"town\s?house",
+        r"dom\s+szereg",
+    ]),
+    # 2. BLIZNIAK - specyficzne wzorce
+    ("blizniak",     [
+        r"bli[zźż]niak",
+        r"bli[zźż]niacz",
+        r"pół[- ]?bli[zźż]niak",
+        r"pol[- ]?bli[zźż]niak",
+        r"1[/\\]?2\s*bli[zźż]niak",
+        r"po[łl]ow[aęą]\s+bli[zźż]niak",
+        r"zabudow(?:a|ie|y)\s+bli[zźż]",
+        r"\bdwurodzinn",
+        r"\bduplex\b",
+        r"dwupak",
+    ]),
+    # 3. SIEDLISKOWY
+    ("siedliskowy",  [
+        r"siedlisk",
+        r"zabudowa\s+zagrodow",
+        r"gospodarstw(?:o|em|a|u|ie)",
+        r"\bstodo[łl]a\b",
+        r"zagrod(?:a|y|owa)",
+    ]),
+    # 4. REZYDENCJA (przed letniskowy, bo willa/pałac)
+    ("rezydencja",   [
+        r"rezydencj",
+        r"\bwilla\b", r"\bwill[ęeą]\b", r"willow",
+        r"dwor(?:ek|ku|em|u|a|ów|ow)",
+        r"\bpa[łl]ac",
+        r"posiad[łl]o[śs][ćc]",
+        r"apartament(?:owy|owa)\s+dom",
+    ]),
+    # 5. LETNISKOWY
+    ("letniskowy",   [
+        r"letnisk",
+        r"dom(?:ek)?\s+rekreac",
+        r"dom(?:ek)?\s+letni",
+        r"\bROD\b",
+        r"rekreacyjn(?:y|ego|ym|a|ej)\s+dom",
+        r"domek\s+w\s+lesie",
+        r"weekendow(?:y|ego|ym)\s+dom",
+    ]),
+    # 6. WOLNOSTOJACY - najbardziej ogólny, OSTATNI (fallback)
+    ("wolnostojacy", [
+        r"wolno[- ]?stoj",
+        r"wolnostoj",
+        r"dom\s+wolno",
+        r"jednorodzinn(?:y|ego|ym|a|ej|e)",
+        r"parterow(?:y|ego|ym|a|ej|e)",
+        r"pi[eę]trow(?:y|ego|ym|a|ej|e)",
+        r"kanadyjs(?:ki|kie|kiego|ka|kim)",
+        r"\bszkieletow(?:y|ego|ej|ym|a)",
+        r"\bdom\s+z\s+bali\b",
+        r"dom\s+pasywn",
+        r"pasywn(?:y|ym|ego)\s+dom",
+        r"dom\s+modu[łl]ow",
+    ]),
 ]
 
-def detect_dom_type(text: str) -> str | None:
+# Mapowanie surowych wartości z portali (Otodom: dom_wolnostojacy, blizniak, szeregowiec, kamienica, rezydencja)
+RAW_BUILDING_TYPE_MAP = {
+    "dom_wolnostojacy": "wolnostojacy",
+    "wolnostojacy": "wolnostojacy",
+    "wolnostojący": "wolnostojacy",
+    "detached": "wolnostojacy",
+    "blizniak": "blizniak",
+    "bliźniak": "blizniak",
+    "semi_detached": "blizniak",
+    "duplex": "blizniak",
+    "szeregowiec": "szeregowiec",
+    "szeregowy": "szeregowiec",
+    "terraced": "szeregowiec",
+    "townhouse": "szeregowiec",
+    "segment": "szeregowiec",
+    "kamienica": "rezydencja",
+    "willa": "rezydencja",
+    "rezydencja": "rezydencja",
+    "letniskowy": "letniskowy",
+    "domek_letniskowy": "letniskowy",
+    "recreational": "letniskowy",
+    "siedliskowy": "siedliskowy",
+    "gospodarstwo": "siedliskowy",
+}
+
+
+def detect_from_raw(item: dict) -> str | None:
+    """Sprawdź surowe pola z portali (Otodom, Morizon, Gratka)."""
+    if not isinstance(item, dict): return None
+    for key in ("buildingType", "building_type", "subtype", "homeType", "propertySubtype", "type_of_building"):
+        v = str(item.get(key) or "").lower().strip()
+        if not v: continue
+        # bezpośredni match
+        if v in RAW_BUILDING_TYPE_MAP:
+            return RAW_BUILDING_TYPE_MAP[v]
+        # fuzzy match
+        for k, label in RAW_BUILDING_TYPE_MAP.items():
+            if k in v or v in k:
+                return label
+    return None
+
+
+def detect_from_url(url: str) -> str | None:
+    """Otodom/Morizon URLs często zawierają typ w slugu."""
+    if not url: return None
+    u = url.lower()
+    # Kolejność ma znaczenie
+    if re.search(r"szeregow|szereg[oó]wk|-segment[- /]|/segment[- /]|townhouse", u): return "szeregowiec"
+    if re.search(r"bli[zźż]niak|semi-?detached|duplex", u): return "blizniak"
+    if re.search(r"siedlisk", u): return "siedliskowy"
+    if re.search(r"rezydencj|-willa[- /]|/willa[- /]|dworek|pa[łl]ac", u): return "rezydencja"
+    if re.search(r"letnisk|rekreacyjn", u): return "letniskowy"
+    if re.search(r"wolnostoj|wolno-?stoj|jednorodzinn", u): return "wolnostojacy"
+    return None
+
+
+def detect_from_regex(text: str) -> str | None:
     if not text: return None
     t = text.lower()
     for label, kws in DOM_TYPE_KEYWORDS:
@@ -43,6 +162,25 @@ def detect_dom_type(text: str) -> str | None:
             if re.search(kw, t):
                 return label
     return None
+
+
+def detect_dom_type(item_or_text, url: str = None) -> str | None:
+    """
+    Priorytet: raw field portalu → URL slug → regex title+description.
+    Akceptuje zarówno dict (Apify item) jak i string (tylko tekst).
+    """
+    if isinstance(item_or_text, dict):
+        r = detect_from_raw(item_or_text)
+        if r: return r
+        r = detect_from_url(item_or_text.get("url"))
+        if r: return r
+        text = f"{item_or_text.get('title','')} {item_or_text.get('descriptionText','') or item_or_text.get('description','')}"
+        return detect_from_regex(text)
+    # fallback dla starych wywołań (backfill)
+    if url:
+        r = detect_from_url(url)
+        if r: return r
+    return detect_from_regex(str(item_or_text or ""))
 
 def detect_purpose(text: str) -> str | None:
     if not text: return None
@@ -85,11 +223,10 @@ def normalize(item: dict, prop_type_hint: str = None) -> dict | None:
         combined = f"{item.get('title','')} {item.get('descriptionText','')}"
         dzialka_type = detect_purpose(combined)
 
-    # Dom subtype (wolnostojacy/blizniak/szeregowiec/etc) - z title+description
+    # Dom subtype (wolnostojacy/blizniak/szeregowiec/etc) - z title+description+url+raw
     building_type = None
     if ptype == "dom":
-        combined_dom = f"{item.get('title','')} {item.get('descriptionText','')}"
-        building_type = detect_dom_type(combined_dom)
+        building_type = detect_dom_type(item)
 
     # Seller type mapping
     st = str(item.get("sellerType") or item.get("sellerCategory") or "").lower()

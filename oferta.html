@@ -767,12 +767,13 @@ function normalizeScrapedListing(raw) {
       .replace(/ł/g,'l').replace(/ń/g,'n').replace(/ó/g,'o')
       .replace(/ż/g,'z').replace(/ź/g,'z').replace(/ć/g,'c');
     const tb2 = normDom(raw.title) + ' ' + normDom(raw.description || raw.descriptionText || '').slice(0, 500);
-    if      (/wolno.?stoj/.test(tb2))                        btRaw = 'wolnostojacy';
-    else if (/blizniak|blizniaczy|pol.blizniaka/.test(tb2)) btRaw = 'blizniak';
-    else if (/szereg(?:ow|owc)/.test(tb2))                   btRaw = 'szeregowiec';
-    else if (/siedlisk|zabudowa.zagrodow/.test(tb2))         btRaw = 'siedliskowy';
-    else if (/rezydencj|willa|dwor(?:ek|ku)/.test(tb2))      btRaw = 'rezydencja';
-    else if (/letnisk|domek.rekreac|calorocz|caloroczn/.test(tb2)) btRaw = 'letniskowy';
+    // Kolejność: szereg > blizniak > siedliskowy > rezydencja > letniskowy > wolnostojacy (najogólniejszy - LAST)
+    if      (/szereg(?:ow|owc|owk)|w szeregu|zabudow.\s*szereg|\bsegment(?:\s|,|\.|$|ow|em|u)|townhouse/.test(tb2))       btRaw = 'szeregowiec';
+    else if (/blizniak|blizniacz|pol.?blizniak|1\/2\s?blizniak|dwurodzin|\bduplex\b|dwupak|zabudow.\s*blizni/.test(tb2)) btRaw = 'blizniak';
+    else if (/siedlisk|zabudowa.zagrodow|gospodarstw|zagrod/.test(tb2))                                                    btRaw = 'siedliskowy';
+    else if (/rezydencj|\bwilla\b|willow|dwor(?:ek|ku|em|u|a)|palac|posiadlosc/.test(tb2))                                 btRaw = 'rezydencja';
+    else if (/letnisk|dom(?:ek)?.rekreac|dom(?:ek)?.letni|\brod\b|weekendow.\s*dom/.test(tb2))                             btRaw = 'letniskowy';
+    else if (/wolno.?stoj|jednorodzinn|parterow|pietrow|kanadyjs|szkieletow|dom.z.bali|pasywn|modul/.test(tb2))            btRaw = 'wolnostojacy';
   }
   const buildingType = DOM_TYPE_ALIAS_OFF[btRaw] || btRaw || (baseType === 'dom' ? '' : (raw.building_type || ''));
   const id = 'otodom-' + raw.external_id;

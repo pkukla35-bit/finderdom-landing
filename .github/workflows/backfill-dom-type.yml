@@ -1,4 +1,4 @@
-name: Backfill building_type dla domów (Apify)
+name: Backfill building_type dla domów (Apify) v2
 
 on:
   workflow_dispatch:
@@ -11,92 +11,140 @@ on:
           - 'no'
           - 'yes'
         default: 'no'
+      city_filter:
+        description: 'Filtr miasta (opcjonalny, np. Warszawa). Puste = wszystkie'
+        required: false
+        type: string
+        default: ''
+      force_reclassify:
+        description: 'Reklasyfikuj też te co już mają building_type'
+        required: false
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+        default: 'no'
 
 jobs:
   backfill:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - run: pip install pymongo
-      - name: Backfill building_type
+      - name: Backfill building_type z ulepszoną logiką
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+          DRY: ${{ inputs.dry_run }}
+          CITY_FILTER: ${{ inputs.city_filter }}
+          FORCE: ${{ inputs.force_reclassify }}
         run: |
-          python3 <<'EOF'
-          import os, re
+          # Importujemy detect_dom_type z aktualnej wersji scripts/import_apify.py — jeden source of truth
+          python3 <<'PYEOF'
+          import os, sys, json
           from pymongo import MongoClient, UpdateOne
           from collections import Counter
 
-          dry = '${{ inputs.dry_run }}' == 'yes'
+          sys.path.insert(0, 'scripts')
+          from import_apify import detect_dom_type, detect_from_raw, detect_from_url, detect_from_regex
+
+          dry = os.environ.get('DRY') == 'yes'
+          city_filter = (os.environ.get('CITY_FILTER') or '').strip()
+          force = os.environ.get('FORCE') == 'yes'
+
           client = MongoClient(os.environ['MONGODB_URI'])
           db = client[os.environ.get('MONGODB_DB', 'finderdom')]
 
-          DOM_TYPE_KEYWORDS = [
-              ("wolnostojacy", [r"wolno.?stoj", r"wolnostoj", r"jednorodzinn(?:y|ego|ym)", r"parterow(?:y|ego|ym)\s+dom", r"dom\s+jednorodzin"]),
-              ("blizniak",     [r"bli[zź]niak", r"bli[zź]niaczy", r"pół.?bli[zź]niaka", r"pol.?blizniaka", r"zabudowa\s+bli[zź]niacz", r"dwurodzinn"]),
-              ("szeregowiec",  [r"szereg(?:ow|owc|owy|owe)", r"dom\s+szereg", r"domek\s+szereg", r"\bsegment(?:\s|,|\.|$)", r"segmentow", r"zabudowa\s+szereg"]),
-              ("siedliskowy",  [r"siedlisk", r"zabudowa\s+zagrodow", r"gospodarstw"]),
-              ("rezydencja",   [r"rezydencj", r"\bwilla\b", r"willow", r"dwor(?:ek|ku|em)"]),
-              ("letniskowy",   [r"letnisk", r"domek\s+rekreac", r"caloroczn", r"całoroczn", r"\bROD\b", r"rekreacyjn"]),
-          ]
-          def detect(text):
-              if not text: return None
-              t = text.lower()
-              for label, kws in DOM_TYPE_KEYWORDS:
-                  for kw in kws:
-                      if re.search(kw, t):
-                          return label
-              return None
-
-          # Znajdz Apify domy bez building_type
           q = {
               'scraped_via': 'apify',
               'type': {'$regex': '^dom', '$options': 'i'},
-              '$or': [{'building_type': None}, {'building_type': {'$exists': False}}, {'building_type': ''}]
           }
-          cursor = db.listings.find(q, {'_id': 1, 'external_id': 1, 'title': 1, 'description': 1})
+          if not force:
+              q['$or'] = [{'building_type': None}, {'building_type': {'$exists': False}}, {'building_type': ''}]
+          if city_filter:
+              q['city'] = {'$regex': f'^{city_filter}$', '$options': 'i'}
+
+          cursor = db.listings.find(q, {'_id': 1, 'external_id': 1, 'title': 1, 'description': 1, 'url': 1, 'city': 1, 'building_type': 1})
           docs = list(cursor)
-          print(f'Kandydaci do backfill: {len(docs)}')
+          print(f'Kandydaci do backfill (city={city_filter or "ALL"}, force={force}): {len(docs)}')
 
           updates = []
           stats = Counter()
-          nomatch = 0
+          nomatch_samples = []
+          source_stats = Counter()  # skąd pochodzi klasyfikacja
+          nomatch_count = 0
+
           for d in docs:
-              text = f"{d.get('title', '')} {d.get('description', '')}"
-              bt = detect(text)
+              # Budujemy dict-podobny obiekt kompatybilny z detect_dom_type
+              fake_item = {
+                  'title': d.get('title', ''),
+                  'description': d.get('description', ''),
+                  'descriptionText': d.get('description', ''),
+                  'url': d.get('url', ''),
+              }
+              # trzy poziomy — chcemy wiedzieć skąd trafienie
+              bt = detect_from_url(d.get('url'))
+              if bt: source_stats['url'] += 1
+              if not bt:
+                  bt = detect_from_regex(f"{d.get('title','')} {d.get('description','')}")
+                  if bt: source_stats['regex'] += 1
+
               if bt:
                   stats[bt] += 1
-                  updates.append(UpdateOne({'_id': d['_id']}, {'$set': {'building_type': bt}}))
+                  # Update tylko jeśli się zmienia
+                  if d.get('building_type') != bt:
+                      updates.append(UpdateOne({'_id': d['_id']}, {'$set': {'building_type': bt}}))
               else:
-                  nomatch += 1
+                  nomatch_count += 1
+                  if len(nomatch_samples) < 40:
+                      nomatch_samples.append({
+                          'title': (d.get('title') or '')[:80],
+                          'city': d.get('city', ''),
+                          'url': (d.get('url') or '')[:120],
+                          'desc_start': (d.get('description') or '')[:100],
+                      })
 
-          print(f'\nDetected:')
+          print(f'\n=== ROZKŁAD ROZPOZNANYCH ===')
           for k, v in stats.most_common():
               print(f'  {k}: {v}')
-          print(f'  BRAK MATCHA: {nomatch}')
-          print(f'  DO UPDATE: {len(updates)}')
+          print(f'\n=== ŹRÓDŁO KLASYFIKACJI ===')
+          for k, v in source_stats.most_common():
+              print(f'  {k}: {v}')
+          print(f'\n=== NIE UDAŁO SIĘ SKLASYFIKOWAĆ: {nomatch_count} ===')
+          print(f'DO UPDATE (delta): {len(updates)}')
+
+          print(f'\n=== PRÓBKI NIESKLASYFIKOWANYCH (max 40) ===')
+          for s in nomatch_samples:
+              print(f"  [{s['city']}] {s['title']}")
+              print(f"    URL: {s['url']}")
+              print(f"    desc: {s['desc_start']}")
 
           if not dry and updates:
-              # Batch update
               chunk = 500
               total = 0
               for i in range(0, len(updates), chunk):
                   r = db.listings.bulk_write(updates[i:i+chunk], ordered=False)
                   total += r.modified_count
-              print(f'\nUpdated: {total}')
+              print(f'\n✅ Updated: {total}')
           elif dry:
-              print('\nDRY RUN')
+              print('\n(DRY RUN — nic nie zapisano)')
 
-          # Final stats
-          print('\n=== Final building_type distribution (Apify domy) ===')
+          # Statystyki finalne
+          print(f'\n=== FINAL building_type distribution (Apify domy, {city_filter or "ALL"}) ===')
+          match_stage = {'scraped_via': 'apify', 'type': {'$regex': '^dom', '$options': 'i'}}
+          if city_filter:
+              match_stage['city'] = {'$regex': f'^{city_filter}$', '$options': 'i'}
           pipeline = [
-              {'$match': {'scraped_via': 'apify', 'type': {'$regex': '^dom', '$options': 'i'}}},
+              {'$match': match_stage},
               {'$group': {'_id': '$building_type', 'count': {'$sum': 1}}},
               {'$sort': {'count': -1}}
           ]
+          total_after = 0
           for r in db.listings.aggregate(pipeline):
               print(f"  {r['_id']}: {r['count']}")
-          EOF
+              total_after += r['count']
+          print(f'  TOTAL: {total_after}')
+          PYEOF

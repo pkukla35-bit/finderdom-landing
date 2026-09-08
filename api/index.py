@@ -791,6 +791,35 @@ async def health():
         raise HTTPException(500, f"DB error: {str(e)[:100]}")
 
 
+
+@app.get("/api/listing/{listing_id}")
+async def listing_single(listing_id: str, response: Response):
+    """Zwraca pojedynczą ofertę po ID - szybki endpoint (<500ms) dla oferta.html.
+
+    ID format: 'otodom-XXX' albo 'XXX' albo cluster ID.
+    """
+    try:
+        coll = database().listings
+        # Zdejmij prefix otodom- jeśli jest
+        ext_id = listing_id.replace('otodom-', '', 1) if listing_id.startswith('otodom-') else listing_id
+        # Szukaj po external_id (string) lub _id (jeśli valid ObjectId)
+        doc = await coll.find_one({"external_id": ext_id}, {"_id": 0})
+        if not doc:
+            # Try numeric external_id
+            try:
+                doc = await coll.find_one({"external_id": int(ext_id)}, {"_id": 0})
+            except: pass
+        if not doc:
+            response.status_code = 404
+            return {"error": "Listing not found", "id": listing_id}
+        response.headers["Cache-Control"] = "public, max-age=300, s-maxage=600, stale-while-revalidate=120"
+        return {"listing": doc}
+    except Exception as e:
+        logger.warning("listing/{%s} error: %s", listing_id, e)
+        response.status_code = 500
+        return {"error": str(e)[:200]}
+
+
 @app.get("/api/listings-scraped")
 async def listings_scraped_endpoint(response: Response, limit: int = 60000):
     """Returns listings scraped via ScrapingBee/Apify.

@@ -621,6 +621,32 @@ async function loadOffer() {
   let id = params.get('id');
 
   try {
+    // 🚀 FAST PATH: spróbuj pojedynczą ofertę przez /api/listing/{id} (<500ms)
+    const idParam = new URLSearchParams(location.search).get('id') || '';
+    if (idParam) {
+      try {
+        const fastRes = await fetch('/api/listing/' + encodeURIComponent(idParam));
+        if (fastRes.ok) {
+          const fd = await fastRes.json();
+          if (fd.listing) {
+            const normalized = normalizeScrapedListing(fd.listing);
+            if (normalized) {
+              currentListing = normalized;
+              window.__offer = normalized;
+              renderOffer(normalized);
+              // W tle doładuj resztę listy dla "Podobnych ofert" (opcjonalnie)
+              setTimeout(() => {
+                fetch('/api/listings-scraped').then(r => r.ok ? r.json() : null).then(d => {
+                  if (d && d.listings) window.__allListings = d.listings;
+                }).catch(() => {});
+              }, 500);
+              return;
+            }
+          }
+        }
+      } catch (e) { /* fallback do pełnej listy */ }
+    }
+    // 🐢 FALLBACK: pełna lista jak wcześniej
     const [staticRes, scrapedRes] = await Promise.allSettled([
       fetch('/data/listings.json?v=' + Date.now()),
       fetch('/api/listings-scraped')

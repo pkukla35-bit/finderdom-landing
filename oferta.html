@@ -625,9 +625,14 @@ async function loadOffer() {
       fetch('/data/listings.json?v=' + Date.now()),
       fetch('/api/listings-scraped')
     ]);
-    if (staticRes.status !== 'fulfilled' || !staticRes.value.ok) throw new Error('static fail');
-    const data = await staticRes.value.json();
-    const staticList = data.listings || [];
+    // Static jest OPCJONALNY - jeśli 404 (bo w .vercelignore) idziemy tylko z API
+    let staticList = [];
+    if (staticRes.status === 'fulfilled' && staticRes.value.ok) {
+      try {
+        const data = await staticRes.value.json();
+        staticList = data.listings || [];
+      } catch { staticList = []; }
+    }
     // Load scraped and normalize to same schema
     let scrapedRaw = [];
     if (scrapedRes.status === 'fulfilled' && scrapedRes.value.ok) {

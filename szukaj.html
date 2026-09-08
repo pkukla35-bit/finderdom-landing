@@ -1249,9 +1249,9 @@ function collectFilterState() {
   const activeVerdicts = Array.from(document.querySelectorAll('.chip.active[data-verdict]'))
     .map(c => c.dataset.verdict);
 
-  // Radius filter (km od wybranego miasta)
-  const radiusCityRaw = document.getElementById('fRadiusCity')?.value?.trim() || '';
-  const radiusKm = parseFloat(document.getElementById('fRadiusKm')?.value || '0');
+  // Radius filter (km od wybranego miasta) — priorytet: sidebar > hero
+  const radiusCityRaw = (document.getElementById('fRadiusCity')?.value?.trim() || document.getElementById('q')?.value?.trim() || '');
+  const radiusKm = parseFloat(document.getElementById('fRadiusKm')?.value || document.getElementById('heroRadiusKm')?.value || '0');
   let radiusCenter = null;
   if (radiusCityRaw && radiusKm > 0) {
     const key = normalizeCity(radiusCityRaw);

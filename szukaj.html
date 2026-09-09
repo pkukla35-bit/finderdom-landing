@@ -624,6 +624,96 @@ function detectPortalFromUrl(url) {
   return null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AI VERDICT — dla każdej oferty policz delta względem mediany ppm² per (typ,miasto)
+// Progi: deal <= -12%, normal (-12..+12), over (+12..+35), outlier (> +35% lub cena zerowa)
+// ─────────────────────────────────────────────────────────────────────────────
+function computeAiVerdicts(listings) {
+  if (!Array.isArray(listings) || listings.length === 0) return;
+  // 1) Zgrupuj po (type, city) i zbierz ppm²
+  const groups = new Map(); // key -> [ppm2, ...]
+  for (const l of listings) {
+    const ppm = Number(l.price_pm2) || 0;
+    if (!ppm || !isFinite(ppm) || ppm < 500) continue; // pomijamy śmieci
+    const key = `${(l.type||'').toLowerCase()}::${(l.city||'').toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(ppm);
+  }
+  // 2) Oblicz medianę + Q1/Q3 dla każdej grupy (min 5 ofert = wiarygodne)
+  const medians = new Map();
+  for (const [key, arr] of groups) {
+    if (arr.length < 5) continue;
+    arr.sort((a,b) => a-b);
+    const mid = Math.floor(arr.length / 2);
+    const median = arr.length % 2 === 0 ? (arr[mid-1]+arr[mid])/2 : arr[mid];
+    medians.set(key, median);
+  }
+  // Fallback per-type (bez city) — dla mniejszych miast które nie mają 5+ ofert
+  const typeMed = new Map();
+  const typeArr = {};
+  for (const l of listings) {
+    const ppm = Number(l.price_pm2) || 0;
+    if (!ppm || ppm < 500) continue;
+    const t = (l.type||'').toLowerCase();
+    if (!typeArr[t]) typeArr[t] = [];
+    typeArr[t].push(ppm);
+  }
+  for (const t in typeArr) {
+    const arr = typeArr[t].slice().sort((a,b)=>a-b);
+    const mid = Math.floor(arr.length/2);
+    typeMed.set(t, arr.length%2===0 ? (arr[mid-1]+arr[mid])/2 : arr[mid]);
+  }
+  // 3) Dla każdej oferty ustaw verdict
+  let stats = {deal:0, normal:0, over:0, outlier:0, noPrice:0};
+  for (const l of listings) {
+    const ppm = Number(l.price_pm2) || 0;
+    if (!ppm || ppm < 500) {
+      l.verdict_badge = 'outlier';
+      l.verdict_text = '⚠️ Brak ceny';
+      l.ai_delta_pct = 0;
+      stats.noPrice++;
+      continue;
+    }
+    const key = `${(l.type||'').toLowerCase()}::${(l.city||'').toLowerCase()}`;
+    let med = medians.get(key);
+    let source = 'city';
+    if (!med) { med = typeMed.get((l.type||'').toLowerCase()); source = 'type'; }
+    if (!med) {
+      l.verdict_badge = 'normal';
+      l.verdict_text = '✨ Nowa';
+      l.ai_delta_pct = 0;
+      continue;
+    }
+    const delta = ((ppm - med) / med) * 100;
+    l.ai_delta_pct = Math.round(delta);
+    l.ai_median_ppm2 = Math.round(med);
+    l.ai_median_source = source;
+    if (delta <= -12) {
+      l.verdict_badge = 'deal';
+      l.verdict_text = `🔥 -${Math.abs(Math.round(delta))}%`;
+      l.verdict_full = `Cena za m² niższa o ${Math.abs(Math.round(delta))}% od mediany dla ${l.city}`;
+      stats.deal++;
+    } else if (delta > -12 && delta < 12) {
+      l.verdict_badge = 'normal';
+      l.verdict_text = delta >= 0 ? `✓ +${Math.round(delta)}%` : `✓ ${Math.round(delta)}%`;
+      l.verdict_full = `W normie dla ${l.city}`;
+      stats.normal++;
+    } else if (delta >= 12 && delta < 35) {
+      l.verdict_badge = 'over';
+      l.verdict_text = `🚫 +${Math.round(delta)}%`;
+      l.verdict_full = `Cena zawyżona o ${Math.round(delta)}% vs. mediana`;
+      stats.over++;
+    } else {
+      l.verdict_badge = 'outlier';
+      l.verdict_text = `⚠️ +${Math.round(delta)}%`;
+      l.verdict_full = `Outlier - ${Math.round(delta)}% ponad medianę`;
+      stats.outlier++;
+    }
+  }
+  console.log('AI verdicts:', stats, `(grupy z medianą: ${medians.size}, listings ${listings.length})`);
+}
+
+
 async function loadListings() {
   const grid = document.getElementById('grid');
   const count = document.getElementById('count');
@@ -683,6 +773,9 @@ async function loadListings() {
     });
     console.log(`Loaded: ${staticList.length} static + ${scrapedList.length} scraped = ${LISTINGS.length} total`);
     count.textContent = LISTINGS.length;
+
+    // ── AI ANALYSIS: oblicz verdict_badge dla każdej oferty (mediana ppm² per typ+miasto) ──
+    try { computeAiVerdicts(LISTINGS); } catch(e) { console.error('AI verdicts:', e); }
 
     // ── Aplikuj parametry z URL query string (deep linking) ──
     // Obsługuje: ?q=Warszawa&type=dom&trans=sprzedaz&date=3d&pmax=800000
@@ -1371,10 +1464,10 @@ function applyAllFilters() {
     // AI verdict filter
     if (f.activeVerdicts.length > 0) {
       const v = l.verdict_badge || 'normal';
-      // "hide-over" oznacza ukryj zawyżone → wtedy wszystkie oprócz over
+      // "hide-over" oznacza ukryj zawyżone → wtedy wszystkie oprócz over i outlier
       const wantHideOver = f.activeVerdicts.includes('hide-over');
       const explicitVerdicts = f.activeVerdicts.filter(x => x !== 'hide-over');
-      if (wantHideOver && v === 'over') return false;
+      if (wantHideOver && (v === 'over' || v === 'outlier')) return false;
       if (explicitVerdicts.length > 0 && !explicitVerdicts.includes(v)) return false;
     }
 

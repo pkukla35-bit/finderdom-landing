@@ -437,6 +437,8 @@
         <option value="area_desc">Największy metraż</option>
       </select>
     </div>
+    <!-- Info bar: aktywny promień geo-search -->
+    <div id="radiusInfo" style="display:none;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#c5d0e6;border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:14px"></div>
 
     <!-- AdSense: Nad wynikami -->
     <div class="fd-ad-slot" data-slot="listing-top" data-format="horizontal"></div>
@@ -1221,14 +1223,22 @@ function collectFilterState() {
 
   // Radius filter (km od wybranego miasta) — priorytet: sidebar > hero
   const radiusCityRaw = (document.getElementById('fRadiusCity')?.value?.trim() || document.getElementById('q')?.value?.trim() || '');
-  const radiusKm = parseFloat(document.getElementById('fRadiusKm')?.value || document.getElementById('heroRadiusKm')?.value || '0');
+  const explicitKm = parseFloat(document.getElementById('fRadiusKm')?.value || document.getElementById('heroRadiusKm')?.value || '0');
+  // AUTO-RADIUS: jeśli user wpisał miasto ale nie km, i miasto jest znane w CITY_COORDS → automatycznie użyj 15 km
+  //   (dzięki temu "Kraków" pokazuje 1099 domów z aglomeracji, a nie tylko 364 z city==Kraków)
+  let radiusKm = explicitKm;
   let radiusCenter = null;
   let radiusCityKey = null;
-  if (radiusCityRaw && radiusKm > 0) {
+  let autoRadius = false;
+  if (radiusCityRaw) {
     const key = normalizeCity(radiusCityRaw);
     if (window.CITY_COORDS && window.CITY_COORDS[key]) {
       radiusCenter = window.CITY_COORDS[key];
       radiusCityKey = key;
+      if (radiusKm <= 0) { radiusKm = 15; autoRadius = true; }
+    } else if (explicitKm > 0) {
+      // km wpisane ale miasto nieznane — pomijamy radius
+      radiusKm = 0;
     }
   }
 
@@ -1243,7 +1253,7 @@ function collectFilterState() {
   return { q, type, trans, priceMax, priceFrom, priceTo, heroMarket, activeSellers, onlyUnique, onlyMulti,
            ppm2From, ppm2To, areaFrom, areaTo, yearFrom, yearTo, dynamic,
            activeRooms, activeFloors, activeVerdicts,
-           radiusCenter, radiusKm, radiusCityKey,
+           radiusCenter, radiusKm, radiusCityKey, autoRadius,
            crmStatuses: Array.from(document.querySelectorAll('.chip.active[data-crm]')).map(c => c.dataset.crm),
            dateFromMs, dateToMs, sortMode };
 }
@@ -1414,6 +1424,21 @@ function applyAllFilters() {
   CURRENT_FILTERED = filtered;
   currentPage = 1;
   document.getElementById('count').textContent = filtered.length;
+  // Info label o aktywnym auto-radius (żeby user wiedział czemu ma dużo ofert wokół miasta)
+  const infoEl = document.getElementById('radiusInfo');
+  if (infoEl) {
+    if (f.autoRadius && f.radiusCityKey) {
+      const nice = (f.radiusCityKey || '').split('-').map(w => w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+      infoEl.innerHTML = `📍 Wyszukiwanie w promieniu <strong>${f.radiusKm} km</strong> od miasta <strong>${nice}</strong> <span style="color:#8ba3d4;font-weight:500">(zmień w polu "+km" obok miasta)</span>`;
+      infoEl.style.display = '';
+    } else if (f.radiusCenter && f.radiusKm > 0) {
+      const nice = (f.radiusCityKey || '').split('-').map(w => w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+      infoEl.innerHTML = `📍 Promień <strong>${f.radiusKm} km</strong> od <strong>${nice}</strong>`;
+      infoEl.style.display = '';
+    } else {
+      infoEl.style.display = 'none';
+    }
+  }
   renderPage();
 }
 

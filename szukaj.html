@@ -167,10 +167,10 @@
   .b-outlier{background:rgba(148,163,184,0.95);color:#0f172a}
   .b-new{background:rgba(255,184,0,0.95);color:#0B1836}
   .card-portal{position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.6);color:#fff;padding:3px 8px;border-radius:100px;font-size:9px;font-weight:700;backdrop-filter:blur(8px)}
-  /* Badge Multi-portal — klikalny, otwiera modal z listą portali */
-  .card-multi-badge{position:absolute;bottom:10px;right:10px;background:rgba(96,165,250,0.95);color:#0c1e3e;padding:5px 11px;border-radius:100px;font-size:10px;font-weight:900;letter-spacing:0.3px;backdrop-filter:blur(8px);border:none;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,0.35);z-index:5;transition:transform .12s, background .15s}
-  .card-multi-badge:hover{background:rgba(59,130,246,1);color:#fff;transform:scale(1.06)}
-  .card-multi-badge:active{transform:scale(0.94)}
+  /* Badge Multi-portal — klikalny, otwiera modal z listą portali (wersja na top-right zamiast pojedynczego portalu) */
+  .card-portal-multi{cursor:pointer;border:none;background:rgba(96,165,250,0.95);color:#0c1e3e;font-size:10px;font-weight:900;letter-spacing:0.3px;padding:4px 10px;box-shadow:0 3px 10px rgba(0,0,0,0.35);z-index:5;transition:transform .12s, background .15s}
+  .card-portal-multi:hover{background:rgba(59,130,246,1);color:#fff;transform:scale(1.06)}
+  .card-portal-multi:active{transform:scale(0.94)}
   /* Modal Multi-portal */
   .fd-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
   .fd-modal-overlay.open{display:flex}
@@ -585,7 +585,7 @@ function normalizeScrapedListing(raw) {
     image_url: raw.image || raw.image_url || '',
     images: (raw.images && raw.images.length) ? raw.images.slice(0, 20) : (raw.image ? [raw.image] : []),
     emoji: TYPE_EMOJI[baseType] || '🏠',
-    img_class: imgClass, portal: 'Otodom', is_original: true,
+    img_class: imgClass, portal: detectPortalFromUrl(raw.url) || 'Portal', is_original: true,
     seller_type: sellerType, seller_label: sellerLabel,
     verdict_badge: 'normal', verdict_text: '✨ Nowa',
     verdict_full: 'Świeżo zescrapowana', ai_delta_pct: 0,
@@ -594,9 +594,34 @@ function normalizeScrapedListing(raw) {
     building_type: buildingType || undefined,
     scraped_via: raw.scraped_via || 'scrapingbee',
     // Multi-portal: Apify klaster - ta sama oferta wystawiona na kilku serwisach
+    // Liczymy UNIKATOWE portale (nie relistings tego samego portalu)
     sources: Array.isArray(raw.sources) ? raw.sources : [],
-    sources_count: Array.isArray(raw.sources) ? raw.sources.length : (Array.isArray(raw.portals) ? raw.portals.length : 1),
+    sources_count: (() => {
+      const src = Array.isArray(raw.sources) ? raw.sources : [];
+      if (src.length > 0) {
+        const uniq = new Set(src.map(s => (s && s.portal) ? String(s.portal).toLowerCase() : '').filter(Boolean));
+        return Math.max(uniq.size, 1);
+      }
+      const ports = Array.isArray(raw.portals) ? raw.portals : [];
+      const uniq2 = new Set(ports.map(p => p ? String(p).toLowerCase() : '').filter(Boolean));
+      return Math.max(uniq2.size, 1);
+    })(),
   };
+}
+
+// Wykrywanie portalu z URL — dla poprawnego wyświetlania badge
+function detectPortalFromUrl(url) {
+  if (!url) return null;
+  const u = String(url).toLowerCase();
+  if (u.includes('otodom.pl')) return 'Otodom';
+  if (u.includes('morizon.pl')) return 'Morizon';
+  if (u.includes('gratka.pl')) return 'Gratka';
+  if (u.includes('olx.pl')) return 'OLX';
+  if (u.includes('nol.pl')) return 'Nol';
+  if (u.includes('adresowo.pl')) return 'Adresowo';
+  if (u.includes('domiporta.pl')) return 'Domiporta';
+  if (u.includes('nieruchomosci-online')) return 'NOL';
+  return null;
 }
 
 async function loadListings() {
@@ -808,10 +833,11 @@ function renderPage() {
           ${carouselHtml}
           ${emojiHtml}
           <div class="card-badge b-${l.verdict_badge}">${l.verdict_text}</div>
-          <div class="card-portal">${l.portal}</div>
+          ${(l.sources_count || 1) > 1
+            ? `<button type="button" class="card-portal card-portal-multi" data-multi-id="${l.id}" title="Kliknij aby zobaczyć wszystkie linki (${l.sources_count} portali)">🌐 ${l.sources_count} portali</button>`
+            : `<div class="card-portal">${l.portal}</div>`}
           ${crmBadgeHtml}
           ${l.seller_label ? `<div style="position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,0.75);color:#FFB800;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:800;backdrop-filter:blur(8px)">${l.seller_label}</div>` : ''}
-          ${(l.sources_count || 1) > 1 ? `<button type="button" class="card-multi-badge" data-multi-id="${l.id}" title="Kliknij aby zobaczyć wszystkie linki">🌐 ${l.sources_count} portali</button>` : ''}
         </div>
         <div class="card-body">
           <div class="card-title">${l.title}</div>
@@ -1630,7 +1656,7 @@ document.getElementById('sortSelect')?.addEventListener('change', applyAllFilter
 <script>
 // Klik na badge "🌐 N portali" → modal z listą linków
 document.getElementById('grid')?.addEventListener('click', (e) => {
-  const b = e.target.closest('.card-multi-badge');
+  const b = e.target.closest('.card-multi-badge, .card-portal-multi');
   if (!b) return;
   e.preventDefault();
   e.stopPropagation();

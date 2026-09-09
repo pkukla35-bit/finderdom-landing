@@ -167,6 +167,24 @@
   .b-outlier{background:rgba(148,163,184,0.95);color:#0f172a}
   .b-new{background:rgba(255,184,0,0.95);color:#0B1836}
   .card-portal{position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.6);color:#fff;padding:3px 8px;border-radius:100px;font-size:9px;font-weight:700;backdrop-filter:blur(8px)}
+  /* Badge Multi-portal — klikalny, otwiera modal z listą portali */
+  .card-multi-badge{position:absolute;bottom:10px;right:10px;background:rgba(96,165,250,0.95);color:#0c1e3e;padding:5px 11px;border-radius:100px;font-size:10px;font-weight:900;letter-spacing:0.3px;backdrop-filter:blur(8px);border:none;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,0.35);z-index:5;transition:transform .12s, background .15s}
+  .card-multi-badge:hover{background:rgba(59,130,246,1);color:#fff;transform:scale(1.06)}
+  .card-multi-badge:active{transform:scale(0.94)}
+  /* Modal Multi-portal */
+  .fd-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+  .fd-modal-overlay.open{display:flex}
+  .fd-modal{background:linear-gradient(180deg,#1a2e5c 0%,#0B1836 100%);border:1px solid rgba(255,184,0,0.35);border-radius:18px;max-width:520px;width:100%;max-height:80vh;overflow-y:auto;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+  .fd-modal h3{color:#FFB800;font-size:14px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
+  .fd-modal .fd-modal-title{font-size:16px;font-weight:800;color:#fff;margin-bottom:20px;line-height:1.3}
+  .fd-modal-list{display:flex;flex-direction:column;gap:10px}
+  .fd-modal-item{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 14px;text-decoration:none;color:#fff;transition:all .15s}
+  .fd-modal-item:hover{border-color:#FFB800;background:rgba(255,184,0,0.08)}
+  .fd-modal-item .p-name{font-size:13px;font-weight:800;text-transform:capitalize}
+  .fd-modal-item .p-price{font-size:13px;color:#FFB800;font-weight:900}
+  .fd-modal-item .p-open{font-size:11px;color:#8ba3d4;margin-left:8px}
+  .fd-modal-close{background:rgba(255,255,255,0.08);border:none;color:#fff;padding:10px 16px;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;margin-top:16px;width:100%;text-transform:uppercase;letter-spacing:0.5px}
+  .fd-modal-close:hover{background:rgba(255,184,0,0.2);color:#FFB800}
   .card-body{padding:16px}
   .card-title{font-size:14px;font-weight:800;margin-bottom:4px;color:#fff;line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
   .card-loc{font-size:11px;color:#8ba3d4;margin-bottom:10px}
@@ -363,10 +381,10 @@
     </div>
 
     <div class="filter-group">
-      <div class="filter-title">🔁 Duplikaty</div>
+      <div class="filter-title">🌐 Obecność na portalach</div>
       <div class="chip-group">
-        <div class="chip" id="chipOnlyOrig">✨ Tylko oryginały</div>
-        <div class="chip" id="chipShowAll">📋 Pokaż wszystko (z kopiami)</div>
+        <div class="chip" id="chipUnique" title="Oferty wystawione tylko na jednym portalu — często mniej konkurencji">🎯 Tylko unikalne (1 portal)</div>
+        <div class="chip" id="chipMulti" title="Ta sama oferta jest na wielu serwisach (Otodom+Morizon+Gratka)">🌐 Multi-portal (2+)</div>
       </div>
     </div>
 
@@ -379,97 +397,6 @@
         <div class="chip" data-crm="direct">🚷 Bez pośrednika</div>
         <div class="chip" data-crm="outdated">🚫 Nieaktualne</div>
         <div class="chip" data-crm="none">🆕 Nieoznaczone</div>
-      </div>
-    </div>
-
-    <!-- Collapsible: More filters (optional) -->
-    <div class="filter-group" style="border-bottom:none;padding-bottom:0">
-      <button id="toggleMore" style="width:100%;padding:12px;background:rgba(255,184,0,0.08);border:1px dashed rgba(255,184,0,0.35);border-radius:10px;color:#FFB800;font-weight:800;font-size:12px;letter-spacing:0.5px;cursor:pointer;text-transform:uppercase;text-align:center;transition:all 0.2s">
-        🔽 Więcej filtrów (opcjonalne)
-      </button>
-    </div>
-
-    <div id="moreFilters" style="display:none">
-      <div class="filter-group">
-        <div class="filter-title">🏗️ Materiał budynku</div>
-        <div class="chip-group">
-          <div class="chip" data-filter="material" data-value="cegla">🧱 Cegła</div>
-          <div class="chip" data-filter="material" data-value="wielka_plyta">🏢 Wielka płyta</div>
-          <div class="chip" data-filter="material" data-value="beton">🏛️ Żelbet / beton</div>
-          <div class="chip" data-filter="material" data-value="drewno">🪵 Drewno</div>
-          <div class="chip" data-filter="material" data-value="silikat">🧊 Silikat</div>
-          <div class="chip" data-filter="material" data-value="pustak">🧱 Pustak</div>
-          <div class="chip" data-filter="material" data-value="gazobeton">🪨 Gazobeton</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <div class="filter-title">🌡️ Ogrzewanie</div>
-        <div class="chip-group">
-          <div class="chip" data-filter="heating" data-value="miejskie">🏙️ Miejskie</div>
-          <div class="chip" data-filter="heating" data-value="gazowe">🔥 Gazowe</div>
-          <div class="chip" data-filter="heating" data-value="kotlownia">♨️ Kotłownia</div>
-          <div class="chip" data-filter="heating" data-value="elektryczne">⚡ Elektryczne</div>
-          <div class="chip" data-filter="heating" data-value="kaflowy">🔥 Piec kaflowy</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <div class="filter-title">🚗 Parking</div>
-        <div class="chip-group">
-          <div class="chip">🅿️ Garaż podziemny</div>
-          <div class="chip">🏚️ Garaż naziemny</div>
-          <div class="chip">📍 Miejsce postojowe</div>
-          <div class="chip">🛣️ Na ulicy</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <div class="filter-title">🔒 Zabezpieczenia</div>
-        <div class="chip-group">
-          <div class="chip">🔔 Domofon</div>
-          <div class="chip">📹 Wideodomofon</div>
-          <div class="chip">👮 Ochrona 24h</div>
-          <div class="chip">🎥 Monitoring</div>
-          <div class="chip">🚧 Osiedle zamknięte</div>
-          <div class="chip">🚨 Alarm</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <div class="filter-title">🌳 Otoczenie</div>
-        <div class="chip-group">
-          <div class="chip">🌳 Park / zieleń</div>
-          <div class="chip">🌲 Las</div>
-          <div class="chip">💧 Jezioro / rzeka</div>
-          <div class="chip">🏙️ Centrum</div>
-          <div class="chip">🏫 Blisko szkoły</div>
-          <div class="chip">🏥 Blisko przychodni</div>
-          <div class="chip">🛒 Blisko sklepów</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <div class="filter-title">🚇 Komunikacja</div>
-        <div class="chip-group">
-          <div class="chip">🚇 Metro (do 500m)</div>
-          <div class="chip">🚊 Tramwaj (do 300m)</div>
-          <div class="chip">🚌 Autobus (do 200m)</div>
-          <div class="chip">🚄 Kolej / SKM</div>
-          <div class="chip">🛣️ Autostrada (do 5km)</div>
-          <div class="chip">✈️ Blisko lotniska</div>
-        </div>
-      </div>
-
-      <div class="filter-group">
-        <div class="filter-title">📋 Stan prawny</div>
-        <div class="chip-group">
-          <div class="chip">🏛️ Własność</div>
-          <div class="chip">📜 Spółdzielcze własnościowe</div>
-          <div class="chip">📄 Spółdzielcze lokatorskie</div>
-          <div class="chip">✓ Księga wieczysta</div>
-          <div class="chip">🚫 Bez obciążeń</div>
-        </div>
       </div>
     </div>
 
@@ -664,6 +591,9 @@ function normalizeScrapedListing(raw) {
     land_purpose: landPurpose || undefined,
     building_type: buildingType || undefined,
     scraped_via: raw.scraped_via || 'scrapingbee',
+    // Multi-portal: Apify klaster - ta sama oferta wystawiona na kilku serwisach
+    sources: Array.isArray(raw.sources) ? raw.sources : [],
+    sources_count: Array.isArray(raw.sources) ? raw.sources.length : (Array.isArray(raw.portals) ? raw.portals.length : 1),
   };
 }
 
@@ -759,9 +689,16 @@ async function loadCrmStatuses() {
 }
 
 function renderListings(list) {
-  // Apply "only originals" filter if active
-  const onlyOrigActive = document.getElementById('chipOnlyOrig')?.classList.contains('active');
-  CURRENT_FILTERED = onlyOrigActive ? list.filter(l => l.is_original !== false) : list;
+  // Multi-portal filter: 🎯 Unikalne (1 portal) vs 🌐 Multi-portal (2+)
+  const uniqActive = document.getElementById('chipUnique')?.classList.contains('active');
+  const multiActive = document.getElementById('chipMulti')?.classList.contains('active');
+  if (uniqActive && !multiActive) {
+    CURRENT_FILTERED = list.filter(l => (l.sources_count || 1) <= 1);
+  } else if (multiActive && !uniqActive) {
+    CURRENT_FILTERED = list.filter(l => (l.sources_count || 1) >= 2);
+  } else {
+    CURRENT_FILTERED = list;
+  }
   currentPage = 1;
   document.getElementById('count').textContent = CURRENT_FILTERED.length;
   renderPage();
@@ -824,7 +761,7 @@ function renderPage() {
           <div class="card-portal">${l.portal}</div>
           ${crmBadgeHtml}
           ${l.seller_label ? `<div style="position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,0.75);color:#FFB800;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:800;backdrop-filter:blur(8px)">${l.seller_label}</div>` : ''}
-          ${l.is_original === false ? '<div style="position:absolute;bottom:10px;right:10px;background:rgba(251,146,60,0.95);color:#3d1a0a;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px">📋 Kopia</div>' : '<div style="position:absolute;bottom:10px;right:10px;background:rgba(34,197,94,0.95);color:#052e16;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px">✨ Oryginalna</div>'}
+          ${(l.sources_count || 1) > 1 ? `<button type="button" class="card-multi-badge" data-multi-id="${l.id}" title="Kliknij aby zobaczyć wszystkie linki">🌐 ${l.sources_count} portali</button>` : ''}
         </div>
         <div class="card-body">
           <div class="card-title">${l.title}</div>
@@ -972,7 +909,7 @@ document.querySelector('.sort-select')?.addEventListener('change', (e) => {
 document.querySelectorAll('.chip').forEach(c => {
   if (c.hasAttribute('data-seller')) return;
   if (c.hasAttribute('data-filter')) return;
-  if (c.id === 'chipOnlyOrig') return;
+  if (c.id === 'chipUnique' || c.id === 'chipMulti') return;
   if (c.closest('#propertyType')) return;
   if (c.dataset.crm) {
     c.addEventListener('click', () => { c.classList.toggle('active'); applyAllFilters(); });
@@ -981,25 +918,7 @@ document.querySelectorAll('.chip').forEach(c => {
   c.addEventListener('click', () => c.classList.toggle('active'));
 });
 
-// Toggle "More filters" section
-const toggleBtn = document.getElementById('toggleMore');
-const moreSection = document.getElementById('moreFilters');
-if (toggleBtn && moreSection) {
-  toggleBtn.addEventListener('click', () => {
-    const isOpen = moreSection.style.display === 'block';
-    moreSection.style.display = isOpen ? 'none' : 'block';
-    toggleBtn.innerHTML = isOpen ? '🔽 Więcej filtrów (opcjonalne)' : '🔼 Zwiń dodatkowe filtry';
-    if (!isOpen) {
-      // Re-bind chip handlers for newly-visible chips
-      moreSection.querySelectorAll('.chip').forEach(c => {
-        if (!c.dataset.bound) {
-          c.dataset.bound = '1';
-          c.addEventListener('click', () => c.classList.toggle('active'));
-        }
-      });
-    }
-  });
-}
+// (usunięto sekcję "Więcej filtrów" — te chipy nie były podpięte do żadnej logiki)
 
 // Property type = radio (single select) + dynamic sub-type
 const SUB_TYPES = {
@@ -1164,7 +1083,8 @@ document.querySelector('.btn-clear')?.addEventListener('click', () => {
   });
   // Reset chipów: WSZYSTKIE odznaczone (user wybiera sam czego chce)
   document.querySelectorAll('.chip[data-seller]').forEach(c => c.classList.remove('active'));
-  document.getElementById('chipOnlyOrig')?.classList.remove('active');
+  document.getElementById('chipUnique')?.classList.remove('active');
+  document.getElementById('chipMulti')?.classList.remove('active');
   document.querySelectorAll('.chip[data-filter][data-value]').forEach(c => c.classList.remove('active'));
   // Reset chipów sub-typu
   document.querySelectorAll('#subTypeChips .chip').forEach(c => c.classList.remove('active'));
@@ -1210,7 +1130,8 @@ function collectFilterState() {
   const activeSellers = Array.from(document.querySelectorAll('.chip.active[data-seller]'))
     .map(c => c.dataset.seller);
 
-  const onlyOrig = document.getElementById('chipOnlyOrig')?.classList.contains('active');
+  const onlyUnique = document.getElementById('chipUnique')?.classList.contains('active');
+  const onlyMulti  = document.getElementById('chipMulti')?.classList.contains('active');
 
   // Data dodania: chip active OR custom range
   const activeDateChip = document.querySelector('.date-chip.active');
@@ -1271,7 +1192,7 @@ function collectFilterState() {
     dynamic[k].add(v);
   });
 
-  return { q, type, trans, priceMax, priceFrom, priceTo, heroMarket, activeSellers, onlyOrig,
+  return { q, type, trans, priceMax, priceFrom, priceTo, heroMarket, activeSellers, onlyUnique, onlyMulti,
            ppm2From, ppm2To, areaFrom, areaTo, yearFrom, yearTo, dynamic,
            activeRooms, activeFloors, activeVerdicts,
            radiusCenter, radiusKm, radiusCityKey,
@@ -1298,7 +1219,10 @@ function applyAllFilters() {
       }
     }
     if (f.activeSellers.length > 0 && !f.activeSellers.includes(l.seller_type)) return false;
-    if (f.onlyOrig && l.is_original === false) return false;
+    // Multi-portal filtry: 🎯 Unikalne = tylko na 1 portalu, 🌐 Multi = 2+
+    const sc = l.sources_count || 1;
+    if (f.onlyUnique && !f.onlyMulti && sc > 1) return false;
+    if (f.onlyMulti && !f.onlyUnique && sc < 2) return false;
 
     // CRM filter (Firmowy) — OR match: show only offers with any of active CRM statuses
     if (f.crmStatuses && f.crmStatuses.length > 0) {
@@ -1437,7 +1361,7 @@ function applyAllFilters() {
     if (typeof updateSubType === 'function') updateSubType(f.type);
   }
 
-  // Bezpieczne renderowanie: bypass onlyOrig filter w renderListings (już zastosowany)
+  // Bezpieczne renderowanie: filtr multi-portal już zastosowany w renderListings
   const grid = document.getElementById('grid');
   CURRENT_FILTERED = filtered;
   currentPage = 1;
@@ -1490,10 +1414,25 @@ document.querySelectorAll('.chip[data-seller]').forEach(c => {
   }, true);
 });
 
-// Chip "Tylko oryginały" — trigger filtracji
-document.getElementById('chipOnlyOrig')?.addEventListener('click', (e) => {
+// Chipy Multi-portal — 🎯 Unikalne (1 portal) i 🌐 Multi-portal (2+) — mutually exclusive
+document.getElementById('chipUnique')?.addEventListener('click', (e) => {
   e.stopImmediatePropagation();
-  e.currentTarget.classList.toggle('active');
+  const c = e.currentTarget;
+  const wasActive = c.classList.contains('active');
+  c.classList.toggle('active');
+  if (!wasActive) {
+    document.getElementById('chipMulti')?.classList.remove('active');
+  }
+  applyAllFilters();
+}, false);
+document.getElementById('chipMulti')?.addEventListener('click', (e) => {
+  e.stopImmediatePropagation();
+  const c = e.currentTarget;
+  const wasActive = c.classList.contains('active');
+  c.classList.toggle('active');
+  if (!wasActive) {
+    document.getElementById('chipUnique')?.classList.remove('active');
+  }
   applyAllFilters();
 }, false);
 
@@ -1561,11 +1500,7 @@ document.querySelectorAll('.chip[data-verdict]').forEach(c => {
   }, true);
 });
 
-// "Pokaż wszystko" — po prostu wyłącza "Tylko oryginały" (nie ma własnego stanu)
-document.getElementById('chipShowAll')?.addEventListener('click', () => {
-  document.getElementById('chipOnlyOrig')?.classList.remove('active');
-  applyAllFilters();
-});
+// (usunięto chip "Pokaż wszystko" — zastąpiony przez Multi-portal / Unikalne)
 
 // Date chips — radio (jeden aktywny na raz)
 document.querySelectorAll('.date-chip').forEach(c => {
@@ -1608,6 +1543,54 @@ document.getElementById('sortSelect')?.addEventListener('change', applyAllFilter
     <a href="mailto:kontakt@finderdom.pl">Kontakt</a>
   </div>
 </footer>
+
+<!-- Modal Multi-portal — pokazuje wszystkie linki do tej samej oferty na różnych serwisach -->
+<div class="fd-modal-overlay" id="multiPortalModal" role="dialog" aria-modal="true">
+  <div class="fd-modal" role="document">
+    <h3>🌐 Ta sama oferta na wielu portalach</h3>
+    <div class="fd-modal-title" id="multiModalTitle">—</div>
+    <div class="fd-modal-list" id="multiModalList"></div>
+    <button type="button" class="fd-modal-close" id="multiModalClose">Zamknij</button>
+  </div>
+</div>
+
+<script>
+// Klik na badge "🌐 N portali" → modal z listą linków
+document.getElementById('grid')?.addEventListener('click', (e) => {
+  const b = e.target.closest('.card-multi-badge');
+  if (!b) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const id = b.dataset.multiId;
+  const listing = LISTINGS.find(l => l.id === id);
+  if (!listing) return;
+  const sources = Array.isArray(listing.sources) ? listing.sources : [];
+  document.getElementById('multiModalTitle').textContent = listing.title || 'Oferta';
+  const listEl = document.getElementById('multiModalList');
+  if (sources.length === 0) {
+    listEl.innerHTML = '<div style="color:#8ba3d4;padding:12px">Brak szczegółów portali dla tej oferty.</div>';
+  } else {
+    listEl.innerHTML = sources.map(s => {
+      const portal = String(s.portal || '').replace(/^./, c => c.toUpperCase()) || 'Portal';
+      const url = s.url || '#';
+      const price = s.price ? (Number(s.price).toLocaleString('pl-PL').replace(/,/g, ' ') + ' zł') : '';
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="fd-modal-item">
+        <span class="p-name">📌 ${portal}</span>
+        <span>${price ? `<span class="p-price">${price}</span>` : ''}<span class="p-open">↗</span></span>
+      </a>`;
+    }).join('');
+  }
+  document.getElementById('multiPortalModal').classList.add('open');
+}, true);
+
+// Zamykanie modala
+function closeMultiModal() { document.getElementById('multiPortalModal')?.classList.remove('open'); }
+document.getElementById('multiModalClose')?.addEventListener('click', closeMultiModal);
+document.getElementById('multiPortalModal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'multiPortalModal') closeMultiModal();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMultiModal(); });
+</script>
 
 </body>
 </html>

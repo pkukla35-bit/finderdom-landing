@@ -80,6 +80,9 @@ DOM_TYPE_KEYWORDS = [
         r"rekreacyjn(?:y|ego|ym|a|ej)\s+dom",
         r"domek\s+w\s+lesie",
         r"weekendow(?:y|ego|ym)\s+dom",
+        r"wypoczynkow(?:y|ego|ym|a)\s+dom",
+        r"dom\s+wypoczynkow",
+        r"domek\s+mobiln",
     ]),
     # 6. WOLNOSTOJACY - najbardziej ogólny, OSTATNI (fallback)
     ("wolnostojacy", [

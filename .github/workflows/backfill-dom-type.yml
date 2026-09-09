@@ -17,13 +17,13 @@ on:
         type: string
         default: ''
       force_reclassify:
-        description: 'Reklasyfikuj też te co już mają building_type'
+        description: 'Reklasyfikuj też te co już mają building_type (POLECANE=yes)'
         required: false
         type: choice
         options:
-          - 'no'
           - 'yes'
-        default: 'no'
+          - 'no'
+        default: 'yes'
 
 jobs:
   backfill:

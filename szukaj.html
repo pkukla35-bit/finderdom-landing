@@ -688,9 +688,15 @@ function computeAiVerdicts(listings) {
     l.ai_delta_pct = Math.round(delta);
     l.ai_median_ppm2 = Math.round(med);
     l.ai_median_source = source;
-    if (delta <= -12) {
+    if (delta <= -50) {
+      // Fałszywa okazja — prawdopodobnie budka/działka/niepełna oferta
+      l.verdict_badge = 'outlier';
+      l.verdict_text = `⚠️ ${Math.round(delta)}%`;
+      l.verdict_full = `Podejrzanie tania - ${Math.round(delta)}% od mediany (możliwy błąd lub niepełna oferta)`;
+      stats.outlier++;
+    } else if (delta <= -12) {
       l.verdict_badge = 'deal';
-      l.verdict_text = `🔥 -${Math.abs(Math.round(delta))}%`;
+      l.verdict_text = `🔥 ${Math.round(delta)}%`;
       l.verdict_full = `Cena za m² niższa o ${Math.abs(Math.round(delta))}% od mediany dla ${l.city}`;
       stats.deal++;
     } else if (delta > -12 && delta < 12) {

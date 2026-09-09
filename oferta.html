@@ -315,6 +315,18 @@
       </div>
     </div>
 
+    <!-- Multi-portal box: pokazuje wszystkie portale gdzie ta sama oferta jest wystawiona -->
+    <div id="multiPortalBox" style="display:none;margin:16px 0;padding:16px 18px;background:linear-gradient(135deg,rgba(96,165,250,0.12),rgba(59,130,246,0.06));border:1px solid rgba(96,165,250,0.35);border-radius:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="font-size:20px">🌐</div>
+        <div>
+          <div style="font-size:14px;font-weight:800;color:#93c5fd">Ta sama oferta na wielu portalach</div>
+          <div id="multiPortalSub" style="font-size:11px;color:#8ba3d4;margin-top:2px">Kliknij aby otworzyć w wybranym serwisie</div>
+        </div>
+      </div>
+      <div id="multiPortalLinks" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
+
     <!-- CRM statusy — tylko dla zalogowanych Firmowy -->
     <div id="crmBar" style="display:none;margin:16px 0;padding:14px 18px;background:linear-gradient(135deg,rgba(79,70,229,0.12),rgba(255,184,0,0.06));border:1px solid rgba(255,184,0,0.3);border-radius:12px">
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px">
@@ -813,7 +825,7 @@ function normalizeScrapedListing(raw) {
     image_url: raw.image || raw.image_url || '',
     images: (Array.isArray(raw.images) && raw.images.length) ? raw.images.slice(0, 30) : ((raw.image || raw.image_url) ? [raw.image || raw.image_url] : []),
     emoji: TYPE_EMOJI_OFF[baseType] || '🏠',
-    img_class: imgClass, portal: 'Otodom', is_original: true,
+    img_class: imgClass, portal: detectPortalFromUrlOff(raw.url) || 'Portal', is_original: true,
     seller_type: sellerType, seller_label: sellerLabel,
     verdict_badge: 'normal', verdict_text: '✨ Nowa',
     verdict_full: 'Świeżo zescrapowana', ai_delta_pct: 0,
@@ -821,7 +833,72 @@ function normalizeScrapedListing(raw) {
     land_purpose: landPurpose || undefined,
     building_type: buildingType || undefined,
     scraped_via: raw.scraped_via || 'scrapingbee',
+    // Multi-portal cluster (Otodom+Morizon+Gratka+...)
+    sources: Array.isArray(raw.sources) ? raw.sources : [],
+    sources_count: (() => {
+      const src = Array.isArray(raw.sources) ? raw.sources : [];
+      if (src.length > 0) {
+        const uniq = new Set(src.map(s => (s && s.portal) ? String(s.portal).toLowerCase() : '').filter(Boolean));
+        return Math.max(uniq.size, 1);
+      }
+      const ports = Array.isArray(raw.portals) ? raw.portals : [];
+      const uniq2 = new Set(ports.map(p => p ? String(p).toLowerCase() : '').filter(Boolean));
+      return Math.max(uniq2.size, 1);
+    })(),
   };
+}
+
+// Wykrywanie portalu z URL (oferta.html)
+function detectPortalFromUrlOff(url) {
+  if (!url) return null;
+  const u = String(url).toLowerCase();
+  if (u.includes('otodom.pl')) return 'Otodom';
+  if (u.includes('morizon.pl')) return 'Morizon';
+  if (u.includes('gratka.pl')) return 'Gratka';
+  if (u.includes('olx.pl')) return 'OLX';
+  if (u.includes('nol.pl')) return 'Nol';
+  if (u.includes('adresowo.pl')) return 'Adresowo';
+  if (u.includes('domiporta.pl')) return 'Domiporta';
+  if (u.includes('nieruchomosci-online')) return 'NOL';
+  return null;
+}
+
+// Multi-portal box na oferta.html
+function renderMultiPortalBox(l) {
+  const box = document.getElementById('multiPortalBox');
+  const linksEl = document.getElementById('multiPortalLinks');
+  const subEl = document.getElementById('multiPortalSub');
+  if (!box || !linksEl) return;
+  const src = Array.isArray(l.sources) ? l.sources : [];
+  const sc = l.sources_count || 1;
+  if (sc < 2 || src.length === 0) {
+    box.style.display = 'none';
+    return;
+  }
+  const portalColors = {
+    otodom:   {bg:'rgba(255,184,0,0.15)',  border:'rgba(255,184,0,0.45)',  color:'#FFB800'},
+    morizon:  {bg:'rgba(74,222,128,0.12)', border:'rgba(74,222,128,0.4)',  color:'#4ade80'},
+    gratka:   {bg:'rgba(96,165,250,0.12)', border:'rgba(96,165,250,0.4)',  color:'#60a5fa'},
+    olx:      {bg:'rgba(139,92,246,0.12)', border:'rgba(139,92,246,0.4)',  color:'#a78bfa'},
+    adresowo: {bg:'rgba(251,146,60,0.12)', border:'rgba(251,146,60,0.4)',  color:'#fb923c'},
+    domiporta:{bg:'rgba(236,72,153,0.12)', border:'rgba(236,72,153,0.4)',  color:'#f472b6'},
+    nol:      {bg:'rgba(148,163,184,0.15)',border:'rgba(148,163,184,0.4)', color:'#94a3b8'},
+  };
+  linksEl.innerHTML = src.map(s => {
+    const portal = String(s.portal || '').toLowerCase();
+    const nice = portal.charAt(0).toUpperCase() + portal.slice(1) || 'Portal';
+    const c = portalColors[portal] || {bg:'rgba(139,163,212,0.12)',border:'rgba(139,163,212,0.3)',color:'#c5d0e6'};
+    const price = s.price ? (Number(s.price).toLocaleString('pl-PL').replace(/,/g,' ') + ' zł') : '';
+    return `<a href="${s.url || '#'}" target="_blank" rel="noopener noreferrer"
+      style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:${c.bg};border:1px solid ${c.border};color:${c.color};border-radius:100px;text-decoration:none;font-size:13px;font-weight:800;transition:transform .1s"
+      onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''">
+      <span>📌 ${nice}</span>
+      ${price ? `<span style="color:#c5d0e6;font-size:11px;font-weight:600">${price}</span>` : ''}
+      <span style="font-size:11px;opacity:0.7">↗</span>
+    </a>`;
+  }).join('');
+  if (subEl) subEl.textContent = `Znaleziona na ${sc} portalach — kliknij aby otworzyć w wybranym serwisie`;
+  box.style.display = 'block';
 }
 
 
@@ -1097,11 +1174,14 @@ function renderOffer(l, all) {
   if (l.source_url) {
     el('sourceLink').href = l.source_url;
     el('ctaOtodom').href = l.source_url;
-    el('ctaOtodom').textContent = `🔗 Otwórz w ${l.portal || 'Otodom'}`;
+    el('ctaOtodom').textContent = `🔗 Otwórz w ${l.portal || 'portalu'}`;
   } else {
     el('sourceLink').style.display = 'none';
     el('ctaOtodom').style.display = 'none';
   }
+
+  // Multi-portal: jeśli oferta jest na kilku serwisach, pokaż listę linków
+  renderMultiPortalBox(l);
 
   // Title + location + price
   el('offerTitle').textContent = l.title;

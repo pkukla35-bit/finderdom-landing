@@ -656,11 +656,59 @@ async function loadListings() {
     });
     console.log(`Loaded: ${staticList.length} static + ${scrapedList.length} scraped = ${LISTINGS.length} total`);
     count.textContent = LISTINGS.length;
+
+    // ── Aplikuj parametry z URL query string (deep linking) ──
+    // Obsługuje: ?q=Warszawa&type=dom&trans=sprzedaz&date=3d&pmax=800000
+    try {
+      const params = new URLSearchParams(location.search);
+      const urlQ = params.get('q') || params.get('city');
+      const urlType = params.get('type');
+      const urlTrans = params.get('trans') || params.get('transaction');
+      const urlDate = params.get('date');
+      const urlPmax = params.get('pmax') || params.get('price_max');
+      const urlKm = params.get('km') || params.get('radius');
+
+      if (urlQ) {
+        const qEl = document.getElementById('q');
+        if (qEl) qEl.value = urlQ;
+        const sidebarCity = document.getElementById('fRadiusCity');
+        if (sidebarCity) sidebarCity.value = urlQ;
+      }
+      if (urlType) {
+        const ht = document.getElementById('heroType');
+        if (ht) ht.value = urlType;
+        // Sync chip w sidebarze
+        document.querySelectorAll('#propertyType .chip').forEach(c => c.classList.remove('active'));
+        const chip = document.querySelector(`#propertyType .chip[data-type="${urlType}"]`);
+        if (chip) chip.classList.add('active');
+        if (typeof updateSubType === 'function') updateSubType(urlType);
+      }
+      if (urlTrans) {
+        const htr = document.getElementById('heroTrans');
+        if (htr) htr.value = urlTrans;
+      }
+      if (urlPmax) {
+        const hp = document.getElementById('heroPrice');
+        if (hp) hp.value = urlPmax;
+      }
+      if (urlKm) {
+        const hrk = document.getElementById('heroRadiusKm');
+        if (hrk) hrk.value = urlKm;
+        const frk = document.getElementById('fRadiusKm');
+        if (frk) frk.value = urlKm;
+      }
+      if (urlDate && ['today','3d','7d','30d','all','custom'].includes(urlDate)) {
+        document.querySelectorAll('.date-chip').forEach(c => c.classList.remove('active'));
+        const dc = document.querySelector(`.date-chip[data-date="${urlDate}"]`);
+        if (dc) dc.classList.add('active');
+      }
+    } catch(e) { console.error('URL params init:', e); }
+
     // Load CRM statuses for Firmowy user (async, non-blocking)
     loadCrmStatuses().then(() => {
       if (typeof applyAllFilters === 'function') applyAllFilters();
     });
-    // Zastosuj domyślne filtry od razu (hero: Mieszkanie + Sprzedaż, sidebar: Prywatna+Pośrednik, Tylko oryginały)
+    // Zastosuj filtry od razu (uwzględnia parametry URL + domyślne UI)
     if (typeof applyAllFilters === 'function') applyAllFilters();
     else renderListings(LISTINGS);
   } catch (err) {

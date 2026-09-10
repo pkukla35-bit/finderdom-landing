@@ -646,12 +646,20 @@ async function loadOffer() {
               currentListing = normalized;
               window.__offer = normalized;
               renderOffer(normalized);
-              // W tle doładuj resztę listy dla "Podobnych ofert" (opcjonalnie)
+              // W tle doładuj resztę listy dla porównywarki AI (5km) i "Podobnych ofert"
               setTimeout(() => {
                 fetch('/api/listings-scraped').then(r => r.ok ? r.json() : null).then(d => {
-                  if (d && d.listings) window.__allListings = d.listings;
+                  if (d && d.listings) {
+                    // Normalizujemy WSZYSTKIE (dla AI porównywarki potrzebujemy lat/lon/price_pm2/area_m2/market_type)
+                    const normAll = d.listings.map(normalizeScrapedListing).filter(Boolean);
+                    window.__allListings = normAll;
+                    // 🔄 REROLL: teraz gdy mamy wszystkie oferty, przerenderuj widget AI z medianą 5km
+                    if (window.__isPremium && currentListing) {
+                      try { renderOffer(currentListing, normAll); } catch(e) { console.error('rerender AI:', e); }
+                    }
+                  }
                 }).catch(() => {});
-              }, 500);
+              }, 300);
               return;
             }
           }
@@ -1014,6 +1022,8 @@ function renderOffer(l, all) {
   el('loadingState').style.display = 'none';
   el('offerContainer').style.display = 'grid';
   window.__currentListingId = l.id;  // dla modalu Wycena Premium PDF
+  // Fallback: gdy fast-path nie przekazał "all", weź to co jest w tle w window.__allListings
+  if (!all || !all.length) all = window.__allListings || [];
 
   // Meta / title
   document.title = `${l.title} — ${l.price_display} — FinderDom.pl`;

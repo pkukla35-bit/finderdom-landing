@@ -6,15 +6,15 @@ name: Apify CRON - regionalny scrape (co 6h)
 
 on:
   schedule:
-    # Co 6 godzin: 03:30, 09:30, 15:30, 21:30 UTC (5:30, 11:30, 17:30, 23:30 CET)
-    - cron: '30 3,9,15,21 * * *'
+    # Co 12 godzin (zamiast co 6h — oszczędzamy Apify budget)
+    - cron: '30 3,15 * * *'
   workflow_dispatch:
     inputs:
       max_items:
         description: 'Max ofert per portal per województwo'
         required: false
         type: string
-        default: '400'
+        default: '200'
       days:
         description: 'Ostatnie N dni (rolling window)'
         required: false
@@ -69,7 +69,7 @@ jobs:
         id: run_actor
         run: |
           DATE_FROM="${{ needs.prepare.outputs.date_from }}"
-          MAX="${{ inputs.max_items || '400' }}"
+          MAX="${{ inputs.max_items || '200' }}"
           REG="${{ matrix.region }}"
           PROP="${{ matrix.property }}"
           RESP=$(curl -s -X POST "https://api.apify.com/v2/acts/trev0n~polish-real-estate-aggregator/runs?token=${{ secrets.APIFY_TOKEN }}&memory=4096&timeout=3600" \

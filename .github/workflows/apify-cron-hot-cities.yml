@@ -5,20 +5,20 @@ name: Apify CRON - HOT cities (co 1h)
 
 on:
   schedule:
-    # Co godzinę o 15 minucie (żeby uniknąć peak load na Apify o pełnej godzinie)
-    - cron: '15 * * * *'
+    # Co 3 godziny (zamiast co 1h — oszczędzamy Apify budget)
+    - cron: '15 */3 * * *'
   workflow_dispatch:
     inputs:
       max_items:
         description: 'Max ofert per portal per miasto'
         required: false
         type: string
-        default: '200'
+        default: '100'
       days:
         description: 'Ostatnie N dni'
         required: false
         type: string
-        default: '7'
+        default: '3'
 
 jobs:
   prepare:
@@ -41,7 +41,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        city: [Warszawa, Kraków, Wrocław, Poznań, Gdańsk, Łódź, Katowice, Bydgoszcz, Szczecin, Lublin]
+        city: [Warszawa, Kraków, Wrocław, Poznań, Gdańsk]
         property: [mieszkanie, dom]
     steps:
       - uses: actions/checkout@v5
@@ -53,7 +53,7 @@ jobs:
         id: run_actor
         run: |
           DATE_FROM="${{ needs.prepare.outputs.date_from }}"
-          MAX="${{ inputs.max_items || '200' }}"
+          MAX="${{ inputs.max_items || '100' }}"
           CITY="${{ matrix.city }}"
           PROP="${{ matrix.property }}"
           echo "🔥 [$CITY / $PROP] fresh <7d, max=$MAX"

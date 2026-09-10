@@ -1491,8 +1491,9 @@ function applyAllFilters() {
     if (f.ppm2To   && l.price_pm2 > f.ppm2To)   return false;
     if (f.areaFrom && l.area_m2   < f.areaFrom) return false;
     if (f.areaTo   && l.area_m2   > f.areaTo)   return false;
-    if (f.yearFrom && (!l.build_year || l.build_year < f.yearFrom)) return false;
-    if (f.yearTo   && (!l.build_year || l.build_year > f.yearTo))   return false;
+    // Rok budowy: gdy oferta MA rok, filtruj strict; gdy 0/brak, przepuszczaj (nie wiemy = nie odrzucamy)
+    if (f.yearFrom && l.build_year > 0 && l.build_year < f.yearFrom) return false;
+    if (f.yearTo   && l.build_year > 0 && l.build_year > f.yearTo)   return false;
 
     // Dynamic filters (typ budynku, standard, market_type, has_*)
     for (const [key, allowed] of Object.entries(f.dynamic)) {

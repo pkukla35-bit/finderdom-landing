@@ -605,22 +605,38 @@ function normalizeScrapedListing(raw) {
   const sellerType = raw.seller_type || 'posrednik';
   const sellerLabel = sellerType === 'prywatna' ? '👨‍👩‍👧 Prywatna' : '🏢 Pośrednik';
 
-  // Autodetekcja market_type z title+description (dla starych importów bez tego pola)
+  // Autodetekcja market_type z title+description+URL+build_year (dla starych importów bez tego pola)
   let marketType = raw.market_type || '';
   if (!marketType) {
-    const mtText = ((raw.title || '') + ' ' + (raw.description || raw.descriptionText || '').slice(0, 800)).toLowerCase();
-    // Pierwotny: developer/nowy/do wykończenia
-    if (/deweloper|dewelopers|pierwotn|nowa inwestycj|nowo\s+wybudow|stan\s+deweloper|oddan(?:e|y)\s+do\s+uży|nowe\s+mieszkan|inwestycja|do\s+odbioru/.test(mtText)) {
-      marketType = 'pierwotny';
-    } else if (/wtórn|wtorn|do\s+remont|do\s+odświe|uzywan|używan|lata\s+70|lata\s+80|lata\s+60|kamienic|z\s+ryn.*?wtórn/.test(mtText)) {
-      marketType = 'wtorny';
-    } else if ((raw.build_year || raw.year_built) && Number(raw.build_year || raw.year_built) >= (new Date().getFullYear() - 2)) {
-      // Rok budowy w ostatnich 2 latach → pewnie pierwotny
-      marketType = 'pierwotny';
-    } else if ((raw.build_year || raw.year_built) && Number(raw.build_year || raw.year_built) > 0 && Number(raw.build_year || raw.year_built) < (new Date().getFullYear() - 5)) {
-      // Rok budowy 5+ lat wstecz → wtórny
-      marketType = 'wtorny';
-    }
+    const currentYear = new Date().getFullYear();
+    const bldYear = Number(raw.build_year || raw.year_built) || 0;
+    const mtText = ((raw.title || '') + ' ' + (raw.description || raw.descriptionText || '').slice(0, 1200) + ' ' + (raw.url || '')).toLowerCase();
+    // === PIERWOTNY - explicit keywords ===
+    const pierwPatterns = [
+      /deweloper/, /dewelopers/, /pierwotn/, /nowa\s+inwestycj/, /nowo\s+wybudow/,
+      /stan\s+deweloper/, /oddan(?:e|y|a)\s+do\s+uży/, /nowe\s+mieszkan/, /inwestycja\s+/, /do\s+odbioru/,
+      /od\s+dewelopera/, /nowa\s+kondygnacja/, /apartament(?:owiec|owy\s+dom)/, /pierwsz(?:a|y)\s+w[łl]a[śs]cicie[lb]/,
+      /rynek\s+pierwotn/, /apartamentowiec/, /stan\s+surow(?:y|ym)/, /stan\s+wyko[ńn]/,
+      /oddanie\s+(?:20\d\d)/, /odbi[oó]r\s+kluczy/, /nowe\s+osiedle/, /osiedle\s+.*?nowe/,
+      /budowa\s+w\s+toku/, /rezerwacja/, /prognoza\s+oddania/, /nowobudowan/,
+      /pierwsza\s+odsprzedaż/, // dziwna kategoria
+    ];
+    // === WTORNY - explicit keywords ===
+    const wtornyPatterns = [
+      /\bwtórn/, /\bwtorn/, /do\s+remont/, /do\s+odświe/, /uzywan/, /używan/,
+      /\bkamienic/, /rynek\s+wt[oó]rn/, /po\s+remoncie/, /odnowion/, /wyremontowan/,
+      /z\s+drugiej\s+ręki/, /na\s+wtórnym/, /odsprzedaż/, /zamieszkałe/, /z\s+lat\s+(?:60|70|80|90)/,
+      /peerelowsk/, /wielk(?:a|iej)\s+p[łl]yt/, /blok\s+z\s+lat/, /osiedle\s+z\s+lat/,
+      /okres\s+PRL/, /odrestaurowan/, /kamienica\s+/, /stary?\s+blok/,
+    ];
+    if (pierwPatterns.some(p => p.test(mtText))) marketType = 'pierwotny';
+    else if (wtornyPatterns.some(p => p.test(mtText))) marketType = 'wtorny';
+    // === Fallback: rok budowy ===
+    else if (bldYear >= currentYear - 3) marketType = 'pierwotny'; // budowa w ostatnich 3 latach = pierwotny
+    else if (bldYear > 0 && bldYear <= currentYear - 4) marketType = 'wtorny'; // starsze niż 4 lata = wtorny
+    // === Fallback: cena za m² ===
+    // Pierwotny zwykle >= 12k zł/m² w większych miastach (Warszawa/Kraków/Gdańsk deweloperów)
+    // Ta heurystyka zbyt ryzykowna — pomijamy
   }
 
   // deterministic image class from external_id

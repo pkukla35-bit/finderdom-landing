@@ -474,9 +474,35 @@ function fmtPln(n) {
   if (n == null || !isFinite(n)) return '';
   return Math.round(n).toLocaleString('pl-PL').replace(/,/g, ' ') + ' zł';
 }
+// Autodetekcja roku budowy z tytułu/opisu (dla ofert Apify bez pola build_year)
+function detectYearFromText(title, description) {
+  const text = ((title || '') + ' ' + (description || '').slice(0, 1000)).toLowerCase();
+  if (!text.trim()) return 0;
+  const nowYear = new Date().getFullYear();
+  // 1. Explicit "rok budowy 2020" / "rok budowy: 2018" / "rb 1985"
+  let m = text.match(/(?:rok\s+budow[yn]?|rb|r\.?\s?b\.?)\s*[:\-–.]?\s*(19\d{2}|20\d{2})/);
+  if (m) { const y = parseInt(m[1]); if (y >= 1900 && y <= nowYear + 3) return y; }
+  // 2. "wybudowany w 2020" / "oddany w 2019" / "z 2015 roku" / "z 1985r"
+  m = text.match(/(?:wybudowan|oddan|zbudowan|zamieszkały|z\s+lat|z\s+(?:roku|r\.?))\s*(?:do|w)?\s*(?:użytkowania|użytku|zamieszkania)?\s*(?:w\s+)?(19\d{2}|20\d{2})(?:r|roku)?/);
+  if (m) { const y = parseInt(m[1]); if (y >= 1900 && y <= nowYear + 3) return y; }
+  // 3. Krótkie "z 1985" (bez "roku") — mniej pewne
+  m = text.match(/\bz\s+(19\d{2}|20\d{2})(?:\s|r|\.|$)/);
+  if (m) { const y = parseInt(m[1]); if (y >= 1900 && y <= nowYear + 3) return y; }
+  // 4. Lata deweloperów: "inwestycja 2024" / "oddanie 2025" (planowane)
+  m = text.match(/(?:inwestycj|oddanie|termin\s+oddania|planowane\s+oddanie|zakończenie)\s*[:\-–.]?\s*(?:w\s+)?(20\d{2})/);
+  if (m) { const y = parseInt(m[1]); if (y >= 2020 && y <= nowYear + 3) return y; }
+  // 5. "kamienica z lat 30" → 1935 (środek dekady)
+  const decades = {'20': 1925, '30': 1935, '40': 1945, '50': 1955, '60': 1965, '70': 1975, '80': 1985, '90': 1995};
+  m = text.match(/lat[a-ząęśćń]*\s+(20|30|40|50|60|70|80|90)/);
+  if (m && decades[m[1]]) return decades[m[1]];
+  // 6. "kamienica" bez roku → ~1930
+  if (/\bkamienic/.test(text) && !/\bnowoczes|współczes|wspolczes/.test(text)) return 1930;
+  return 0;
+}
+
+
 // Autodetekcja liczby pokoi z tytułu/opisu (dla ofert Apify bez pola rooms)
-function detectRoomsFromText(title, description) {
-  const text = ((title || '') + ' ' + (description || '').slice(0, 400)).toLowerCase();
+function detectRoomsFromText(title, description) {  const text = ((title || '') + ' ' + (description || '').slice(0, 400)).toLowerCase();
   if (!text.trim()) return 0;
   // Kawalerka = 1 pokój
   if (/\bkawalerk|jednopokojow|1[- ]?pokojow|studio\s+apart/.test(text)) return 1;
@@ -611,8 +637,8 @@ function normalizeScrapedListing(raw) {
     price_pm2_display: ppm2 ? (ppm2.toLocaleString('pl-PL').replace(/,/g,' ') + ' zł/m²') : '',
     area_m2: area, rooms: Number(raw.rooms) || detectRoomsFromText(raw.title, raw.description || raw.descriptionText) || 0,
     floor: raw.floor || 0, max_floor: raw.max_floor || 0,
-    year_built: raw.build_year || raw.year_built || 0,
-    build_year: raw.build_year || raw.year_built || 0,
+    year_built: Number(raw.build_year) || Number(raw.year_built) || detectYearFromText(raw.title, raw.description || raw.descriptionText) || 0,
+    build_year: Number(raw.build_year) || Number(raw.year_built) || detectYearFromText(raw.title, raw.description || raw.descriptionText) || 0,
     lat: raw.lat || raw.latitude || null,
     lng: raw.lng || raw.longitude || null,
     standard: '',

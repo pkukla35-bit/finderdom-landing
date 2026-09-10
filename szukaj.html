@@ -368,7 +368,9 @@
       <div class="chip-group" id="marketOrPurposeChips">
         <div class="chip" data-filter="market_type" data-value="pierwotny">🏗️ Pierwotny (deweloper)</div>
         <div class="chip" data-filter="market_type" data-value="wtorny">🏘️ Wtórny</div>
+        <div class="chip" data-filter="market_type" data-value="__unknown__" title="Oferty bez określonego rynku — brak info od portalu">🔍 Bez określenia</div>
       </div>
+      <div style="font-size:11px;color:#8ba3d4;margin-top:8px;line-height:1.4">💡 Wiele ofert nie ma określonego rynku w źródłowym portalu — używaj chipa "Bez określenia" aby je zobaczyć</div>
     </div>
 
     <div class="filter-group">
@@ -1517,6 +1519,16 @@ function applyAllFilters() {
       // Boolean features: chip "true" matches when listing is truthy
       if (allowed.has("true")) {
         if (!v) return false;
+        continue;
+      }
+      // Special: "__unknown__" chip - dopasuj oferty gdzie pole jest puste
+      if (allowed.has("__unknown__")) {
+        if (v && v !== '') {
+          // Ma wartość - sprawdź czy jest w allowed innych niż __unknown__
+          const other = new Set([...allowed].filter(x => x !== '__unknown__'));
+          if (other.size > 0 && !other.has(String(v))) return false;
+          if (other.size === 0) return false; // klik "tylko unknown" a to ma wartość
+        }
         continue;
       }
       if (v == null || v === '') return false;

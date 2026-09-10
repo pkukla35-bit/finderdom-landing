@@ -1360,7 +1360,26 @@ function renderOffer(l, all) {
       }
     }
   } else {
-    el('aiAnalysis').style.display = 'none';
+    // Brak lokalnej mediany (all=[] lub <8 ofert w promieniu 24km) — pokaż widget z komunikatem
+    if (Array.isArray(all) && all.length === 0) {
+      // Pełna lista jeszcze się ładuje w tle — pokaż placeholder
+      el('aiVerdict').innerHTML = '<span style="color:#8ba3d4">⏳ Ładowanie analizy...</span>';
+      el('aiSubtitle').textContent = 'Pobieramy dane porównawcze z okolicy — chwila cierpliwości';
+      el('valThis').textContent = thisPpm2 ? Math.round(thisPpm2).toLocaleString('pl-PL').replace(/,/g,' ') + ' zł/m²' : '—';
+      el('valOffers').textContent = '⏳ ładowanie';
+      el('valRcn').textContent    = '⏳ ładowanie';
+      el('rcnInfo').innerHTML = '<span style="color:#8ba3d4">📊 Za chwilę porównamy z medianą ofert w promieniu 5 km i realnych transakcji z RCN. To trwa ~2-4 sekundy.</span>';
+      el('aiAnalysis').style.display = '';
+    } else {
+      // Mamy dane ale mniej niż 8 podobnych ofert — pokaż że za mało próbek
+      el('aiVerdict').innerHTML = '<span style="color:#94a3b8">🔍 Za mało podobnych ofert</span>';
+      el('aiSubtitle').textContent = `Nie znaleźliśmy 8+ podobnych ofert w promieniu 24 km w ${l.city} (ten sam typ, metraż ±30%, ten sam rynek)`;
+      el('valThis').textContent = thisPpm2 ? Math.round(thisPpm2).toLocaleString('pl-PL').replace(/,/g,' ') + ' zł/m²' : '—';
+      el('valOffers').textContent = 'brak danych';
+      el('valRcn').textContent    = 'brak danych';
+      el('rcnInfo').innerHTML = '💡 Wskazówka: gdy w bazie pojawi się więcej podobnych ofert w tej okolicy, analiza AI się aktywuje. Wróć za kilka dni.';
+      el('aiAnalysis').style.display = '';
+    }
   }
   } // <-- end of "if (window.__isPremium)" for AI Analysis section
 

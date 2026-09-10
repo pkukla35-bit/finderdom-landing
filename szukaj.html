@@ -474,6 +474,25 @@ function fmtPln(n) {
   if (n == null || !isFinite(n)) return '';
   return Math.round(n).toLocaleString('pl-PL').replace(/,/g, ' ') + ' zł';
 }
+// Autodetekcja liczby pokoi z tytułu/opisu (dla ofert Apify bez pola rooms)
+function detectRoomsFromText(title, description) {
+  const text = ((title || '') + ' ' + (description || '').slice(0, 400)).toLowerCase();
+  if (!text.trim()) return 0;
+  // Kawalerka = 1 pokój
+  if (/\bkawalerk|jednopokojow|1[- ]?pokojow|studio\s+apart/.test(text)) return 1;
+  // "5 pokoi" / "5 pok." / "5-pokojowe" / "pięciopokojowe"
+  const wordNums = {'jednopokojow':1,'dwupokojow':2,'trzypokojow':3,'czteropokojow':4,'pięciopokojow':5,'pieciopokojow':5,'sześciopokojow':6,'szesciopokojow':6};
+  for (const [k,v] of Object.entries(wordNums)) if (text.includes(k)) return v;
+  // "M3" / "M-4"
+  const m = text.match(/\bm[- ]?([1-6])\b/);
+  if (m) return parseInt(m[1]);
+  // "3 pokoje" / "3 pok" / "3-pokojow"
+  const m2 = text.match(/\b([1-6])\s*[- ]?pok(?:oj|oje|ój|\.|owe|owy|oi)/);
+  if (m2) return parseInt(m2[1]);
+  return 0;
+}
+
+
 function normalizeScrapedListing(raw) {
   if (!raw || !raw.external_id) return null;
   const t = String(raw.type || '').toLowerCase();
@@ -590,7 +609,7 @@ function normalizeScrapedListing(raw) {
     price, price_display: fmtPln(price),
     price_pm2: ppm2,
     price_pm2_display: ppm2 ? (ppm2.toLocaleString('pl-PL').replace(/,/g,' ') + ' zł/m²') : '',
-    area_m2: area, rooms: raw.rooms || 0,
+    area_m2: area, rooms: Number(raw.rooms) || detectRoomsFromText(raw.title, raw.description || raw.descriptionText) || 0,
     floor: raw.floor || 0, max_floor: raw.max_floor || 0,
     year_built: raw.build_year || raw.year_built || 0,
     build_year: raw.build_year || raw.year_built || 0,

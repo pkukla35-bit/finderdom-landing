@@ -1,0 +1,76 @@
+name: Cleanup ScrapingBee data (jednorazowy)
+
+# Usuwa wszystkie oferty scraped_via='scrapingbee' - stare, ubogie w pola.
+# Zostawia tylko Apify (100% market_type, description, rooms, GPS, etc.)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Tylko podgląd (nie usuwaj)'
+        required: false
+        type: choice
+        options:
+          - 'yes'
+          - 'no'
+        default: 'yes'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install pymongo
+      - name: Analiza + cleanup
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          python3 <<'PYEOF'
+          import os
+          from pymongo import MongoClient
+          from collections import Counter
+
+          dry = os.environ.get('DRY') == 'yes'
+          client = MongoClient(os.environ['MONGODB_URI'])
+          db = client[os.environ.get('MONGODB_DB', 'finderdom')]
+
+          # Analiza pre-cleanup
+          total = db.listings.count_documents({})
+          sb = db.listings.count_documents({'scraped_via': 'scrapingbee'})
+          apify = db.listings.count_documents({'scraped_via': 'apify'})
+          other = total - sb - apify
+          print(f'\n=== STAN PRZED CLEANUP ===')
+          print(f'Total: {total}')
+          print(f'  scrapingbee: {sb} ({sb*100/max(total,1):.1f}%)')
+          print(f'  apify:       {apify} ({apify*100/max(total,1):.1f}%)')
+          print(f'  inne:        {other}')
+
+          # Breakdown by type
+          print(f'\n=== ScrapingBee per typ ===')
+          pipe = [{'$match': {'scraped_via': 'scrapingbee'}}, {'$group': {'_id': '$type', 'n': {'$sum': 1}}}, {'$sort': {'n': -1}}]
+          for r in db.listings.aggregate(pipe):
+              print(f'  {r["_id"] or "(brak)"}: {r["n"]}')
+
+          # Breakdown by city (top 10)
+          print(f'\n=== ScrapingBee top 10 miast ===')
+          pipe2 = [{'$match': {'scraped_via': 'scrapingbee'}}, {'$group': {'_id': '$city', 'n': {'$sum': 1}}}, {'$sort': {'n': -1}}, {'$limit': 10}]
+          for r in db.listings.aggregate(pipe2):
+              print(f'  {r["_id"] or "(brak)"}: {r["n"]}')
+
+          if dry:
+              print(f'\n(DRY RUN — nic nie usunięto. Uruchom ponownie z dry_run=no)')
+          else:
+              result = db.listings.delete_many({'scraped_via': 'scrapingbee'})
+              print(f'\n✅ USUNIĘTO {result.deleted_count} ofert ScrapingBee')
+              # Sprawdź stan po
+              after = db.listings.count_documents({})
+              print(f'\n=== STAN PO CLEANUP ===')
+              print(f'Total: {after} (było {total}, usunięto {total-after})')
+              apify_after = db.listings.count_documents({'scraped_via': 'apify'})
+              print(f'  apify: {apify_after} (100% z pełnymi polami)')
+          PYEOF

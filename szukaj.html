@@ -844,10 +844,65 @@ async function loadListings() {
         else if (pR === pE && (r.added_at || '') > (existing.added_at || '')) { scrapedByKey.set(key, r); }
       }
       const deduped = Array.from(scrapedByKey.values());
-      scrapedList = deduped.map(normalizeScrapedListing).filter(Boolean);
-      console.log(`Scraped raw=${raw.length} deduped=${deduped.length} normalized=${scrapedList.length}`);
-      if (raw[0]) console.log('sample raw:', raw[0]);
-      if (scrapedList[0]) console.log('sample normalized:', scrapedList[0]);
+      // ── SECOND-LEVEL DEDUP: łączy oferty które są tym samym mieszkaniem na różnych portalach
+      //    Klucz: (cena, area, miasto, znormalizowany tytuł) — Apify cluster nie zawsze łapie cross-portal
+      const clusterMap = new Map();
+      function normalizeTitle(t) {
+        return String(t || '').toLowerCase()
+          .replace(/[^a-ząęćńóśźż0-9\s]/g, ' ')
+          .replace(/\s+/g, ' ').trim().slice(0, 60);
+      }
+      function detectPortalFromUrl2(url) {
+        if (!url) return '';
+        const u = String(url).toLowerCase();
+        if (u.includes('otodom.pl')) return 'otodom';
+        if (u.includes('morizon.pl')) return 'morizon';
+        if (u.includes('gratka.pl')) return 'gratka';
+        if (u.includes('olx.pl')) return 'olx';
+        if (u.includes('domiporta.pl')) return 'domiporta';
+        if (u.includes('adresowo.pl')) return 'adresowo';
+        return '';
+      }
+      const clusteredList = [];
+      for (const r of deduped) {
+        const price = Number(r.price) || 0;
+        const area = Number(r.area_m2) || 0;
+        const city = String(r.city || '').toLowerCase().trim();
+        const title = normalizeTitle(r.title);
+        // Cross-portal cluster: cena identyczna + area ± 0.5 + to samo miasto + podobny tytuł
+        if (price < 1000 || area < 10 || !city) {
+          clusteredList.push(r);  // brak wystarczających danych do klastra
+          continue;
+        }
+        const ck = `${price}|${Math.round(area)}|${city}|${title}`;
+        const existing = clusterMap.get(ck);
+        if (!existing) {
+          clusterMap.set(ck, r);
+          clusteredList.push(r);
+        } else {
+          // Merge - dodaj do sources istniejącego
+          if (!Array.isArray(existing.sources)) existing.sources = [];
+          const existingPortals = new Set(existing.sources.map(s => (s.portal || '').toLowerCase()));
+          const newPortal = detectPortalFromUrl2(r.url) || (r.sources?.[0]?.portal || '');
+          if (newPortal && !existingPortals.has(newPortal.toLowerCase())) {
+            existing.sources.push({ portal: newPortal, url: r.url, price: r.price });
+          }
+          // Zsumuj tez sources z r
+          if (Array.isArray(r.sources)) {
+            for (const s of r.sources) {
+              const p = (s.portal || '').toLowerCase();
+              if (p && !existingPortals.has(p)) {
+                existing.sources.push(s);
+                existingPortals.add(p);
+              }
+            }
+          }
+        }
+      }
+      const clusterMerged = clusteredList.length;
+      const savedByClustering = deduped.length - clusterMerged;
+      console.log(`Cross-portal cluster: ${deduped.length} → ${clusterMerged} (zredukowano ${savedByClustering} duplikatów)`);
+      scrapedList = clusteredList.map(normalizeScrapedListing).filter(Boolean);
     }
     // Merge with dedup by URL (scraped takes priority — fresher data)
     const seenUrls = new Set(scrapedList.map(l => l.source_url || l.url));

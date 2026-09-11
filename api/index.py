@@ -821,38 +821,53 @@ async def listing_single(listing_id: str, response: Response):
 
 
 @app.get("/api/listings-scraped")
-async def listings_scraped_endpoint(response: Response, limit: int = 60000, lite: int = 1):
+async def listings_scraped_endpoint(
+    response: Response,
+    limit: int = 60000,
+    lite: int = 1,
+    city: Optional[str] = None,
+    type: Optional[str] = None,
+    transaction: Optional[str] = None,
+):
     """Returns listings scraped via ScrapingBee/Apify.
 
     Optimized:
     - LITE mode (default): drops `description` (46MB) and `images` array (17MB) —
-      total payload ~108MB → ~25MB uncompressed (~70% reduction), ~2.6MB → ~600KB gzipped
-    - Full mode (lite=0): includes description + images (for backwards compat if needed)
-    - description/images available via /api/listing/{id} for single-offer views (oferta.html)
-    - Gzip compression (added at middleware level, ~82% reduction)
+      total payload ~108MB → ~25MB uncompressed (~70% reduction)
+    - Server-side filters (city/type/transaction) — reduces 36k → 500-2000 rows
+    - Payload with all filters: ~2-3MB uncompressed, ~200-400KB gzipped
+    - description/images available via /api/listing/{id} for single-offer views
     - Cache-Control: 5 min CDN + 1 min browser
     """
     try:
         coll = database().listings
-        # LITE projection: exclude heavy fields not needed for list rendering
+        # Server-side filtering
+        query = {"scraped_via": {"$in": ["scrapingbee", "apify"]}}
+        if city:
+            # Case-insensitive city match — includes city and district fields
+            city_re = {"$regex": city, "$options": "i"}
+            query["$or"] = [{"city": city_re}, {"district": city_re}, {"title": city_re}]
+        if type:
+            query["type"] = {"$regex": f"^{type}", "$options": "i"}
+        if transaction:
+            query["transaction_type"] = transaction
+
+        # LITE projection
         if lite:
             projection = {
                 "_id": 0,
                 "description": 0,
-                "images": 0,  # keep single `image` thumbnail
+                "images": 0,
                 "source_actor": 0,
                 "last_seen_at": 0,
                 "phone": 0,
-                "posted_at": 0,  # keep added_at for date filters
+                "posted_at": 0,
             }
         else:
             projection = {"_id": 0}
-        docs = await coll.find(
-            {"scraped_via": {"$in": ["scrapingbee", "apify"]}},
-            projection
-        ).to_list(length=min(limit, 60000))
+        docs = await coll.find(query, projection).to_list(length=min(limit, 60000))
         response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=120"
-        return {"listings": docs, "count": len(docs), "lite": bool(lite)}
+        return {"listings": docs, "count": len(docs), "lite": bool(lite), "filtered": bool(city or type)}
     except Exception as e:
         logger.warning("listings-scraped error: %s", e)
         return {"listings": [], "count": 0, "error": str(e)[:200]}

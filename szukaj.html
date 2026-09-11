@@ -806,10 +806,21 @@ async function loadListings() {
   const count = document.getElementById('count');
   try {
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8ba3d4">⏳ Wczytuję oferty...</div>';
+    // ── Server-side prefiltr: użyj URL params (q, type, trans) żeby ograniczyć payload
+    //    Zamiast ładować 36k ofert, backend zwraca ~500-2000 pasujących do zapytania
+    const urlParams = new URLSearchParams(location.search);
+    const preCity = (urlParams.get('q') || urlParams.get('city') || '').trim();
+    const preType = (urlParams.get('type') || '').trim();
+    const preTrans = (urlParams.get('trans') || urlParams.get('transaction') || '').trim();
+    const apiParams = new URLSearchParams();
+    if (preCity) apiParams.set('city', preCity);
+    if (preType) apiParams.set('type', preType);
+    if (preTrans) apiParams.set('transaction', preTrans);
+    const scrapedUrl = '/api/listings-scraped' + (apiParams.toString() ? '?' + apiParams.toString() : '');
     // Fetch BOTH static + freshly scraped listings in parallel
     const [staticRes, scrapedRes] = await Promise.allSettled([
       fetch('/data/listings.json?v=' + Date.now()),
-      fetch('/api/listings-scraped')
+      fetch(scrapedUrl)
     ]);
     let staticList = [];
     if (staticRes.status === 'fulfilled' && staticRes.value.ok) {

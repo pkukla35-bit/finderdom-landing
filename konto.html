@@ -151,6 +151,7 @@
 
     <!-- Subskrypcja -->
     <div class="panel" id="panel-subscription">
+      <div id="trialBanner" style="display:none"></div>
       <div class="card">
         <h2>Twoja subskrypcja</h2>
         <div class="row"><div class="k">Aktualny plan</div><div class="v"><span id="tierBadge" class="badge badge-free">Free</span></div></div>
@@ -304,7 +305,24 @@
       }
 
       tierBadge(u.tier);
-      document.getElementById('subStatus').textContent = u.tier === 'free' ? 'Bez subskrypcji' : 'Aktywny';
+      // Trial banner: gdy user jest w darmowym trialu, pokaż countdown
+      const trialBox = document.getElementById('trialBanner');
+      if (u.is_trial && u.trial_days_left > 0) {
+        if (trialBox) {
+          const daysTxt = u.trial_days_left === 1 ? '1 dzień' : (u.trial_days_left <= 4 ? u.trial_days_left + ' dni' : u.trial_days_left + ' dni');
+          trialBox.innerHTML = `
+            <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px solid #fbbf24;color:#7c2d12;padding:14px 18px;border-radius:12px;font-weight:700;margin-bottom:20px">
+              🎁 <strong>Darmowy trial Premium</strong> — pozostało <strong>${daysTxt}</strong>. Aby zachować dostęp po wygaśnięciu, wybierz plan poniżej.
+            </div>`;
+          trialBox.style.display = '';
+        }
+        document.getElementById('subStatus').textContent = `🎁 Trial (${u.trial_days_left} dni)`;
+      } else if (trialBox) {
+        trialBox.style.display = 'none';
+      }
+      if (!u.is_trial) {
+        document.getElementById('subStatus').textContent = u.tier === 'free' ? 'Bez subskrypcji' : 'Aktywny';
+      }
       document.getElementById('subExpires').textContent = u.expires_at ? fmtDate(u.expires_at) : '— (plan darmowy)';
 
       document.querySelectorAll('.plan').forEach(p => {

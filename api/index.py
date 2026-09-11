@@ -265,6 +265,14 @@ async def effective_tier_async(user: dict) -> str:
 def public_user(user: dict) -> dict:
     tier_now = effective_tier(user)
     expires_at = user.get("expires_at")
+    # Trial info: True gdy user jest w trial (nie po opłacie Stripe)
+    is_trial = bool(user.get("is_trial")) and expires_at and (as_dt(expires_at) or datetime.min.replace(tzinfo=timezone.utc)) > datetime.now(timezone.utc)
+    trial_days_left = 0
+    if is_trial and expires_at:
+        exp_dt = as_dt(expires_at)
+        if exp_dt:
+            delta = exp_dt - datetime.now(timezone.utc)
+            trial_days_left = max(0, int(delta.total_seconds() / 86400) + (1 if delta.total_seconds() % 86400 > 0 else 0))
     return {
         "id": str(user["_id"]),
         "email": user["email"],
@@ -273,6 +281,8 @@ def public_user(user: dict) -> dict:
         "company_name": user.get("company_name"),
         "tier": tier_now,
         "expires_at": expires_at.isoformat() if isinstance(expires_at, datetime) else expires_at,
+        "is_trial": is_trial,
+        "trial_days_left": trial_days_left,
         "subscription_status": user.get("subscription_status", "active"),
         "created_at": user["created_at"].isoformat() if isinstance(user["created_at"], datetime) else user["created_at"],
         # Team fields (Firmowy multi-agent)
@@ -935,14 +945,23 @@ async def register(body: RegisterRequest):
         raise HTTPException(400, "Hasło jest zbyt długie (max 72 bajty)")
     password_hash = bcrypt.hashpw(body.password.encode("utf-8"), bcrypt.gensalt()).decode()
     now = datetime.now(timezone.utc)
+    # === DARMOWY TRIAL 7 DNI ===
+    # Nowy user dostaje 7 dni Premium (individual tier) za darmo. Po 7 dniach wraca do "free".
+    # Firmowe (business) dostają trial B2B (dostęp do TeamMode/CRM, ale bez zaproszeń).
+    trial_days = 7
+    trial_tier = "business" if account_type == "business" else "individual"
+    trial_expires = now + timedelta(days=trial_days)
     user = {
         "email": email,
         "password_hash": password_hash,
         "account_type": account_type,
         "nip": nip,
         "company_name": company_name,
-        "tier": "free",
-        "expires_at": None,
+        "tier": trial_tier,
+        "expires_at": trial_expires,
+        "is_trial": True,
+        "trial_started_at": now,
+        "trial_ends_at": trial_expires,
         "subscription_status": "active",
         "payment_customer_id": None,
         "created_at": now,

@@ -95,7 +95,12 @@
 
     <div class="tabs" role="tablist" id="tabsRow">
       <button type="button" class="tab active" data-type="personal">Osobiste</button>
-      <button type="button" class="tab" data-type="business">Firmowe</button>
+      <button type="button" class="tab" data-type="business">Firmowe 🎁</button>
+    </div>
+
+    <!-- Info banner: trial 7 dni tylko dla firm -->
+    <div id="trialInfo" style="display:none;background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px solid #fbbf24;color:#7c2d12;padding:12px 16px;border-radius:10px;font-weight:600;font-size:13px;margin-bottom:16px;line-height:1.4">
+      🎁 <strong>Bonus dla firm:</strong> Rejestrując konto firmowe z NIP dostajesz <strong>7 dni Premium Firmowy za darmo</strong> (wartość 199 zł) — pełen dostęp do CRM, TeamMode i dystrybucji leadów.
     </div>
 
     <div id="alert" class="alert"></div>
@@ -155,6 +160,9 @@
       const type = tab.dataset.type;
       accountTypeInput.value = type;
       bizFields.classList.toggle('show', type === 'business');
+      // Pokaż banner trial tylko dla Firmowe
+      const trialInfo = document.getElementById('trialInfo');
+      if (trialInfo) trialInfo.style.display = (type === 'business') ? '' : 'none';
     });
   });
 

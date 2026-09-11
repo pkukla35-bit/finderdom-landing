@@ -945,22 +945,29 @@ async def register(body: RegisterRequest):
         raise HTTPException(400, "Hasło jest zbyt długie (max 72 bajty)")
     password_hash = bcrypt.hashpw(body.password.encode("utf-8"), bcrypt.gensalt()).decode()
     now = datetime.now(timezone.utc)
-    # === DARMOWY TRIAL 7 DNI ===
-    # Nowy user dostaje 7 dni Premium (individual tier) za darmo. Po 7 dniach wraca do "free".
-    # Firmowe (business) dostają trial B2B (dostęp do TeamMode/CRM, ale bez zaproszeń).
+    # === DARMOWY TRIAL 7 DNI - TYLKO DLA FIRM Z NIP ===
+    # Firmy (account_type=business + NIP) dostają 7 dni Premium (tier=business).
+    # Indywidualni użytkownicy (account_type=individual) dostają zwykłe konto free.
     trial_days = 7
-    trial_tier = "business" if account_type == "business" else "individual"
-    trial_expires = now + timedelta(days=trial_days)
+    is_business_with_nip = (account_type == "business" and nip and str(nip).strip())
+    if is_business_with_nip:
+        trial_expires = now + timedelta(days=trial_days)
+        user_tier = "business"
+        trial_flag = True
+    else:
+        trial_expires = None
+        user_tier = "free"
+        trial_flag = False
     user = {
         "email": email,
         "password_hash": password_hash,
         "account_type": account_type,
         "nip": nip,
         "company_name": company_name,
-        "tier": trial_tier,
+        "tier": user_tier,
         "expires_at": trial_expires,
-        "is_trial": True,
-        "trial_started_at": now,
+        "is_trial": trial_flag,
+        "trial_started_at": now if trial_flag else None,
         "trial_ends_at": trial_expires,
         "subscription_status": "active",
         "payment_customer_id": None,

@@ -821,22 +821,38 @@ async def listing_single(listing_id: str, response: Response):
 
 
 @app.get("/api/listings-scraped")
-async def listings_scraped_endpoint(response: Response, limit: int = 60000):
+async def listings_scraped_endpoint(response: Response, limit: int = 60000, lite: int = 1):
     """Returns listings scraped via ScrapingBee/Apify.
 
     Optimized:
+    - LITE mode (default): drops `description` (46MB) and `images` array (17MB) —
+      total payload ~108MB → ~25MB uncompressed (~70% reduction), ~2.6MB → ~600KB gzipped
+    - Full mode (lite=0): includes description + images (for backwards compat if needed)
+    - description/images available via /api/listing/{id} for single-offer views (oferta.html)
     - Gzip compression (added at middleware level, ~82% reduction)
     - Cache-Control: 5 min CDN + 1 min browser
-    - Full document returned (needed by oferta.html for description)
     """
     try:
         coll = database().listings
+        # LITE projection: exclude heavy fields not needed for list rendering
+        if lite:
+            projection = {
+                "_id": 0,
+                "description": 0,
+                "images": 0,  # keep single `image` thumbnail
+                "source_actor": 0,
+                "last_seen_at": 0,
+                "phone": 0,
+                "posted_at": 0,  # keep added_at for date filters
+            }
+        else:
+            projection = {"_id": 0}
         docs = await coll.find(
             {"scraped_via": {"$in": ["scrapingbee", "apify"]}},
-            {"_id": 0}
+            projection
         ).to_list(length=min(limit, 60000))
         response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=120"
-        return {"listings": docs, "count": len(docs)}
+        return {"listings": docs, "count": len(docs), "lite": bool(lite)}
     except Exception as e:
         logger.warning("listings-scraped error: %s", e)
         return {"listings": [], "count": 0, "error": str(e)[:200]}

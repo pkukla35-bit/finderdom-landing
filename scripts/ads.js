@@ -18,14 +18,14 @@
 window.FD_ADS = {
   CLIENT: 'ca-pub-7963354786615192', // <- WKLEJ TWÓJ ID KLIENTA ADSENSE
   SLOTS: {
-    'listing-top':     '0000000000',  // <- BLOK REKLAMOWY: nad wynikami wyszukiwania
-    'listing-inline':  '0000000000',  // <- BLOK REKLAMOWY: między ofertami (co 8 pozycji)
-    'listing-bottom':  '0000000000',  // <- BLOK REKLAMOWY: pod wynikami wyszukiwania
-    'oferta-top':      '0000000000',  // <- BLOK REKLAMOWY: na górze strony oferty
-    'oferta-bottom':   '0000000000',  // <- BLOK REKLAMOWY: na dole strony oferty
-    'home-bottom':     '0000000000',  // <- BLOK REKLAMOWY: strona główna, na dole
+    'listing-top':     '4941008438',  // <- BLOK REKLAMOWY: nad wynikami wyszukiwania
+    'listing-inline':  '9835076614',  // <- BLOK REKLAMOWY: między ofertami (co 8 pozycji)
+    'listing-bottom':  '8284734958',  // <- BLOK REKLAMOWY: pod wynikami wyszukiwania
+    'oferta-top':      '9723395971',  // <- BLOK REKLAMOWY: na górze strony oferty
+    'oferta-bottom':   '8410314308',  // <- BLOK REKLAMOWY: na dole strony oferty
+    'home-bottom':     '5658571616',  // <- BLOK REKLAMOWY: strona główna, na dole
   },
-  PLACEHOLDER: true, // TRUE = pokaż ładne placeholdery (do czasu zatwierdzenia AdSense). FALSE = pokaż prawdziwe reklamy.
+  PLACEHOLDER: false, // TRUE = pokaż ładne placeholdery (do czasu zatwierdzenia AdSense). FALSE = pokaż prawdziwe reklamy.
 };
 
 (function initAds(){

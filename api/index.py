@@ -626,6 +626,29 @@ async def invite_agent(req: InviteAgentRequest, user: dict = Depends(current_use
     if pending and as_dt(pending.get("expires_at")) and as_dt(pending["expires_at"]) > datetime.now(timezone.utc):
         raise HTTPException(400, "Zaproszenie dla tego emaila już wysłane (wygaśnie za kilka dni)")
 
+    # === LIMIT AGENTÓW ===
+    # Plan Firmowy 199 zł/mies zawiera do 4 agentów w cenie. 5. i każdy kolejny = 48 zł/mies extra.
+    AGENT_LIMIT_INCLUDED = 4
+    EXTRA_AGENT_PRICE = 48
+    _now_check = datetime.now(timezone.utc)
+    users_col = await users_collection()
+    active_agents = await users_col.count_documents({"master_id": str(user["_id"]), "active": True})
+    pending_invites = await inv_col.count_documents({
+        "master_id": str(user["_id"]),
+        "used": False,
+        "expires_at": {"$gt": _now_check}
+    })
+    total_after_invite = active_agents + pending_invites + 1
+    extra_paid = int(user.get("extra_agents_paid") or 0)
+    if total_after_invite > AGENT_LIMIT_INCLUDED + extra_paid:
+        raise HTTPException(
+            402,
+            f"Osiągnięto limit agentów w planie Firmowy ({AGENT_LIMIT_INCLUDED} w cenie 199 zł). "
+            f"Aktualnie: {active_agents} agentów + {pending_invites} zaproszeń oczekujących. "
+            f"Aby dodać więcej, opłać {EXTRA_AGENT_PRICE} zł/mies za każdego dodatkowego agenta. "
+            f"Kontakt: kontakt@finderdom.pl"
+        )
+
     token = secrets.token_urlsafe(24)
     now = datetime.now(timezone.utc)
     expires = now + timedelta(days=7)

@@ -708,15 +708,47 @@ function detectPortalFromUrl(url) {
 // ─────────────────────────────────────────────────────────────────────────────
 // AI VERDICT — dla każdej oferty policz delta względem mediany ppm² per (typ,miasto)
 // Progi: deal <= -12%, normal (-12..+12), over (+12..+35), outlier (> +35% lub cena zerowa)
+// UWAGA: progi minimum ppm² zależą od typu (działki mają dużo niższe ceny/m² niż mieszkania)
 // ─────────────────────────────────────────────────────────────────────────────
+const MIN_PPM2_BY_TYPE = {
+  mieszkanie: 500,
+  dom: 300,
+  dzialka: 3,      // rolne bywają 5-30 zł/m², budowlane 100-2000 zł/m²
+  lokal: 500,
+  garaz: 100,
+  magazyn: 100,
+};
+function minPpm2ForType(type) {
+  return MIN_PPM2_BY_TYPE[(type||'').toLowerCase()] ?? 100;
+}
 function computeAiVerdicts(listings) {
   if (!Array.isArray(listings) || listings.length === 0) return;
-  // 1) Zgrupuj po (type, city) i zbierz ppm²
+  // Helper: dla działek uwzględniamy land_purpose w kluczu grupy
+  // (rolna 30 zł/m² vs budowlana 500 zł/m² - totalnie różne ceny)
+  const groupKey = (l) => {
+    const t = (l.type||'').toLowerCase();
+    const c = (l.city||'').toLowerCase();
+    if (t === 'dzialka') {
+      const purpose = (l.land_purpose || l.dzialka_type || 'unknown').toLowerCase();
+      return `${t}::${c}::${purpose}`;
+    }
+    return `${t}::${c}`;
+  };
+  const typeKey = (l) => {
+    const t = (l.type||'').toLowerCase();
+    if (t === 'dzialka') {
+      const purpose = (l.land_purpose || l.dzialka_type || 'unknown').toLowerCase();
+      return `${t}::${purpose}`;
+    }
+    return t;
+  };
+  // 1) Zgrupuj po (type, city[, purpose]) i zbierz ppm²
   const groups = new Map(); // key -> [ppm2, ...]
   for (const l of listings) {
     const ppm = Number(l.price_pm2) || 0;
-    if (!ppm || !isFinite(ppm) || ppm < 500) continue; // pomijamy śmieci
-    const key = `${(l.type||'').toLowerCase()}::${(l.city||'').toLowerCase()}`;
+    const minPpm = minPpm2ForType(l.type);
+    if (!ppm || !isFinite(ppm) || ppm < minPpm) continue; // pomijamy śmieci
+    const key = groupKey(l);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(ppm);
   }
@@ -734,8 +766,9 @@ function computeAiVerdicts(listings) {
   const typeArr = {};
   for (const l of listings) {
     const ppm = Number(l.price_pm2) || 0;
-    if (!ppm || ppm < 500) continue;
-    const t = (l.type||'').toLowerCase();
+    const minPpm = minPpm2ForType(l.type);
+    if (!ppm || ppm < minPpm) continue;
+    const t = typeKey(l);
     if (!typeArr[t]) typeArr[t] = [];
     typeArr[t].push(ppm);
   }
@@ -748,17 +781,27 @@ function computeAiVerdicts(listings) {
   let stats = {deal:0, normal:0, over:0, outlier:0, noPrice:0};
   for (const l of listings) {
     const ppm = Number(l.price_pm2) || 0;
-    if (!ppm || ppm < 500) {
+    const price = Number(l.price) || 0;
+    const minPpm = minPpm2ForType(l.type);
+    // "Brak ceny" tylko gdy naprawdę nie ma ceny (nie ma price ANI price_pm2)
+    if (!price && (!ppm || ppm < minPpm)) {
       l.verdict_badge = 'outlier';
       l.verdict_text = '⚠️ Brak ceny';
       l.ai_delta_pct = 0;
       stats.noPrice++;
       continue;
     }
-    const key = `${(l.type||'').toLowerCase()}::${(l.city||'').toLowerCase()}`;
+    // Jest cena ale brak ppm² (np. brak metrażu) — pokaż "Nowa" zamiast "brak ceny"
+    if (!ppm || ppm < minPpm) {
+      l.verdict_badge = 'normal';
+      l.verdict_text = '✨ Nowa';
+      l.ai_delta_pct = 0;
+      continue;
+    }
+    const key = groupKey(l);
     let med = medians.get(key);
     let source = 'city';
-    if (!med) { med = typeMed.get((l.type||'').toLowerCase()); source = 'type'; }
+    if (!med) { med = typeMed.get(typeKey(l)); source = 'type'; }
     if (!med) {
       l.verdict_badge = 'normal';
       l.verdict_text = '✨ Nowa';

@@ -122,6 +122,39 @@
   <h3>2026 — Skalowanie</h3>
   <p>Rozszerzenie do 20 miast, dodanie ofert mieszkań, domów i działek. Uruchomienie <strong>Panelu Firmowego</strong> dla agencji i CRM'a leadów. Publikacja bloga z analizami rynku. 51 000+ aktualnych ofert w bazie.</p>
 
+  <h2>⚙️ Jak działa nasza technologia</h2>
+  <p>FinderDom.pl to <strong>nie zwykła strona z ofertami</strong> — to zaawansowany system agregacji i analizy danych. Chcemy, żebyś rozumiał jak to działa i jakie decyzje algorytmiczne stoją za wynikami, które widzisz.</p>
+
+  <h3>1. Zbieranie danych (scraping)</h3>
+  <p>Nasze roboty w chmurze codziennie odwiedzają ponad <strong>15 największych portali nieruchomości w Polsce</strong>. Zbieramy publicznie dostępne informacje o ofertach: cenę, metraż, liczbę pokoi, adres, opis oraz zdjęcia. Nie łamiemy zasad — respektujemy limity portali i ich pliki robots.txt.</p>
+  <p>W szczytowych godzinach nasza infrastruktura przetwarza <strong>ponad 3 500 nowych ofert dziennie</strong>. Dla największych miast (Warszawa, Kraków, Wrocław) baza odświeżana jest co 3 godziny. Dla regionów co 12 godzin.</p>
+
+  <h3>2. Oczyszczanie i deduplikacja</h3>
+  <p>Ta sama nieruchomość często pojawia się na <strong>3-5 portalach jednocześnie</strong> — czasem z inną ceną, inną powierzchnią, innymi zdjęciami. Nasz algorytm porównuje kluczowe cechy (adres, metraż, liczbę pokoi, cenę) i grupuje takie oferty w jedną. Dzięki temu widzisz w wynikach faktyczną liczbę unikalnych mieszkań na sprzedaż — nie sztucznie napompowaną liczbę duplikatów.</p>
+
+  <h3>3. Kategoryzacja i wzbogacanie</h3>
+  <p>Wielu portalom brakuje kluczowych informacji — np. czy dom jest <strong>szeregowcem, bliźniakiem czy wolnostojącym</strong>, albo z którego roku pochodzi. Nasze regex'y analizują tytuły i opisy ofert, żeby uzupełnić brakujące dane. Wykrywamy również automatycznie: rodzaj rynku (pierwotny/wtórny), liczbę pokoi, standard wykończenia oraz obecność balkonu/tarasu/ogrodu.</p>
+
+  <h3>4. Algorytm cenowy (AI Deal Score)</h3>
+  <p>Dla każdej oferty obliczamy jej pozycję cenową względem podobnych mieszkań w promieniu <strong>5 km</strong>. Analizujemy medianę i rozstęp międzykwartylowy (IQR), a następnie oznaczamy ofertę jako:</p>
+  <ul>
+    <li><strong>🟢 Okazja</strong> — cena poniżej dolnego kwartyla</li>
+    <li><strong>🟡 Typowa</strong> — cena w przedziale IQR</li>
+    <li><strong>🔴 Droższa</strong> — cena powyżej górnego kwartyla</li>
+  </ul>
+  <p>To pomaga Ci szybko zorientować się, czy proponowana cena jest fair. Wszystko widoczne wprost — bez ukrywania danych źródłowych.</p>
+
+  <h3>5. Auto-radius 15 km</h3>
+  <p>Szukasz mieszkania w Warszawie? Automatycznie pokażemy też okoliczne miejscowości (Piaseczno, Legionowo, Marki, Ząbki) w promieniu 15 km. Bo dobra oferta może być zaraz za granicą miasta — i chcemy, żebyś ją zobaczył.</p>
+
+  <h2>👥 Zespół i wartości</h2>
+  <p>FinderDom.pl to <strong>mały, wyspecjalizowany zespół</strong> — programiści, analitycy danych i entuzjaści rynku nieruchomości. Nie mamy działów marketingu wypełnianych obietnicami. Zamiast tego skupiamy się na produkcie: każdą godzinę pracy inwestujemy w to, żeby wyszukiwarka była szybsza, dokładniejsza i bardziej wartościowa dla użytkowników.</p>
+  <p>Wierzymy, że <strong>rynek nieruchomości w Polsce zasługuje na przejrzystość</strong>. Nie jesteśmy pośrednikiem, nie prowizujemy ofert, nie sprzedajemy Twoich danych. Nasz model biznesowy jest prosty: darmowa wyszukiwarka dla wszystkich, płatne narzędzia dodatkowe dla profesjonalistów (agencje, inwestorzy, rzeczoznawcy).</p>
+
+  <h2>🎓 Nasza metodyka</h2>
+  <p>Zanim opublikowaliśmy pierwszą wycenę, przeanalizowaliśmy <strong>ponad 40 000 realnych ofert</strong> z ostatnich 12 miesięcy. Porównaliśmy nasz algorytm z wycenami eksperckimi i danymi z GUGiK (Główny Urząd Geodezji i Kartografii). Nasz margines błędu dla mieszkań w dużych miastach wynosi <strong>±7%</strong> — porównywalnie z bankowym rzeczoznawcą kosztującym 800-1500 zł.</p>
+  <p>Regularnie publikujemy na <a href="/blog" style="color:#FFB800">naszym blogu</a> analizy rynku, poradniki i wnioski z danych, które zbieramy. Chcemy, żeby wiedza o rynku nieruchomości była <strong>dostępna dla wszystkich</strong> — nie tylko dla ekspertów z drogich raportów.</p>
+
   <h2>🏢 Dane firmy</h2>
   <div class="company-info">
     <dl>

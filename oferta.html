@@ -737,6 +737,21 @@ async function loadOffer() {
 // (kopia z szukaj.html — trzymamy jedna zrodlowa logike w obu miejscach)
 const TYPE_EMOJI_OFF = { mieszkanie: '🏢', dom: '🏡', dzialka: '🌳', lokal: '🏪', garaz: '🅿️', magazyn: '🏭' };
 const IMG_CLASSES_OFF = ['i1','i2','i3','i4','i5','i6','i7','i8'];
+
+// Image proxy: wsrv.nl (darmowe, Cloudflare, obchodzi anti-hotlinking OLX/CDN)
+// Dodaje też CDN cache i optymalizację (WebP). Dla lokalnych i już-proxied URL zwraca oryginal.
+function proxyImg(url) {
+  if (!url || typeof url !== 'string') return url || '';
+  const u = url.trim();
+  if (!u) return '';
+  // Skip local/data/blob/already-proxied
+  if (u.startsWith('/') || u.startsWith('data:') || u.startsWith('blob:')) return u;
+  if (u.includes('wsrv.nl') || u.includes('images.weserv.nl')) return u;
+  // Wrap w wsrv.nl proxy — działa dla OLX, Otodom, Morizon, Gratka i wszystkich CDN które blokują hotlinking
+  // Parametry: url=<enc>, output=webp (mniejszy rozmiar), maxage=1y (cache), we=1 (webp jeśli obsługiwany)
+  return 'https://wsrv.nl/?url=' + encodeURIComponent(u) + '&output=webp&maxage=1y&we=1';
+}
+
 const DZIALKA_TYPE_ALIAS_OFF = {
   'lesna': 'lesna', 'leśna': 'lesna', 'leśn': 'lesna',
   'usługowa': 'inwestycyjna', 'uslugowa': 'inwestycyjna',
@@ -831,8 +846,8 @@ function normalizeScrapedListing(raw) {
     market_type: raw.market_type || '',
     transaction: raw.transaction_type || raw.transaction || 'sprzedaz',
     added_at: raw.added_at || new Date().toISOString(),
-    image_url: raw.image || raw.image_url || '',
-    images: (Array.isArray(raw.images) && raw.images.length) ? raw.images.slice(0, 30) : ((raw.image || raw.image_url) ? [raw.image || raw.image_url] : []),
+    image_url: proxyImg(raw.image || raw.image_url || ''),
+    images: (Array.isArray(raw.images) && raw.images.length) ? raw.images.slice(0, 30).map(u => proxyImg(u)) : ((raw.image || raw.image_url) ? [proxyImg(raw.image || raw.image_url)] : []),
     emoji: TYPE_EMOJI_OFF[baseType] || '🏠',
     img_class: imgClass, portal: detectPortalFromUrlOff(raw.url) || 'Portal', is_original: true,
     seller_type: sellerType, seller_label: sellerLabel,

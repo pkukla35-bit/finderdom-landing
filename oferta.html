@@ -752,6 +752,36 @@ function proxyImg(url) {
   return 'https://wsrv.nl/?url=' + encodeURIComponent(u) + '&output=webp&maxage=1y&we=1';
 }
 
+// Filtruj złe URL-e (placeholdery "BRAK ZDJĘĆ", puste, duplikaty)
+function cleanImageList(arr) {
+  if (!Array.isArray(arr)) return [];
+  const seen = new Set();
+  const out = [];
+  const BAD_PATTERNS = [
+    /nophoto/i, /no_photo/i, /brak.*zdj/i, /placeholder/i,
+    /default.*image/i, /_default\./i, /noimage/i, /no-image/i,
+    /empty\.(png|jpg|gif|svg)/i,
+  ];
+  for (const raw of arr) {
+    if (!raw || typeof raw !== 'string') continue;
+    let u = raw.trim();
+    if (!u) continue;
+    // Normalize: strip query params for dedup key (bo Morizon/Otodom mają same photo z różnymi ?w=xxx)
+    let key = u.split('?')[0].split('#')[0];
+    // Strip resize suffixes like "_240x180" / "-thumb" / "/small/"
+    key = key.replace(/_\d{2,4}x\d{2,4}(?=\.\w+$)/, '');
+    key = key.replace(/-(thumb|small|medium|preview)(?=\.\w+$)/, '');
+    key = key.replace(/\/(thumb|small|medium|preview)\//g, '/');
+    key = key.toLowerCase();
+    if (seen.has(key)) continue;
+    // Filter known placeholders
+    if (BAD_PATTERNS.some(re => re.test(u))) continue;
+    seen.add(key);
+    out.push(u);
+  }
+  return out;
+}
+
 const DZIALKA_TYPE_ALIAS_OFF = {
   'lesna': 'lesna', 'leśna': 'lesna', 'leśn': 'lesna',
   'usługowa': 'inwestycyjna', 'uslugowa': 'inwestycyjna',
@@ -847,7 +877,10 @@ function normalizeScrapedListing(raw) {
     transaction: raw.transaction_type || raw.transaction || 'sprzedaz',
     added_at: raw.added_at || new Date().toISOString(),
     image_url: proxyImg(raw.image || raw.image_url || ''),
-    images: (Array.isArray(raw.images) && raw.images.length) ? raw.images.slice(0, 30).map(u => proxyImg(u)) : ((raw.image || raw.image_url) ? [proxyImg(raw.image || raw.image_url)] : []),
+    images: (() => {
+      const raw_imgs = (Array.isArray(raw.images) && raw.images.length) ? raw.images : ((raw.image || raw.image_url) ? [raw.image || raw.image_url] : []);
+      return cleanImageList(raw_imgs).slice(0, 30).map(u => proxyImg(u));
+    })(),
     emoji: TYPE_EMOJI_OFF[baseType] || '🏠',
     img_class: imgClass, portal: detectPortalFromUrlOff(raw.url) || 'Portal', is_original: true,
     seller_type: sellerType, seller_label: sellerLabel,

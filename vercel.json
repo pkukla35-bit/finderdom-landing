@@ -25,6 +25,7 @@
     { "source": "/api/debug/:path*", "destination": "/api/index" },
     { "source": "/api/health", "destination": "/api/index" },
     { "source": "/api/rcn/:path*", "destination": "/api/index" },
+    { "source": "/api/admin/:path*", "destination": "/api/index" },
     { "source": "/api/listings-scraped", "destination": "/api/index" },
     { "source": "/api/listing/:id", "destination": "/api/index" },
     { "source": "/api/docs", "destination": "/api/index" },
@@ -42,6 +43,7 @@
     { "source": "/blog", "destination": "/blog.html" },
     { "source": "/blog/:slug", "destination": "/blog/:slug.html" },
     { "source": "/o-nas", "destination": "/o-nas.html" },
+    { "source": "/admin", "destination": "/admin.html" },
     { "source": "/kontakt", "destination": "/kontakt.html" },
     { "source": "/regulamin", "destination": "/regulamin.html" },
     { "source": "/polityka-prywatnosci", "destination": "/polityka-prywatnosci.html" }

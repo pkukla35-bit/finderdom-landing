@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Panel Admina · FinderDom.pl</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#0B1836;color:#e6e9f2;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.5}
+  .topnav{background:rgba(11,24,54,0.95);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.08);position:sticky;top:0;z-index:100;padding:14px 20px}
+  .nav-inner{max-width:1400px;margin:auto;display:flex;align-items:center;gap:24px}
+  .logo{font-size:18px;font-weight:900;color:#FFB800;text-decoration:none}
+  .nav-badge{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;padding:4px 10px;border-radius:100px;font-size:11px;font-weight:900;letter-spacing:1px}
+  .nav-links{display:flex;gap:14px;align-items:center;margin-left:auto;font-size:13px}
+  .nav-links a{color:#c5d0e6;text-decoration:none;font-weight:600;padding:6px 12px;border-radius:8px}
+  .nav-links a:hover{background:rgba(255,255,255,0.05);color:#FFB800}
+  main{max-width:1400px;margin:auto;padding:24px 20px 80px}
+  h1{font-size:28px;font-weight:900;margin:0 0 6px}
+  .sub{color:#8ba3d4;font-size:14px;margin-bottom:24px}
+  .tabs{display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid rgba(255,255,255,0.08);flex-wrap:wrap}
+  .tab{padding:10px 18px;color:#8ba3d4;background:none;border:none;font-weight:700;cursor:pointer;font-size:14px;border-bottom:3px solid transparent;font-family:inherit}
+  .tab.active{color:#FFB800;border-color:#FFB800}
+  .tab:hover:not(.active){color:#e6e9f2}
+  section{display:none}
+  section.active{display:block}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:24px}
+  .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:18px 20px}
+  .card-title{font-size:11px;color:#8ba3d4;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+  .card-value{font-size:28px;font-weight:900;color:#fff;line-height:1;margin-bottom:6px}
+  .card-value.amber{color:#FFB800}
+  .card-value.green{color:#4ade80}
+  .card-value.blue{color:#60a5fa}
+  .card-value.rose{color:#fb7185}
+  .card-sub{font-size:12px;color:#8ba3d4}
+  .card-sub strong{color:#c5d0e6}
+  .section-title{font-size:16px;font-weight:800;color:#FFB800;margin:28px 0 12px}
+  table{width:100%;border-collapse:collapse;background:rgba(255,255,255,0.03);border-radius:12px;overflow:hidden;font-size:13px}
+  th{background:rgba(255,184,0,0.08);color:#FFB800;font-weight:700;text-align:left;padding:10px 14px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.08)}
+  td{padding:11px 14px;border-bottom:1px solid rgba(255,255,255,0.05);color:#e6e9f2;vertical-align:top}
+  tr:hover td{background:rgba(255,255,255,0.02)}
+  .tag{display:inline-block;padding:2px 8px;border-radius:100px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px}
+  .tag-free{background:rgba(139,163,212,0.15);color:#8ba3d4}
+  .tag-individual{background:rgba(96,165,250,0.15);color:#60a5fa}
+  .tag-business{background:rgba(255,184,0,0.15);color:#FFB800}
+  .tag-trial{background:rgba(74,222,128,0.15);color:#4ade80}
+  .tag-agent{background:rgba(251,113,133,0.15);color:#fb7185}
+  .empty{text-align:center;color:#8ba3d4;padding:40px 20px;font-style:italic}
+  .loader{text-align:center;color:#8ba3d4;padding:40px 20px}
+  .loader::before{content:'⟳';display:inline-block;font-size:32px;color:#FFB800;animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .refresh-btn{background:rgba(255,184,0,0.15);color:#FFB800;border:1px solid rgba(255,184,0,0.3);border-radius:8px;padding:6px 14px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit}
+  .refresh-btn:hover{background:rgba(255,184,0,0.25)}
+  .row-actions{display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .err{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;padding:14px 18px;border-radius:12px;margin:20px 0}
+  .login-box{max-width:400px;margin:80px auto;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:32px 28px;text-align:center}
+  .login-box h2{margin:0 0 8px;color:#FFB800}
+  .login-box p{color:#c5d0e6;font-size:14px;margin:0 0 20px}
+  .login-box .btn{display:inline-block;background:#FFB800;color:#0B1836;font-weight:800;padding:10px 22px;border-radius:100px;text-decoration:none;font-size:14px}
+  .link{color:#60a5fa;text-decoration:none;font-size:12px}
+  .link:hover{text-decoration:underline}
+  .mono{font-family:ui-monospace,'SF Mono',Consolas,monospace;font-size:12px;color:#8ba3d4}
+  .cell-email{font-weight:600;color:#fff}
+  @media (max-width:768px){
+    .stats-grid{grid-template-columns:repeat(2,1fr)}
+    .card-value{font-size:22px}
+    table{font-size:11px}
+    th,td{padding:8px 10px}
+    .nav-links a{padding:4px 8px;font-size:11px}
+  }
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="nav-inner">
+    <a href="/" class="logo">🏠 FinderDom.pl</a>
+    <span class="nav-badge">🔐 ADMIN</span>
+    <div class="nav-links">
+      <a href="/szukaj.html">Wyszukiwarka</a>
+      <a href="/konto">Moje konto</a>
+      <a href="#" onclick="doLogout();return false">Wyloguj</a>
+    </div>
+  </div>
+</nav>
+
+<main id="main">
+  <div class="loader" id="initLoader">Ładuję panel admina…</div>
+</main>
+
+<template id="tpl-dashboard">
+  <h1>📊 Panel Admina</h1>
+  <div class="sub">Zalogowany jako <strong id="adminEmail" style="color:#FFB800"></strong> · Ostatnie odświeżenie: <span id="lastRefresh">—</span></div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="overview">📊 Przegląd</button>
+    <button class="tab" data-tab="users">👥 Użytkownicy</button>
+    <button class="tab" data-tab="payments">💳 Płatności</button>
+    <button class="tab" data-tab="leads">📩 Leady</button>
+    <button class="tab" data-tab="scrapers">🕷️ Scrapery</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <section class="active" data-panel="overview">
+    <div class="row-actions">
+      <button class="refresh-btn" onclick="loadStats()">↻ Odśwież</button>
+    </div>
+    <div class="stats-grid" id="statsCards"></div>
+  </section>
+
+  <!-- USERS -->
+  <section data-panel="users">
+    <div class="row-actions">
+      <button class="refresh-btn" onclick="loadUsers()">↻ Odśwież</button>
+      <span class="mono" id="usersCount"></span>
+    </div>
+    <div id="usersTable" class="loader">Ładuję…</div>
+  </section>
+
+  <!-- PAYMENTS -->
+  <section data-panel="payments">
+    <div class="row-actions">
+      <button class="refresh-btn" onclick="loadPayments()">↻ Odśwież</button>
+      <span class="mono" id="paymentsCount"></span>
+    </div>
+    <div id="paymentsTable" class="loader">Ładuję…</div>
+  </section>
+
+  <!-- LEADS -->
+  <section data-panel="leads">
+    <div class="row-actions">
+      <button class="refresh-btn" onclick="loadLeads()">↻ Odśwież</button>
+      <span class="mono" id="leadsCount"></span>
+    </div>
+    <div id="leadsTable" class="loader">Ładuję…</div>
+  </section>
+
+  <!-- SCRAPERS -->
+  <section data-panel="scrapers">
+    <div class="row-actions">
+      <button class="refresh-btn" onclick="loadScrapers()">↻ Odśwież</button>
+      <span class="mono" id="scrapersCount"></span>
+    </div>
+    <div id="scrapersTable" class="loader">Ładuję…</div>
+  </section>
+</main>
+</template>
+
+<template id="tpl-login">
+  <div class="login-box">
+    <div style="font-size:48px;margin-bottom:12px">🔐</div>
+    <h2>Panel Admina</h2>
+    <p id="loginMsg">Wymagane logowanie na konto administratora</p>
+    <a href="/logowanie" class="btn">Zaloguj się</a>
+    <div style="margin-top:16px"><a href="/" class="link">← wróć do strony głównej</a></div>
+  </div>
+</template>
+
+<script>
+const API_BASE = (typeof window !== 'undefined' && window.EXPO_BACKEND_URL) ? window.EXPO_BACKEND_URL + '/api' : '/api';
+const TOKEN_KEY = 'finderdom_token';
+
+function getToken(){ return localStorage.getItem(TOKEN_KEY) || ''; }
+function doLogout(){ localStorage.removeItem(TOKEN_KEY); localStorage.removeItem('finderdom_user'); location.href='/logowanie'; }
+
+async function api(path){
+  const token = getToken();
+  if (!token) throw new Error('AUTH_REQUIRED');
+  const r = await fetch(API_BASE + path, { headers: { 'Authorization': 'Bearer ' + token } });
+  if (r.status === 401) { doLogout(); throw new Error('SESSION_EXPIRED'); }
+  if (r.status === 403) throw new Error('NOT_ADMIN');
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+function fmtDate(iso){
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleString('pl-PL', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function fmtDateShort(iso){
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString('pl-PL', {day:'2-digit',month:'2-digit',year:'2-digit'});
+}
+function fmtMoney(pln){
+  if (pln == null) return '—';
+  return Number(pln).toLocaleString('pl-PL', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' zł';
+}
+function escapeHtml(s){
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderLogin(msg){
+  const tpl = document.getElementById('tpl-login').content.cloneNode(true);
+  if (msg) tpl.querySelector('#loginMsg').textContent = msg;
+  document.getElementById('main').innerHTML = '';
+  document.getElementById('main').appendChild(tpl);
+}
+
+function initTabs(){
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('section[data-panel]').forEach(s => s.classList.remove('active'));
+      t.classList.add('active');
+      const panel = document.querySelector(`section[data-panel="${t.dataset.tab}"]`);
+      if (panel) panel.classList.add('active');
+      // Lazy load
+      if (t.dataset.tab === 'users' && !window._loadedUsers) { window._loadedUsers = true; loadUsers(); }
+      if (t.dataset.tab === 'payments' && !window._loadedPayments) { window._loadedPayments = true; loadPayments(); }
+      if (t.dataset.tab === 'leads' && !window._loadedLeads) { window._loadedLeads = true; loadLeads(); }
+      if (t.dataset.tab === 'scrapers' && !window._loadedScrapers) { window._loadedScrapers = true; loadScrapers(); }
+    });
+  });
+}
+
+async function loadStats(){
+  try {
+    const s = await api('/admin/stats');
+    document.getElementById('lastRefresh').textContent = new Date().toLocaleTimeString('pl-PL');
+    const cards = document.getElementById('statsCards');
+    cards.innerHTML = `
+      <div class="card">
+        <div class="card-title">👥 Użytkownicy (total)</div>
+        <div class="card-value amber">${s.users.total.toLocaleString('pl-PL')}</div>
+        <div class="card-sub">+${s.users.new_7d} w 7 dni · +${s.users.new_30d} w 30 dni</div>
+      </div>
+      <div class="card">
+        <div class="card-title">💳 Płacący (aktywni)</div>
+        <div class="card-value green">${s.users.paid_active}</div>
+        <div class="card-sub">Business: <strong>${s.users.business}</strong> · Individual: <strong>${s.users.individual}</strong></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🎁 Aktywne triale</div>
+        <div class="card-value blue">${s.users.trials_active}</div>
+        <div class="card-sub">Agenci: <strong>${s.users.agents}</strong></div>
+      </div>
+      <div class="card">
+        <div class="card-title">💰 Przychód (total)</div>
+        <div class="card-value amber">${fmtMoney(s.revenue.total_pln)}</div>
+        <div class="card-sub">${s.revenue.payments_total} płatności</div>
+      </div>
+      <div class="card">
+        <div class="card-title">📅 Przychód 30 dni</div>
+        <div class="card-value green">${fmtMoney(s.revenue.last_30d_pln)}</div>
+        <div class="card-sub">${s.revenue.payments_30d} płatności · 7 dni: <strong>${fmtMoney(s.revenue.last_7d_pln)}</strong></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📩 Leady (total)</div>
+        <div class="card-value blue">${s.leads.total.toLocaleString('pl-PL')}</div>
+        <div class="card-sub">+${s.leads.last_7d} w 7 dni · <strong>${s.leads.unclaimed}</strong> nieprzypisanych</div>
+      </div>
+      <div class="card">
+        <div class="card-title">🏘️ Ofert w bazie</div>
+        <div class="card-value amber">${s.listings.total.toLocaleString('pl-PL')}</div>
+        <div class="card-sub">+${s.listings.scraped_24h} w 24h (scraping)</div>
+      </div>
+      <div class="card">
+        <div class="card-title">🕐 Wygenerowane</div>
+        <div class="card-value" style="font-size:15px;color:#c5d0e6;line-height:1.4">${fmtDate(s.generated_at)}</div>
+        <div class="card-sub">Dane live z MongoDB</div>
+      </div>
+    `;
+  } catch(e){
+    document.getElementById('statsCards').innerHTML = `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function tierTag(tier, isTrial){
+  const map = {free:'tag-free', individual:'tag-individual', business:'tag-business'};
+  const cls = map[tier] || 'tag-free';
+  const label = tier === 'free' ? 'FREE' : tier === 'individual' ? 'INDIVIDUAL' : tier === 'business' ? 'BUSINESS' : tier.toUpperCase();
+  const trialBadge = isTrial ? '<span class="tag tag-trial" style="margin-left:6px">TRIAL</span>' : '';
+  return `<span class="tag ${cls}">${label}</span>${trialBadge}`;
+}
+
+async function loadUsers(){
+  try {
+    const d = await api('/admin/users?limit=100');
+    document.getElementById('usersCount').textContent = `${d.total} użytkowników w bazie (pokazuję ${d.items.length})`;
+    if (!d.items.length) {
+      document.getElementById('usersTable').innerHTML = '<div class="empty">Brak użytkowników w bazie</div>';
+      return;
+    }
+    const rows = d.items.map(u => `
+      <tr>
+        <td class="cell-email">${escapeHtml(u.email)}</td>
+        <td>${escapeHtml(u.account_type || '—')}${u.role === 'agent' ? '<span class="tag tag-agent" style="margin-left:6px">AGENT</span>' : ''}</td>
+        <td>${tierTag(u.tier, u.is_trial)}</td>
+        <td class="mono">${escapeHtml(u.nip || '—')}</td>
+        <td>${escapeHtml(u.company_name || '—')}</td>
+        <td>${fmtDate(u.expires_at)}</td>
+        <td>${fmtDateShort(u.created_at)}</td>
+      </tr>
+    `).join('');
+    document.getElementById('usersTable').innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Email</th><th>Typ</th><th>Plan</th><th>NIP</th><th>Firma</th><th>Wygasa</th><th>Rejestracja</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  } catch(e){
+    document.getElementById('usersTable').innerHTML = `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function loadPayments(){
+  try {
+    const d = await api('/admin/invoices?limit=100');
+    document.getElementById('paymentsCount').textContent = `${d.total} płatności w bazie`;
+    if (!d.items.length) {
+      document.getElementById('paymentsTable').innerHTML = '<div class="empty">Brak płatności w bazie</div>';
+      return;
+    }
+    const rows = d.items.map(p => `
+      <tr>
+        <td class="mono">${escapeHtml(p.invoice_number || '—')}</td>
+        <td class="cell-email">${escapeHtml(p.user_email || '—')}</td>
+        <td><span class="tag tag-${p.plan === 'business' ? 'business' : p.plan === 'individual' ? 'individual' : 'free'}">${escapeHtml(p.plan || '—')}</span></td>
+        <td style="color:#4ade80;font-weight:800">${fmtMoney(p.amount_pln)}</td>
+        <td class="mono">${escapeHtml((p.stripe_session_id || '—').slice(0,20))}…</td>
+        <td>${fmtDate(p.created_at)}</td>
+      </tr>
+    `).join('');
+    document.getElementById('paymentsTable').innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Numer FV</th><th>Email</th><th>Plan</th><th>Kwota</th><th>Stripe Session</th><th>Data</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  } catch(e){
+    document.getElementById('paymentsTable').innerHTML = `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function loadLeads(){
+  try {
+    const d = await api('/admin/leads?limit=100');
+    document.getElementById('leadsCount').textContent = `${d.total} leadów w bazie`;
+    if (!d.items.length) {
+      document.getElementById('leadsTable').innerHTML = '<div class="empty">Brak leadów w bazie</div>';
+      return;
+    }
+    const rows = d.items.map(l => `
+      <tr>
+        <td class="cell-email">${escapeHtml(l.email || '—')}</td>
+        <td>${escapeHtml(l.name || '—')}</td>
+        <td class="mono">${escapeHtml(l.phone || '—')}</td>
+        <td>${escapeHtml(l.city || '—')}</td>
+        <td>${l.listing_url ? `<a href="${escapeHtml(l.listing_url)}" target="_blank" class="link">${escapeHtml((l.listing_title || l.listing_id || 'link').slice(0,40))}…</a>` : '—'}</td>
+        <td>${l.claimed_by ? '<span class="tag tag-business">PRZYPISANY</span>' : '<span class="tag tag-trial">NOWY</span>'}</td>
+        <td>${fmtDate(l.created_at)}</td>
+      </tr>
+    `).join('');
+    document.getElementById('leadsTable').innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Email</th><th>Imię</th><th>Telefon</th><th>Miasto</th><th>Oferta</th><th>Status</th><th>Data</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  } catch(e){
+    document.getElementById('leadsTable').innerHTML = `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function loadScrapers(){
+  try {
+    const d = await api('/admin/scraper-status');
+    document.getElementById('scrapersCount').textContent = `${d.total_groups} grup (miasto+typ)`;
+    if (!d.items.length) {
+      document.getElementById('scrapersTable').innerHTML = '<div class="empty">Brak zeskrapowanych ofert w bazie</div>';
+      return;
+    }
+    // Sort by count desc
+    d.items.sort((a,b) => b.count - a.count);
+    const rows = d.items.slice(0, 200).map(s => {
+      const lastDt = s.last_scraped ? new Date(s.last_scraped) : null;
+      const hoursAgo = lastDt ? Math.floor((Date.now() - lastDt.getTime()) / 3600000) : null;
+      const staleClass = hoursAgo != null && hoursAgo > 24 ? 'style="color:#fb7185"' : hoursAgo != null && hoursAgo > 12 ? 'style="color:#FFB800"' : 'style="color:#4ade80"';
+      return `
+        <tr>
+          <td><strong>${escapeHtml(s.city || '?')}</strong></td>
+          <td>${escapeHtml(s.type || '?')}</td>
+          <td style="color:#FFB800;font-weight:800">${s.count.toLocaleString('pl-PL')}</td>
+          <td>${s.portals ? s.portals.map(p => `<span class="tag tag-free" style="margin-right:4px">${escapeHtml(p)}</span>`).join('') : '—'}</td>
+          <td ${staleClass}>${fmtDate(s.last_scraped)}${hoursAgo != null ? ` (${hoursAgo}h temu)` : ''}</td>
+        </tr>
+      `;
+    }).join('');
+    document.getElementById('scrapersTable').innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Miasto</th><th>Typ</th><th>Ofert</th><th>Portale</th><th>Ostatni scrape</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  } catch(e){
+    document.getElementById('scrapersTable').innerHTML = `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ── Init ──
+(async function init(){
+  if (!getToken()) { renderLogin('Musisz być zalogowany na konto admina, aby zobaczyć ten panel.'); return; }
+  try {
+    // Verify token AND admin access
+    await api('/admin/stats');
+  } catch(e){
+    if (e.message === 'NOT_ADMIN') { renderLogin('Twoje konto nie ma uprawnień administratora. Zaloguj się jako admin.'); return; }
+    if (e.message === 'SESSION_EXPIRED' || e.message === 'AUTH_REQUIRED') { renderLogin('Sesja wygasła. Zaloguj się ponownie.'); return; }
+    // For other errors — allow render, will show error in the panels
+  }
+  // Render dashboard
+  const tpl = document.getElementById('tpl-dashboard').content.cloneNode(true);
+  document.getElementById('main').innerHTML = '';
+  document.getElementById('main').appendChild(tpl);
+  // Show admin email
+  try {
+    const u = JSON.parse(localStorage.getItem('finderdom_user') || '{}');
+    document.getElementById('adminEmail').textContent = u.email || '—';
+  } catch(e){}
+  initTabs();
+  loadStats();
+})();
+</script>
+</body>
+</html>

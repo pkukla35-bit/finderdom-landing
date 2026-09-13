@@ -73,6 +73,14 @@ EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO", "")
 MAPBOX_TOKEN = os.environ.get("MAPBOX_TOKEN", "")
 MAPBOX_STYLE = os.environ.get("MAPBOX_STYLE", "mapbox/streets-v12")
 
+# Admin panel — whitelisted emails have access to /api/admin/*
+# Multiple admins can be separated by comma: "user1@x.pl,user2@y.pl"
+ADMIN_EMAILS = set(
+    e.strip().lower()
+    for e in os.environ.get("ADMIN_EMAILS", "pkukla35@gmail.com").split(",")
+    if e.strip()
+)
+
 # City coordinates fallback (top ~150 Polish cities)
 CITY_COORDS = {}
 
@@ -315,6 +323,15 @@ async def current_user(credentials: HTTPAuthorizationCredentials = Depends(secur
     user = await (await users_collection()).find_one({"_id": oid})
     if not user:
         raise HTTPException(401, "Użytkownik nie istnieje")
+    return user
+
+
+async def require_admin(user: dict = Depends(current_user)) -> dict:
+    """Dependency: allow only whitelisted admin emails.
+    Configure via env var ADMIN_EMAILS (comma-separated). Default: pkukla35@gmail.com"""
+    email = (user.get("email") or "").strip().lower()
+    if email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Brak uprawnień administratora")
     return user
 
 
@@ -822,6 +839,254 @@ async def health():
         return {"ok": True, "db": "connected", "stripe": bool(STRIPE_SECRET_KEY)}
     except Exception as e:
         raise HTTPException(500, f"DB error: {str(e)[:100]}")
+
+
+# --- Admin panel endpoints ---
+@app.get("/api/admin/stats")
+async def admin_stats(admin: dict = Depends(require_admin)):
+    """Aggregated dashboard statistics for admin panel."""
+    db = database()
+    now = datetime.now(timezone.utc)
+    day7_ago = now - timedelta(days=7)
+    day30_ago = now - timedelta(days=30)
+
+    users_col = db.users
+    invoices_col = db.invoices
+    leads_col = db.leads
+    listings_col = db.listings_scraped
+
+    # Users breakdown
+    total_users = await users_col.count_documents({})
+    users_7d = await users_col.count_documents({"created_at": {"$gte": day7_ago}})
+    users_30d = await users_col.count_documents({"created_at": {"$gte": day30_ago}})
+    business = await users_col.count_documents({"account_type": "business"})
+    individual = await users_col.count_documents({"account_type": "individual"})
+    trials_active = await users_col.count_documents({"is_trial": True, "expires_at": {"$gte": now}})
+
+    # Paid users (tier != free, active)
+    paid_active = await users_col.count_documents({
+        "tier": {"$in": ["individual", "business"]},
+        "expires_at": {"$gte": now}
+    })
+
+    # Team agents
+    agents = await users_col.count_documents({"role": "agent"})
+
+    # Revenue (from invoices — amount stored in grosze)
+    async def _sum_amount(match):
+        pipeline = [{"$match": match}, {"$group": {"_id": None, "total": {"$sum": "$amount_grosze"}}}]
+        cur = invoices_col.aggregate(pipeline)
+        async for row in cur:
+            return int(row.get("total") or 0)
+        return 0
+
+    revenue_total = await _sum_amount({})
+    revenue_7d = await _sum_amount({"created_at": {"$gte": day7_ago}})
+    revenue_30d = await _sum_amount({"created_at": {"$gte": day30_ago}})
+    payments_total = await invoices_col.count_documents({})
+    payments_30d = await invoices_col.count_documents({"created_at": {"$gte": day30_ago}})
+
+    # Leads
+    leads_total = await leads_col.count_documents({})
+    leads_7d = await leads_col.count_documents({"created_at": {"$gte": day7_ago}})
+    leads_unclaimed = await leads_col.count_documents({"claimed_by": {"$in": [None, ""]}})
+
+    # Listings
+    try:
+        listings_total = await listings_col.count_documents({})
+        # Ostatnie 24h
+        listings_24h = await listings_col.count_documents({"scraped_at": {"$gte": now - timedelta(hours=24)}})
+    except Exception:
+        listings_total = 0
+        listings_24h = 0
+
+    return {
+        "generated_at": now.isoformat(),
+        "users": {
+            "total": total_users,
+            "new_7d": users_7d,
+            "new_30d": users_30d,
+            "business": business,
+            "individual": individual,
+            "trials_active": trials_active,
+            "paid_active": paid_active,
+            "agents": agents,
+        },
+        "revenue": {
+            "total_pln": round(revenue_total / 100, 2),
+            "last_7d_pln": round(revenue_7d / 100, 2),
+            "last_30d_pln": round(revenue_30d / 100, 2),
+            "payments_total": payments_total,
+            "payments_30d": payments_30d,
+        },
+        "leads": {
+            "total": leads_total,
+            "last_7d": leads_7d,
+            "unclaimed": leads_unclaimed,
+        },
+        "listings": {
+            "total": listings_total,
+            "scraped_24h": listings_24h,
+        },
+    }
+
+
+@app.get("/api/admin/users")
+async def admin_users(limit: int = 30, offset: int = 0, admin: dict = Depends(require_admin)):
+    """List of newest users (paginated)."""
+    limit = max(1, min(200, limit))
+    offset = max(0, offset)
+    users_col = await users_collection()
+    total = await users_col.count_documents({})
+    cursor = users_col.find({}).sort("created_at", -1).skip(offset).limit(limit)
+    items = []
+    async for u in cursor:
+        exp = u.get("expires_at")
+        items.append({
+            "id": str(u["_id"]),
+            "email": u.get("email"),
+            "account_type": u.get("account_type"),
+            "tier": u.get("tier", "free"),
+            "nip": u.get("nip"),
+            "company_name": u.get("company_name"),
+            "is_trial": bool(u.get("is_trial")),
+            "expires_at": exp.isoformat() if isinstance(exp, datetime) else exp,
+            "role": u.get("role"),
+            "active": u.get("active", True),
+            "created_at": u["created_at"].isoformat() if isinstance(u.get("created_at"), datetime) else u.get("created_at"),
+        })
+    return {"total": total, "items": items, "limit": limit, "offset": offset}
+
+
+@app.get("/api/admin/invoices")
+async def admin_invoices(limit: int = 30, offset: int = 0, admin: dict = Depends(require_admin)):
+    """List of newest payments/invoices."""
+    limit = max(1, min(200, limit))
+    offset = max(0, offset)
+    inv_col = database().invoices
+    total = await inv_col.count_documents({})
+    cursor = inv_col.find({}).sort("created_at", -1).skip(offset).limit(limit)
+    items = []
+    async for inv in cursor:
+        items.append({
+            "id": str(inv["_id"]),
+            "invoice_number": inv.get("invoice_number"),
+            "user_id": str(inv.get("user_id")) if inv.get("user_id") else None,
+            "user_email": inv.get("user_email"),
+            "plan": inv.get("plan"),
+            "amount_pln": round((inv.get("amount_grosze") or 0) / 100, 2),
+            "stripe_session_id": inv.get("stripe_session_id"),
+            "created_at": inv["created_at"].isoformat() if isinstance(inv.get("created_at"), datetime) else inv.get("created_at"),
+        })
+    return {"total": total, "items": items, "limit": limit, "offset": offset}
+
+
+@app.get("/api/admin/leads")
+async def admin_leads(limit: int = 30, offset: int = 0, admin: dict = Depends(require_admin)):
+    """List of newest leads."""
+    limit = max(1, min(200, limit))
+    offset = max(0, offset)
+    leads_col = database().leads
+    total = await leads_col.count_documents({})
+    cursor = leads_col.find({}).sort("created_at", -1).skip(offset).limit(limit)
+    items = []
+    async for l in cursor:
+        items.append({
+            "id": str(l["_id"]),
+            "email": l.get("email"),
+            "phone": l.get("phone"),
+            "name": l.get("name"),
+            "city": l.get("city"),
+            "listing_id": l.get("listing_id"),
+            "listing_url": l.get("listing_url"),
+            "listing_title": l.get("listing_title"),
+            "source": l.get("source"),
+            "claimed_by": l.get("claimed_by"),
+            "created_at": l["created_at"].isoformat() if isinstance(l.get("created_at"), datetime) else l.get("created_at"),
+        })
+    return {"total": total, "items": items, "limit": limit, "offset": offset}
+
+
+@app.get("/api/admin/scraper-status")
+async def admin_scraper_status(admin: dict = Depends(require_admin)):
+    """Apify scraper status per city + type. Returns last scrape time and counts."""
+    db = database()
+    listings_col = db.listings_scraped
+    # Group by (city, type) and get count + latest scraped_at
+    try:
+        pipeline = [
+            {"$group": {
+                "_id": {"city": "$city", "type": "$type"},
+                "count": {"$sum": 1},
+                "last_scraped": {"$max": "$scraped_at"},
+                "portals": {"$addToSet": "$portal"},
+            }},
+            {"$sort": {"_id.city": 1, "_id.type": 1}},
+            {"$limit": 500},
+        ]
+        cursor = listings_col.aggregate(pipeline)
+        items = []
+        async for row in cursor:
+            last = row.get("last_scraped")
+            items.append({
+                "city": (row["_id"].get("city") or "?"),
+                "type": (row["_id"].get("type") or "?"),
+                "count": row.get("count", 0),
+                "last_scraped": last.isoformat() if isinstance(last, datetime) else last,
+                "portals": row.get("portals", []),
+            })
+        return {"items": items, "total_groups": len(items)}
+    except Exception as e:
+        raise HTTPException(500, f"Scraper status error: {str(e)[:200]}")
+
+
+@app.get("/api/admin/timeseries")
+async def admin_timeseries(days: int = 30, admin: dict = Depends(require_admin)):
+    """Registrations & payments per day for the last N days (for chart)."""
+    days = max(1, min(90, days))
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=days)
+    db = database()
+
+    # Registrations per day
+    reg_pipeline = [
+        {"$match": {"created_at": {"$gte": since}}},
+        {"$group": {
+            "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}},
+            "count": {"$sum": 1},
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+    regs = {}
+    async for row in db.users.aggregate(reg_pipeline):
+        regs[row["_id"]] = row["count"]
+
+    # Payments per day (amount + count)
+    pay_pipeline = [
+        {"$match": {"created_at": {"$gte": since}}},
+        {"$group": {
+            "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}},
+            "amount_grosze": {"$sum": "$amount_grosze"},
+            "count": {"$sum": 1},
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+    pays = {}
+    async for row in db.invoices.aggregate(pay_pipeline):
+        pays[row["_id"]] = {"amount_pln": round(row["amount_grosze"] / 100, 2), "count": row["count"]}
+
+    # Build ordered series (fill missing days with 0)
+    series = []
+    for i in range(days):
+        d = (since + timedelta(days=i)).strftime("%Y-%m-%d")
+        p = pays.get(d, {"amount_pln": 0, "count": 0})
+        series.append({
+            "date": d,
+            "registrations": regs.get(d, 0),
+            "payments_count": p["count"],
+            "payments_pln": p["amount_pln"],
+        })
+    return {"days": days, "series": series}
 
 
 

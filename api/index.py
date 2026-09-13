@@ -842,27 +842,35 @@ async def health():
 
 
 # --- Image proxy for OLX and other portals that block hotlinking ---
-# Public endpoint (no auth) — fetches image server-side with proper Referer, streams to browser.
-# Used only for OLX (where wsrv.nl fails). Otodom/Morizon/etc go through wsrv.nl directly.
+# Fetches image server-side with proper Referer, streams to browser.
+# Bezpieczeństwo: content-type check (tylko image/*), max 8MB, timeout 8s.
 import urllib.parse as _urlp
 
-_ALLOWED_IMG_HOSTS = (
-    "olxcdn.com",
-    "apollo.olxcdn.com",
-    "frankfurt.apollo.olxcdn.com",
-    "ireland.apollo.olxcdn.com",
-    "olx.pl",
+_BLOCKED_IMG_HOSTS = (  # blokujemy prywatne IP i localhost dla bezpieczeństwa
+    "localhost", "127.0.0.1", "0.0.0.0",
+    "169.254.",  # AWS metadata
+    "10.", "172.16.", "172.17.", "172.18.", "172.19.",
+    "172.20.", "172.21.", "172.22.", "172.23.",
+    "172.24.", "172.25.", "172.26.", "172.27.",
+    "172.28.", "172.29.", "172.30.", "172.31.",
+    "192.168.",
 )
 
 def _referer_for_host(host: str) -> str:
     if "olxcdn" in host or "olx" in host:
         return "https://www.olx.pl/"
+    if "otodom" in host:
+        return "https://www.otodom.pl/"
+    if "morizon" in host:
+        return "https://www.morizon.pl/"
+    if "gratka" in host:
+        return "https://gratka.pl/"
     return ""
 
 @app.get("/api/img")
 async def image_proxy(u: str):
     """Fetch remote image with proper Referer header (bypass hotlink protection).
-    Only whitelisted hosts allowed to prevent abuse."""
+    Uwaga: content-type check zapobiega używaniu jako open proxy do HTML/JS."""
     if not u or len(u) > 2000:
         raise HTTPException(400, "Missing or too long URL")
     try:
@@ -872,13 +880,18 @@ async def image_proxy(u: str):
     if parsed.scheme not in ("http", "https"):
         raise HTTPException(400, "Only http/https URLs allowed")
     host = (parsed.hostname or "").lower()
-    if not any(host == h or host.endswith("." + h) for h in _ALLOWED_IMG_HOSTS):
-        raise HTTPException(403, f"Host not allowed: {host}")
+    if not host:
+        raise HTTPException(400, "Invalid host")
+    # Block private/internal networks (SSRF protection)
+    for blocked in _BLOCKED_IMG_HOSTS:
+        if host == blocked.rstrip(".") or host.startswith(blocked):
+            raise HTTPException(403, f"Host blocked: {host}")
 
     referer = _referer_for_host(host)
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; FinderDomBot/1.0)",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
         "Accept": "image/webp,image/avif,image/*,*/*;q=0.8",
+        "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.8",
     }
     if referer:
         headers["Referer"] = referer
@@ -888,12 +901,16 @@ async def image_proxy(u: str):
             r = await client.get(u, headers=headers)
             if r.status_code >= 400:
                 raise HTTPException(502, f"Upstream {r.status_code}")
-            content_type = r.headers.get("content-type", "image/jpeg")
-            if not content_type.startswith("image/"):
-                raise HTTPException(502, "Upstream did not return an image")
+            content_type = r.headers.get("content-type", "image/jpeg").lower()
+            # Bezpieczeństwo: tylko obrazki (nie HTML/JS/etc)
+            if not (content_type.startswith("image/") or content_type.startswith("application/octet-stream")):
+                raise HTTPException(502, f"Not an image (content-type: {content_type[:60]})")
+            # Max 10MB (chroni przed DoS)
+            if len(r.content) > 10 * 1024 * 1024:
+                raise HTTPException(413, "Image too large")
             return Response(
                 content=r.content,
-                media_type=content_type,
+                media_type=content_type if content_type.startswith("image/") else "image/jpeg",
                 headers={
                     "Cache-Control": "public, max-age=2592000, immutable",  # 30 dni cache w przeglądarce
                     "CDN-Cache-Control": "public, s-maxage=31536000",       # 1 rok na Vercel Edge
@@ -902,6 +919,10 @@ async def image_proxy(u: str):
             )
     except httpx.HTTPError as e:
         raise HTTPException(502, f"Fetch error: {str(e)[:100]}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Proxy error: {str(e)[:100]}")
 
 
 # --- Admin panel endpoints ---

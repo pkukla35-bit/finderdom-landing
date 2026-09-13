@@ -1130,7 +1130,7 @@ function renderPage() {
     const hasPhoto = allImages.length > 0;
     const imgList = allImages.slice(0, 15);  // max 15 zdjec per karta
     const photoHtml = hasPhoto
-      ? `<img class="photo" data-imgs='${JSON.stringify(imgList).replace(/'/g, "&#39;")}' data-idx="0" src="${imgList[0]}" alt="" loading="lazy" decoding="async" onerror="this.remove();this.parentElement.classList.remove('has-photo')">`
+      ? `<img class="photo" data-imgs='${JSON.stringify(imgList).replace(/'/g, "&#39;")}' data-idx="0" src="${imgList[0]}" alt="" loading="lazy" decoding="async" onerror="window.__cardImgFallback(this)">`
       : '';
     const carouselHtml = (hasPhoto && imgList.length > 1) ? `
       <button class="card-img-nav prev" data-nav="prev" aria-label="Poprzednie zdjęcie" type="button">‹</button>
@@ -1187,6 +1187,37 @@ function renderPage() {
     return cardHtml;
   }).join('');
   grid.innerHTML = cardsHtml;
+
+  // Fallback dla zdjęć karty: próbuje kolejnego z listy imgs, a jak wszystkie zawiodą — pokazuje placeholder emoji
+  if (!window.__cardImgFallback) {
+    window.__cardImgFallback = function(img) {
+      try {
+        const imgs = JSON.parse(img.dataset.imgs || '[]');
+        let idx = parseInt(img.dataset.idx || '0', 10);
+        const nextIdx = idx + 1;
+        if (nextIdx < imgs.length) {
+          img.dataset.idx = nextIdx;
+          img.src = imgs[nextIdx];
+          return;
+        }
+        // Wszystkie zawiodły → pokaż placeholder
+        const parent = img.parentElement;
+        img.remove();
+        if (!parent) return;
+        parent.classList.remove('has-photo');
+        // Usuń nawigację (jeśli była) i wstaw placeholder
+        parent.querySelectorAll('.card-img-nav, .card-img-dots, .card-img-count').forEach(el => el.remove());
+        if (!parent.querySelector('.placeholder-box')) {
+          const ph = document.createElement('div');
+          ph.className = 'placeholder-box';
+          ph.innerHTML = '<div class="ph-icon">🏠</div><div class="ph-txt">Nieruchomość</div><div class="ph-sub">📸 Zdjęcia u sprzedającego</div>';
+          parent.appendChild(ph);
+        }
+      } catch(e) {
+        img.remove();
+      }
+    };
+  }
   // Delegated carousel navigation — click prev/next zmieniają zdjęcie bez otwierania oferty
   if (!grid.dataset.carouselBound) {
     // Klik strzałek + kropek

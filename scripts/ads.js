@@ -25,7 +25,7 @@ window.FD_ADS = {
     'oferta-bottom':   '8410314308',  // <- BLOK REKLAMOWY: na dole strony oferty
     'home-bottom':     '5658571616',  // <- BLOK REKLAMOWY: strona główna, na dole
   },
-  PLACEHOLDER: false, // TRUE = pokaż ładne placeholdery (do czasu zatwierdzenia AdSense). FALSE = pokaż prawdziwe reklamy.
+  PLACEHOLDER: true, // TRUE = pokaż ładne placeholdery (do czasu zatwierdzenia AdSense). FALSE = pokaż prawdziwe reklamy.
 };
 
 (function initAds(){
@@ -57,8 +57,8 @@ window.FD_ADS = {
     const slotName = el.dataset.slot;
     const slotId = (window.FD_ADS.SLOTS || {})[slotName];
 
-    if (window.FD_ADS.PLACEHOLDER || !slotId || slotId.startsWith('0000') || !window.FD_ADS.CLIENT || window.FD_ADS.CLIENT.includes('XXXX')){
-      // Ładny placeholder z informacją
+    // Zawsze najpierw pokaż ładny placeholder — potem próbuj załadować prawdziwą reklamę
+    const showPlaceholder = () => {
       el.innerHTML = `
         <div class="fd-ad-placeholder">
           <div class="fd-ad-ph-inner">
@@ -69,20 +69,46 @@ window.FD_ADS = {
             </div>
           </div>
         </div>`;
+    };
+
+    // Brak slot ID lub client — pokaż tylko placeholder
+    if (!slotId || slotId.startsWith('0000') || !window.FD_ADS.CLIENT || window.FD_ADS.CLIENT.includes('XXXX')){
+      showPlaceholder();
       return;
     }
 
-    // Prawdziwy AdSense - wstaw <ins>
-    const ins = document.createElement('ins');
-    ins.className = 'adsbygoogle';
-    ins.style.display = 'block';
-    ins.setAttribute('data-ad-client', window.FD_ADS.CLIENT);
-    ins.setAttribute('data-ad-slot', slotId);
-    ins.setAttribute('data-ad-format', el.dataset.format || 'auto');
-    ins.setAttribute('data-full-width-responsive', 'true');
-    el.innerHTML = '';
-    el.appendChild(ins);
-    try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch(e){ console.warn('AdSense push failed:', e); }
+    // Tryb PLACEHOLDER=true — pokaż placeholder, nie ładuj reklamy
+    if (window.FD_ADS.PLACEHOLDER){
+      showPlaceholder();
+      return;
+    }
+
+    // Prawdziwy AdSense — pokaż placeholder JAKO FALLBACK, załaduj reklamę w tle
+    showPlaceholder();
+    setTimeout(() => {
+      try {
+        const ins = document.createElement('ins');
+        ins.className = 'adsbygoogle';
+        ins.style.display = 'block';
+        ins.style.minHeight = '90px';
+        ins.setAttribute('data-ad-client', window.FD_ADS.CLIENT);
+        ins.setAttribute('data-ad-slot', slotId);
+        ins.setAttribute('data-ad-format', el.dataset.format || 'auto');
+        ins.setAttribute('data-full-width-responsive', 'true');
+        el.innerHTML = '';
+        el.appendChild(ins);
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+        // Po 3 sekundach sprawdź czy reklama się załadowała, jeśli nie — wróć do placeholdera
+        setTimeout(() => {
+          if (ins.dataset.adStatus === 'unfilled' || ins.offsetHeight < 40) {
+            showPlaceholder();
+          }
+        }, 3000);
+      } catch(e){
+        console.warn('AdSense push failed:', e);
+        showPlaceholder();
+      }
+    }, 100);
   };
 
   // Renderuje wszystkie sloty na stronie

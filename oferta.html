@@ -1115,14 +1115,25 @@ function renderOffer(l, all) {
     galPhoto.src = galleryImgs[0];
     galPhoto.style.display = 'block';
     galEmoji.style.display = 'none';
+    window.__failedImgs = 0;
     galPhoto.onerror = () => {
-      // If image fails, try next; if all fail — fallback emoji
+      // If image fails, try next; if all fail — fallback emoji + info note
       const imgs = window.__galImgs || [];
+      window.__failedImgs = (window.__failedImgs || 0) + 1;
       if (imgs.length > 1 && window.__galIdx < imgs.length - 1) {
         showGalIdx(window.__galIdx + 1);
       } else {
         galPhoto.style.display = 'none';
         galEmoji.style.display = 'block';
+        // Jeśli WSZYSTKIE zdjęcia zawiodły → pokaż komunikat że oferta jest nieaktualna
+        if (window.__failedImgs >= imgs.length && !document.getElementById('staleNote')) {
+          const emojiEl = galEmoji;
+          const note = document.createElement('div');
+          note.id = 'staleNote';
+          note.style.cssText = 'position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.9);color:#fff;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;max-width:90%;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:5';
+          note.innerHTML = '⚠️ Zdjęcia niedostępne — oferta może być już nieaktualna. Sprawdź na źródłowym portalu.';
+          emojiEl.parentElement.appendChild(note);
+        }
       }
     };
   } else {

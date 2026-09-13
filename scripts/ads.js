@@ -16,16 +16,20 @@
  * Reklamy są AUTOMATYCZNIE UKRYWANE dla użytkowników z planem Osobisty (35 zł) i Firmowy (199 zł).
  */
 window.FD_ADS = {
-  CLIENT: 'ca-pub-7963354786615192', // <- WKLEJ TWÓJ ID KLIENTA ADSENSE
+  // UWAGA: Poniższe wartości są ze STAREGO konta AdSense (osoba fizyczna) — do zamknięcia.
+  // Po założeniu nowego FIRMOWEGO konta AdSense — podmień CLIENT i SLOTS na nowe wartości.
+  CLIENT: '', // ← CELOWO PUSTE: stare konto zamykane, nowe jeszcze nie założone. Placeholdery aktywne.
+  // Stare wartości (zakomentowane — do usunięcia po założeniu nowego konta):
+  // CLIENT: 'ca-pub-7963354786615192',
   SLOTS: {
-    'listing-top':     '4941008438',  // <- BLOK REKLAMOWY: nad wynikami wyszukiwania
-    'listing-inline':  '9835076614',  // <- BLOK REKLAMOWY: między ofertami (co 8 pozycji)
-    'listing-bottom':  '8284734958',  // <- BLOK REKLAMOWY: pod wynikami wyszukiwania
-    'oferta-top':      '9723395971',  // <- BLOK REKLAMOWY: na górze strony oferty
-    'oferta-bottom':   '8410314308',  // <- BLOK REKLAMOWY: na dole strony oferty
-    'home-bottom':     '5658571616',  // <- BLOK REKLAMOWY: strona główna, na dole
+    'listing-top':     '0000000000',
+    'listing-inline':  '0000000000',
+    'listing-bottom':  '0000000000',
+    'oferta-top':      '0000000000',
+    'oferta-bottom':   '0000000000',
+    'home-bottom':     '0000000000',
   },
-  PLACEHOLDER: true, // TRUE = pokaż ładne placeholdery (do czasu zatwierdzenia AdSense). FALSE = pokaż prawdziwe reklamy.
+  PLACEHOLDER: true, // TRUE = pokaż ładne placeholdery (aktywne w tym momencie). FALSE = pokaż prawdziwe reklamy (po zatwierdzeniu nowego konta firmowego).
 };
 
 (function initAds(){

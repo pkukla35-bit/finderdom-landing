@@ -908,6 +908,11 @@ async def image_proxy(u: str):
             # Max 10MB (chroni przed DoS)
             if len(r.content) > 10 * 1024 * 1024:
                 raise HTTPException(413, "Image too large")
+            # Detekcja Morizon placeholder "BRAK ZDJĘĆ" (dokładne rozmiary — źródłowy obraz został usunięty z Gratki)
+            # Odkryte przez pomiary: 3x2_l:fill_and_crop = 19726 B, inne formaty mogą być podobne
+            MORIZON_PLACEHOLDER_SIZES = {19726, 22468, 26109, 16234}  # znane rozmiary placeholderów
+            if "staticmorizon" in host and len(r.content) in MORIZON_PLACEHOLDER_SIZES:
+                raise HTTPException(410, "Source image deleted (placeholder)")
             return Response(
                 content=r.content,
                 media_type=content_type if content_type.startswith("image/") else "image/jpeg",

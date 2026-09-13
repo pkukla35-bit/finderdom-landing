@@ -24,6 +24,7 @@
     { "source": "/api/team/:path*", "destination": "/api/index" },
     { "source": "/api/debug/:path*", "destination": "/api/index" },
     { "source": "/api/health", "destination": "/api/index" },
+    { "source": "/api/img", "destination": "/api/index" },
     { "source": "/api/rcn/:path*", "destination": "/api/index" },
     { "source": "/api/admin/:path*", "destination": "/api/index" },
     { "source": "/api/listings-scraped", "destination": "/api/index" },

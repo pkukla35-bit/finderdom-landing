@@ -738,17 +738,19 @@ async function loadOffer() {
 const TYPE_EMOJI_OFF = { mieszkanie: '🏢', dom: '🏡', dzialka: '🌳', lokal: '🏪', garaz: '🅿️', magazyn: '🏭' };
 const IMG_CLASSES_OFF = ['i1','i2','i3','i4','i5','i6','i7','i8'];
 
-// Image proxy: wsrv.nl (darmowe, Cloudflare, obchodzi anti-hotlinking OLX/CDN)
-// Dodaje też CDN cache i optymalizację (WebP). Dla lokalnych i już-proxied URL zwraca oryginal.
+// Image proxy: wsrv.nl dla większości portali (darmowe, Cloudflare, WebP + CDN cache)
+// OLX używa własnego /api/img (bo wsrv.nl nie wysyła Referer:olx.pl wymaganego przez OLX CDN)
 function proxyImg(url) {
   if (!url || typeof url !== 'string') return url || '';
   const u = url.trim();
   if (!u) return '';
-  // Skip local/data/blob/already-proxied
   if (u.startsWith('/') || u.startsWith('data:') || u.startsWith('blob:')) return u;
   if (u.includes('wsrv.nl') || u.includes('images.weserv.nl')) return u;
-  // Wrap w wsrv.nl proxy — działa dla OLX, Otodom, Morizon, Gratka i wszystkich CDN które blokują hotlinking
-  // Parametry: url=<enc>, output=webp (mniejszy rozmiar), maxage=1y (cache), we=1 (webp jeśli obsługiwany)
+  // OLX CDN: własne proxy z Referer:olx.pl
+  if (/(^|\/\/)([^/]*\.)?olxcdn\.com/i.test(u) || /(^|\/\/)([^/]*\.)?olx\.pl/i.test(u)) {
+    return '/api/img?u=' + encodeURIComponent(u);
+  }
+  // Reszta: wsrv.nl (Otodom, Morizon, Gratka, Domiporta, itd.)
   return 'https://wsrv.nl/?url=' + encodeURIComponent(u) + '&output=webp&maxage=1y&we=1';
 }
 

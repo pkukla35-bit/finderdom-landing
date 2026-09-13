@@ -841,6 +841,69 @@ async def health():
         raise HTTPException(500, f"DB error: {str(e)[:100]}")
 
 
+# --- Image proxy for OLX and other portals that block hotlinking ---
+# Public endpoint (no auth) — fetches image server-side with proper Referer, streams to browser.
+# Used only for OLX (where wsrv.nl fails). Otodom/Morizon/etc go through wsrv.nl directly.
+import urllib.parse as _urlp
+
+_ALLOWED_IMG_HOSTS = (
+    "olxcdn.com",
+    "apollo.olxcdn.com",
+    "frankfurt.apollo.olxcdn.com",
+    "ireland.apollo.olxcdn.com",
+    "olx.pl",
+)
+
+def _referer_for_host(host: str) -> str:
+    if "olxcdn" in host or "olx" in host:
+        return "https://www.olx.pl/"
+    return ""
+
+@app.get("/api/img")
+async def image_proxy(u: str):
+    """Fetch remote image with proper Referer header (bypass hotlink protection).
+    Only whitelisted hosts allowed to prevent abuse."""
+    if not u or len(u) > 2000:
+        raise HTTPException(400, "Missing or too long URL")
+    try:
+        parsed = _urlp.urlparse(u)
+    except Exception:
+        raise HTTPException(400, "Invalid URL")
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(400, "Only http/https URLs allowed")
+    host = (parsed.hostname or "").lower()
+    if not any(host == h or host.endswith("." + h) for h in _ALLOWED_IMG_HOSTS):
+        raise HTTPException(403, f"Host not allowed: {host}")
+
+    referer = _referer_for_host(host)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; FinderDomBot/1.0)",
+        "Accept": "image/webp,image/avif,image/*,*/*;q=0.8",
+    }
+    if referer:
+        headers["Referer"] = referer
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+            r = await client.get(u, headers=headers)
+            if r.status_code >= 400:
+                raise HTTPException(502, f"Upstream {r.status_code}")
+            content_type = r.headers.get("content-type", "image/jpeg")
+            if not content_type.startswith("image/"):
+                raise HTTPException(502, "Upstream did not return an image")
+            return Response(
+                content=r.content,
+                media_type=content_type,
+                headers={
+                    "Cache-Control": "public, max-age=2592000, immutable",  # 30 dni cache w przeglądarce
+                    "CDN-Cache-Control": "public, s-maxage=31536000",       # 1 rok na Vercel Edge
+                    "Vercel-CDN-Cache-Control": "public, s-maxage=31536000",
+                },
+            )
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Fetch error: {str(e)[:100]}")
+
+
 # --- Admin panel endpoints ---
 @app.get("/api/admin/stats")
 async def admin_stats(admin: dict = Depends(require_admin)):

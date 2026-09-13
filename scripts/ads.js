@@ -16,20 +16,17 @@
  * Reklamy są AUTOMATYCZNIE UKRYWANE dla użytkowników z planem Osobisty (35 zł) i Firmowy (199 zł).
  */
 window.FD_ADS = {
-  // UWAGA: Poniższe wartości są ze STAREGO konta AdSense (osoba fizyczna) — do zamknięcia.
-  // Po założeniu nowego FIRMOWEGO konta AdSense — podmień CLIENT i SLOTS na nowe wartości.
-  CLIENT: '', // ← CELOWO PUSTE: stare konto zamykane, nowe jeszcze nie założone. Placeholdery aktywne.
-  // Stare wartości (zakomentowane — do usunięcia po założeniu nowego konta):
-  // CLIENT: 'ca-pub-7963354786615192',
+  // Konto FIRMOWE: Taxigo Paweł Kukla (Profil ID: 6953-2167-7812)
+  CLIENT: 'ca-pub-9328001602201523', // ← Nowe konto Organizacja
   SLOTS: {
-    'listing-top':     '0000000000',
+    'listing-top':     '0000000000',  // ← Do wygenerowania po zatwierdzeniu domeny przez AdSense
     'listing-inline':  '0000000000',
     'listing-bottom':  '0000000000',
     'oferta-top':      '0000000000',
     'oferta-bottom':   '0000000000',
     'home-bottom':     '0000000000',
   },
-  PLACEHOLDER: true, // TRUE = pokaż ładne placeholdery (aktywne w tym momencie). FALSE = pokaż prawdziwe reklamy (po zatwierdzeniu nowego konta firmowego).
+  PLACEHOLDER: true, // TRUE = pokaż ładne placeholdery (do czasu utworzenia slotów). FALSE = pokaż prawdziwe reklamy.
 };
 
 (function initAds(){

@@ -77,7 +77,7 @@ MAPBOX_STYLE = os.environ.get("MAPBOX_STYLE", "mapbox/streets-v12")
 # Multiple admins can be separated by comma: "user1@x.pl,user2@y.pl"
 ADMIN_EMAILS = set(
     e.strip().lower()
-    for e in os.environ.get("ADMIN_EMAILS", "pkukla35@gmail.com").split(",")
+    for e in os.environ.get("ADMIN_EMAILS", "pkukla35@gmail.com,test1@test.pl").split(",")
     if e.strip()
 )
 

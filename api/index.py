@@ -190,6 +190,18 @@ async def ensure_indexes():
         await db.leads.create_index([("claimed_by", 1), ("created_at", -1)])
     except Exception:
         pass
+    # Indexy na listings — kluczowe dla wydajności /api/listings-scraped
+    try:
+        # Główny index do sortowania po dacie dodania (najnowsze na górze)
+        await db.listings.create_index([("added_at", -1)])
+        # Compound index: filtr po scraped_via + sort po added_at (najczęstszy pattern)
+        await db.listings.create_index([("scraped_via", 1), ("added_at", -1)])
+        # Filtr po mieście + sort
+        await db.listings.create_index([("city", 1), ("added_at", -1)])
+        # Filtr po typie + sort
+        await db.listings.create_index([("type", 1), ("added_at", -1)])
+    except Exception:
+        pass
     # Note: _id is unique automatically; do NOT create additional unique index on it.
     _indexes_ready = True
 
@@ -1210,7 +1222,8 @@ async def listing_single(listing_id: str, response: Response):
 @app.get("/api/listings-scraped")
 async def listings_scraped_endpoint(
     response: Response,
-    limit: int = 60000,
+    limit: int = 5000,
+    offset: int = 0,
     lite: int = 1,
     city: Optional[str] = None,
     type: Optional[str] = None,
@@ -1221,13 +1234,14 @@ async def listings_scraped_endpoint(
     Optimized:
     - LITE mode (default): drops `description` (46MB) and `images` array (17MB) —
       total payload ~108MB → ~25MB uncompressed (~70% reduction)
-    - Server-side filters (city/type/transaction) — reduces 36k → 500-2000 rows
-    - Payload with all filters: ~2-3MB uncompressed, ~200-400KB gzipped
-    - description/images available via /api/listing/{id} for single-offer views
+    - Server-side filters (city/type/transaction) — reduces 50k → 500-2000 rows
+    - Pagination: offset+limit dla większych zakresów, default limit=5000
+    - Sortowanie by added_at desc (najnowsze najpierw)
     - Cache-Control: 5 min CDN + 1 min browser
     """
     try:
         coll = database().listings
+        await ensure_indexes()  # zapewnia indexy na added_at/scraped_via/city/type dla szybkiego sortowania
         # Server-side filtering
         query = {"scraped_via": {"$in": ["scrapingbee", "apify"]}}
         if city:
@@ -1239,10 +1253,9 @@ async def listings_scraped_endpoint(
         if transaction:
             query["transaction_type"] = transaction
 
-        # Bez żadnych filtrów — cap limit do 800 najnowszych, żeby uniknąć Vercel timeout (504)
-        # Cała baza to ~50k ofert, pełny scan zajmuje 20+ sekund → timeout na Vercel Free (10s max).
-        if not (city or type or transaction):
-            limit = min(limit, 800)
+        # Sanity caps (chroni przed abuse i Vercel 10s timeout)
+        limit = max(1, min(limit, 10000))
+        offset = max(0, min(offset, 100000))
 
         # LITE projection
         if lite:
@@ -1257,11 +1270,11 @@ async def listings_scraped_endpoint(
             }
         else:
             projection = {"_id": 0}
-        # Sort by added_at desc żeby domyślnie najnowsze na górze
-        cursor = coll.find(query, projection).sort("added_at", -1).limit(min(limit, 60000))
-        docs = await cursor.to_list(length=min(limit, 60000))
+        # Sort by added_at desc — najnowsze na górze; skip + limit dla paginacji
+        cursor = coll.find(query, projection).sort("added_at", -1).skip(offset).limit(limit)
+        docs = await cursor.to_list(length=limit)
         response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=120"
-        return {"listings": docs, "count": len(docs), "lite": bool(lite), "filtered": bool(city or type)}
+        return {"listings": docs, "count": len(docs), "offset": offset, "limit": limit, "lite": bool(lite), "filtered": bool(city or type)}
     except Exception as e:
         logger.warning("listings-scraped error: %s", e)
         return {"listings": [], "count": 0, "error": str(e)[:200]}

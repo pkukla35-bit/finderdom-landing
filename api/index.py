@@ -1285,7 +1285,11 @@ async def listings_scraped_endpoint(
         # Total count (dla frontend: pokazuje "Znaleziono X ofert" nawet gdy załadowaliśmy tylko limit)
         # count_documents jest szybki dzięki indexom
         try:
-            total_count = await coll.count_documents(query, maxTimeMS=3000)
+            if not (city or type or transaction):
+                # Cała baza — estimated_document_count jest instant (używa metadata)
+                total_count = await coll.estimated_document_count()
+            else:
+                total_count = await coll.count_documents(query, maxTimeMS=3000)
         except Exception:
             total_count = len(docs)
         response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=120"

@@ -1109,7 +1109,11 @@ function renderListings(list) {
     CURRENT_FILTERED = list;
   }
   currentPage = 1;
-  document.getElementById('count').textContent = CURRENT_FILTERED.length;
+  // Pokazuj total_count z bazy (2640 dla Warszawa mieszkania) gdy jest większy niż filtered
+  // — to jest liczba jaką widziałem przedtem (14000 dla całej Polski)
+  const totalFromBase = window.__scrapedTotalCount || 0;
+  const displayCount = Math.max(CURRENT_FILTERED.length, totalFromBase);
+  document.getElementById('count').textContent = displayCount;
   renderPage();
 }
 

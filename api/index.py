@@ -1243,7 +1243,12 @@ async def listings_scraped_endpoint(
         coll = database().listings
         await ensure_indexes()  # zapewnia indexy na added_at/scraped_via/city/type dla szybkiego sortowania
         # Server-side filtering
-        query = {"scraped_via": {"$in": ["scrapingbee", "apify"]}}
+        # Uwaga: gdy BRAK city/type/transaction — nie filtrujemy po scraped_via żeby uniknąć slow scan
+        # (99% ofert i tak ma scraped_via w [scrapingbee, apify])
+        if city or type or transaction:
+            query = {"scraped_via": {"$in": ["scrapingbee", "apify"]}}
+        else:
+            query = {}
         if city:
             # Case-insensitive city match — includes city and district fields
             city_re = {"$regex": city, "$options": "i"}
@@ -1277,8 +1282,14 @@ async def listings_scraped_endpoint(
             cursor = cursor.sort("added_at", -1)
         cursor = cursor.skip(offset).limit(limit)
         docs = await cursor.to_list(length=limit)
+        # Total count (dla frontend: pokazuje "Znaleziono X ofert" nawet gdy załadowaliśmy tylko limit)
+        # count_documents jest szybki dzięki indexom
+        try:
+            total_count = await coll.count_documents(query, maxTimeMS=3000)
+        except Exception:
+            total_count = len(docs)
         response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=120"
-        return {"listings": docs, "count": len(docs), "offset": offset, "limit": limit, "lite": bool(lite), "filtered": bool(city or type)}
+        return {"listings": docs, "count": len(docs), "total_count": total_count, "offset": offset, "limit": limit, "lite": bool(lite), "filtered": bool(city or type)}
     except Exception as e:
         logger.warning("listings-scraped error: %s", e)
         return {"listings": [], "count": 0, "error": str(e)[:200]}

@@ -1222,7 +1222,7 @@ async def listing_single(listing_id: str, response: Response):
 @app.get("/api/listings-scraped")
 async def listings_scraped_endpoint(
     response: Response,
-    limit: int = 5000,
+    limit: int = 1000,
     offset: int = 0,
     lite: int = 1,
     city: Optional[str] = None,

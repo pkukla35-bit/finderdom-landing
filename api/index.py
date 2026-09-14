@@ -1239,6 +1239,11 @@ async def listings_scraped_endpoint(
         if transaction:
             query["transaction_type"] = transaction
 
+        # Bez żadnych filtrów — cap limit do 800 najnowszych, żeby uniknąć Vercel timeout (504)
+        # Cała baza to ~50k ofert, pełny scan zajmuje 20+ sekund → timeout na Vercel Free (10s max).
+        if not (city or type or transaction):
+            limit = min(limit, 800)
+
         # LITE projection
         if lite:
             projection = {
@@ -1252,7 +1257,9 @@ async def listings_scraped_endpoint(
             }
         else:
             projection = {"_id": 0}
-        docs = await coll.find(query, projection).to_list(length=min(limit, 60000))
+        # Sort by added_at desc żeby domyślnie najnowsze na górze
+        cursor = coll.find(query, projection).sort("added_at", -1).limit(min(limit, 60000))
+        docs = await cursor.to_list(length=min(limit, 60000))
         response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=120"
         return {"listings": docs, "count": len(docs), "lite": bool(lite), "filtered": bool(city or type)}
     except Exception as e:

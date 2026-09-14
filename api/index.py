@@ -1270,8 +1270,12 @@ async def listings_scraped_endpoint(
             }
         else:
             projection = {"_id": 0}
-        # Sort by added_at desc — najnowsze na górze; skip + limit dla paginacji
-        cursor = coll.find(query, projection).sort("added_at", -1).skip(offset).limit(limit)
+        # Sortowanie: gdy filtr po mieście/typie już zawęża do ~500-2000 rekordów, można sortować po added_at.
+        # Gdy BRAK filtrów (cała baza 50k) sort byłby zbyt kosztowny → skip sort dla wydajności.
+        cursor = coll.find(query, projection)
+        if city or type or transaction:
+            cursor = cursor.sort("added_at", -1)
+        cursor = cursor.skip(offset).limit(limit)
         docs = await cursor.to_list(length=limit)
         response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=120"
         return {"listings": docs, "count": len(docs), "offset": offset, "limit": limit, "lite": bool(lite), "filtered": bool(city or type)}

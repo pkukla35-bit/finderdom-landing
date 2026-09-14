@@ -912,9 +912,11 @@ async function loadListings() {
       staticList = d.listings || [];
     }
     let scrapedList = [];
+    let scrapedTotalCount = 0;  // total ofert w bazie (przed limit) — dla count display
     if (scrapedRes.status === 'fulfilled' && scrapedRes.value.ok) {
       const d = await scrapedRes.value.json();
       const raw = d.listings || [];
+      scrapedTotalCount = Number(d.total_count) || 0;
       // ── Dedup wewnątrz scraped: apify > scrapingbee dla tego samego URL/external_id
       const scrapedByKey = new Map();
       for (const r of raw) {
@@ -1008,8 +1010,10 @@ async function loadListings() {
       else if (/inwestyc|komercyj|uslugow|przemyslow|zabudowa uslug/.test(tb)) purpose = 'inwestycyjna';
       if (purpose) { l.land_purpose = purpose; l.dzialka_type = purpose; }
     });
-    console.log(`Loaded: ${staticList.length} static + ${scrapedList.length} scraped = ${LISTINGS.length} total`);
-    count.textContent = LISTINGS.length;
+    console.log(`Loaded: ${staticList.length} static + ${scrapedList.length} scraped = ${LISTINGS.length} total (baza: ${scrapedTotalCount})`);
+    window.__scrapedTotalCount = scrapedTotalCount;
+    // Pokazuj total_count z bazy jeśli większy niż załadowane (paginacja)
+    count.textContent = Math.max(LISTINGS.length, scrapedTotalCount || 0);
 
     // ── AI ANALYSIS: oblicz verdict_badge dla każdej oferty (mediana ppm² per typ+miasto) ──
     try { computeAiVerdicts(LISTINGS); } catch(e) { console.error('AI verdicts:', e); }

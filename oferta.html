@@ -1234,13 +1234,21 @@ function renderOffer(l, all) {
   const v = VERDICT_MAP[l.verdict_badge] || VERDICT_MAP.normal;
   el('verdictBadge').className = 'b ' + v.badgeCls;
   el('verdictBadge').textContent = l.verdict_text || v.text;
-  el('portalBadge').textContent = l.portal || 'Otodom';
+  el('portalBadge').textContent = l.portal || 'portal';
 
-  // Source link
+  // Source link — dynamiczny tekst per portal
+  const portalName = l.portal || 'portal źródłowy';
   if (l.source_url) {
     el('sourceLink').href = l.source_url;
+    el('sourceLink').textContent = `Zobacz na ${portalName} ↗`;
     el('ctaOtodom').href = l.source_url;
-    el('ctaOtodom').textContent = `🔗 Otwórz w ${l.portal || 'portalu'}`;
+    el('ctaOtodom').textContent = `🔗 Otwórz w ${portalName}`;
+    // Wskazówka + opis footer
+    const ctaHint = document.getElementById('ctaHint');
+    if (ctaHint) ctaHint.innerHTML = `<strong>💡 Wskazówka:</strong> Kliknij „Otwórz w ${portalName}" żeby zobaczyć numer telefonu, pełny opis i wszystkie zdjęcia.`;
+    // Sekcja opis: znajdź akapit z tekstem „Zobacz na Otodom" i podmień
+    const descP = document.querySelector('.description p[style*="italic"]');
+    if (descP) descP.innerHTML = `📌 Aby zobaczyć pełny opis, dodatkowe zdjęcia i skontaktować się ze sprzedającym — kliknij „Zobacz na ${portalName} ↗" powyżej.`;
   } else {
     el('sourceLink').style.display = 'none';
     el('ctaOtodom').style.display = 'none';

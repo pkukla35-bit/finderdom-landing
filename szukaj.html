@@ -1155,6 +1155,11 @@ function renderPage() {
       : (l.image_url ? [l.image_url]
         : (l.image ? [l.image]                     // lite payload używa pola `image` (singular)
         : (l.main_image ? [l.main_image] : [])));
+    // Fallback: og:image z HTML strony oferty (dla ofert z polamanymi URL w bazie)
+    const sourceUrl = l.url || l.source_url || (l.sources && l.sources[0] && l.sources[0].url);
+    if (sourceUrl) {
+      allImages.push('/api/og-image?url=' + encodeURIComponent(sourceUrl));
+    }
     const hasPhoto = allImages.length > 0;
     const imgList = allImages.slice(0, 15);  // max 15 zdjec per karta
     const photoHtml = hasPhoto

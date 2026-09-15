@@ -942,6 +942,91 @@ async def image_proxy(u: str):
         raise HTTPException(500, f"Proxy error: {str(e)[:100]}")
 
 
+# --- OG Image extractor (fallback dla ofert Morizon/Otodom bez działających zdjęć w bazie) ---
+_og_image_cache: dict[str, tuple[float, bytes, str]] = {}   # url → (expires_ts, bytes, content_type)
+_OG_CACHE_TTL = 3600.0  # 1h in-memory cache
+
+@app.get("/api/og-image")
+async def get_og_image(url: str):
+    """
+    Fetches offer page HTML (Morizon/Otodom/OLX/Gratka), extracts <meta property="og:image">
+    and streams the image. Fallback dla ofert z połamanymi URL zdjęć w bazie.
+    """
+    import re as _re, time as _time
+    if not url or not url.startswith(("http://", "https://")):
+        raise HTTPException(400, "Invalid URL")
+
+    # In-memory cache
+    now_ts = _time.time()
+    cached = _og_image_cache.get(url)
+    if cached and cached[0] > now_ts:
+        return Response(
+            content=cached[1],
+            media_type=cached[2],
+            headers={"Cache-Control": "public, max-age=3600", "X-OG-Cache": "hit"},
+        )
+
+    domain = url.split("//", 1)[1].split("/", 1)[0].lower()
+    referer_map = {
+        "morizon.pl": "https://www.morizon.pl/",
+        "otodom.pl": "https://www.otodom.pl/",
+        "olx.pl": "https://www.olx.pl/",
+        "gratka.pl": "https://gratka.pl/",
+        "domiporta.pl": "https://www.domiporta.pl/",
+    }
+    referer = next((v for k, v in referer_map.items() if k in domain), url)
+
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as client:
+            r = await client.get(url, headers={
+                "User-Agent": ua,
+                "Referer": referer,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9",
+                "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.8",
+            })
+            if r.status_code != 200:
+                raise HTTPException(410, f"Offer page returned {r.status_code}")
+
+            html = r.text[:200000]  # first 200KB is enough for OG meta
+            # Match og:image (both attribute orders)
+            m = (_re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', html, _re.I)
+                 or _re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']', html, _re.I)
+                 or _re.search(r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']', html, _re.I))
+            if not m:
+                raise HTTPException(410, "No og:image found")
+            img_url = m.group(1).replace("&amp;", "&")
+            if img_url.startswith("//"):
+                img_url = "https:" + img_url
+            elif img_url.startswith("/"):
+                img_url = f"https://{domain}" + img_url
+
+            # Fetch the actual image
+            img_r = await client.get(img_url, headers={"User-Agent": ua, "Referer": referer})
+            if img_r.status_code != 200:
+                raise HTTPException(410, f"OG image returned {img_r.status_code}")
+            ct = img_r.headers.get("content-type", "image/jpeg")
+            body = img_r.content
+            # Store cache
+            _og_image_cache[url] = (now_ts + _OG_CACHE_TTL, body, ct)
+            # Trim cache if huge
+            if len(_og_image_cache) > 500:
+                _og_image_cache.clear()
+            return Response(
+                content=body,
+                media_type=ct,
+                headers={"Cache-Control": "public, max-age=86400", "X-OG-Cache": "miss"},
+            )
+    except HTTPException:
+        raise
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Fetch error: {str(e)[:100]}")
+    except Exception as e:
+        raise HTTPException(500, f"OG error: {str(e)[:100]}")
+
+
+
+
 # --- Admin panel endpoints ---
 @app.get("/api/admin/stats")
 async def admin_stats(admin: dict = Depends(require_admin)):

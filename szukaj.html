@@ -1508,10 +1508,12 @@ document.querySelectorAll('#propertyType .chip').forEach(c => {
     document.querySelectorAll('#propertyType .chip').forEach(x => x.classList.remove('active'));
     c.classList.add('active');
     updateSubType(c.dataset.type);
-    // SYNC z hero-select + wywołaj wspólną filtrację (uwzględnia sellera, cenę, itp.)
+    // SYNC z hero-select + refetch z API (backend ma pełną bazę per typ)
     const heroType = document.getElementById('heroType');
     if (heroType) heroType.value = c.dataset.type;
-    if (typeof applyAllFilters === 'function') {
+    if (typeof loadListings === 'function') {
+      loadListings();
+    } else if (typeof applyAllFilters === 'function') {
       applyAllFilters();
     } else {
       const filtered = LISTINGS.filter(l => l.type === c.dataset.type);
@@ -1865,6 +1867,13 @@ function applyAllFilters() {
 // Alias backward-compat (stary hero-search wywołuje applyHeroSearch)
 function applyHeroSearch() { applyAllFilters(); }
 
+// SZUKAJ / Enter / zmiana miasta/typu/transakcji → refetch z API (backend ma pełną bazę 35k)
+//   Live typing (input) → client-side filter (bo LISTINGS może już mieć match)
+function refetchFromApi() {
+  // Reset LISTINGS, wywołaj loadListings() ktora czyta aktualne wartości UI
+  loadListings();
+}
+
 // Debounce dla live-search
 let filterTimer = null;
 function applyAllFiltersDebounced() {
@@ -1875,14 +1884,14 @@ function applyAllFiltersDebounced() {
 // Podpięcie eventów HERO
 document.getElementById('q')?.addEventListener('input', applyAllFiltersDebounced);
 document.getElementById('q')?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); applyAllFilters(); }
+  if (e.key === 'Enter') { e.preventDefault(); refetchFromApi(); }
 });
-document.getElementById('heroType')?.addEventListener('change', applyAllFilters);
-document.getElementById('heroTrans')?.addEventListener('change', applyAllFilters);
+document.getElementById('heroType')?.addEventListener('change', refetchFromApi);
+document.getElementById('heroTrans')?.addEventListener('change', refetchFromApi);
 document.getElementById('heroPrice')?.addEventListener('input', applyAllFiltersDebounced);
 document.getElementById('heroPrice')?.addEventListener('change', applyAllFilters);
 document.getElementById('heroMarket')?.addEventListener('change', applyAllFilters);
-document.getElementById('heroSearchBtn')?.addEventListener('click', applyAllFilters);
+document.getElementById('heroSearchBtn')?.addEventListener('click', refetchFromApi);
 
 // Hero radius km — synchronizuj z ukrytym sidebar #fRadiusKm i wywołaj filtr
 document.getElementById('heroRadiusKm')?.addEventListener('input', () => {

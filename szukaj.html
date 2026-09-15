@@ -890,12 +890,15 @@ async function loadListings() {
   const count = document.getElementById('count');
   try {
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8ba3d4">⏳ Wczytuję oferty...</div>';
-    // ── Server-side prefiltr: użyj URL params (q, type, trans) żeby ograniczyć payload
+    // ── Server-side prefiltr: użyj URL params LUB aktualnych wartości UI (heroType/heroTrans defaultują na mieszkanie/sprzedaz)
     //    Zamiast ładować 36k ofert, backend zwraca ~500-2000 pasujących do zapytania
     const urlParams = new URLSearchParams(location.search);
-    const preCity = (urlParams.get('q') || urlParams.get('city') || '').trim();
-    const preType = (urlParams.get('type') || '').trim();
-    const preTrans = (urlParams.get('trans') || urlParams.get('transaction') || '').trim();
+    const uiType = document.getElementById('heroType')?.value || '';
+    const uiTrans = document.getElementById('heroTrans')?.value || '';
+    const uiCity = document.getElementById('q')?.value?.trim() || '';
+    const preCity = (urlParams.get('q') || urlParams.get('city') || uiCity).trim();
+    const preType = (urlParams.get('type') || uiType).trim();
+    const preTrans = (urlParams.get('trans') || urlParams.get('transaction') || uiTrans).trim();
     const apiParams = new URLSearchParams();
     if (preCity) apiParams.set('city', preCity);
     if (preType) apiParams.set('type', preType);
@@ -1012,6 +1015,11 @@ async function loadListings() {
     });
     console.log(`Loaded: ${staticList.length} static + ${scrapedList.length} scraped = ${LISTINGS.length} total (baza: ${scrapedTotalCount})`);
     window.__scrapedTotalCount = scrapedTotalCount;
+    // NATYCHMIAST ustaw count na total_count z bazy — nie czekaj na applyAllFilters
+    if (scrapedTotalCount > 0) {
+      const cEl = document.getElementById('count');
+      if (cEl) cEl.textContent = scrapedTotalCount;
+    }
     // Pokazuj total_count z bazy jeśli większy niż załadowane (paginacja)
     count.textContent = Math.max(LISTINGS.length, scrapedTotalCount || 0);
 
@@ -1657,8 +1665,10 @@ function applyAllFilters() {
   const f = collectFilterState();
 
   const filtered = LISTINGS.filter(l => {
-    if (f.type && l.type !== f.type) return false;
-    if (f.trans && l.transaction !== f.trans) return false;
+    // Type filter: permisywny - jeśli oferta nie ma typu, przepuść (dane scraper często niepełne)
+    if (f.type && l.type && l.type !== f.type) return false;
+    // Transaction filter: permisywny - większość Apify ofert nie ma pola transaction (traktuj jako match dla sprzedaz)
+    if (f.trans && l.transaction && l.transaction !== f.trans) return false;
     if (f.priceMax && l.price > f.priceMax) return false;
     if (f.heroMarket && l.market_type !== f.heroMarket) return false;
     if (f.priceFrom && l.price < f.priceFrom) return false;
@@ -1829,7 +1839,11 @@ function applyAllFilters() {
   const grid = document.getElementById('grid');
   CURRENT_FILTERED = filtered;
   currentPage = 1;
-  document.getElementById('count').textContent = filtered.length;
+  // Count display: gdy client-side filtry nic nie odrzuciły — pokaż realny total z bazy (35k, 15k etc.)
+  //                 gdy odrzuciły — pokaż liczbę pozostałych po filtrach
+  const backendTotal = window.__scrapedTotalCount || 0;
+  const noNarrowing = filtered.length === LISTINGS.length && LISTINGS.length > 0;
+  document.getElementById('count').textContent = noNarrowing && backendTotal > 0 ? backendTotal : filtered.length;
   // Info label o aktywnym auto-radius (żeby user wiedział czemu ma dużo ofert wokół miasta)
   const infoEl = document.getElementById('radiusInfo');
   if (infoEl) {

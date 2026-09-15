@@ -986,6 +986,15 @@ async function loadListings() {
               }
             }
           }
+          // ── Merge IMAGES z różnych portali — jeśli Morizon zwróci 410, karuzela spróbuje URL z OLX/Otodom
+          if (!Array.isArray(existing.images)) existing.images = existing.image ? [existing.image] : [];
+          const rImgs = [];
+          if (Array.isArray(r.images) && r.images.length) rImgs.push(...r.images);
+          else if (r.image) rImgs.push(r.image);
+          else if (r.image_url) rImgs.push(r.image_url);
+          for (const u of rImgs) {
+            if (u && !existing.images.includes(u)) existing.images.push(u);
+          }
         }
       }
       const clusterMerged = clusteredList.length;

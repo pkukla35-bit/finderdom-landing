@@ -1141,7 +1141,11 @@ function renderPage() {
     if (l.type === 'dom') specs += ' · 🏡 Dom';
     if (l.type === 'dzialka') specs += ' · 🌳 Działka';
     const targetUrl = `/oferta.html?id=${l.id}`;
-    const allImages = (l.images && l.images.length > 0) ? l.images : (l.image_url ? [l.image_url] : []);
+    const allImages = (l.images && l.images.length > 0)
+      ? l.images
+      : (l.image_url ? [l.image_url]
+        : (l.image ? [l.image]                     // lite payload używa pola `image` (singular)
+        : (l.main_image ? [l.main_image] : [])));
     const hasPhoto = allImages.length > 0;
     const imgList = allImages.slice(0, 15);  // max 15 zdjec per karta
     const photoHtml = hasPhoto

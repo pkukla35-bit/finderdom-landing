@@ -723,6 +723,39 @@ async function loadOffer() {
     }
 
     if (!offer) { showError(); return; }
+
+    // Cross-portal image merging: znajdź duplikaty z innych portali (ta sama cena+area+miasto+podobny tytuł)
+    // i dołącz ich zdjęcia do galerii — gdy Morizon zwróci 410, karuzela spróbuje URL z OLX/Otodom
+    try {
+      const oPrice = Number(offer.price) || 0;
+      const oArea = Number(offer.area_m2) || 0;
+      const oCity = String(offer.city || '').toLowerCase().trim();
+      if (oPrice > 1000 && oArea > 10 && oCity && Array.isArray(listings)) {
+        const twinImages = [];
+        for (const other of listings) {
+          if (!other || other === offer || other.id === offer.id) continue;
+          const p = Number(other.price) || 0;
+          const a = Number(other.area_m2) || 0;
+          const c = String(other.city || '').toLowerCase().trim();
+          if (p !== oPrice || Math.abs(a - oArea) > 0.5 || c !== oCity) continue;
+          const imgs = Array.isArray(other.images) ? other.images : (other.image_url ? [other.image_url] : (other.image ? [other.image] : []));
+          for (const u of imgs) if (u) twinImages.push(u);
+        }
+        if (twinImages.length) {
+          const existing = Array.isArray(offer.images) ? offer.images.slice() : (offer.image_url ? [offer.image_url] : []);
+          const merged = [];
+          const seen = new Set();
+          for (const u of [...existing, ...twinImages]) {
+            if (u && !seen.has(u)) { seen.add(u); merged.push(u); }
+          }
+          offer.images = merged;
+          console.log(`Cross-portal images: +${twinImages.length} z duplikatów → total ${merged.length}`);
+        }
+      }
+    } catch (mergeErr) {
+      console.warn('cross-portal img merge failed:', mergeErr);
+    }
+
     renderOffer(offer, listings);
     // Init CRM bar (async, doesn't block render)
     initCrmBar(offer.id);

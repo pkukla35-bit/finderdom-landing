@@ -118,6 +118,39 @@ def _normalize_city_name(name):
     n = n.replace(" ", "-")
     return n
 
+
+def _build_diacritic_regex(text: str) -> str:
+    """Buduje regex ktory pasuje case+diacritic-insensitive.
+    Np. "gdansk" -> "[gG][dD][aąAĄ][nńNŃ][sS][kK]"
+    Uzywane dla filtrow po miescie/nazwach z polskimi znakami.
+    """
+    if not text:
+        return ""
+    # Mapa: kazdy znak (nawet z ogonkiem) -> zbior alternatyw
+    diac_map = {
+        'a': 'aąAĄ', 'ą': 'aąAĄ',
+        'c': 'cćCĆ', 'ć': 'cćCĆ',
+        'e': 'eęEĘ', 'ę': 'eęEĘ',
+        'l': 'lłLŁ', 'ł': 'lłLŁ',
+        'n': 'nńNŃ', 'ń': 'nńNŃ',
+        'o': 'oóOÓ', 'ó': 'oóOÓ',
+        's': 'sśSŚ', 'ś': 'sśSŚ',
+        'z': 'zźżZŹŻ', 'ź': 'zźżZŹŻ', 'ż': 'zźżZŹŻ',
+    }
+    out = []
+    import re as _re
+    for ch in text:
+        lower = ch.lower()
+        if lower in diac_map:
+            out.append('[' + diac_map[lower] + ']')
+        elif ch.isalpha():
+            # Zwykla litera - obie wielkosci
+            out.append('[' + ch.lower() + ch.upper() + ']')
+        else:
+            # Znak specjalny (spacja, -, cyfra) - escape
+            out.append(_re.escape(ch))
+    return ''.join(out)
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="FinderDom API", docs_url="/docs", redoc_url=None)
@@ -1335,8 +1368,9 @@ async def listings_scraped_endpoint(
         else:
             query = {}
         if city:
-            # Case-insensitive city match — includes city and district fields
-            city_re = {"$regex": city, "$options": "i"}
+            # Case+diacritic-insensitive: "gdansk" pasuje do "Gdańsk", "krakow" -> "Kraków" itd.
+            city_pattern = _build_diacritic_regex(city.strip())
+            city_re = {"$regex": city_pattern}
             query["$or"] = [{"city": city_re}, {"district": city_re}, {"title": city_re}]
         if type:
             query["type"] = {"$regex": f"^{type}", "$options": "i"}

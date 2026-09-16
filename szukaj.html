@@ -1151,17 +1151,24 @@ function renderPage() {
     if (l.type === 'dzialka') specs += ' · 🌳 Działka';
     const targetUrl = `/oferta.html?id=${l.id}`;
     const allImages = (l.images && l.images.length > 0)
-      ? l.images
+      ? l.images.slice()
       : (l.image_url ? [l.image_url]
         : (l.image ? [l.image]                     // lite payload używa pola `image` (singular)
         : (l.main_image ? [l.main_image] : [])));
     // Fallback: og:image z HTML strony oferty (dla ofert z polamanymi URL w bazie)
     const sourceUrl = l.url || l.source_url || (l.sources && l.sources[0] && l.sources[0].url);
     if (sourceUrl) {
-      allImages.push('/api/og-image?url=' + encodeURIComponent(sourceUrl));
+      const ogUrl = '/api/og-image?url=' + encodeURIComponent(sourceUrl);
+      if (!allImages.includes(ogUrl)) allImages.push(ogUrl);
     }
-    const hasPhoto = allImages.length > 0;
-    const imgList = allImages.slice(0, 15);  // max 15 zdjec per karta
+    // Dedupe (chroni przed przypadkowymi duplikatami z clustera + og-image)
+    const _seen = new Set();
+    const _dedup = [];
+    for (const u of allImages) {
+      if (u && !_seen.has(u)) { _seen.add(u); _dedup.push(u); }
+    }
+    const hasPhoto = _dedup.length > 0;
+    const imgList = _dedup.slice(0, 15);  // max 15 zdjec per karta
     const photoHtml = hasPhoto
       ? `<img class="photo" data-imgs='${JSON.stringify(imgList).replace(/'/g, "&#39;")}' data-idx="0" src="${imgList[0]}" alt="" loading="lazy" decoding="async" onerror="window.__cardImgFallback(this)">`
       : '';

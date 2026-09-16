@@ -1352,11 +1352,11 @@ async def listings_scraped_endpoint(
             projection = {
                 "_id": 0,
                 "description": 0,
-                "images": 0,
                 "source_actor": 0,
                 "last_seen_at": 0,
                 "phone": 0,
                 "posted_at": 0,
+                # images: keep, but slice server-side ponizej do max 5 (bo OLX URL sa dlugie)
             }
         else:
             projection = {"_id": 0}
@@ -1367,6 +1367,12 @@ async def listings_scraped_endpoint(
             cursor = cursor.sort("added_at", -1)
         cursor = cursor.skip(offset).limit(limit)
         docs = await cursor.to_list(length=limit)
+        # Slice images do 5 pierwszych (w lite mode) — pozwala karuzeli, bez blootowania payloadu
+        if lite:
+            for d in docs:
+                imgs = d.get("images")
+                if isinstance(imgs, list) and len(imgs) > 5:
+                    d["images"] = imgs[:5]
         # Total count (dla frontend: pokazuje "Znaleziono X ofert" nawet gdy załadowaliśmy tylko limit)
         # count_documents jest szybki dzięki indexom
         try:

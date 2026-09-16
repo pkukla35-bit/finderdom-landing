@@ -1308,6 +1308,135 @@ async def admin_timeseries(days: int = 30, admin: dict = Depends(require_admin))
     return {"days": days, "series": series}
 
 
+# --- Automatyczne czyszczenie nieaktualnych ofert (HEAD-check URL) ---
+@app.post("/api/admin/cleanup-stale")
+async def admin_cleanup_stale(
+    request: Request,
+    limit: int = 200,
+    concurrency: int = 20,
+    delete_after_days: int = 30,
+    dry_run: int = 0,
+):
+    """
+    HEAD-checkuje URLe ofert. Jak 404/410/gone → is_stale=true.
+    Kasuje oferty ze stale_since > delete_after_days.
+
+    Auth: albo admin JWT albo header X-Cron-Secret=$CRON_SECRET (dla GitHub Actions)
+    """
+    # Auth: dwie opcje
+    cron_secret_env = os.getenv("CRON_SECRET") or ""
+    x_cron_secret = request.headers.get("x-cron-secret") or request.headers.get("X-Cron-Secret") or ""
+    is_cron = bool(cron_secret_env and x_cron_secret == cron_secret_env)
+    if not is_cron:
+        # Wymagany admin JWT
+        try:
+            user = await current_user(HTTPAuthorizationCredentials(
+                scheme="Bearer",
+                credentials=(request.headers.get("authorization") or "").replace("Bearer ", "").strip()
+            ))
+            admin_emails = (os.getenv("ADMIN_EMAILS") or "").lower().split(",")
+            if (user.get("email") or "").lower() not in admin_emails:
+                raise HTTPException(403, "admin only")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(401, "unauthorized")
+
+    limit = max(1, min(limit, 1000))
+    concurrency = max(1, min(concurrency, 50))
+    coll = database().listings_scraped
+
+    # 1) Krok pierwszy: skasuj oferty stale > delete_after_days
+    now = datetime.now(timezone.utc)
+    delete_cutoff = now - timedelta(days=max(1, delete_after_days))
+    if not dry_run:
+        r = await coll.delete_many({"is_stale": True, "stale_since": {"$lt": delete_cutoff}})
+        deleted_permanent = r.deleted_count
+    else:
+        deleted_permanent = await coll.count_documents({"is_stale": True, "stale_since": {"$lt": delete_cutoff}})
+
+    # 2) Pobierz N ofert z URL, najstarsze najdawniej sprawdzone (i te nieoznakowane)
+    recent_cutoff = now - timedelta(hours=24)
+    query = {
+        "url": {"$exists": True, "$ne": ""},
+        "is_stale": {"$ne": True},
+        "$or": [
+            {"last_checked_at": {"$exists": False}},
+            {"last_checked_at": {"$lt": recent_cutoff}},
+        ],
+    }
+    cursor = coll.find(query, {"_id": 1, "url": 1}).sort("last_checked_at", 1).limit(limit)
+    docs = await cursor.to_list(length=limit)
+    total_to_check = len(docs)
+
+    if total_to_check == 0:
+        return {
+            "ok": True,
+            "checked": 0,
+            "marked_stale": 0,
+            "deleted_permanent": deleted_permanent,
+            "message": "Nic do sprawdzenia (wszystkie oferty juz sprawdzone w ostatnie 24h).",
+        }
+
+    # 3) Concurrent HEAD check
+    import asyncio as _asyncio
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+
+    async def check_url(doc):
+        url = doc.get("url", "")
+        if not url or not url.startswith(("http://", "https://")):
+            return (doc["_id"], False, None)
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
+                r = await client.head(url, headers={"User-Agent": ua})
+                if r.status_code in (405, 501):
+                    r = await client.get(url, headers={"User-Agent": ua, "Range": "bytes=0-1024"})
+                # 404/410 = stale. 4xx (poza 429 rate limit) = też stale (redirect na listing itp)
+                is_stale = r.status_code in (404, 410) or (400 <= r.status_code < 500 and r.status_code != 429)
+                return (doc["_id"], is_stale, r.status_code)
+        except (httpx.TimeoutException, httpx.HTTPError):
+            return (doc["_id"], False, None)
+        except Exception:
+            return (doc["_id"], False, None)
+
+    sem = _asyncio.Semaphore(concurrency)
+    async def bounded(d):
+        async with sem:
+            return await check_url(d)
+
+    results = await _asyncio.gather(*[bounded(d) for d in docs])
+    stale_ids = [r[0] for r in results if r[1]]
+    checked_ids = [r[0] for r in results]
+
+    marked_stale = 0
+    if not dry_run:
+        if stale_ids:
+            up = await coll.update_many(
+                {"_id": {"$in": stale_ids}},
+                {"$set": {"is_stale": True, "stale_since": now, "last_checked_at": now}},
+            )
+            marked_stale = up.modified_count
+        alive_ids = [i for i in checked_ids if i not in set(stale_ids)]
+        if alive_ids:
+            await coll.update_many(
+                {"_id": {"$in": alive_ids}},
+                {"$set": {"last_checked_at": now}},
+            )
+    else:
+        marked_stale = len(stale_ids)
+
+    return {
+        "ok": True,
+        "checked": total_to_check,
+        "marked_stale": marked_stale,
+        "deleted_permanent": deleted_permanent,
+        "dry_run": bool(dry_run),
+        "sample_status_codes": [r[2] for r in results[:20]],
+    }
+
+
+
+
 
 @app.get("/api/listing/{listing_id}")
 async def listing_single(listing_id: str, response: Response):
@@ -1364,9 +1493,9 @@ async def listings_scraped_endpoint(
         # Uwaga: gdy BRAK city/type/transaction — nie filtrujemy po scraped_via żeby uniknąć slow scan
         # (99% ofert i tak ma scraped_via w [scrapingbee, apify])
         if city or type or transaction:
-            query = {"scraped_via": {"$in": ["scrapingbee", "apify"]}}
+            query = {"scraped_via": {"$in": ["scrapingbee", "apify"]}, "is_stale": {"$ne": True}}
         else:
-            query = {}
+            query = {"is_stale": {"$ne": True}}
         if city:
             # Case+diacritic-insensitive: "gdansk" pasuje do "Gdańsk", "krakow" -> "Kraków" itd.
             city_pattern = _build_diacritic_regex(city.strip())

@@ -1,0 +1,75 @@
+name: Cleanup stale listings (auto-remove 404/410 offers)
+
+on:
+  schedule:
+    # Codziennie o 3:00 UTC (5:00 CEST) — mała ruch, tania operacja
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (nic nie zmienia w bazie)'
+        required: false
+        type: choice
+        options: ['no', 'yes']
+        default: 'no'
+      batches:
+        description: 'Ile bathe po 200 ofert (default 5 = 1000 sprawdzen)'
+        required: false
+        default: '5'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Sprawdz oferty (HEAD-check URLi)
+        env:
+          API_BASE: ${{ secrets.API_BASE || 'https://www.finderdom.pl' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DRY_RUN: ${{ inputs.dry_run || 'no' }}
+          BATCHES: ${{ inputs.batches || '5' }}
+        run: |
+          set -e
+          if [ -z "$CRON_SECRET" ]; then
+            echo "ERROR: brak CRON_SECRET w GitHub Secrets"
+            exit 1
+          fi
+
+          DRY=0
+          if [ "$DRY_RUN" = "yes" ]; then DRY=1; fi
+
+          TOTAL_CHECKED=0
+          TOTAL_STALE=0
+          TOTAL_DELETED=0
+
+          for i in $(seq 1 $BATCHES); do
+            echo "--- Batch $i/$BATCHES ---"
+            RESP=$(curl -sS -X POST \
+              "${API_BASE}/api/admin/cleanup-stale?limit=200&concurrency=20&dry_run=${DRY}" \
+              -H "X-Cron-Secret: ${CRON_SECRET}" \
+              -H "Content-Type: application/json" \
+              --max-time 60)
+            echo "Response: $RESP"
+
+            CHECKED=$(echo "$RESP" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('checked',0))")
+            STALE=$(echo "$RESP" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('marked_stale',0))")
+            DEL=$(echo "$RESP" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('deleted_permanent',0))")
+
+            TOTAL_CHECKED=$((TOTAL_CHECKED + CHECKED))
+            TOTAL_STALE=$((TOTAL_STALE + STALE))
+            TOTAL_DELETED=$((TOTAL_DELETED + DEL))
+
+            if [ "$CHECKED" = "0" ]; then
+              echo "Brak wiecej ofert do sprawdzenia — koncze."
+              break
+            fi
+            sleep 3
+          done
+
+          echo ""
+          echo "======================================"
+          echo "  PODSUMOWANIE (dry_run=$DRY_RUN)"
+          echo "  Sprawdzono:   $TOTAL_CHECKED ofert"
+          echo "  Oznaczono jako stale: $TOTAL_STALE"
+          echo "  Skasowano permanentnie: $TOTAL_DELETED"
+          echo "======================================"

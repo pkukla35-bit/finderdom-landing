@@ -1632,10 +1632,16 @@ async def similar_offers_endpoint(
 
     async def run_query(q):
         try:
-            return await coll.find(q, projection).limit(limit).to_list(length=limit)
+            docs_local = await coll.find(q, projection).limit(limit).to_list(length=limit)
+            _debug_last["last_count"] = len(docs_local)
+            _debug_last["last_query_keys"] = list(q.keys())
+            return docs_local
         except Exception as e:
             logger.warning("similar-offers query err: %s", e)
+            _debug_last["last_error"] = str(e)[:200]
             return []
+
+    _debug_last = {}
 
     docs: list = []
     step_used = ""
@@ -1720,6 +1726,7 @@ async def similar_offers_endpoint(
         "step_used": step_used,
         "offers": result[:limit],
         "stats": stats,
+        "_debug": _debug_last,
     }
 
 

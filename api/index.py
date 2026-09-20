@@ -1072,7 +1072,7 @@ async def admin_stats(admin: dict = Depends(require_admin)):
     users_col = db.users
     invoices_col = db.invoices
     leads_col = db.leads
-    listings_col = db.listings_scraped
+    listings_col = db.listings
 
     # Users breakdown
     total_users = await users_col.count_documents({})
@@ -1230,7 +1230,7 @@ async def admin_leads(limit: int = 30, offset: int = 0, admin: dict = Depends(re
 async def admin_scraper_status(admin: dict = Depends(require_admin)):
     """Apify scraper status per city + type. Returns last scrape time and counts."""
     db = database()
-    listings_col = db.listings_scraped
+    listings_col = db.listings
     # Group by (city, type) and get count + latest scraped_at
     try:
         pipeline = [
@@ -1344,7 +1344,7 @@ async def admin_cleanup_stale(
 
     limit = max(1, min(limit, 1000))
     concurrency = max(1, min(concurrency, 50))
-    coll = database().listings_scraped
+    coll = database().listings
 
     # 1) Krok pierwszy: skasuj oferty stale > delete_after_days
     now = datetime.now(timezone.utc)
@@ -1600,7 +1600,7 @@ async def similar_offers_endpoint(
     Kolejnosc pol zwrotu: cena, m2, cena_m2, city, district, market_type, area_m2
     """
     limit = max(1, min(limit, 200))
-    coll = database().listings_scraped
+    coll = database().listings
 
     base_query: Dict[str, Any] = {
         "is_stale": {"$ne": True},

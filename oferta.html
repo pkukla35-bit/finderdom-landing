@@ -1631,6 +1631,7 @@ async function renderOffer(l, all) {
 
   // 🔁 FALLBACK: gdy client-side nie znalazl 4+ podobnych (mala baza lokalna),
   //    pobierz z pelnej bazy 35k przez /api/similar-offers
+  console.log('[similar] client-side found:', similar.length, 'listings, __skipSimilar=', window.__skipSimilar);
   if (similar.length < 4) {
     try {
       const params = new URLSearchParams({
@@ -1642,9 +1643,12 @@ async function renderOffer(l, all) {
       if (l.market_type) params.set('market_type', l.market_type);
       if (l.external_id || l.id) params.set('exclude_id', l.external_id || l.id);
       params.set('limit', '20');
+      console.log('[similar] fetching /api/similar-offers with:', params.toString());
       const resp = await fetch('/api/similar-offers?' + params.toString());
+      console.log('[similar] resp status:', resp.status);
       if (resp.ok) {
         const data = await resp.json();
+        console.log('[similar] data.offers.length:', (data.offers || []).length);
         if (Array.isArray(data.offers) && data.offers.length) {
           // Merge z tym co juz mamy (unikaj duplikatow po id)
           const seenIds = new Set(similar.map(s => s.id));

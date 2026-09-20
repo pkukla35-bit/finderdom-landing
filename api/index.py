@@ -1632,9 +1632,10 @@ async def similar_offers_endpoint(
 
     async def run_query(q):
         try:
+            # Debug: cursor bez limit, zeby zobaczyc raw count
             docs_local = await coll.find(q, projection).limit(limit).to_list(length=limit)
             _debug_last["last_count"] = len(docs_local)
-            _debug_last["last_query_keys"] = list(q.keys())
+            _debug_last["last_query"] = str(q)[:500]
             return docs_local
         except Exception as e:
             logger.warning("similar-offers query err: %s", e)

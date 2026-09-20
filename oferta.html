@@ -1390,6 +1390,8 @@ async function renderOffer(l, all) {
             price: o.price, price_pm2: o.price_pm2, area_m2: o.area_m2,
             lat: o.lat, lon: o.lon, url: o.url,
           }));
+          // Ustaw usedRadiusKm zeby ponizej sampleN=localOffers.length
+          usedRadiusKm = 999; // sygnalizuje "backend fallback" (nie lokalny promien)
           scopeLabel = data.step_used && data.step_used.startsWith('poland')
             ? `w Polsce (${data.stats.count} podobnych — mało lokalnych danych)`
             : `w mieście ${l.city} (${data.stats.count} podobnych)`;
@@ -1658,7 +1660,7 @@ async function renderOffer(l, all) {
               price_pm2: o.price_pm2,
               price_pm2_display: (o.price_pm2 || 0).toLocaleString('pl-PL').replace(/,/g, ' ') + ' zł/m²',
               area_m2: o.area_m2,
-              emoji: TYPE_EMOJI[l.type] || '🏢',
+              emoji: TYPE_EMOJI_OFF[l.type] || '🏢',
               image_url: null, // og-image sie doda w renderze
             });
             seenIds.add(o.id);

@@ -903,6 +903,9 @@ async function loadListings() {
     if (preCity) apiParams.set('city', preCity);
     if (preType) apiParams.set('type', preType);
     if (preTrans) apiParams.set('transaction', preTrans);
+    // Aktualnie wybrany chip seller (prywatna / posrednik) — filter na backend
+    const activeSellerChip = document.querySelector('.chip.active[data-seller]');
+    if (activeSellerChip) apiParams.set('seller_type', activeSellerChip.dataset.seller);
     const scrapedUrl = '/api/listings-scraped' + (apiParams.toString() ? '?' + apiParams.toString() : '');
     // Fetch BOTH static + freshly scraped listings in parallel
     const [staticRes, scrapedRes] = await Promise.allSettled([
@@ -1948,12 +1951,17 @@ document.getElementById('q')?.addEventListener('input', () => {
   if (sidebarCity) sidebarCity.value = city;
 });
 
-// Podpięcie eventów SIDEBAR — chipy sellera (multi-select)
+// Podpięcie eventów SIDEBAR — chipy sellera (single-select, refetch z API bo baza jest wielka)
 document.querySelectorAll('.chip[data-seller]').forEach(c => {
   c.addEventListener('click', (e) => {
     e.stopImmediatePropagation();
-    c.classList.toggle('active');
-    applyAllFilters();
+    const wasActive = c.classList.contains('active');
+    // Wylacz inne chipy seller (single-select - "Prywatna" i "Posrednik" wykluczaja sie)
+    document.querySelectorAll('.chip[data-seller]').forEach(x => x.classList.remove('active'));
+    if (!wasActive) c.classList.add('active');
+    // Refetch z API bo baza ma 14000 mieszkan, prywatnych ~2000 - client-side na 1000 batchu daje 128
+    if (typeof loadListings === 'function') loadListings();
+    else applyAllFilters();
   }, true);
 });
 

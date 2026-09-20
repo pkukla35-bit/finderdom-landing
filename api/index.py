@@ -1481,6 +1481,7 @@ async def listings_scraped_endpoint(
     city: Optional[str] = None,
     type: Optional[str] = None,
     transaction: Optional[str] = None,
+    seller_type: Optional[str] = None,
 ):
     """Returns listings scraped via ScrapingBee/Apify.
 
@@ -1511,6 +1512,13 @@ async def listings_scraped_endpoint(
             query["type"] = {"$regex": f"^{type}", "$options": "i"}
         if transaction:
             query["transaction_type"] = transaction
+        if seller_type:
+            # "prywatna" lub "posrednik" (case-insensitive)
+            st = seller_type.lower().strip()
+            if st in ("prywatna", "prywatny", "prywatne"):
+                query["seller_type"] = "prywatna"
+            elif st in ("posrednik", "pośrednik", "agencja"):
+                query["seller_type"] = "posrednik"
 
         # Sanity caps (chroni przed abuse i Vercel 10s timeout)
         limit = max(1, min(limit, 10000))
@@ -1532,7 +1540,7 @@ async def listings_scraped_endpoint(
         # Sortowanie: gdy filtr po mieście/typie już zawęża do ~500-2000 rekordów, można sortować po added_at.
         # Gdy BRAK filtrów (cała baza 50k) sort byłby zbyt kosztowny → skip sort dla wydajności.
         cursor = coll.find(query, projection)
-        if city or type or transaction:
+        if city or type or transaction or seller_type:
             cursor = cursor.sort("added_at", -1)
         cursor = cursor.skip(offset).limit(limit)
         docs = await cursor.to_list(length=limit)

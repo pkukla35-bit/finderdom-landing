@@ -1575,6 +1575,144 @@ async def rcn_stats_endpoint(city: str, type: str, area: Optional[float] = None)
     return {"ok": True, **stats}
 
 
+
+# --- Podobne oferty dla AI Analizy Ceny (fetch z pelnej bazy 35k) ---
+@app.get("/api/similar-offers")
+async def similar_offers_endpoint(
+    city: str,
+    type: str,
+    transaction: str = "sprzedaz",
+    area: Optional[float] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    market_type: Optional[str] = None,
+    exclude_id: Optional[str] = None,
+    limit: int = 50,
+):
+    """
+    Zwraca podobne oferty z pelnej bazy 35k, do analizy AI ceny.
+    Progresywnie luzuje kryteria zeby znalezc min 8 ofert:
+    step 1: city + type + area ±30% + market_type
+    step 2: city + type + area ±50% (bez market_type)
+    step 3: city + type (bez area)
+    step 4: bez city (tylko type + area ±30%) — dla malych miejscowosci fallback do wojewodztwa
+
+    Kolejnosc pol zwrotu: cena, m2, cena_m2, city, district, market_type, area_m2
+    """
+    limit = max(1, min(limit, 200))
+    coll = database().listings_scraped
+
+    base_query: Dict[str, Any] = {
+        "is_stale": {"$ne": True},
+        "price": {"$gt": 1000},
+    }
+    if type:
+        base_query["type"] = {"$regex": f"^{type}", "$options": "i"}
+    if transaction:
+        # transaction moze byc None w bazie (Apify data niepelne) — dopuszczamy
+        base_query["$or"] = [
+            {"transaction_type": transaction},
+            {"transaction_type": {"$exists": False}},
+            {"transaction_type": None},
+        ]
+    if exclude_id:
+        base_query["external_id"] = {"$ne": exclude_id}
+
+    # Diakrytyka: uzywamy _build_diacritic_regex zeby "Kielce" pasowalo do "kielce"/"Kielce"
+    if city:
+        city_pattern = _build_diacritic_regex(city.strip())
+        city_re = {"$regex": city_pattern}
+
+    projection = {
+        "_id": 0, "price": 1, "area_m2": 1, "city": 1, "district": 1,
+        "market_type": 1, "latitude": 1, "longitude": 1, "url": 1, "title": 1,
+        "external_id": 1, "type": 1, "transaction_type": 1,
+    }
+
+    async def run_query(q):
+        try:
+            return await coll.find(q, projection).limit(limit).to_list(length=limit)
+        except Exception as e:
+            logger.warning("similar-offers query err: %s", e)
+            return []
+
+    docs: list = []
+    step_used = ""
+
+    # Step 1: city + area ±30% + market_type
+    if city and area and area > 0:
+        q = dict(base_query)
+        q["$and"] = [{"$or": [{"city": city_re}, {"district": city_re}]}]
+        q["area_m2"] = {"$gte": area * 0.7, "$lte": area * 1.3}
+        if market_type:
+            q["market_type"] = market_type
+        docs = await run_query(q)
+        step_used = "city+area±30%+market"
+
+    # Step 2: city + area ±50% (bez market)
+    if len(docs) < 8 and city and area and area > 0:
+        q = dict(base_query)
+        q["$and"] = [{"$or": [{"city": city_re}, {"district": city_re}]}]
+        q["area_m2"] = {"$gte": area * 0.5, "$lte": area * 1.5}
+        docs = await run_query(q)
+        step_used = "city+area±50%"
+
+    # Step 3: city only
+    if len(docs) < 8 and city:
+        q = dict(base_query)
+        q["$and"] = [{"$or": [{"city": city_re}, {"district": city_re}]}]
+        docs = await run_query(q)
+        step_used = "city_only"
+
+    # Step 4: brak city — cala Polska + area ±30% (dla malych miejscowosci)
+    if len(docs) < 8 and area and area > 0:
+        q = dict(base_query)
+        q["area_m2"] = {"$gte": area * 0.7, "$lte": area * 1.3}
+        docs = await run_query(q)
+        step_used = "poland+area±30%"
+
+    # Wylicz cena_m2 i posortuj po odleglosci od naszego area (najbardziej podobne najpierw)
+    result = []
+    for d in docs:
+        p = d.get("price") or 0
+        a = d.get("area_m2") or 0
+        if p > 1000 and a > 5:
+            result.append({
+                "price": p,
+                "area_m2": a,
+                "price_pm2": round(p / a),
+                "city": d.get("city") or "",
+                "district": d.get("district") or "",
+                "market_type": d.get("market_type") or "",
+                "lat": d.get("latitude"),
+                "lon": d.get("longitude"),
+                "url": d.get("url") or "",
+                "title": d.get("title") or "",
+                "id": d.get("external_id") or "",
+            })
+
+    # Median cena/m²
+    import statistics
+    ppm2_values = [r["price_pm2"] for r in result if r["price_pm2"] > 0]
+    stats = None
+    if ppm2_values:
+        stats = {
+            "median_pm2": int(statistics.median(ppm2_values)),
+            "min_pm2": int(min(ppm2_values)),
+            "max_pm2": int(max(ppm2_values)),
+            "count": len(ppm2_values),
+        }
+
+    return {
+        "ok": True,
+        "count": len(result),
+        "step_used": step_used,
+        "offers": result[:limit],
+        "stats": stats,
+    }
+
+
+
 @app.post("/api/auth/register", status_code=201)
 async def register(body: RegisterRequest):
     email = clean_email(body.email)

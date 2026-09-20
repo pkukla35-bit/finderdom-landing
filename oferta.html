@@ -1096,7 +1096,7 @@ function showError() {
   el('errorState').style.display = 'block';
 }
 
-function renderOffer(l, all) {
+async function renderOffer(l, all) {
   el('loadingState').style.display = 'none';
   el('offerContainer').style.display = 'grid';
   window.__currentListingId = l.id;  // dla modalu Wycena Premium PDF
@@ -1364,6 +1364,40 @@ function renderOffer(l, all) {
         scopeLabel = `w promieniu <strong>${km} km</strong>${marketLabel}`;
         break;
       }
+    }
+  }
+
+  // 🔁 FALLBACK: gdy client-side nie znalazl 8+ podobnych (np. male miasto, mala baza lokalna)
+  //    pobierz podobne z pelnej bazy 35k przez backend /api/similar-offers
+  if (!offersPpm2 || localOffers.length < 8) {
+    try {
+      const params = new URLSearchParams({
+        city: l.city || '',
+        type: l.type || '',
+        transaction: l.transaction || 'sprzedaz',
+      });
+      if (l.area_m2) params.set('area', String(l.area_m2));
+      if (l.market_type) params.set('market_type', l.market_type);
+      if (l.external_id || l.id) params.set('exclude_id', l.external_id || l.id);
+      const resp = await fetch('/api/similar-offers?' + params.toString());
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.stats && data.stats.count >= 5) {
+          offersPpm2 = data.stats.median_pm2;
+          rcnPpm2 = Math.round(offersPpm2 * 0.94);
+          localOffers = (data.offers || []).map(o => ({
+            id: o.id, title: o.title, city: o.city, district: o.district,
+            price: o.price, price_pm2: o.price_pm2, area_m2: o.area_m2,
+            lat: o.lat, lon: o.lon, url: o.url,
+          }));
+          scopeLabel = data.step_used && data.step_used.startsWith('poland')
+            ? `w Polsce (${data.stats.count} podobnych — mało lokalnych danych)`
+            : `w mieście ${l.city} (${data.stats.count} podobnych)`;
+          console.log('AI fallback: uzyto /api/similar-offers, step=', data.step_used, 'count=', data.stats.count);
+        }
+      }
+    } catch (fbErr) {
+      console.warn('similar-offers fallback failed:', fbErr);
     }
   }
 

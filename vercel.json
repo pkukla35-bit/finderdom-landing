@@ -26,6 +26,7 @@
     { "source": "/api/health", "destination": "/api/index" },
     { "source": "/api/img", "destination": "/api/index" },
     { "source": "/api/og-image", "destination": "/api/index" },
+    { "source": "/api/similar-offers", "destination": "/api/index" },
     { "source": "/api/rcn/:path*", "destination": "/api/index" },
     { "source": "/api/admin/:path*", "destination": "/api/index" },
     { "source": "/api/listings-scraped", "destination": "/api/index" },

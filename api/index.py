@@ -1608,13 +1608,14 @@ async def similar_offers_endpoint(
     }
     if type:
         base_query["type"] = {"$regex": f"^{type}", "$options": "i"}
+    # transaction filter jako czesc AND (moze byc None w bazie)
+    transaction_and_clause = None
     if transaction:
-        # transaction moze byc None w bazie (Apify data niepelne) — dopuszczamy
-        base_query["$or"] = [
+        transaction_and_clause = {"$or": [
             {"transaction_type": transaction},
             {"transaction_type": {"$exists": False}},
             {"transaction_type": None},
-        ]
+        ]}
     if exclude_id:
         base_query["external_id"] = {"$ne": exclude_id}
 
@@ -1639,10 +1640,19 @@ async def similar_offers_endpoint(
     docs: list = []
     step_used = ""
 
+    def _combine_and(q, extra_clauses):
+        """Buduje $and safely (obsluguje transaction filter)."""
+        clauses = list(extra_clauses)
+        if transaction_and_clause:
+            clauses.append(transaction_and_clause)
+        if clauses:
+            q["$and"] = clauses
+        return q
+
     # Step 1: city + area ±30% + market_type
     if city and area and area > 0:
         q = dict(base_query)
-        q["$and"] = [{"$or": [{"city": city_re}, {"district": city_re}]}]
+        q = _combine_and(q, [{"$or": [{"city": city_re}, {"district": city_re}]}])
         q["area_m2"] = {"$gte": area * 0.7, "$lte": area * 1.3}
         if market_type:
             q["market_type"] = market_type
@@ -1652,7 +1662,7 @@ async def similar_offers_endpoint(
     # Step 2: city + area ±50% (bez market)
     if len(docs) < 8 and city and area and area > 0:
         q = dict(base_query)
-        q["$and"] = [{"$or": [{"city": city_re}, {"district": city_re}]}]
+        q = _combine_and(q, [{"$or": [{"city": city_re}, {"district": city_re}]}])
         q["area_m2"] = {"$gte": area * 0.5, "$lte": area * 1.5}
         docs = await run_query(q)
         step_used = "city+area±50%"
@@ -1660,13 +1670,14 @@ async def similar_offers_endpoint(
     # Step 3: city only
     if len(docs) < 8 and city:
         q = dict(base_query)
-        q["$and"] = [{"$or": [{"city": city_re}, {"district": city_re}]}]
+        q = _combine_and(q, [{"$or": [{"city": city_re}, {"district": city_re}]}])
         docs = await run_query(q)
         step_used = "city_only"
 
     # Step 4: brak city — cala Polska + area ±30% (dla malych miejscowosci)
     if len(docs) < 8 and area and area > 0:
         q = dict(base_query)
+        q = _combine_and(q, [])
         q["area_m2"] = {"$gte": area * 0.7, "$lte": area * 1.3}
         docs = await run_query(q)
         step_used = "poland+area±30%"

@@ -1097,6 +1097,7 @@ function showError() {
 }
 
 async function renderOffer(l, all) {
+  all = all || [];  // fallback gdy renderOffer wywolany bez listy
   el('loadingState').style.display = 'none';
   el('offerContainer').style.display = 'grid';
   window.__currentListingId = l.id;  // dla modalu Wycena Premium PDF

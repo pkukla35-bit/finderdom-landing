@@ -1625,6 +1625,54 @@ async function renderOffer(l, all) {
   }
 
   similar = similar.slice(0, 4);
+
+  // 🔁 FALLBACK: gdy client-side nie znalazl 4+ podobnych (mala baza lokalna),
+  //    pobierz z pelnej bazy 35k przez /api/similar-offers
+  if (similar.length < 4) {
+    try {
+      const params = new URLSearchParams({
+        city: l.city || '',
+        type: l.type || '',
+        transaction: l.transaction || 'sprzedaz',
+      });
+      if (l.area_m2) params.set('area', String(l.area_m2));
+      if (l.market_type) params.set('market_type', l.market_type);
+      if (l.external_id || l.id) params.set('exclude_id', l.external_id || l.id);
+      params.set('limit', '20');
+      const resp = await fetch('/api/similar-offers?' + params.toString());
+      if (resp.ok) {
+        const data = await resp.json();
+        if (Array.isArray(data.offers) && data.offers.length) {
+          // Merge z tym co juz mamy (unikaj duplikatow po id)
+          const seenIds = new Set(similar.map(s => s.id));
+          for (const o of data.offers) {
+            if (similar.length >= 4) break;
+            if (seenIds.has(o.id)) continue;
+            similar.push({
+              id: o.id,
+              title: o.title || 'Podobna oferta',
+              city: o.city || l.city,
+              location: '📍 ' + (o.city || '') + (o.district ? ', ' + o.district : ''),
+              price: o.price,
+              price_display: (o.price || 0).toLocaleString('pl-PL').replace(/,/g, ' ') + ' zł',
+              price_pm2: o.price_pm2,
+              price_pm2_display: (o.price_pm2 || 0).toLocaleString('pl-PL').replace(/,/g, ' ') + ' zł/m²',
+              area_m2: o.area_m2,
+              emoji: TYPE_EMOJI[l.type] || '🏢',
+              image_url: null, // og-image sie doda w renderze
+            });
+            seenIds.add(o.id);
+          }
+          if (!similarScope) similarScope = data.step_used && data.step_used.startsWith('poland')
+            ? 'w Polsce (mało lokalnych danych)'
+            : `w mieście ${l.city}`;
+        }
+      }
+    } catch (err) {
+      console.warn('similar-offers backend fallback:', err);
+    }
+  }
+
   if (similar.length) {
     el('similarSection').style.display = 'block';
     el('similarSub').textContent = `${TYPE_LABEL[l.type]} · ${similarScope || 'zbliżony metraż i cena'}`;

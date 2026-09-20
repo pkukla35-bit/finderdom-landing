@@ -317,6 +317,11 @@ async def effective_tier_async(user: dict) -> str:
 
 def public_user(user: dict) -> dict:
     tier_now = effective_tier(user)
+    # 🔑 ADMIN BYPASS: adminowie (w ADMIN_EMAILS) automatycznie maja dostep Premium
+    email_lower = (user.get("email") or "").lower()
+    is_admin = email_lower in ADMIN_EMAILS
+    if is_admin and tier_now == "free":
+        tier_now = "business"  # najwyzszy tier dla adminow
     expires_at = user.get("expires_at")
     # Trial info: True gdy user jest w trial (nie po opłacie Stripe)
     is_trial = bool(user.get("is_trial")) and expires_at and (as_dt(expires_at) or datetime.min.replace(tzinfo=timezone.utc)) > datetime.now(timezone.utc)
@@ -342,6 +347,7 @@ def public_user(user: dict) -> dict:
         "role": user.get("role"),  # "master" | "agent" | None
         "master_id": user.get("master_id"),  # if agent, points to master's user id
         "active": user.get("active", True),
+        "is_admin": is_admin,
     }
 
 

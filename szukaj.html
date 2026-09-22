@@ -1816,20 +1816,23 @@ function applyAllFilters() {
 
     // Promień od miasta centralnego (haversine) — priorytet: lat/lng oferty; fallback: CITY_COORDS po miescie
     if (f.radiusCenter && f.radiusKm > 0) {
-      // Zawsze pokazuj oferty z TEGO SAMEGO miasta co centrum promienia (intuicyjne UX)
-      const centerCityKey = f.radiusCityKey;
-      const ofCityKey = normalizeCity(l.city || '');
-      if (centerCityKey && ofCityKey === centerCityKey) {
-        // w tym samym mieście - przepuść bez geo check
+      let ofLat = null, ofLng = null;
+      if (l.lat && l.lng) {
+        // Oferta ma dokladny GPS - uzywamy realny dystans (Krakow ma 15km srednicy,
+        // Warszawa 30km - "same city" NIE oznacza "w promieniu 5km")
+        ofLat = Number(l.lat); ofLng = Number(l.lng);
       } else {
-        let ofLat = null, ofLng = null;
-        if (l.lat && l.lng) {
-          ofLat = Number(l.lat); ofLng = Number(l.lng);
+        // Fallback: uzyj wspolrzednych srodka miasta
+        const ofCityKey = normalizeCity(l.city || '');
+        const c = window.CITY_COORDS?.[ofCityKey];
+        if (c) { ofLat = c[0]; ofLng = c[1]; }
+        else if (ofCityKey === f.radiusCityKey) {
+          // Ta sama nazwa miasta ale nieznane wspolrzedne - przepusc (nie mozemy zmierzyc)
         } else {
-          const c = window.CITY_COORDS?.[ofCityKey];
-          if (c) { ofLat = c[0]; ofLng = c[1]; }
+          return false;
         }
-        if (ofLat == null || ofLng == null) return false;
+      }
+      if (ofLat != null && ofLng != null) {
         const d = haversineKm(f.radiusCenter[0], f.radiusCenter[1], ofLat, ofLng);
         if (d > f.radiusKm) return false;
       }

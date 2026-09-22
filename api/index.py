@@ -1482,6 +1482,9 @@ async def listings_scraped_endpoint(
     type: Optional[str] = None,
     transaction: Optional[str] = None,
     seller_type: Optional[str] = None,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    radius_km: Optional[float] = None,
 ):
     """Returns listings scraped via ScrapingBee/Apify.
 
@@ -1499,11 +1502,20 @@ async def listings_scraped_endpoint(
         # Server-side filtering
         # Uwaga: gdy BRAK city/type/transaction — nie filtrujemy po scraped_via żeby uniknąć slow scan
         # (99% ofert i tak ma scraped_via w [scrapingbee, apify])
-        if city or type or transaction:
+        if city or type or transaction or (lat and lng and radius_km):
             query = {"scraped_via": {"$in": ["scrapingbee", "apify"]}, "is_stale": {"$ne": True}}
         else:
             query = {"is_stale": {"$ne": True}}
-        if city:
+        # GEO filter (bounding box): 1° lat = 111 km; 1° lng = 111 * cos(lat) km
+        # Uzywane gdy user chce ofert w promieniu X km od danych wspolrzednych (np. Krakow 50km -> Wieliczka, Skawina)
+        use_geo = bool(lat is not None and lng is not None and radius_km and radius_km > 0)
+        if use_geo:
+            import math as _math
+            lat_delta = float(radius_km) / 111.0
+            lng_delta = float(radius_km) / (111.0 * max(_math.cos(_math.radians(float(lat))), 0.1))
+            query["lat"] = {"$gte": float(lat) - lat_delta, "$lte": float(lat) + lat_delta}
+            query["lng"] = {"$gte": float(lng) - lng_delta, "$lte": float(lng) + lng_delta}
+        if city and not use_geo:
             # Case+diacritic-insensitive: "gdansk" pasuje do "Gdańsk", "krakow" -> "Kraków" itd.
             city_pattern = _build_diacritic_regex(city.strip())
             city_re = {"$regex": city_pattern}

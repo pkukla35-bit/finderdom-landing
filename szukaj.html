@@ -906,6 +906,22 @@ async function loadListings() {
     // Aktualnie wybrany chip seller (prywatna / posrednik) — filter na backend
     const activeSellerChip = document.querySelector('.chip.active[data-seller]');
     if (activeSellerChip) apiParams.set('seller_type', activeSellerChip.dataset.seller);
+    // GEO filter: gdy user wpisal miasto + promien (heroRadiusKm), wysylamy lat/lng+radius zamiast city
+    // Backend zwraca oferty z bounding box, wiec dla Krakow+50km dostaniemy tez Wieliczka, Skawina, Zabierzów
+    const uiRadiusKm = parseFloat(document.getElementById('heroRadiusKm')?.value || '0');
+    if (uiRadiusKm > 0 && preCity && window.CITY_COORDS) {
+      const cityKey = preCity.toLowerCase().trim()
+        .replace(/ą/g,'a').replace(/ć/g,'c').replace(/ę/g,'e').replace(/ł/g,'l')
+        .replace(/ń/g,'n').replace(/ó/g,'o').replace(/ś/g,'s').replace(/ż/g,'z').replace(/ź/g,'z')
+        .replace(/\s+/g, '-');
+      const coords = window.CITY_COORDS[cityKey];
+      if (coords) {
+        apiParams.delete('city');  // GEO ma priorytet nad city
+        apiParams.set('lat', String(coords[0]));
+        apiParams.set('lng', String(coords[1]));
+        apiParams.set('radius_km', String(uiRadiusKm));
+      }
+    }
     const scrapedUrl = '/api/listings-scraped' + (apiParams.toString() ? '?' + apiParams.toString() : '');
     // Fetch BOTH static + freshly scraped listings in parallel
     const [staticRes, scrapedRes] = await Promise.allSettled([
@@ -1940,12 +1956,17 @@ document.getElementById('heroPrice')?.addEventListener('change', applyAllFilters
 document.getElementById('heroMarket')?.addEventListener('change', applyAllFilters);
 document.getElementById('heroSearchBtn')?.addEventListener('click', refetchFromApi);
 
-// Hero radius km — synchronizuj z ukrytym sidebar #fRadiusKm i wywołaj filtr
+// Hero radius km — refetch z API zeby dostac oferty spoza wpisanego miasta (Krakow 50km -> Wieliczka)
+let radiusRefetchTimer = null;
 document.getElementById('heroRadiusKm')?.addEventListener('input', () => {
   const km = document.getElementById('heroRadiusKm').value;
   const sidebarKm = document.getElementById('fRadiusKm');
   if (sidebarKm) sidebarKm.value = km;
-  applyAllFiltersDebounced();
+  clearTimeout(radiusRefetchTimer);
+  radiusRefetchTimer = setTimeout(() => {
+    if (typeof loadListings === 'function') loadListings();
+    else applyAllFilters();
+  }, 600);
 });
 // #q (miasto) synchronizuj z ukrytym #fRadiusCity gdy km > 0 (żeby filter radius mial nazwe miasta)
 document.getElementById('q')?.addEventListener('input', () => {

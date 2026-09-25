@@ -1315,6 +1315,7 @@ async def admin_timeseries(days: int = 30, admin: dict = Depends(require_admin))
 
 
 # --- Automatyczne czyszczenie nieaktualnych ofert (HEAD-check URL) ---
+@app.get("/api/admin/cleanup-stale")
 @app.post("/api/admin/cleanup-stale")
 async def admin_cleanup_stale(
     request: Request,
@@ -1329,24 +1330,29 @@ async def admin_cleanup_stale(
 
     Auth: albo admin JWT albo header X-Cron-Secret=$CRON_SECRET (dla GitHub Actions)
     """
-    # Auth: dwie opcje
+    # Auth: 3 opcje
+    #  1. Vercel Cron - dodaje header 'x-vercel-cron: 1' automatycznie
+    #  2. Admin JWT (Bearer token)
+    #  3. Custom CRON_SECRET (dla GitHub Actions)
     cron_secret_env = os.getenv("CRON_SECRET") or ""
-    x_cron_secret = request.headers.get("x-cron-secret") or request.headers.get("X-Cron-Secret") or ""
-    is_cron = bool(cron_secret_env and x_cron_secret == cron_secret_env)
-    if not is_cron:
-        # Wymagany admin JWT
+    x_cron_secret = request.headers.get("x-cron-secret") or ""
+    is_vercel_cron = request.headers.get("x-vercel-cron") == "1"
+    is_custom_cron = bool(cron_secret_env and x_cron_secret == cron_secret_env)
+    is_authorized = is_vercel_cron or is_custom_cron
+
+    if not is_authorized:
+        # Sprobuj admin JWT
+        auth_header = (request.headers.get("authorization") or "").replace("Bearer ", "").strip()
+        if not auth_header:
+            raise HTTPException(401, "unauthorized (need admin JWT, X-Cron-Secret, or Vercel Cron)")
         try:
-            user = await current_user(HTTPAuthorizationCredentials(
-                scheme="Bearer",
-                credentials=(request.headers.get("authorization") or "").replace("Bearer ", "").strip()
-            ))
-            admin_emails = (os.getenv("ADMIN_EMAILS") or "").lower().split(",")
-            if (user.get("email") or "").lower() not in admin_emails:
+            user = await current_user(HTTPAuthorizationCredentials(scheme="Bearer", credentials=auth_header))
+            if (user.get("email") or "").lower() not in ADMIN_EMAILS:
                 raise HTTPException(403, "admin only")
         except HTTPException:
             raise
         except Exception:
-            raise HTTPException(401, "unauthorized")
+            raise HTTPException(401, "invalid token")
 
     limit = max(1, min(limit, 1000))
     concurrency = max(1, min(concurrency, 50))

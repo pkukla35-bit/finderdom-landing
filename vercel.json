@@ -12,6 +12,9 @@
       "maxDuration": 10
     }
   },
+  "crons": [
+    { "path": "/api/admin/cleanup-stale?limit=500&concurrency=25", "schedule": "0 3 * * *" }
+  ],
   "rewrites": [
     { "source": "/api/auth/:path*", "destination": "/api/index" },
     { "source": "/api/payments/:path*", "destination": "/api/index" },

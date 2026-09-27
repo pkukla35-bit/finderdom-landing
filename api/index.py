@@ -1447,6 +1447,37 @@ async def admin_cleanup_stale(
     }
 
 
+# --- Zgloszenie nieaktualnej oferty (frontend gdy wszystkie zdjecia zawiodly) ---
+_report_stale_ratelimit: "dict[str, float]" = {}  # id → last_seen_ts
+
+@app.post("/api/report-stale")
+async def report_stale(request: Request, id: str = ""):
+    """
+    Frontend zglasza ze karta ma polamane zdjecia. Po 1 zgloszeniu = mark stale.
+    Rate-limit: 1 zgloszenie per listing_id na 24h (chroni przed zamkiem/spam).
+    """
+    if not id or len(id) > 100:
+        return {"ok": False, "reason": "invalid id"}
+    import time as _time
+    now_ts = _time.time()
+    if len(_report_stale_ratelimit) > 5000:
+        _report_stale_ratelimit.clear()
+    last = _report_stale_ratelimit.get(id, 0)
+    if now_ts - last < 86400:  # 24h
+        return {"ok": True, "cached": True}
+    _report_stale_ratelimit[id] = now_ts
+    try:
+        coll = database().listings
+        r = await coll.update_one(
+            {"external_id": id, "is_stale": {"$ne": True}},
+            {"$set": {"is_stale": True, "stale_since": datetime.now(timezone.utc), "stale_reason": "broken_images"}},
+        )
+        return {"ok": True, "marked": r.modified_count}
+    except Exception as e:
+        logger.warning("report-stale err: %s", e)
+        return {"ok": False, "reason": "db_error"}
+
+
 
 
 

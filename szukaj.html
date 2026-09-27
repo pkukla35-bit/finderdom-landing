@@ -1266,12 +1266,27 @@ function renderPage() {
           img.src = og;
           return;
         }
-        // Wszystkie zawiodły → pokaż placeholder
+        // Wszystkie zawiodły → to jest znak nieaktualnej oferty
+        //  1. Ukryj cala kartę z widoku (natychmiast dla UX)
+        //  2. Zglos do backendu POST /api/report-stale (rate-limited)
         const parent = img.parentElement;
+        const card = parent?.closest('.card');
+        const listingId = card?.getAttribute('href')?.match(/[?&]id=([^&]+)/)?.[1];
+        if (card) {
+          card.style.display = 'none';
+          // Usun tez inline reklame ktora byla obok tej karty (jesli byla)
+          const nextAd = card.nextElementSibling;
+          if (nextAd?.classList?.contains('fd-ad-slot-inline')) nextAd.style.display = 'none';
+        }
+        // Zgloszenie do backendu (fire and forget, bez auth)
+        if (listingId && !window.__reportedStale?.has(listingId)) {
+          (window.__reportedStale = window.__reportedStale || new Set()).add(listingId);
+          fetch('/api/report-stale?id=' + encodeURIComponent(listingId), {method: 'POST'}).catch(() => {});
+        }
         img.remove();
         if (!parent) return;
         parent.classList.remove('has-photo');
-        // Usuń nawigację (jeśli była) i wstaw placeholder
+        // Usuń nawigację (jeśli była) i wstaw placeholder (dla kart poza widokiem)
         parent.querySelectorAll('.card-img-nav, .card-img-dots, .card-img-count').forEach(el => el.remove());
         if (!parent.querySelector('.placeholder-box')) {
           const ph = document.createElement('div');

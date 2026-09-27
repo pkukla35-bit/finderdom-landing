@@ -1134,6 +1134,21 @@ async function loadCrmStatuses() {
 }
 
 function renderListings(list) {
+  // 🎯 Odrzuc oferty z cena 0 (badly scraped) i wyslij report-stale (backend oznaczy w bazie)
+  const goodPrice = [];
+  const alreadyReported = window.__reportedStale = window.__reportedStale || new Set();
+  for (const l of list) {
+    if (!l.price || l.price < 1000) {
+      const id = l.external_id || l.id;
+      if (id && !alreadyReported.has(id)) {
+        alreadyReported.add(id);
+        fetch('/api/report-stale?id=' + encodeURIComponent(id) + '&reason=zero_price', {method: 'POST'}).catch(() => {});
+      }
+      continue;
+    }
+    goodPrice.push(l);
+  }
+  list = goodPrice;
   // Multi-portal filter: 🎯 Unikalne (1 portal) vs 🌐 Multi-portal (2+)
   const uniqActive = document.getElementById('chipUnique')?.classList.contains('active');
   const multiActive = document.getElementById('chipMulti')?.classList.contains('active');

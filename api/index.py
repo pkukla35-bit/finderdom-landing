@@ -1451,7 +1451,7 @@ async def admin_cleanup_stale(
 _report_stale_ratelimit: "dict[str, float]" = {}  # id → last_seen_ts
 
 @app.post("/api/report-stale")
-async def report_stale(request: Request, id: str = ""):
+async def report_stale(request: Request, id: str = "", reason: str = "broken_images"):
     """
     Frontend zglasza ze karta ma polamane zdjecia. Po 1 zgloszeniu = mark stale.
     Rate-limit: 1 zgloszenie per listing_id na 24h (chroni przed zamkiem/spam).
@@ -1470,7 +1470,7 @@ async def report_stale(request: Request, id: str = ""):
         coll = database().listings
         r = await coll.update_one(
             {"external_id": id, "is_stale": {"$ne": True}},
-            {"$set": {"is_stale": True, "stale_since": datetime.now(timezone.utc), "stale_reason": "broken_images"}},
+            {"$set": {"is_stale": True, "stale_since": datetime.now(timezone.utc), "stale_reason": reason[:50]}},
         )
         return {"ok": True, "marked": r.modified_count}
     except Exception as e:
@@ -1540,9 +1540,9 @@ async def listings_scraped_endpoint(
         # Uwaga: gdy BRAK city/type/transaction — nie filtrujemy po scraped_via żeby uniknąć slow scan
         # (99% ofert i tak ma scraped_via w [scrapingbee, apify])
         if city or type or transaction or (lat and lng and radius_km):
-            query = {"scraped_via": {"$in": ["scrapingbee", "apify"]}, "is_stale": {"$ne": True}}
+            query = {"scraped_via": {"$in": ["scrapingbee", "apify"]}, "is_stale": {"$ne": True}, "price": {"$gt": 1000}}
         else:
-            query = {"is_stale": {"$ne": True}}
+            query = {"is_stale": {"$ne": True}, "price": {"$gt": 1000}}
         # GEO filter (bounding box): 1° lat = 111 km; 1° lng = 111 * cos(lat) km
         # Uzywane gdy user chce ofert w promieniu X km od danych wspolrzednych (np. Krakow 50km -> Wieliczka, Skawina)
         use_geo = bool(lat is not None and lng is not None and radius_km and radius_km > 0)

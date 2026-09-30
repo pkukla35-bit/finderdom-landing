@@ -1519,6 +1519,7 @@ async def listings_scraped_endpoint(
     type: Optional[str] = None,
     transaction: Optional[str] = None,
     seller_type: Optional[str] = None,
+    rooms: Optional[str] = None,   # "1", "2", "3", "4", "5+" lub "2,3,4" (multi)
     lat: Optional[float] = None,
     lng: Optional[float] = None,
     radius_km: Optional[float] = None,
@@ -1568,6 +1569,31 @@ async def listings_scraped_endpoint(
                 query["seller_type"] = "prywatna"
             elif st in ("posrednik", "pośrednik", "agencja"):
                 query["seller_type"] = "posrednik"
+        # Filter po liczbie pokoi - "1,2,3" (multi-select) lub "5+"
+        if rooms:
+            room_vals = []
+            has_5plus = False
+            for r in rooms.split(","):
+                r = r.strip()
+                if r == "5+" or r == "5%2B":
+                    has_5plus = True
+                elif r.isdigit():
+                    n = int(r)
+                    if 1 <= n <= 20:
+                        room_vals.append(n)
+            room_clauses = []
+            if room_vals:
+                room_clauses.append({"rooms": {"$in": room_vals}})
+            if has_5plus:
+                room_clauses.append({"rooms": {"$gte": 5}})
+            if room_clauses:
+                if len(room_clauses) == 1:
+                    query.update(room_clauses[0])
+                else:
+                    # 5+ + inne pokoje → union przez $or (aby nie kolizji z transaction $or, uzywamy $and)
+                    existing_and = query.get("$and", [])
+                    existing_and.append({"$or": room_clauses})
+                    query["$and"] = existing_and
 
         # Sanity caps (chroni przed abuse i Vercel 10s timeout)
         limit = max(1, min(limit, 10000))

@@ -906,6 +906,9 @@ async function loadListings() {
     // Aktualnie wybrany chip seller (prywatna / posrednik) — filter na backend
     const activeSellerChip = document.querySelector('.chip.active[data-seller]');
     if (activeSellerChip) apiParams.set('seller_type', activeSellerChip.dataset.seller);
+    // Rooms filter (multi-select) - send do backend zamiast client-side na 1000 batchu
+    const activeRoomsChips = Array.from(document.querySelectorAll('.chip.active[data-rooms]')).map(c => c.dataset.rooms);
+    if (activeRoomsChips.length) apiParams.set('rooms', activeRoomsChips.join(','));
     // GEO filter: gdy user wpisal miasto + promien (heroRadiusKm), wysylamy lat/lng+radius zamiast city
     // Backend zwraca oferty z bounding box, wiec dla Krakow+50km dostaniemy tez Wieliczka, Skawina, Zabierzów
     const uiRadiusKm = parseFloat(document.getElementById('heroRadiusKm')?.value || '0');
@@ -2078,12 +2081,13 @@ document.querySelectorAll('.chip[data-filter][data-value]').forEach(c => {
   }, true);
 });
 
-// Chipy pokoi — multi-select
+// Chipy pokoi — multi-select + refetch z API (backend filtruje pelna baza 14k, nie tylko 1000 batch)
 document.querySelectorAll('.chip[data-rooms]').forEach(c => {
   c.addEventListener('click', (e) => {
     e.stopImmediatePropagation();
     c.classList.toggle('active');
-    applyAllFilters();
+    if (typeof loadListings === 'function') loadListings();
+    else applyAllFilters();
   }, true);
 });
 

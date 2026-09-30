@@ -26,7 +26,7 @@ window.FD_ADS = {
     'oferta-bottom':   '0000000000',
     'home-bottom':     '0000000000',
   },
-  PLACEHOLDER: true, // TRUE = pokaż ładne placeholdery (do czasu utworzenia slotów). FALSE = pokaż prawdziwe reklamy.
+  PLACEHOLDER: false, // FALSE = ukryj puste sloty (Googlebot NIE widzi placeholderow → wyzsza szansa akceptacji)
 };
 
 (function initAds(){
@@ -57,6 +57,14 @@ window.FD_ADS = {
     el.dataset.fdRendered = '1';
     const slotName = el.dataset.slot;
     const slotId = (window.FD_ADS.SLOTS || {})[slotName];
+
+    // 🎯 CAŁKOWITE UKRYCIE dla ofert bez prawdziwych slotów (weryfikacja AdSense)
+    //   Placeholder "0000000000" wygląda dla Googlebota jak "brak zatwierdzonych bloków"
+    //   → odrzucenie witryny. Dopóki nie mamy realnych ID, ukrywamy KAŻDY slot.
+    if (!slotId || slotId === '0000000000' || slotId.includes('X')) {
+      el.style.display = 'none';
+      return;
+    }
 
     // Zawsze najpierw pokaż ładny placeholder — potem próbuj załadować prawdziwą reklamę
     const showPlaceholder = () => {

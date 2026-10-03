@@ -58,7 +58,7 @@ jobs:
           - warmińsko-mazurskie
           - wielkopolskie
           - zachodniopomorskie
-        property: [mieszkanie, dom]
+        property: [mieszkanie, dom, dzialka, lokal]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

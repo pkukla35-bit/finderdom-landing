@@ -1,4 +1,4 @@
-name: Apify CRON - regionalny scrape (co 6h)
+name: Apify CRON - regionalny scrape (1x dziennie)
 
 # Odpala pełny scrape 16 województw dla mieszkań+domów co 6 godzin
 # Dopełnia dane z hot-cities (które łapią tylko TOP 10 miast) o mniejsze miejscowości
@@ -6,8 +6,8 @@ name: Apify CRON - regionalny scrape (co 6h)
 
 on:
   schedule:
-    # Co 12 godzin (zamiast co 6h — oszczędzamy Apify budget)
-    - cron: '30 3,15 * * *'
+    # 1× dziennie o 03:30 UTC (oszczedzamy Apify budget, bylo 2× dziennie 3,15)
+    - cron: '30 3 * * *'
   workflow_dispatch:
     inputs:
       max_items:

@@ -923,6 +923,13 @@ async function loadListings() {
     // "Bez określenia" (__unknown__) zostaje client-side — wtedy nie zawężamy po stronie API.
     const activeMarket = Array.from(document.querySelectorAll('.chip.active[data-filter="market_type"]')).map(c => c.dataset.value);
     if (activeMarket.length && !activeMarket.includes('__unknown__')) apiParams.set('market_type', activeMarket.join(','));
+    // Zakresy liczbowe (rok budowy, cena, m², zł/m²) → backend filtruje pełną bazę
+    const numVal = (id) => { const v = parseFloat(document.getElementById(id)?.value || ''); return (isFinite(v) && v > 0) ? v : 0; };
+    const rangeMap = { year_from: 'fYearFrom', year_to: 'fYearTo', price_from: 'fPriceFrom', price_to: 'fPriceTo', area_from: 'fAreaFrom', area_to: 'fAreaTo', ppm2_from: 'fPpm2From', ppm2_to: 'fPpm2To' };
+    for (const [param, id] of Object.entries(rangeMap)) { const v = numVal(id); if (v) apiParams.set(param, String(v)); }
+    // Hero "Cena do" — jeśli ostrzejsze niż sidebar price_to
+    const heroMax = numVal('heroPrice');
+    if (heroMax && (!apiParams.get('price_to') || heroMax < parseFloat(apiParams.get('price_to')))) apiParams.set('price_to', String(heroMax));
     // GEO filter: gdy user wpisal miasto + promien (heroRadiusKm), wysylamy lat/lng+radius zamiast city
     // Backend zwraca oferty z bounding box, wiec dla Krakow+50km dostaniemy tez Wieliczka, Skawina, Zabierzów
     const uiRadiusKm = parseFloat(document.getElementById('heroRadiusKm')?.value || '0');
@@ -1642,7 +1649,7 @@ document.querySelectorAll('#propertyType .chip').forEach(c => {
 
 // Apply / Clear buttons (sidebar)
 document.querySelector('.btn-apply')?.addEventListener('click', () => {
-  applyAllFilters();
+  loadListings();  // filtry zakresowe/rynek/pokoje są na backendzie → refetch
 });
 document.querySelector('.btn-clear')?.addEventListener('click', () => {
   // Reset hero
@@ -1665,7 +1672,7 @@ document.querySelector('.btn-clear')?.addEventListener('click', () => {
   document.querySelectorAll('.date-chip').forEach(c => c.classList.remove('active'));
   document.querySelector('.date-chip[data-date="all"]')?.classList.add('active');
   document.getElementById('dateCustom').style.display = 'none';
-  applyAllFilters();
+  loadListings();  // wyczyszczone filtry backendowe → refetch pełnej listy
 });
 
 // ============================================================================
@@ -2001,6 +2008,13 @@ function applyAllFiltersDebounced() {
   clearTimeout(filterTimer);
   filterTimer = setTimeout(applyAllFilters, 250);
 }
+// Zakresy liczbowe (cena/m²/rok/zł-m²) filtrujemy na backendzie → refetch z API (debounce 500ms, żeby nie strzelać na każdą cyfrę)
+let refetchTimer;
+function loadListingsDebounced() {
+  clearTimeout(filterTimer);
+  clearTimeout(refetchTimer);
+  refetchTimer = setTimeout(() => { if (typeof loadListings === 'function') loadListings(); else applyAllFilters(); }, 500);
+}
 
 // Podpięcie eventów HERO
 document.getElementById('q')?.addEventListener('input', applyAllFiltersDebounced);
@@ -2009,7 +2023,7 @@ document.getElementById('q')?.addEventListener('keydown', (e) => {
 });
 document.getElementById('heroType')?.addEventListener('change', refetchFromApi);
 document.getElementById('heroTrans')?.addEventListener('change', refetchFromApi);
-document.getElementById('heroPrice')?.addEventListener('input', applyAllFiltersDebounced);
+document.getElementById('heroPrice')?.addEventListener('input', loadListingsDebounced);
 document.getElementById('heroPrice')?.addEventListener('change', applyAllFilters);
 document.getElementById('heroMarket')?.addEventListener('change', applyAllFilters);
 document.getElementById('heroSearchBtn')?.addEventListener('click', refetchFromApi);
@@ -2070,7 +2084,10 @@ document.getElementById('chipMulti')?.addEventListener('click', (e) => {
 }, false);
 
 // Inputy cena/powierzchnia/rok/promień — live
-['fPpm2From','fPpm2To','fPriceFrom','fPriceTo','fAreaFrom','fAreaTo','fYearFrom','fYearTo','fRadiusCity','fRadiusKm'].forEach(id => {
+['fPpm2From','fPpm2To','fPriceFrom','fPriceTo','fAreaFrom','fAreaTo','fYearFrom','fYearTo'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', loadListingsDebounced);
+});
+['fRadiusCity','fRadiusKm'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', applyAllFiltersDebounced);
 });
 

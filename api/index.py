@@ -1522,6 +1522,14 @@ async def listings_scraped_endpoint(
     seller_type: Optional[str] = None,
     rooms: Optional[str] = None,   # "1", "2", "3", "4", "5+" lub "2,3,4" (multi)
     market_type: Optional[str] = None,  # "pierwotny" | "wtorny" | "pierwotny,wtorny"
+    year_from: Optional[int] = None,
+    year_to: Optional[int] = None,
+    price_from: Optional[float] = None,
+    price_to: Optional[float] = None,
+    area_from: Optional[float] = None,
+    area_to: Optional[float] = None,
+    ppm2_from: Optional[float] = None,
+    ppm2_to: Optional[float] = None,
     lat: Optional[float] = None,
     lng: Optional[float] = None,
     radius_km: Optional[float] = None,
@@ -1578,6 +1586,21 @@ async def listings_scraped_endpoint(
                 query["market_type"] = mt_vals[0]
             elif len(mt_vals) > 1:
                 query["market_type"] = {"$in": mt_vals}
+        # Zakresy liczbowe (rok budowy / cena / m² / cena za m²) — na pełnej bazie, nie tylko na batchu 1000.
+        # Rok budowy: strict (tylko oferty ze znanym rokiem) — inaczej wyniki zalewają oferty bez roku.
+        def _range(field: str, lo, hi):
+            cond = dict(query.get(field) or {}) if isinstance(query.get(field), dict) else {}
+            if lo is not None and lo > 0:
+                cond["$gte"] = lo
+            if hi is not None and hi > 0:
+                cond["$lte"] = hi
+            if cond:
+                query[field] = cond
+        _range("build_year", year_from, year_to)
+        _range("price", price_from, price_to)
+        _range("area_m2", area_from, area_to)
+        _range("price_pm2", ppm2_from, ppm2_to)
+        has_range = any(v is not None and v > 0 for v in (year_from, year_to, price_from, price_to, area_from, area_to, ppm2_from, ppm2_to))
         # Filter po liczbie pokoi - "1,2,3" (multi-select) lub "5+"
         if rooms:
             room_vals = []
@@ -1624,14 +1647,14 @@ async def listings_scraped_endpoint(
         # Sortowanie: gdy filtr po mieście/typie już zawęża do ~500-2000 rekordów, można sortować po added_at.
         # Gdy BRAK filtrów (cała baza 50k) sort byłby zbyt kosztowny → skip sort dla wydajności.
         cursor = coll.find(query, projection)
-        if city or type or transaction or seller_type or market_type:
+        if city or type or transaction or seller_type or market_type or has_range:
             cursor = cursor.sort("added_at", -1)
         cursor = cursor.skip(offset).limit(limit)
 
         # Total count (dla frontend: pokazuje "Znaleziono X ofert" nawet gdy załadowaliśmy tylko limit)
         async def _count():
             try:
-                if not (city or type or transaction or seller_type or rooms or market_type or use_geo):
+                if not (city or type or transaction or seller_type or rooms or market_type or use_geo or has_range):
                     # Cała baza — estimated_document_count jest instant (używa metadata)
                     return await coll.estimated_document_count()
                 return await coll.count_documents(query, maxTimeMS=3000)

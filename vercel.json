@@ -31,6 +31,7 @@
     { "source": "/api/og-image", "destination": "/api/index" },
     { "source": "/api/similar-offers", "destination": "/api/index" },
     { "source": "/api/report-stale", "destination": "/api/index" },
+    { "source": "/api/kredyt-lead", "destination": "/api/index" },
     { "source": "/mieszkania", "destination": "/mieszkania/index.html" },
     { "source": "/mieszkania/", "destination": "/mieszkania/index.html" },
     { "source": "/mieszkania/:city", "destination": "/mieszkania/:city.html" },

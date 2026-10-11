@@ -67,10 +67,10 @@ window.FD_KREDYT = {
     injectStyles();
     const C = window.FD_KREDYT;
     const isAff = !!C.AFFILIATE_URL;
-    const ctaHref = isAff ? C.AFFILIATE_URL : '/blog/kredyt-hipoteczny-2026';
-    const ctaLabel = isAff ? C.AFFILIATE_LABEL : '📖 Jak dostać najtańszy kredyt w 2026 →';
-    const ctaAttrs = isAff ? 'target="_blank" rel="nofollow sponsored noopener"' : '';
     const p0 = Math.round(price || 600000);
+    const ctaHref = isAff ? C.AFFILIATE_URL : ('/kredyt?cena=' + p0);
+    const ctaLabel = isAff ? C.AFFILIATE_LABEL : '🤝 Bezpłatne porównanie ofert kredytów →';
+    const ctaAttrs = isAff ? 'target="_blank" rel="nofollow sponsored noopener"' : '';
 
     el.innerHTML = `
       <div class="fdk" data-fd-kredyt>

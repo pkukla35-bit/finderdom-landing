@@ -1479,6 +1479,71 @@ async def report_stale(request: Request, id: str = "", reason: str = "broken_ima
         return {"ok": False, "reason": "db_error"}
 
 
+# ─────────────────────────── Leady kredytowe (kalkulator raty → doradca) ───────────────────────────
+class KredytLeadRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    phone: str = Field(min_length=7, max_length=30)
+    email: Optional[str] = Field(default="", max_length=254)
+    city: Optional[str] = Field(default="", max_length=80)
+    price: Optional[float] = None
+    down_pct: Optional[float] = None
+    years: Optional[int] = None
+    note: Optional[str] = Field(default="", max_length=500)
+    consent: bool
+    source: Optional[str] = Field(default="kredyt", max_length=60)
+    listing_id: Optional[str] = Field(default="", max_length=100)
+
+
+@app.post("/api/kredyt-lead")
+async def kredyt_lead(body: KredytLeadRequest):
+    """Zapisuje lead kredytowy (źródło: kalkulator raty / strona /kredyt) do kolekcji leads (source='kredyt')
+    i powiadamia admina mailem. Dedup: ten sam telefon w ciągu 24h → ok, bez duplikatu."""
+    if not body.consent:
+        raise HTTPException(400, "Wymagana zgoda na kontakt")
+    digits = re.sub(r"\D", "", body.phone)
+    if len(digits) < 9:
+        raise HTTPException(400, "Podaj poprawny numer telefonu")
+    db = database()
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    dup = await db.leads.find_one({"phone_digits": digits, "source": "kredyt", "created_at": {"$gte": since}})
+    if dup:
+        return {"ok": True, "duplicate": True}
+    doc = {
+        "name": body.name.strip(),
+        "phone": body.phone.strip(),
+        "phone_digits": digits,
+        "email": (body.email or "").strip().lower(),
+        "city": (body.city or "").strip(),
+        "price": body.price,
+        "down_pct": body.down_pct,
+        "years": body.years,
+        "note": (body.note or "").strip(),
+        "listing_id": body.listing_id or "",
+        "source": "kredyt",
+        "source_page": (body.source or "kredyt")[:60],
+        "status": "new",
+        "claimed_by": None,
+        "created_at": datetime.now(timezone.utc),
+    }
+    result = await db.leads.insert_one(doc)
+    try:
+        price_txt = f"{int(doc['price']):,}".replace(",", " ") + " zł" if doc.get("price") else "—"
+        html = (
+            f"<h2>💳 Nowy lead kredytowy</h2>"
+            f"<p><b>Imię:</b> {doc['name']}<br><b>Telefon:</b> {doc['phone']}<br><b>E-mail:</b> {doc['email'] or '—'}<br>"
+            f"<b>Miasto:</b> {doc['city'] or '—'}<br><b>Cena nieruchomości:</b> {price_txt}<br>"
+            f"<b>Wkład własny:</b> {doc.get('down_pct') or '—'}% · <b>Okres:</b> {doc.get('years') or '—'} lat<br>"
+            f"<b>Uwagi:</b> {doc['note'] or '—'}<br><b>Źródło:</b> {doc['source_page']}"
+            f"{' · oferta ' + doc['listing_id'] if doc['listing_id'] else ''}</p>"
+            f"<p>Panel: https://www.finderdom.pl/admin (zakładka Leady)</p>"
+        )
+        for admin_email in ADMIN_EMAILS:
+            await send_email(to=admin_email, subject=f"[FinderDom] Lead kredytowy: {doc['name']} ({doc['city'] or 'brak miasta'})", html=html)
+    except Exception as e:
+        logger.warning("kredyt-lead notify err: %s", e)
+    return {"ok": True, "id": str(result.inserted_id)}
+
+
 
 
 

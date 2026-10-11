@@ -11,6 +11,7 @@ window.FD_KREDYT = {
     // Expander — pośrednik, porównanie 20+ banków (MyLead, CPL) → przycisk główny
     { name: 'Expander — porównanie 20+ banków', short: 'Expander', note: 'bezpłatne porównanie ofert banków online', url: 'https://goradar.xyz/a/4xl59Tl2k6h3jk4' },
     { name: 'Bank Millennium', note: 'wniosek online w kilka minut', url: 'https://myleadltd.ebrokerpartner.pl/targetclick.php?param=eyJsZWFkSUQiOi0xLCJ0YXJnZXRJRCI6IjYwOTgiLCJwYXJ0bmVySUQiOiIzMTE1MTQiLCJkb21haW5JRCI6IjMxNTI2OCJ9' },
+    { name: 'Kasa Stefczyka', note: 'kredyt hipoteczny, krótki wniosek online', url: 'https://goradar.xyz/a/1wg29CqAWkFmy75' },
     // { name: 'PKO BP', note: '…', url: 'https://…' },
     // { name: 'ING Bank Śląski', note: '…', url: 'https://…' },
   ],

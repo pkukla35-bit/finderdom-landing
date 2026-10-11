@@ -13,78 +13,228 @@
     }
   },
   "crons": [
-    { "path": "/api/admin/cleanup-stale?limit=500&concurrency=25", "schedule": "0 3 * * *" }
+    {
+      "path": "/api/admin/cleanup-stale?limit=500&concurrency=25",
+      "schedule": "0 3 * * *"
+    }
   ],
   "rewrites": [
-    { "source": "/api/auth/:path*", "destination": "/api/index" },
-    { "source": "/api/payments/:path*", "destination": "/api/index" },
-    { "source": "/api/valuation/:path*", "destination": "/api/index" },
-    { "source": "/api/invoices/:path*", "destination": "/api/index" },
-    { "source": "/api/invoices", "destination": "/api/index" },
-    { "source": "/api/leads/:path*", "destination": "/api/index" },
-    { "source": "/api/offer-status", "destination": "/api/index" },
-    { "source": "/api/offer-status/:path*", "destination": "/api/index" },
-    { "source": "/api/team/:path*", "destination": "/api/index" },
-    { "source": "/api/debug/:path*", "destination": "/api/index" },
-    { "source": "/api/health", "destination": "/api/index" },
-    { "source": "/api/img", "destination": "/api/index" },
-    { "source": "/api/og-image", "destination": "/api/index" },
-    { "source": "/api/similar-offers", "destination": "/api/index" },
-    { "source": "/api/report-stale", "destination": "/api/index" },
-    { "source": "/api/kredyt-lead", "destination": "/api/index" },
-    { "source": "/mieszkania", "destination": "/mieszkania/index.html" },
-    { "source": "/mieszkania/", "destination": "/mieszkania/index.html" },
-    { "source": "/mieszkania/:city", "destination": "/mieszkania/:city.html" },
-    { "source": "/api/rcn/:path*", "destination": "/api/index" },
-    { "source": "/api/admin/:path*", "destination": "/api/index" },
-    { "source": "/api/listings-scraped", "destination": "/api/index" },
-    { "source": "/api/listing/:id", "destination": "/api/index" },
-    { "source": "/api/docs", "destination": "/api/index" },
-    { "source": "/platnosc-sukces", "destination": "/platnosc-sukces.html" },
-    { "source": "/platnosc-anulowana", "destination": "/platnosc-anulowana.html" },
-    { "source": "/wycena-sukces", "destination": "/wycena-sukces.html" },
-    { "source": "/wycena", "destination": "/wycena.html" },
-    { "source": "/lead-claim", "destination": "/lead-claim.html" },
-    { "source": "/pomoc", "destination": "/pomoc.html" },
-    { "source": "/pomoc/rejestracja", "destination": "/pomoc-rejestracja.html" },
-    { "source": "/pomoc/szukaj", "destination": "/pomoc-szukaj.html" },
-    { "source": "/pomoc/wycena", "destination": "/pomoc-wycena.html" },
-    { "source": "/pomoc/plany", "destination": "/pomoc-plany.html" },
-    { "source": "/zespol", "destination": "/zespol.html" },
-    { "source": "/blog", "destination": "/blog.html" },
-    { "source": "/blog/:slug", "destination": "/blog/:slug.html" },
-    { "source": "/o-nas", "destination": "/o-nas.html" },
-    { "source": "/admin", "destination": "/admin.html" },
-    { "source": "/kontakt", "destination": "/kontakt.html" },
-    { "source": "/regulamin", "destination": "/regulamin.html" },
-    { "source": "/polityka-prywatnosci", "destination": "/polityka-prywatnosci.html" }
+    {
+      "source": "/api/auth/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/payments/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/valuation/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/invoices/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/invoices",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/leads/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/offer-status",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/offer-status/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/team/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/debug/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/img",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/og-image",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/similar-offers",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/report-stale",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/kredyt-lead",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/mieszkania",
+      "destination": "/mieszkania/index.html"
+    },
+    {
+      "source": "/mieszkania/",
+      "destination": "/mieszkania/index.html"
+    },
+    {
+      "source": "/mieszkania/:city",
+      "destination": "/mieszkania/:city.html"
+    },
+    {
+      "source": "/api/rcn/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/admin/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/listings-scraped",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/listing/:id",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/docs",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/platnosc-sukces",
+      "destination": "/platnosc-sukces.html"
+    },
+    {
+      "source": "/platnosc-anulowana",
+      "destination": "/platnosc-anulowana.html"
+    },
+    {
+      "source": "/wycena-sukces",
+      "destination": "/wycena-sukces.html"
+    },
+    {
+      "source": "/wycena",
+      "destination": "/wycena.html"
+    },
+    {
+      "source": "/lead-claim",
+      "destination": "/lead-claim.html"
+    },
+    {
+      "source": "/pomoc",
+      "destination": "/pomoc.html"
+    },
+    {
+      "source": "/pomoc/rejestracja",
+      "destination": "/pomoc-rejestracja.html"
+    },
+    {
+      "source": "/pomoc/szukaj",
+      "destination": "/pomoc-szukaj.html"
+    },
+    {
+      "source": "/pomoc/wycena",
+      "destination": "/pomoc-wycena.html"
+    },
+    {
+      "source": "/pomoc/plany",
+      "destination": "/pomoc-plany.html"
+    },
+    {
+      "source": "/zespol",
+      "destination": "/zespol.html"
+    },
+    {
+      "source": "/blog",
+      "destination": "/blog.html"
+    },
+    {
+      "source": "/blog/:slug",
+      "destination": "/blog/:slug.html"
+    },
+    {
+      "source": "/o-nas",
+      "destination": "/o-nas.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/kontakt",
+      "destination": "/kontakt.html"
+    },
+    {
+      "source": "/regulamin",
+      "destination": "/regulamin.html"
+    },
+    {
+      "source": "/polityka-prywatnosci",
+      "destination": "/polityka-prywatnosci.html"
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        }
       ]
     },
     {
       "source": "/(.*).(png|jpg|jpeg|svg|ico|webp)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
       "source": "/scripts/(.*).(js|css)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400"
+        }
       ]
     },
     {
       "source": "/api/listings-scraped",
       "headers": [
-        { "key": "Cache-Control", "value": "public, s-maxage=900, max-age=120, stale-while-revalidate=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=900, max-age=120, stale-while-revalidate=86400"
+        }
       ]
     }
   ]

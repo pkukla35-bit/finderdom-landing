@@ -5,6 +5,7 @@ import os
 TEMPLATE = """<!doctype html>
 <html lang="pl">
 <head>
+<!-- mylead-verification: 976ef06b15d7634b3c0c92c7e6449abb -->
 <meta charset="utf-8">
 <!-- Clickio Consent (CMP, TCF 2.2) + Google Consent Mode v2 — musi być przed GA4 i AdSense -->
 <script>

@@ -433,6 +433,9 @@
       </div>
     </div>
 
+    <!-- Kalkulator raty kredytu (+ CTA afiliacyjne — link w /scripts/kredyt.js) -->
+    <div id="kredytBox" style="margin-bottom:16px"></div>
+
     <div class="alert-card">
       <h4>🔔 Powiadomienie o podobnych ofertach</h4>
       <p id="alertDesc">Ustaw alert i dostaniesz email gdy pojawi się podobna oferta.</p>
@@ -1309,6 +1312,15 @@ async function renderOffer(l, all) {
   el('offerLoc').textContent = l.location || `📍 ${l.city}${l.district ? ', ' + l.district : ''}`;
   el('priceMain').textContent = l.price_display;
   el('priceM2').textContent = l.price_pm2_display;
+  // Kalkulator raty — tylko dla sprzedaży z sensowną ceną
+  (function renderKredyt(){
+    const box = document.getElementById('kredytBox');
+    if (!box) return;
+    const isSale = (l.transaction || 'sprzedaz') !== 'wynajem';
+    if (!isSale || !l.price || l.price < 50000) { box.style.display = 'none'; return; }
+    const go = () => window.FD_renderKredyt && window.FD_renderKredyt(box, l.price, { source: 'oferta' });
+    if (window.FD_renderKredyt) go(); else window.addEventListener('load', go, { once: true });
+  })();
 
   // 🔒 GATING: Free-userzy dostają tylko lock CTA zamiast AI + similar
   if (!window.__isPremium) {
@@ -1745,6 +1757,7 @@ loadOffer();
 </script>
 <!-- AdSense: Pod ofertą (wstawia się dynamicznie z JS w loadOffer) -->
 <script src="/scripts/ads.js" defer></script>
+<script src="/scripts/kredyt.js" defer></script>
 <script src="/scripts/cookies.js" defer></script>
 
 <!-- Modal Wycena Premium (32 zł) -->

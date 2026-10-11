@@ -197,6 +197,7 @@
   .card-price{display:flex;justify-content:space-between;align-items:baseline}
   .card-price .p{font-size:18px;font-weight:900;color:#fff}
   .card-price .pm2{font-size:11px;color:#8ba3d4}
+  .card-rata{font-size:11px;color:#FFB800;margin-top:4px;font-weight:700;opacity:.9}
 
   /* Load more */
   .load-more{text-align:center;margin-top:32px;padding-bottom:40px}
@@ -218,6 +219,7 @@
 </style>
 <script src="/scripts/city-coords.js"></script>
 <script src="/scripts/ads.js" defer></script>
+<script src="/scripts/kredyt.js" defer></script>
 <script src="/scripts/cookies.js" defer></script>
 
 <style>
@@ -411,6 +413,9 @@
       <button class="btn-clear">Wyczyść</button>
       <button class="btn-apply">Zastosuj</button>
     </div>
+
+    <!-- Kalkulator raty kredytu (+ CTA afiliacyjne — link w /scripts/kredyt.js) -->
+    <div id="kredytBox" style="margin-top:20px"></div>
   </aside>
 
   <!-- Results -->
@@ -1286,6 +1291,7 @@ function renderPage() {
             <span class="p">${l.price_display}</span>
             <span class="pm2">${l.price_pm2_display}</span>
           </div>
+          ${(l.transaction !== 'wynajem' && window.FD_rataOd && FD_rataOd(l.price)) ? `<div class="card-rata">💳 rata od ~${Math.round(FD_rataOd(l.price)).toLocaleString('pl-PL')} zł/mies.</div>` : ''}
         </div>
       </a>
     `;
@@ -1433,6 +1439,13 @@ function renderPage() {
   }
   // Reload ad slots after re-render
   if (window.FD_renderAllAds) window.FD_renderAllAds();
+  // Kalkulator raty w sidebarze (raz) — cena z hero "Cena do" albo mediana widocznych ofert
+  if (window.FD_renderKredyt && !document.querySelector('#kredytBox [data-fd-kredyt]')) {
+    const heroP = parseFloat(document.getElementById('heroPrice')?.value || '') || 0;
+    const prices = (typeof CURRENT_FILTERED !== 'undefined' ? CURRENT_FILTERED : []).map(x => x.price).filter(p => p > 50000).sort((a, b) => a - b);
+    const med = prices.length ? prices[Math.floor(prices.length / 2)] : 600000;
+    window.FD_renderKredyt(document.getElementById('kredytBox'), heroP || med, { source: 'szukaj' });
+  }
   // Load more button
   const remaining = CURRENT_FILTERED.length - slice.length;
   if (btn) {

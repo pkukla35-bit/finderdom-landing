@@ -919,6 +919,10 @@ async function loadListings() {
     // Rooms filter (multi-select) - send do backend zamiast client-side na 1000 batchu
     const activeRoomsChips = Array.from(document.querySelectorAll('.chip.active[data-rooms]')).map(c => c.dataset.rooms);
     if (activeRoomsChips.length) apiParams.set('rooms', activeRoomsChips.join(','));
+    // Rynek pierwotny/wtórny → filtr na backendzie (pełna baza 14k, nie tylko batch 1000).
+    // "Bez określenia" (__unknown__) zostaje client-side — wtedy nie zawężamy po stronie API.
+    const activeMarket = Array.from(document.querySelectorAll('.chip.active[data-filter="market_type"]')).map(c => c.dataset.value);
+    if (activeMarket.length && !activeMarket.includes('__unknown__')) apiParams.set('market_type', activeMarket.join(','));
     // GEO filter: gdy user wpisal miasto + promien (heroRadiusKm), wysylamy lat/lng+radius zamiast city
     // Backend zwraca oferty z bounding box, wiec dla Krakow+50km dostaniemy tez Wieliczka, Skawina, Zabierzów
     const uiRadiusKm = parseFloat(document.getElementById('heroRadiusKm')?.value || '0');
@@ -1580,11 +1584,12 @@ function updateSubType(type){
       `;
       mpGroup.style.display = '';
     }
-    // Podepnij handlery
+    // Podepnij handlery (rynek pierwotny/wtórny → refetch z API; reszta client-side)
     mpChips.querySelectorAll('.chip').forEach(c => {
       c.addEventListener('click', () => {
         c.classList.toggle('active');
-        applyAllFilters();
+        if (c.dataset.filter === 'market_type' && typeof loadListings === 'function') loadListings();
+        else applyAllFilters();
       });
     });
   }
@@ -2097,7 +2102,9 @@ document.querySelectorAll('.chip[data-filter][data-value]').forEach(c => {
   c.addEventListener('click', (e) => {
     e.stopImmediatePropagation();
     c.classList.toggle('active');
-    applyAllFilters();
+    // Rynek pierwotny/wtórny filtrujemy na backendzie (pełna baza) → refetch
+    if (c.dataset.filter === 'market_type' && typeof loadListings === 'function') loadListings();
+    else applyAllFilters();
   }, true);
 });
 

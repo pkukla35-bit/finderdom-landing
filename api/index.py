@@ -1521,6 +1521,7 @@ async def listings_scraped_endpoint(
     transaction: Optional[str] = None,
     seller_type: Optional[str] = None,
     rooms: Optional[str] = None,   # "1", "2", "3", "4", "5+" lub "2,3,4" (multi)
+    market_type: Optional[str] = None,  # "pierwotny" | "wtorny" | "pierwotny,wtorny"
     lat: Optional[float] = None,
     lng: Optional[float] = None,
     radius_km: Optional[float] = None,
@@ -1570,6 +1571,13 @@ async def listings_scraped_endpoint(
                 query["seller_type"] = "prywatna"
             elif st in ("posrednik", "pośrednik", "agencja"):
                 query["seller_type"] = "posrednik"
+        # Filter po rynku (pierwotny / wtorny) — na pełnej bazie, nie tylko na batchu 1000
+        if market_type:
+            mt_vals = [m.strip().lower() for m in market_type.split(",") if m.strip().lower() in ("pierwotny", "wtorny")]
+            if len(mt_vals) == 1:
+                query["market_type"] = mt_vals[0]
+            elif len(mt_vals) > 1:
+                query["market_type"] = {"$in": mt_vals}
         # Filter po liczbie pokoi - "1,2,3" (multi-select) lub "5+"
         if rooms:
             room_vals = []
@@ -1616,14 +1624,14 @@ async def listings_scraped_endpoint(
         # Sortowanie: gdy filtr po mieście/typie już zawęża do ~500-2000 rekordów, można sortować po added_at.
         # Gdy BRAK filtrów (cała baza 50k) sort byłby zbyt kosztowny → skip sort dla wydajności.
         cursor = coll.find(query, projection)
-        if city or type or transaction or seller_type:
+        if city or type or transaction or seller_type or market_type:
             cursor = cursor.sort("added_at", -1)
         cursor = cursor.skip(offset).limit(limit)
 
         # Total count (dla frontend: pokazuje "Znaleziono X ofert" nawet gdy załadowaliśmy tylko limit)
         async def _count():
             try:
-                if not (city or type or transaction):
+                if not (city or type or transaction or seller_type or rooms or market_type or use_geo):
                     # Cała baza — estimated_document_count jest instant (używa metadata)
                     return await coll.estimated_document_count()
                 return await coll.count_documents(query, maxTimeMS=3000)

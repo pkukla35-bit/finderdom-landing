@@ -1,17 +1,19 @@
 /*
- * FinderDom.pl — Kalkulator raty kredytu hipotecznego + CTA afiliacyjne
- * --------------------------------------------------------------------
- * GDZIE WKLEIĆ LINK AFILIACYJNY (MyLead / Convertiser / Awin / Lendi / Notus):
- *   AFFILIATE_URL  — pełny link z Twoim ID partnera. Gdy pusty, przycisk prowadzi do poradnika kredytowego na blogu.
- *   AFFILIATE_LABEL — tekst przycisku.
- * Link afiliacyjny dostaje rel="nofollow sponsored" (wymóg Google) i otwiera się w nowej karcie.
+ * FinderDom.pl — Kalkulator raty kredytu hipotecznego + oferty banków (linki afiliacyjne)
+ * -------------------------------------------------------------------------------------
+ * JAK DODAĆ BANK: dopisz obiekt do tablicy BANKS (nazwa, link partnerski z MyLead/Convertiser/Awin, krótka cecha).
+ *   - pierwszy bank na liście = duży przycisk główny,
+ *   - kolejne = lista „Inne banki” pod przyciskiem.
+ * Każdy link dostaje rel="nofollow sponsored" (wymóg Google) i otwiera się w nowej karcie.
  */
 window.FD_KREDYT = {
-  // MyLead → eBroker → Bank Millennium (kredyt hipoteczny, CPL)
-  AFFILIATE_URL: 'https://myleadltd.ebrokerpartner.pl/targetclick.php?param=eyJsZWFkSUQiOi0xLCJ0YXJnZXRJRCI6IjYwOTgiLCJwYXJ0bmVySUQiOiIzMTE1MTQiLCJkb21haW5JRCI6IjMxNTI2OCJ9',
-  AFFILIATE_LABEL: '🏦 Sprawdź ofertę kredytu w Banku Millennium →',
-  AFFILIATE_NOTE: 'Link partnerski · wniosek online w kilka minut · bez zobowiązań',
-  // Drugi przycisk: bezpłatna konsultacja z doradcą (nasz formularz leadowy)
+  BANKS: [
+    { name: 'Bank Millennium', note: 'wniosek online w kilka minut', url: 'https://myleadltd.ebrokerpartner.pl/targetclick.php?param=eyJsZWFkSUQiOi0xLCJ0YXJnZXRJRCI6IjYwOTgiLCJwYXJ0bmVySUQiOiIzMTE1MTQiLCJkb21haW5JRCI6IjMxNTI2OCJ9' },
+    // { name: 'PKO BP', note: '…', url: 'https://…' },
+    // { name: 'ING Bank Śląski', note: '…', url: 'https://…' },
+  ],
+  AFFILIATE_NOTE: 'Linki partnerskie · bez zobowiązań · wniosek online',
+  // Przycisk: bezpłatna konsultacja z doradcą (nasz formularz leadowy na /kredyt)
   SECONDARY_LABEL: '🤝 Wolisz porównanie wielu banków? Bezpłatna konsultacja →',
   DEFAULTS: { downPct: 20, years: 30, rate: 7.0 },
 };
@@ -53,6 +55,12 @@ window.FD_KREDYT = {
       .fdk-result .meta{font-size:12px;color:#c5d0e6}
       .fdk-cta{display:block;text-align:center;min-height:44px;padding:12px 14px;line-height:1.3;box-sizing:border-box;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836 !important;font-weight:900;border-radius:12px;text-decoration:none;font-size:14px}
       .fdk-note{font-size:11px;color:#8ba3d4;text-align:center;margin-top:8px}
+      .fdk-banks{margin-top:12px;border-top:1px dashed rgba(255,255,255,0.1);padding-top:10px}
+      .fdk-banks-title{font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#8ba3d4;margin-bottom:6px}
+      .fdk-bank{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 10px;margin-bottom:6px;background:rgba(11,24,54,0.5);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#fff !important;text-decoration:none;font-weight:800;font-size:13px}
+      .fdk-bank:hover{border-color:#FFB800}
+      .fdk-bank-note{flex:1;font-weight:500;font-size:11px;color:#8ba3d4;text-align:right}
+      .fdk-bank-go{color:#FFB800}
       .fdk-cta2{display:block;text-align:center;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,184,0,0.35);border-radius:12px;color:#FFB800 !important;font-weight:800;font-size:12.5px;text-decoration:none;line-height:1.3}
       .fdk-disc{font-size:10px;color:#6b7fa8;margin-top:10px;line-height:1.4}
     `;
@@ -70,11 +78,16 @@ window.FD_KREDYT = {
     opts = opts || {};
     injectStyles();
     const C = window.FD_KREDYT;
-    const isAff = !!C.AFFILIATE_URL;
+    const banks = (C.BANKS || []).filter(b => b && b.url);
+    const isAff = banks.length > 0;
     const p0 = Math.round(price || 600000);
-    const ctaHref = isAff ? C.AFFILIATE_URL : ('/kredyt?cena=' + p0);
-    const ctaLabel = isAff ? C.AFFILIATE_LABEL : '🤝 Bezpłatne porównanie ofert kredytów →';
+    const main = banks[0];
+    const ctaHref = isAff ? main.url : ('/kredyt?cena=' + p0);
+    const ctaLabel = isAff ? `🏦 Sprawdź ofertę kredytu: ${main.name} →` : '🤝 Bezpłatne porównanie ofert kredytów →';
     const ctaAttrs = isAff ? 'target="_blank" rel="nofollow sponsored noopener"' : '';
+    const others = banks.slice(1);
+    const esc = (t) => String(t || '').replace(/</g, '&lt;');
+    const othersHtml = others.length ? `<div class="fdk-banks"><div class="fdk-banks-title">Inne banki</div>${others.map((b, i) => `<a class="fdk-bank" href="${b.url}" target="_blank" rel="nofollow sponsored noopener" data-k="bank" data-bank="${esc(b.name)}"><span>🏦 ${esc(b.name)}</span><span class="fdk-bank-note">${esc(b.note)}</span><span class="fdk-bank-go">→</span></a>`).join('')}</div>` : '';
 
     el.innerHTML = `
       <div class="fdk" data-fd-kredyt>
@@ -96,7 +109,8 @@ window.FD_KREDYT = {
           <div class="meta" data-k="meta"></div>
         </div>
         <a class="fdk-cta" href="${ctaHref}" ${ctaAttrs} data-k="cta">${ctaLabel}</a>
-        ${isAff ? `<div class="fdk-note">${C.AFFILIATE_NOTE}</div>` : ''}
+        ${isAff && main.note ? `<div class="fdk-note">${esc(main.note)} · link partnerski</div>` : ''}
+        ${othersHtml}
         ${(isAff && !opts.noSecondary) ? `<a class="fdk-cta2" href="/kredyt?cena=${p0}#leadCard" data-k="cta2">${C.SECONDARY_LABEL}</a>` : ''}
         <div class="fdk-disc">Wyliczenie orientacyjne (rata równa, bez prowizji i ubezpieczeń). Rzeczywista rata zależy od oferty banku i Twojej zdolności kredytowej.</div>
       </div>`;
@@ -117,8 +131,11 @@ window.FD_KREDYT = {
     }
     el.querySelectorAll('input,select').forEach(i => i.addEventListener('input', recalc));
     q('cta').addEventListener('click', () => {
-      try { window.gtag && gtag('event', 'kredyt_cta_click', { price: el.dataset.fdPrice, source: opts.source || location.pathname, affiliate: isAff }); } catch (e) {}
+      try { window.gtag && gtag('event', 'kredyt_cta_click', { price: el.dataset.fdPrice, source: opts.source || location.pathname, affiliate: isAff, bank: isAff ? main.name : '' }); } catch (e) {}
     });
+    el.querySelectorAll('[data-k="bank"]').forEach(a => a.addEventListener('click', () => {
+      try { window.gtag && gtag('event', 'kredyt_cta_click', { price: el.dataset.fdPrice, source: opts.source || location.pathname, affiliate: true, bank: a.dataset.bank }); } catch (e) {}
+    }));
     recalc();
   };
 })();

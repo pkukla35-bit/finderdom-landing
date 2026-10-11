@@ -181,7 +181,7 @@ gtag('set', 'url_passthrough', false);
     window.FD_renderKredyt(box, startPrice, { source: 'kredyt-page', noSecondary: true });
     // Na stronie /kredyt CTA widgetu prowadzi do formularza obok (jeśli brak linku afiliacyjnego)
     const cta = box.querySelector('[data-k="cta"]');
-    if (cta && !window.FD_KREDYT.AFFILIATE_URL) { cta.textContent = '🤝 Zamów bezpłatne porównanie ofert ↓'; cta.setAttribute('href', '#leadCard'); }
+    if (cta && !(window.FD_KREDYT.BANKS || []).some(b => b && b.url)) { cta.textContent = '🤝 Zamów bezpłatne porównanie ofert ↓'; cta.setAttribute('href', '#leadCard'); }
     const upd = () => {
       const price = parseFloat(box.querySelector('[data-k="price"]').value)||0, down = parseFloat(box.querySelector('[data-k="down"]').value)||0;
       const years = parseInt(box.querySelector('[data-k="years"]').value)||30, rate = parseFloat(box.querySelector('[data-k="rate"]').value)||0;

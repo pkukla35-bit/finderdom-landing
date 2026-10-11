@@ -7,9 +7,12 @@
  * Link afiliacyjny dostaje rel="nofollow sponsored" (wymóg Google) i otwiera się w nowej karcie.
  */
 window.FD_KREDYT = {
-  AFFILIATE_URL: '',
-  AFFILIATE_LABEL: '🏦 Porównaj oferty kredytów →',
-  AFFILIATE_NOTE: 'Bezpłatne porównanie w 20+ bankach · bez zobowiązań',
+  // MyLead → eBroker → Bank Millennium (kredyt hipoteczny, CPL)
+  AFFILIATE_URL: 'https://myleadltd.ebrokerpartner.pl/targetclick.php?param=eyJsZWFkSUQiOi0xLCJ0YXJnZXRJRCI6IjYwOTgiLCJwYXJ0bmVySUQiOiIzMTE1MTQiLCJkb21haW5JRCI6IjMxNTI2OCJ9',
+  AFFILIATE_LABEL: '🏦 Sprawdź ofertę kredytu w Banku Millennium →',
+  AFFILIATE_NOTE: 'Link partnerski · wniosek online w kilka minut · bez zobowiązań',
+  // Drugi przycisk: bezpłatna konsultacja z doradcą (nasz formularz leadowy)
+  SECONDARY_LABEL: '🤝 Wolisz porównanie wielu banków? Bezpłatna konsultacja →',
   DEFAULTS: { downPct: 20, years: 30, rate: 7.0 },
 };
 
@@ -50,6 +53,7 @@ window.FD_KREDYT = {
       .fdk-result .meta{font-size:12px;color:#c5d0e6}
       .fdk-cta{display:block;text-align:center;min-height:44px;padding:12px 14px;line-height:1.3;box-sizing:border-box;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836 !important;font-weight:900;border-radius:12px;text-decoration:none;font-size:14px}
       .fdk-note{font-size:11px;color:#8ba3d4;text-align:center;margin-top:8px}
+      .fdk-cta2{display:block;text-align:center;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,184,0,0.35);border-radius:12px;color:#FFB800 !important;font-weight:800;font-size:12.5px;text-decoration:none;line-height:1.3}
       .fdk-disc{font-size:10px;color:#6b7fa8;margin-top:10px;line-height:1.4}
     `;
     document.head.appendChild(st);
@@ -93,6 +97,7 @@ window.FD_KREDYT = {
         </div>
         <a class="fdk-cta" href="${ctaHref}" ${ctaAttrs} data-k="cta">${ctaLabel}</a>
         ${isAff ? `<div class="fdk-note">${C.AFFILIATE_NOTE}</div>` : ''}
+        ${(isAff && !opts.noSecondary) ? `<a class="fdk-cta2" href="/kredyt?cena=${p0}#leadCard" data-k="cta2">${C.SECONDARY_LABEL}</a>` : ''}
         <div class="fdk-disc">Wyliczenie orientacyjne (rata równa, bez prowizji i ubezpieczeń). Rzeczywista rata zależy od oferty banku i Twojej zdolności kredytowej.</div>
       </div>`;
 

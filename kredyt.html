@@ -178,7 +178,7 @@ gtag('set', 'url_passthrough', false);
   // Kalkulator + zdolność (po załadowaniu kredyt.js)
   function init(){
     const box = document.getElementById('calc');
-    window.FD_renderKredyt(box, startPrice, { source: 'kredyt-page' });
+    window.FD_renderKredyt(box, startPrice, { source: 'kredyt-page', noSecondary: true });
     // Na stronie /kredyt CTA widgetu prowadzi do formularza obok (jeśli brak linku afiliacyjnego)
     const cta = box.querySelector('[data-k="cta"]');
     if (cta && !window.FD_KREDYT.AFFILIATE_URL) { cta.textContent = '🤝 Zamów bezpłatne porównanie ofert ↓'; cta.setAttribute('href', '#leadCard'); }

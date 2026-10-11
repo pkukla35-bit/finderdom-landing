@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://finderdom.pl/sitemap.xml
+Sitemap: https://www.finderdom.pl/sitemap.xml

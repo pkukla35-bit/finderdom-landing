@@ -54,3 +54,15 @@ th{color:#FFB800;font-weight:800;background:rgba(255,184,0,0.05)}
 .fd-ad-ph-sub{color:#8ba3d4;font-size:12px}
 footer{max-width:780px;margin:40px auto 24px;padding:24px 20px 0;border-top:1px solid rgba(255,255,255,0.08);display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;color:#8ba3d4;font-size:13px}
 footer a{color:#a3b3d1;text-decoration:none}
+.author-box{display:flex;gap:16px;align-items:flex-start;margin:40px 0 0;padding:20px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px}
+.author-avatar{flex:0 0 52px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:18px}
+.author-name{font-weight:900;color:#fff;margin-bottom:4px}
+.author-bio{font-size:13px;color:#a3b3d1;line-height:1.55}
+.author-bio a{color:#FFB800;text-decoration:none}
+.faq{margin-top:40px}
+.faq h2{margin-bottom:12px}
+.faq details{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 18px;margin-bottom:10px}
+.faq summary{cursor:pointer;font-weight:800;color:#fff;font-size:15px}
+.faq details p{margin:10px 0 0;color:#c5d0e6;font-size:14px}
+.sources{margin-top:28px;font-size:12px;color:#8ba3d4}
+.sources ul{margin:6px 0 0;padding-left:18px}

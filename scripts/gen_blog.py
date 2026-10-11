@@ -10,27 +10,28 @@ TEMPLATE = """<!doctype html>
 <title>{title} | FinderDom.pl</title>
 <meta name="description" content="{description}">
 <meta name="keywords" content="{keywords}">
-<link rel="canonical" href="https://finderdom.pl/blog/{slug}">
+<link rel="canonical" href="https://www.finderdom.pl/blog/{slug}">
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{description}">
 <meta property="og:type" content="article">
-<meta property="og:url" content="https://finderdom.pl/blog/{slug}">
+<meta property="og:url" content="https://www.finderdom.pl/blog/{slug}">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/scripts/blog.css">
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7963354786615192" crossorigin="anonymous"></script>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9328001602201523" crossorigin="anonymous"></script>
 <script type="application/ld+json">
-{{"@context":"https://schema.org","@type":"Article","headline":"{title}","author":{{"@type":"Organization","name":"FinderDom.pl"}},"publisher":{{"@type":"Organization","name":"FinderDom.pl","logo":{{"@type":"ImageObject","url":"https://finderdom.pl/favicon.svg"}}}},"datePublished":"{date_iso}","dateModified":"{date_iso}","mainEntityOfPage":"https://finderdom.pl/blog/{slug}","image":"https://finderdom.pl/favicon.svg","description":"{description}"}}
+{{"@context":"https://schema.org","@type":"Article","headline":"{title}","author":{{"@type":"Person","name":"Paweł Kukla","url":"https://www.finderdom.pl/o-nas"}},"publisher":{{"@type":"Organization","name":"FinderDom.pl","logo":{{"@type":"ImageObject","url":"https://www.finderdom.pl/favicon.svg"}}}},"datePublished":"{date_iso}","dateModified":"{date_modified}","mainEntityOfPage":"https://www.finderdom.pl/blog/{slug}","image":"https://www.finderdom.pl/favicon.svg","description":"{description}"}}
 </script>
+{extra_schema}
 </head>
 <body>
 <nav class="topnav">
   <div class="nav-inner">
     <a href="/" class="logo">🏠 FinderDom.pl</a>
     <div class="nav-links">
-      <a href="/szukaj.html">Wyszukiwarka</a>
-      <a href="/wycena.html">💰 Wyceń nieruchomość</a>
+      <a href="/szukaj">Wyszukiwarka</a>
+      <a href="/wycena">💰 Wyceń nieruchomość</a>
       <a href="/blog" class="active">📝 Blog</a>
-      <a href="/pomoc.html">💬 Pomoc</a>
+      <a href="/pomoc">💬 Pomoc</a>
       <span id="authWidget" style="display:inline-flex;gap:8px;align-items:center;margin-left:auto"></span>
     </div>
   </div>
@@ -40,9 +41,17 @@ TEMPLATE = """<!doctype html>
   <div class="breadcrumb"><a href="/">Strona główna</a> · <a href="/blog">Blog</a> · {breadcrumb}</div>
   <h1>{title}</h1>
   <div class="lead">{lead}</div>
-  <div class="meta">📅 {date_pl} · ⏱️ {read_time} · 📝 FinderDom.pl</div>
+  <div class="meta">📅 {date_pl} · ⏱️ {read_time} · ✍️ <a href="/o-nas" style="color:inherit">Paweł Kukla, redakcja FinderDom.pl</a></div>
 
   {content}
+
+  <div class="author-box">
+    <div class="author-avatar">PK</div>
+    <div>
+      <div class="author-name">Paweł Kukla</div>
+      <div class="author-bio">Założyciel FinderDom.pl — wyszukiwarki agregującej ogłoszenia nieruchomości z największych polskich portali. Na co dzień analizuje ceny z kilkunastu tysięcy aktualnych ofert i opisuje rynek bez marketingowej otoczki. <a href="/o-nas">Więcej o redakcji →</a></div>
+    </div>
+  </div>
 
   <div class="cta-box">
     <h3>{cta_title}</h3>
@@ -65,14 +74,14 @@ TEMPLATE = """<!doctype html>
   <div style="display:flex;flex-wrap:wrap;gap:16px">
     <a href="/">Strona główna</a>
     <a href="/blog">Blog</a>
-    <a href="/pomoc.html">Pomoc</a>
+    <a href="/pomoc">Pomoc</a>
     <a href="/regulamin">Regulamin</a>
     <a href="/polityka-prywatnosci">Polityka prywatności</a>
     <a href="mailto:kontakt@finderdom.pl">Kontakt</a>
   </div>
 </footer>
 
-<script src="/scripts/ads.js"></script>
+<script src="/scripts/ads.js" defer></script>
 <script>
   (function renderAuthWidget(){{
     const el = document.getElementById('authWidget');
@@ -87,6 +96,18 @@ TEMPLATE = """<!doctype html>
 """
 
 ALL_POSTS = [
+    {"slug": "ceny-mieszkan-w-polsce-2026-ranking-miast", "icon": "🏙️", "title": "Ceny mieszkań w czerwcu 2026: ranking 20 miast z ofert", "desc": "Ranking 20 miast wg mediany zł/m² z ok. 10 039 ofert FinderDom.pl: od Warszawy ("},
+    {"slug": "rynek-pierwotny-czy-wtorny-2026", "icon": "🏗️", "title": "Rynek pierwotny czy wtórny w 2026? Ceny w 20 miastach", "desc": "Co opłaca się bardziej w 2026: mieszkanie od dewelopera czy z rynku wtórnego? Po"},
+    {"slug": "ile-kosztuje-mieszkanie-2-pokojowe-2026", "icon": "🛏️", "title": "Ile kosztuje kawalerka i mieszkanie 2-, 3-, 4-pokojowe w 2026?", "desc": "Mediany cen kawalerek oraz mieszkań 2-, 3- i 4+ pokojowych w 20 miastach w 2026 "},
+    {"slug": "koszty-zakupu-mieszkania-pcc-notariusz-2026", "icon": "🧾", "title": "Koszty zakupu mieszkania 2026: PCC, notariusz, KW, pośrednik", "desc": "Ile naprawdę kosztuje kupno mieszkania w 2026? PCC 2%, taksa notarialna z VAT, o"},
+    {"slug": "ksiega-wieczysta-jak-sprawdzic-mieszkanie", "icon": "📜", "title": "Księga wieczysta mieszkania: jak sprawdzić KW przed zakupem", "desc": "Jak sprawdzić księgę wieczystą przed zakupem mieszkania krok po kroku: skąd wzią"},
+    {"slug": "umowa-przedwstepna-zadatek-zaliczka", "icon": "✍️", "title": "Umowa przedwstępna kupna mieszkania: zadatek, forma, zapisy", "desc": "Umowa przedwstępna zakupu mieszkania: zadatek czy zaliczka, umowa zwykła czy not"},
+    {"slug": "odbior-mieszkania-od-dewelopera-checklista", "icon": "🔧", "title": "Odbiór mieszkania od dewelopera: checklista 50 punktów i prawa", "desc": "Jak odebrać mieszkanie od dewelopera: narzędzia, normy odchyłek, checklista tech"},
+    {"slug": "jak-negocjowac-cene-mieszkania", "icon": "🤝", "title": "Jak negocjować cenę mieszkania w 2026: 12 technik i realny rabat", "desc": "Ile realnie urwiesz z ceny mieszkania w 2026? 12 technik negocjacji, dane o czas"},
+    {"slug": "czerwone-flagi-w-ogloszeniach-nieruchomosci", "icon": "🚩", "title": "Czerwone flagi w ogłoszeniach nieruchomości: jak nie dać się oszukać", "desc": "Jak rozpoznać oszustwo, zawyżoną cenę i ukryte wady w ogłoszeniu o mieszkaniu? P"},
+    {"slug": "podatek-od-sprzedazy-nieruchomosci-przed-uplywem-5-lat", "icon": "🏛️", "title": "Podatek od sprzedaży mieszkania przed 5 latami – jak go uniknąć", "desc": "Sprzedajesz mieszkanie przed upływem 5 lat? Sprawdź, jak liczyć termin, jaki jes"},
+    {"slug": "wynajem-mieszkania-umowa-najmu-okazjonalnego", "icon": "🔑", "title": "Wynajem mieszkania 2026: najem okazjonalny, zwykły i kaucja", "desc": "Najem zwykły, okazjonalny i instytucjonalny w 2026: różnice w ochronie lokatorów"},
+    {"slug": "flipping-mieszkan-czy-sie-oplaca-2026", "icon": "📈", "title": "Flipping mieszkań w 2026: czy się opłaca? Kalkulacja i podatki", "desc": "Flipping mieszkań w 2026 roku: model biznesowy, pełna kalkulacja flipu 48 m² w Ł"},
     {"slug": "rynek-mieszkan-warszawa-2026", "icon": "📈", "title": "Rynek mieszkań w Warszawie 2026 — analiza cen, dzielnic i prognoz", "desc": "Rynek mieszkań w Warszawie 2026 — analiza cen"},
     {"slug": "wycena-nieruchomosci-metody", "icon": "💰", "title": "Wycena nieruchomości — 3 metody profesjonalnej wyceny", "desc": "Metoda porównawcza, dochodowa, kosztowa"},
     {"slug": "dom-czy-mieszkanie", "icon": "🏡", "title": "Dom czy mieszkanie? Co się bardziej opłaca w 2026", "desc": "Porównanie kosztów i opłacalności"},
@@ -117,6 +138,9 @@ def related_for(current_slug, all_posts, other_slug="jak-kupic-dzialke-budowlana
 
 
 def generate(slug: str, meta: dict, content: str):
+    meta = dict(meta)
+    meta.setdefault("extra_schema", "")
+    meta.setdefault("date_modified", meta.get("date_iso", ""))
     related_html = related_for(slug, ALL_POSTS)
     html = TEMPLATE.format(
         slug=slug, related=related_html, content=content, **meta

@@ -10,14 +10,14 @@
 <meta name="keywords" content="mieszkania, domy, nieruchomości, wyszukiwarka, otodom, olx, morizon, gratka, analiza cen">
 <meta name="author" content="FinderDom.pl">
 <meta name="robots" content="index, follow">
-<link rel="canonical" href="https://finderdom.pl/">
+<link rel="canonical" href="https://www.finderdom.pl/">
 
 <!-- Open Graph -->
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://finderdom.pl/">
+<meta property="og:url" content="https://www.finderdom.pl/">
 <meta property="og:title" content="FinderDom.pl — Wyszukiwarka ogłoszeń nieruchomości">
 <meta property="og:description" content="Wszystkie portale nieruchomości w jednym miejscu. AI analiza cen. Podobne oferty w okolicy. Powiadomienia. Wkrótce startujemy!">
-<meta property="og:image" content="https://finderdom.pl/og-image.png">
+<meta property="og:image" content="https://www.finderdom.pl/og-image.png">
 <meta property="og:locale" content="pl_PL">
 
 <!-- Twitter -->
@@ -47,7 +47,7 @@
   "@context": "https://schema.org",
   "@type": "WebSite",
   "name": "FinderDom.pl",
-  "url": "https://finderdom.pl",
+  "url": "https://www.finderdom.pl",
   "description": "Wyszukiwarka ogłoszeń nieruchomości ze wszystkich dostępnych portali w Polsce",
   "inLanguage": "pl-PL"
 }
@@ -265,8 +265,8 @@
     <p class="subtitle">Otodom, OLX, Morizon, Gratka i wszystkie pozostałe portale w Polsce — jedno wyszukiwanie. AI analiza cen sprawdzi czy oferta to okazja czy zawyżka.</p>
 
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:40px">
-      <a href="/szukaj.html" style="background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:16px 32px;border-radius:14px;text-decoration:none;font-size:14px;text-transform:uppercase;letter-spacing:0.5px;box-shadow:0 8px 24px rgba(255,184,0,0.35);transition:transform 0.15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">🔍 Otwórz wyszukiwarkę (demo)</a>
-      <a href="/oferta.html" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.2);color:#fff;font-weight:700;padding:16px 32px;border-radius:14px;text-decoration:none;font-size:14px">Zobacz przykład oferty</a>
+      <a href="/szukaj" style="background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:16px 32px;border-radius:14px;text-decoration:none;font-size:14px;text-transform:uppercase;letter-spacing:0.5px;box-shadow:0 8px 24px rgba(255,184,0,0.35);transition:transform 0.15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">🔍 Otwórz wyszukiwarkę (demo)</a>
+      <a href="/oferta" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.2);color:#fff;font-weight:700;padding:16px 32px;border-radius:14px;text-decoration:none;font-size:14px">Zobacz przykład oferty</a>
     </div>
 
     <div class="stats">
@@ -629,7 +629,7 @@
         </summary>
         <div itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer" style="margin-top:14px;color:#c5d0e6;font-size:14px;line-height:1.65" itemprop="text">
           <p style="margin:0 0 10px">Najlepszy sposób kontaktu to <strong style="color:#FFDC80">email: <a href="mailto:kontakt@finderdom.pl" style="color:#FFB800">kontakt@finderdom.pl</a></strong>. Odpowiadamy standardowo w ciągu 24h (użytkownicy planu Firmowego — w 4h).</p>
-          <p style="margin:0 0 10px">Możesz też skorzystać z <a href="/kontakt" style="color:#FFB800">formularza kontaktowego</a>, przeglądnąć <a href="/pomoc.html" style="color:#FFB800">Centrum Pomocy</a> lub zajrzeć na naszego <a href="/blog" style="color:#FFB800">bloga</a>, gdzie regularnie publikujemy analizy rynku i poradniki.</p>
+          <p style="margin:0 0 10px">Możesz też skorzystać z <a href="/kontakt" style="color:#FFB800">formularza kontaktowego</a>, przeglądnąć <a href="/pomoc" style="color:#FFB800">Centrum Pomocy</a> lub zajrzeć na naszego <a href="/blog" style="color:#FFB800">bloga</a>, gdzie regularnie publikujemy analizy rynku i poradniki.</p>
           <p style="margin:0">Więcej informacji o firmie i naszej misji znajdziesz na stronie <a href="/o-nas" style="color:#FFB800">O nas</a>.</p>
         </div>
       </details>
@@ -682,7 +682,7 @@
     <div>© 2026 FinderDom.pl</div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
       <a href="/blog">📝 Blog</a>
-      <a href="/pomoc.html">💬 Pomoc</a>
+      <a href="/pomoc">💬 Pomoc</a>
       <a href="/o-nas">O nas</a>
     <a href="/kontakt">Kontakt</a>
     <a href="/regulamin">Regulamin</a>
@@ -750,7 +750,7 @@
     const el = document.getElementById('headerAuth');
     if (!el) return;
     const token = localStorage.getItem('finderdom_token');
-    const pomocLink = '<a href="/blog" class="a-nav" title="Blog i porady">📝 Blog</a><a href="/pomoc.html" class="a-nav" title="Centrum pomocy">💬 Pomoc</a>';
+    const pomocLink = '<a href="/blog" class="a-nav" title="Blog i porady">📝 Blog</a><a href="/pomoc" class="a-nav" title="Centrum pomocy">💬 Pomoc</a>';
     if (token) {
       el.innerHTML = pomocLink + '<a href="/konto" class="a-cta">👤 Moje konto</a>';
     } else {

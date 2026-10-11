@@ -6,6 +6,7 @@
 <meta name="google-adsense-account" content="ca-pub-9328001602201523">
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9328001602201523" crossorigin="anonymous"></script>
 <title>Wyszukiwarka ogłoszeń — FinderDom.pl</title>
+<link rel="canonical" href="https://www.finderdom.pl/szukaj">
 <meta name="description" content="Wyszukaj mieszkania i domy ze wszystkich portali w Polsce. AI analiza cen, filtry zaawansowane, powiadomienia.">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <!-- Preconnect do CDN zdjęć (OLX, Morizon, Domiporta) — oszczędza DNS+TLS handshake przy pierwszym zdjęciu -->
@@ -241,11 +242,11 @@
       <div class="brand-text">Finder<span class="accent">Dom</span>.pl</div>
     </a>
     <div class="nav-links">
-      <a href="/szukaj.html" class="active">Wyszukiwarka</a>
-      <a href="/wycena.html" class="a-wycena">💰 Wyceń nieruchomość</a>
-      <a href="/oferta.html" class="hide-mob">Przykład oferty</a>
+      <a href="/szukaj" class="active">Wyszukiwarka</a>
+      <a href="/wycena" class="a-wycena">💰 Wyceń nieruchomość</a>
+      <a href="/oferta" class="hide-mob">Przykład oferty</a>
       <a href="/blog" class="hide-mob" title="Blog i porady">📝 Blog</a>
-      <a href="/pomoc.html" class="hide-mob" title="Centrum pomocy">💬 Pomoc</a>
+      <a href="/pomoc" class="hide-mob" title="Centrum pomocy">💬 Pomoc</a>
       <span id="authWidget" class="auth-widget"></span>
     </div>
   </div>
@@ -1217,7 +1218,7 @@ function renderPage() {
     if (l.floor > 0) specs += ` · 🏢 ${l.floor} piętro`;
     if (l.type === 'dom') specs += ' · 🏡 Dom';
     if (l.type === 'dzialka') specs += ' · 🌳 Działka';
-    const targetUrl = `/oferta.html?id=${l.id}`;
+    const targetUrl = `/oferta?id=${l.id}`;
     // Karuzela POKAZUJE tylko oryginalne zdjecia z bazy
     const primaryImages = (l.images && l.images.length > 0)
       ? l.images.slice()

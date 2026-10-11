@@ -48,7 +48,7 @@ window.FD_KREDYT = {
       .fdk-result .lbl{font-size:11px;color:#8ba3d4;text-transform:uppercase;letter-spacing:1px;font-weight:800}
       .fdk-result .val{font-size:28px;font-weight:900;color:#FFB800;line-height:1.2;margin:4px 0}
       .fdk-result .meta{font-size:12px;color:#c5d0e6}
-      .fdk-cta{display:block;text-align:center;min-height:44px;line-height:44px;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836 !important;font-weight:900;border-radius:12px;text-decoration:none;font-size:14px}
+      .fdk-cta{display:block;text-align:center;min-height:44px;padding:12px 14px;line-height:1.3;box-sizing:border-box;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836 !important;font-weight:900;border-radius:12px;text-decoration:none;font-size:14px}
       .fdk-note{font-size:11px;color:#8ba3d4;text-align:center;margin-top:8px}
       .fdk-disc{font-size:10px;color:#6b7fa8;margin-top:10px;line-height:1.4}
     `;

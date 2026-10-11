@@ -8,13 +8,15 @@
  */
 window.FD_KREDYT = {
   BANKS: [
+    // Expander — pośrednik, porównanie 20+ banków (MyLead, CPL) → przycisk główny
+    { name: 'Expander — porównanie 20+ banków', short: 'Expander', note: 'bezpłatne porównanie ofert banków online', url: 'https://goradar.xyz/a/4xl59Tl2k6h3jk4' },
     { name: 'Bank Millennium', note: 'wniosek online w kilka minut', url: 'https://myleadltd.ebrokerpartner.pl/targetclick.php?param=eyJsZWFkSUQiOi0xLCJ0YXJnZXRJRCI6IjYwOTgiLCJwYXJ0bmVySUQiOiIzMTE1MTQiLCJkb21haW5JRCI6IjMxNTI2OCJ9' },
     // { name: 'PKO BP', note: '…', url: 'https://…' },
     // { name: 'ING Bank Śląski', note: '…', url: 'https://…' },
   ],
   AFFILIATE_NOTE: 'Linki partnerskie · bez zobowiązań · wniosek online',
   // Przycisk: bezpłatna konsultacja z doradcą (nasz formularz leadowy na /kredyt)
-  SECONDARY_LABEL: '🤝 Wolisz porównanie wielu banków? Bezpłatna konsultacja →',
+  SECONDARY_LABEL: '🤝 Wolisz rozmowę z doradcą? Bezpłatna konsultacja →',
   DEFAULTS: { downPct: 20, years: 30, rate: 7.0 },
 };
 
@@ -83,7 +85,7 @@ window.FD_KREDYT = {
     const p0 = Math.round(price || 600000);
     const main = banks[0];
     const ctaHref = isAff ? main.url : ('/kredyt?cena=' + p0);
-    const ctaLabel = isAff ? `🏦 Sprawdź ofertę kredytu: ${main.name} →` : '🤝 Bezpłatne porównanie ofert kredytów →';
+    const ctaLabel = isAff ? `🏦 ${main.name} →` : '🤝 Bezpłatne porównanie ofert kredytów →';
     const ctaAttrs = isAff ? 'target="_blank" rel="nofollow sponsored noopener"' : '';
     const others = banks.slice(1);
     const esc = (t) => String(t || '').replace(/</g, '&lt;');

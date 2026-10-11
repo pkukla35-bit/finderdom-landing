@@ -75,9 +75,15 @@
       ]
     },
     {
+      "source": "/scripts/(.*).(js|css)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" }
+      ]
+    },
+    {
       "source": "/api/listings-scraped",
       "headers": [
-        { "key": "Cache-Control", "value": "public, s-maxage=300, max-age=60, stale-while-revalidate=120" }
+        { "key": "Cache-Control", "value": "public, s-maxage=900, max-age=120, stale-while-revalidate=86400" }
       ]
     }
   ]

@@ -8,6 +8,10 @@
 <title>Wyszukiwarka ogłoszeń — FinderDom.pl</title>
 <meta name="description" content="Wyszukaj mieszkania i domy ze wszystkich portali w Polsce. AI analiza cen, filtry zaawansowane, powiadomienia.">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<!-- Preconnect do CDN zdjęć (OLX, Morizon, Domiporta) — oszczędza DNS+TLS handshake przy pierwszym zdjęciu -->
+<link rel="preconnect" href="https://ireland.apollo.olxcdn.com" crossorigin>
+<link rel="preconnect" href="https://img1.staticmorizon.com.pl" crossorigin>
+<link rel="dns-prefetch" href="https://galeria.domiporta.pl">
 
 <!-- Google Analytics 4 -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-8BX5DVXPDV"></script>
@@ -212,8 +216,8 @@
   }
 </style>
 <script src="/scripts/city-coords.js"></script>
-<script src="/scripts/ads.js"></script>
-<script src="/scripts/cookies.js"></script>
+<script src="/scripts/ads.js" defer></script>
+<script src="/scripts/cookies.js" defer></script>
 
 <style>
   .fd-footer{max-width:1400px;margin:40px auto 24px;padding:24px 24px 0;border-top:1px solid rgba(255,255,255,0.08);display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:center;color:#8ba3d4;font-size:13px}
@@ -476,10 +480,16 @@ const IMG_CLASSES = ['i1','i2','i3','i4','i5','i6','i7','i8'];
 // Image proxy: /api/img (własne proxy z Referer per portal, bezpieczne, cache 30d browser + 1y Vercel Edge)
 function proxyImg(url) {
   if (!url || typeof url !== 'string') return url || '';
-  const u = url.trim();
+  let u = url.trim();
   if (!u) return '';
   if (u.startsWith('/') || u.startsWith('data:') || u.startsWith('blob:')) return u;
   if (u.includes('wsrv.nl') || u.includes('images.weserv.nl') || u.includes('/api/img?')) return u;
+  // OLX CDN — publiczny, bez hotlink-protection → bezpośrednio z CDN (bez serverless hopu)
+  // + miniatura 640px do kart zamiast pełnego zdjęcia (≈30KB zamiast 100-400KB)
+  if (u.includes('apollo.olxcdn.com')) return u.replace(/;s=\d+x\d+/, ';s=640x480');
+  if (u.includes('galeria.domiporta.pl')) return u;
+  // Morizon: wariant "m" (≈40KB) zamiast "l" (≈140KB) — wystarczy do karty; proxy wykrywa placeholder "BRAK ZDJĘĆ"
+  if (u.includes('staticmorizon')) u = u.replace('/3x2_l:fill_and_crop/', '/3x2_m:fill_and_crop/');
   return '/api/img?u=' + encodeURIComponent(u);
 }
 
@@ -701,7 +711,7 @@ function normalizeScrapedListing(raw) {
     market_type: marketType,
     transaction: raw.transaction_type || raw.transaction || 'sprzedaz',
     added_at: raw.added_at || new Date().toISOString(),
-    image_url: proxyImg(raw.image || raw.image_url || ''),
+    image_url: proxyImg(raw.image || raw.image_url || (Array.isArray(raw.images) && raw.images[0]) || ''),
     images: (() => {
       const raw_imgs = (raw.images && raw.images.length) ? raw.images : (raw.image ? [raw.image] : []);
       return cleanImageList(raw_imgs).slice(0, 20).map(u => proxyImg(u));
@@ -926,20 +936,35 @@ async function loadListings() {
       }
     }
     const scrapedUrl = '/api/listings-scraped' + (apiParams.toString() ? '?' + apiParams.toString() : '');
-    // Fetch BOTH static + freshly scraped listings in parallel
-    const [staticRes, scrapedRes] = await Promise.allSettled([
-      fetch('/data/listings.json?v=' + Date.now()),
-      fetch(scrapedUrl)
-    ]);
-    let staticList = [];
-    if (staticRes.status === 'fulfilled' && staticRes.value.ok) {
-      const d = await staticRes.value.json();
-      staticList = d.listings || [];
-    }
+    // ── DWUFAZOWE ŁADOWANIE ──
+    //   Faza 1: szybki request z limit=PAGE_SIZE (~5x mniejszy payload) → pierwszy ekran kart w ~0.5s
+    //   Faza 2: pełny batch (1000) startuje równolegle → po dotarciu podmienia LISTINGS (AI mediany, filtry client-side)
+    //   `seq` chroni przed nadpisaniem wyników nowszego wyszukiwania starszym requestem.
+    const seq = (window.__loadSeq = (window.__loadSeq || 0) + 1);
+    const quickParams = new URLSearchParams(apiParams);
+    quickParams.set('limit', String(PAGE_SIZE));
+    const quickUrl = '/api/listings-scraped?' + quickParams.toString();
+    const fetchJson = (u) => fetch(u).then(r => r.ok ? r.json() : null).catch(() => null);
+    const fullPromise = fetchJson(scrapedUrl);
+    let fullApplied = false;
+    const quick = await fetchJson(quickUrl);
+    if (quick && seq === window.__loadSeq && !fullApplied) applyScrapedData(quick);
+    const full = await fullPromise;
+    if (seq !== window.__loadSeq) return;  // user zdążył zmienić wyszukiwanie
+    if (full) { fullApplied = true; applyScrapedData(full); }
+    else if (!quick) throw new Error('listings-scraped: brak odpowiedzi');
+  } catch (err) {
+    console.error('Fetch listings failed:', err);
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#f87171">❌ Błąd ładowania. Odśwież stronę.</div>';
+  }
+}
+
+// Przetwarza odpowiedź /api/listings-scraped: dedup → cluster cross-portal → normalize → AI verdicts → render
+function applyScrapedData(d) {
+    const count = document.getElementById('count');
     let scrapedList = [];
     let scrapedTotalCount = 0;  // total ofert w bazie (przed limit) — dla count display
-    if (scrapedRes.status === 'fulfilled' && scrapedRes.value.ok) {
-      const d = await scrapedRes.value.json();
+    {
       const raw = d.listings || [];
       scrapedTotalCount = Number(d.total_count) || 0;
       // ── Dedup wewnątrz scraped: apify > scrapingbee dla tego samego URL/external_id
@@ -1025,10 +1050,8 @@ async function loadListings() {
       scrapedList = clusteredList.map(normalizeScrapedListing).filter(Boolean);
     }
     // Merge with dedup by URL (scraped takes priority — fresher data)
-    const seenUrls = new Set(scrapedList.map(l => l.source_url || l.url));
-    LISTINGS = [...scrapedList, ...staticList.filter(l => !seenUrls.has(l.source_url || l.url))];
-    // ── Enrich: uzupelnij land_purpose/dzialka_type dla static działek z tytulu ──
-    // (static listings.json nie ma tego pola, wiec autodetekcja z title)
+    LISTINGS = scrapedList;
+    // ── Enrich: uzupelnij land_purpose/dzialka_type dla działek z tytulu ──
     LISTINGS.forEach(l => {
       if (l.type !== 'dzialka') return;
       if (l.land_purpose || l.dzialka_type) return;
@@ -1044,7 +1067,7 @@ async function loadListings() {
       else if (/inwestyc|komercyj|uslugow|przemyslow|zabudowa uslug/.test(tb)) purpose = 'inwestycyjna';
       if (purpose) { l.land_purpose = purpose; l.dzialka_type = purpose; }
     });
-    console.log(`Loaded: ${staticList.length} static + ${scrapedList.length} scraped = ${LISTINGS.length} total (baza: ${scrapedTotalCount})`);
+    console.log(`Loaded: ${scrapedList.length} scraped (baza: ${scrapedTotalCount}, ${d.limit ? 'limit ' + d.limit : ''})`);
     window.__scrapedTotalCount = scrapedTotalCount;
     // NATYCHMIAST ustaw count na total_count z bazy — nie czekaj na applyAllFilters
     if (scrapedTotalCount > 0) {
@@ -1104,17 +1127,14 @@ async function loadListings() {
       }
     } catch(e) { console.error('URL params init:', e); }
 
-    // Load CRM statuses for Firmowy user (async, non-blocking)
-    loadCrmStatuses().then(() => {
+    // Load CRM statuses for Firmowy user (async, non-blocking, tylko raz)
+    window.__crmPromise = window.__crmPromise || loadCrmStatuses();
+    window.__crmPromise.then(() => {
       if (typeof applyAllFilters === 'function') applyAllFilters();
     });
     // Zastosuj filtry od razu (uwzględnia parametry URL + domyślne UI)
     if (typeof applyAllFilters === 'function') applyAllFilters();
     else renderListings(LISTINGS);
-  } catch (err) {
-    console.error('Fetch listings failed:', err);
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#f87171">❌ Błąd ładowania. Odśwież stronę.</div>';
-  }
 }
 
 // CRM statuses (Firmowy) — bulk fetch all statuses for the company
@@ -1207,7 +1227,7 @@ function renderPage() {
     const hasPhoto = _dedup.length > 0;
     const imgList = _dedup.slice(0, 15);  // max 15 zdjec per karta
     const photoHtml = hasPhoto
-      ? `<img class="photo" data-imgs='${JSON.stringify(imgList).replace(/'/g, "&#39;")}' data-og='${(ogFallback || '').replace(/'/g, "&#39;")}' data-idx="0" src="${imgList[0]}" alt="" loading="lazy" decoding="async" onerror="window.__cardImgFallback(this)">`
+      ? `<img class="photo" data-imgs='${JSON.stringify(imgList).replace(/'/g, "&#39;")}' data-og='${(ogFallback || '').replace(/'/g, "&#39;")}' data-idx="0" src="${imgList[0]}" alt="" loading="${idx < 6 ? 'eager' : 'lazy'}"${idx < 3 ? ' fetchpriority="high"' : ''} decoding="async" onerror="window.__cardImgFallback(this)">`
       : '';
     const carouselHtml = (hasPhoto && imgList.length > 1) ? `
       <button class="card-img-nav prev" data-nav="prev" aria-label="Poprzednie zdjęcie" type="button">‹</button>

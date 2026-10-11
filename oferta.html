@@ -8,6 +8,8 @@
 <title id="pageTitle">Oferta — FinderDom.pl</title>
 <meta name="description" content="Szczegółowa analiza AI oferty nieruchomości. Wyliczamy czy cena jest okazją, w normie, czy zawyżona.">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://ireland.apollo.olxcdn.com" crossorigin>
+<link rel="preconnect" href="https://img1.staticmorizon.com.pl" crossorigin>
 
 <!-- GA4 -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-8BX5DVXPDV"></script>
@@ -646,9 +648,14 @@ async function loadOffer() {
               currentListing = normalized;
               window.__offer = normalized;
               renderOffer(normalized);
-              // W tle doładuj resztę listy dla porównywarki AI (5km) i "Podobnych ofert"
+              // W tle doładuj oferty z tego samego miasta/typu dla porównywarki AI (5km) i "Podobnych ofert"
+              // (filtr city+type zamiast całej bazy: ~10x mniejszy payload i trafniejsze porównania)
               setTimeout(() => {
-                fetch('/api/listings-scraped').then(r => r.ok ? r.json() : null).then(d => {
+                const bgParams = new URLSearchParams();
+                if (normalized.city) bgParams.set('city', normalized.city);
+                if (normalized.type) bgParams.set('type', normalized.type);
+                if (normalized.transaction) bgParams.set('transaction', normalized.transaction);
+                fetch('/api/listings-scraped' + (bgParams.toString() ? '?' + bgParams.toString() : '')).then(r => r.ok ? r.json() : null).then(d => {
                   if (d && d.listings) {
                     // Normalizujemy WSZYSTKIE (dla AI porównywarki potrzebujemy lat/lon/price_pm2/area_m2/market_type)
                     const normAll = d.listings.map(normalizeScrapedListing).filter(Boolean);
@@ -778,6 +785,8 @@ function proxyImg(url) {
   if (!u) return '';
   if (u.startsWith('/') || u.startsWith('data:') || u.startsWith('blob:')) return u;
   if (u.includes('wsrv.nl') || u.includes('images.weserv.nl') || u.includes('/api/img?')) return u;
+  // OLX / Domiporta CDN — publiczne, bez hotlink-protection → bezpośrednio (bez serverless hopu)
+  if (u.includes('apollo.olxcdn.com') || u.includes('galeria.domiporta.pl')) return u;
   return '/api/img?u=' + encodeURIComponent(u);
 }
 
@@ -905,7 +914,7 @@ function normalizeScrapedListing(raw) {
     market_type: raw.market_type || '',
     transaction: raw.transaction_type || raw.transaction || 'sprzedaz',
     added_at: raw.added_at || new Date().toISOString(),
-    image_url: proxyImg(raw.image || raw.image_url || ''),
+    image_url: proxyImg(raw.image || raw.image_url || (Array.isArray(raw.images) && raw.images[0]) || ''),
     images: (() => {
       const raw_imgs = (Array.isArray(raw.images) && raw.images.length) ? raw.images : ((raw.image || raw.image_url) ? [raw.image || raw.image_url] : []);
       return cleanImageList(raw_imgs).slice(0, 30).map(u => proxyImg(u));
@@ -1735,8 +1744,8 @@ loadOffer();
 })();
 </script>
 <!-- AdSense: Pod ofertą (wstawia się dynamicznie z JS w loadOffer) -->
-<script src="/scripts/ads.js"></script>
-<script src="/scripts/cookies.js"></script>
+<script src="/scripts/ads.js" defer></script>
+<script src="/scripts/cookies.js" defer></script>
 
 <!-- Modal Wycena Premium (32 zł) -->
 <div class="val-modal-bg" id="valModal">

@@ -11,6 +11,7 @@ window.FD_KREDYT = {
     // Expander — pośrednik, porównanie 20+ banków (MyLead, CPL) → przycisk główny
     { name: 'Expander — porównanie 20+ banków', short: 'Expander', note: 'bezpłatne porównanie ofert banków online', url: 'https://goradar.xyz/a/4xl59Tl2k6h3jk4' },
     { name: 'Bank Millennium', note: 'wniosek online w kilka minut', url: 'https://myleadltd.ebrokerpartner.pl/targetclick.php?param=eyJsZWFkSUQiOi0xLCJ0YXJnZXRJRCI6IjYwOTgiLCJwYXJ0bmVySUQiOiIzMTE1MTQiLCJkb21haW5JRCI6IjMxNTI2OCJ9' },
+    { name: 'Lendi — porównywarka kredytów', note: 'oferty 20+ banków online, bezpłatny doradca', url: 'https://goradar.xyz/a/rkPJYhDWqhLG89' },
     { name: 'PKO Bank Polski', note: 'największy bank hipoteczny w Polsce', url: 'https://goradar.xyz/a/NkVN8hM62Uyz1D' },
     { name: 'Kasa Stefczyka', note: 'kredyt hipoteczny, krótki wniosek online', url: 'https://goradar.xyz/a/1wg29CqAWkFmy75' },
     // { name: 'PKO BP', note: '…', url: 'https://…' },
@@ -91,7 +92,7 @@ window.FD_KREDYT = {
     const ctaAttrs = isAff ? 'target="_blank" rel="nofollow sponsored noopener"' : '';
     const others = banks.slice(1);
     const esc = (t) => String(t || '').replace(/</g, '&lt;');
-    const othersHtml = others.length ? `<div class="fdk-banks"><div class="fdk-banks-title">Inne banki</div>${others.map((b, i) => `<a class="fdk-bank" href="${b.url}" target="_blank" rel="nofollow sponsored noopener" data-k="bank" data-bank="${esc(b.name)}"><span>🏦 ${esc(b.name)}</span><span class="fdk-bank-note">${esc(b.note)}</span><span class="fdk-bank-go">→</span></a>`).join('')}</div>` : '';
+    const othersHtml = others.length ? `<div class="fdk-banks"><div class="fdk-banks-title">Porównywarki i banki</div>${others.map((b, i) => `<a class="fdk-bank" href="${b.url}" target="_blank" rel="nofollow sponsored noopener" data-k="bank" data-bank="${esc(b.name)}"><span>🏦 ${esc(b.name)}</span><span class="fdk-bank-note">${esc(b.note)}</span><span class="fdk-bank-go">→</span></a>`).join('')}</div>` : '';
 
     el.innerHTML = `
       <div class="fdk" data-fd-kredyt>

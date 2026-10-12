@@ -1587,6 +1587,7 @@ async def listings_scraped_endpoint(
     seller_type: Optional[str] = None,
     rooms: Optional[str] = None,   # "1", "2", "3", "4", "5+" lub "2,3,4" (multi)
     market_type: Optional[str] = None,  # "pierwotny" | "wtorny" | "pierwotny,wtorny"
+    portals: Optional[str] = None,  # "unique" (tylko 1 portal) | "multi" (2+ portali)
     year_from: Optional[int] = None,
     year_to: Optional[int] = None,
     price_from: Optional[float] = None,
@@ -1651,6 +1652,12 @@ async def listings_scraped_endpoint(
                 query["market_type"] = mt_vals[0]
             elif len(mt_vals) > 1:
                 query["market_type"] = {"$in": mt_vals}
+        # Obecność na portalach: unique = oferta tylko w 1 serwisie, multi = ta sama oferta na 2+ serwisach
+        # (tablica `sources`; "sources.1" istnieje ⇔ ≥2 elementy)
+        if portals == "multi":
+            query["sources.1"] = {"$exists": True}
+        elif portals == "unique":
+            query["sources.1"] = {"$exists": False}
         # Zakresy liczbowe (rok budowy / cena / m² / cena za m²) — na pełnej bazie, nie tylko na batchu 1000.
         # Rok budowy: strict (tylko oferty ze znanym rokiem) — inaczej wyniki zalewają oferty bez roku.
         def _range(field: str, lo, hi):
@@ -1712,14 +1719,14 @@ async def listings_scraped_endpoint(
         # Sortowanie: gdy filtr po mieście/typie już zawęża do ~500-2000 rekordów, można sortować po added_at.
         # Gdy BRAK filtrów (cała baza 50k) sort byłby zbyt kosztowny → skip sort dla wydajności.
         cursor = coll.find(query, projection)
-        if city or type or transaction or seller_type or market_type or has_range:
+        if city or type or transaction or seller_type or market_type or has_range or portals:
             cursor = cursor.sort("added_at", -1)
         cursor = cursor.skip(offset).limit(limit)
 
         # Total count (dla frontend: pokazuje "Znaleziono X ofert" nawet gdy załadowaliśmy tylko limit)
         async def _count():
             try:
-                if not (city or type or transaction or seller_type or rooms or market_type or use_geo or has_range):
+                if not (city or type or transaction or seller_type or rooms or market_type or use_geo or has_range or portals):
                     # Cała baza — estimated_document_count jest instant (używa metadata)
                     return await coll.estimated_document_count()
                 return await coll.count_documents(query, maxTimeMS=3000)

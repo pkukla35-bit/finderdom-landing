@@ -941,6 +941,11 @@ async function loadListings() {
     // "Bez określenia" (__unknown__) zostaje client-side — wtedy nie zawężamy po stronie API.
     const activeMarket = Array.from(document.querySelectorAll('.chip.active[data-filter="market_type"]')).map(c => c.dataset.value);
     if (activeMarket.length && !activeMarket.includes('__unknown__')) apiParams.set('market_type', activeMarket.join(','));
+    // Obecność na portalach (unikalne / multi-portal) → backend filtruje pełną bazę
+    const uniqOn = document.getElementById('chipUnique')?.classList.contains('active');
+    const multiOn = document.getElementById('chipMulti')?.classList.contains('active');
+    if (uniqOn && !multiOn) apiParams.set('portals', 'unique');
+    else if (multiOn && !uniqOn) apiParams.set('portals', 'multi');
     // Zakresy liczbowe (rok budowy, cena, m², zł/m²) → backend filtruje pełną bazę
     const numVal = (id) => { const v = parseFloat(document.getElementById(id)?.value || ''); return (isFinite(v) && v > 0) ? v : 0; };
     const rangeMap = { year_from: 'fYearFrom', year_to: 'fYearTo', price_from: 'fPriceFrom', price_to: 'fPriceTo', area_from: 'fAreaFrom', area_to: 'fAreaTo', ppm2_from: 'fPpm2From', ppm2_to: 'fPpm2To' };
@@ -2096,7 +2101,7 @@ document.getElementById('chipUnique')?.addEventListener('click', (e) => {
   if (!wasActive) {
     document.getElementById('chipMulti')?.classList.remove('active');
   }
-  applyAllFilters();
+  loadListings();  // filtr na backendzie (pełna baza) → refetch
 }, false);
 document.getElementById('chipMulti')?.addEventListener('click', (e) => {
   e.stopImmediatePropagation();
@@ -2106,7 +2111,7 @@ document.getElementById('chipMulti')?.addEventListener('click', (e) => {
   if (!wasActive) {
     document.getElementById('chipUnique')?.classList.remove('active');
   }
-  applyAllFilters();
+  loadListings();  // filtr na backendzie (pełna baza) → refetch
 }, false);
 
 // Inputy cena/powierzchnia/rok/promień — live

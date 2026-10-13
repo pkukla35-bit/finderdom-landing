@@ -113,9 +113,18 @@ def num(f: str, key: str):
         return None
 
 
+TODAY = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
 def date_of(f: str):
+    """Data aktu (YYYY-MM-DD). RCN ma literówki typu rok 8201 — takie odrzucamy (None)."""
     m = re.search(r"<ms:DOK_DATA[^>]*><gml:timePosition>([^<]*)</gml:timePosition>", f)
-    return m.group(1)[:10] if m else None
+    if not m:
+        return None
+    d = m.group(1)[:10]
+    if len(d) != 10 or d > TODAY or d < "1995-01-01":
+        return None
+    return d
 
 
 def pos_of(f: str):
@@ -154,13 +163,16 @@ def parse_lokal(f: str, fallback_city: str):
     ppm = price / area
     if ppm < 1500 or ppm > 70000:
         return None
+    dz = date_of(f)
+    if not dz:
+        return None
     gid = val(f, "gid")
     lat, lng = pos_of(f)
     city, street = addr_parts(val(f, "LOK_ADRES"))
     return {
         "gid": f"lokal-{gid}", "rodzaj_nieruchomosci": "lokal", "city": city or fallback_city,
         "ulica": street, "cena_brutto": round(price), "powierzchnia": round(area, 2), "cena_m2": round(ppm, 2),
-        "data_zawarcia": date_of(f), "rodzaj_rynku": market_of(f), "izby": int(num(f, "LOK_LICZBA_IZB") or 0) or None,
+        "data_zawarcia": dz, "rodzaj_rynku": market_of(f), "izby": int(num(f, "LOK_LICZBA_IZB") or 0) or None,
         "kondygnacja": int(num(f, "LOK_NR_KOND") or 0) if num(f, "LOK_NR_KOND") is not None else None,
         "teryt": val(f, "TERYT"), "lat": lat, "lng": lng, "rodzaj_trans": val(f, "TRAN_RODZAJ_TRANS"),
     }
@@ -181,13 +193,16 @@ def parse_dzialka(f: str, fallback_city: str):
     ppm = price / area
     if ppm < 2 or ppm > 6000:
         return None
+    dz = date_of(f)
+    if not dz:
+        return None
     gid = val(f, "gid")
     lat, lng = pos_of(f)
     city, street = addr_parts(val(f, "DZI_ADRES"))
     return {
         "gid": f"dzialka-{gid}", "rodzaj_nieruchomosci": "dzialka", "city": city or fallback_city,
         "ulica": street, "cena_brutto": round(price), "powierzchnia": round(area, 1), "cena_m2": round(ppm, 2),
-        "data_zawarcia": date_of(f), "rodzaj_rynku": market_of(f),
+        "data_zawarcia": dz, "rodzaj_rynku": market_of(f),
         "przeznaczenie": val(f, "DZI_PRZEZN_WMPZP"), "sposob_uzyt": val(f, "DZI_SPOSOB_UZYT"),
         "teryt": val(f, "TERYT"), "lat": lat, "lng": lng, "rodzaj_trans": val(f, "TRAN_RODZAJ_TRANS"),
     }
@@ -228,6 +243,9 @@ def main():
                 coll.drop_index(old)
                 log.info("Usunięto stary indeks %s", old)
         coll.create_index([("gid", ASCENDING)], unique=True)
+        bad = coll.delete_many({"$or": [{"data_zawarcia": {"$gt": TODAY}}, {"data_zawarcia": None}]}).deleted_count
+        if bad:
+            log.info("Usunięto %d rekordów z błędną datą (np. rok 8201)", bad)
         coll.create_index([("rodzaj_nieruchomosci", ASCENDING), ("lat", ASCENDING), ("lng", ASCENDING)])
         coll.create_index([("rodzaj_nieruchomosci", ASCENDING), ("city", ASCENDING), ("data_zawarcia", DESCENDING)])
 

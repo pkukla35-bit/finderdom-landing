@@ -3079,13 +3079,15 @@ async def get_rcn_stats(city: str, prop_type: str, area_m2: Optional[float] = No
     now = datetime.now(timezone.utc)
     since18 = (now - timedelta(days=548)).strftime("%Y-%m-%d")
     since36 = (now - timedelta(days=1096)).strftime("%Y-%m-%d")
+    today = now.strftime("%Y-%m-%d")
     proj = {"_id": 0, "cena_m2": 1, "powierzchnia": 1, "data_zawarcia": 1, "cena_brutto": 1, "ulica": 1,
             "izby": 1, "kondygnacja": 1, "rodzaj_rynku": 1, "lat": 1, "lng": 1, "city": 1}
     market_db = {"pierwotny": "pierwotny", "wtorny": "wtórny", "wtórny": "wtórny"}.get((market or "").lower())
     area_tol = 0.25 if kind == "lokal" else 0.40
 
     def base_q(since):
-        q: Dict[str, Any] = {"rodzaj_nieruchomosci": kind, "cena_m2": {"$gt": 0}, "data_zawarcia": {"$gte": since}}
+        q: Dict[str, Any] = {"rodzaj_nieruchomosci": kind, "cena_m2": {"$gt": 0},
+                             "data_zawarcia": {"$gte": since, "$lte": today}}  # RCN ma literówki typu rok 8201
         if area_m2 and area_m2 > 0:
             q["powierzchnia"] = {"$gte": area_m2 * (1 - area_tol), "$lte": area_m2 * (1 + area_tol)}
         if market_db and kind == "lokal":

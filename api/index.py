@@ -3128,7 +3128,7 @@ async def get_rcn_stats(city: str, prop_type: str, area_m2: Optional[float] = No
                 if len(cand) >= max(min_sample, 8):
                     docs = cand
                     radius_used = None if city_center_mode else km
-                    scope = (f"w {city.strip()} (do {km:g} km od centrum)" if city_center_mode else f"w promieniu {km:g} km") \
+                    scope = (f"w mieście {city.strip()} (do {km:g} km od centrum)" if city_center_mode else f"w promieniu {km:g} km") \
                         + (" (ostatnie 3 lata)" if since == since36 else "")
                     break
             if docs:

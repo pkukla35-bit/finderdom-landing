@@ -1317,6 +1317,41 @@ async def admin_timeseries(days: int = 30, admin: dict = Depends(require_admin))
 
 # --- Automatyczne czyszczenie nieaktualnych ofert (HEAD-check URL) ---
 @app.get("/api/admin/cleanup-stale")
+class AdminSetTierRequest(BaseModel):
+    tier: str = Field(pattern="^(free|individual|business)$")
+    days: Optional[int] = Field(default=None, ge=1, le=3650)  # None = bezterminowo (10 lat)
+
+
+@app.post("/api/admin/users/{user_id}/tier")
+async def admin_set_tier(user_id: str, body: AdminSetTierRequest, admin: dict = Depends(require_admin)):
+    """Admin: ręczne nadanie planu użytkownikowi (np. konto własnej firmy, partner, test).
+    tier=free → odbiera plan. days=None → bezterminowo (10 lat)."""
+    users_col = await users_collection()
+    try:
+        oid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(400, "Nieprawidłowe id użytkownika")
+    now = datetime.now(timezone.utc)
+    if body.tier == "free":
+        upd = {"tier": "free", "expires_at": None, "is_trial": False, "updated_at": now}
+    else:
+        upd = {
+            "tier": body.tier,
+            "expires_at": now + timedelta(days=body.days or 3650),
+            "is_trial": False,
+            "subscription_status": "active",
+            "granted_by_admin": admin.get("email"),
+            "updated_at": now,
+        }
+        if body.tier == "business":
+            upd["role"] = "master"
+    res = await users_col.update_one({"_id": oid}, {"$set": upd})
+    if not res.matched_count:
+        raise HTTPException(404, "Użytkownik nie istnieje")
+    u = await users_col.find_one({"_id": oid})
+    return {"ok": True, "user": public_user(u)}
+
+
 @app.post("/api/admin/cleanup-stale")
 async def admin_cleanup_stale(
     request: Request,

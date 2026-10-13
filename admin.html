@@ -77,6 +77,8 @@
     .nav-links a{padding:4px 8px;font-size:11px}
     .charts-grid{grid-template-columns:1fr}
   }
+.btn-mini{background:rgba(255,184,0,0.15);border:1px solid rgba(255,184,0,0.4);color:#FFB800;padding:6px 10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.btn-mini:hover{background:rgba(255,184,0,0.3)}
 </style>
 </head>
 <body>
@@ -441,6 +443,25 @@ function tierTag(tier, isTrial){
   return `<span class="tag ${cls}">${label}</span>${trialBadge}`;
 }
 
+// Admin: ręczne nadanie planu (free / individual / business), bezterminowo lub na N dni
+async function grantTier(id, email){
+  const tier = prompt(`Plan dla ${email}:\n- business (Firmowy)\n- individual (Osobisty)\n- free (odbierz plan)`, 'business');
+  if (!tier || !['business','individual','free'].includes(tier.trim())) return;
+  let days = null;
+  if (tier.trim() !== 'free') {
+    const d = prompt('Na ile dni? (puste = bezterminowo)', '');
+    if (d === null) return;
+    if (d.trim()) { days = parseInt(d, 10); if (!(days > 0)) { alert('Podaj liczbę dni > 0'); return; } }
+  }
+  try {
+    const r = await fetch(API_BASE + `/admin/users/${id}/tier`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ tier: tier.trim(), days }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+    alert(`✅ ${email}: plan ${d.user.tier}${d.user.expires_at ? ' do ' + fmtDate(d.user.expires_at) : ''}`);
+    loadUsers();
+  } catch(e){ alert('Błąd: ' + e.message); }
+}
+
 async function loadUsers(){
   try {
     const d = await api('/admin/users?limit=100');
@@ -458,12 +479,13 @@ async function loadUsers(){
         <td>${escapeHtml(u.company_name || '—')}</td>
         <td>${fmtDate(u.expires_at)}</td>
         <td>${fmtDateShort(u.created_at)}</td>
+        <td><button class="btn-mini" onclick="grantTier('${u.id}','${escapeHtml(u.email)}')">Nadaj plan</button></td>
       </tr>
     `).join('');
     document.getElementById('usersTable').innerHTML = `
       <table>
         <thead><tr>
-          <th>Email</th><th>Typ</th><th>Plan</th><th>NIP</th><th>Firma</th><th>Wygasa</th><th>Rejestracja</th>
+          <th>Email</th><th>Typ</th><th>Plan</th><th>NIP</th><th>Firma</th><th>Wygasa</th><th>Rejestracja</th><th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>

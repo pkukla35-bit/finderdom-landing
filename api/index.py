@@ -1660,14 +1660,17 @@ async def listings_scraped_endpoint(
             query["sources.1"] = {"$exists": True}
         elif portals == "unique":
             query["sources.1"] = {"$exists": False}
-        # Data dodania (added_at przechowywane jako datetime)
-        def _parse_dt(v):
+        # Data dodania — added_at przechowywane jako ISO string (UTC, "2026-10-03T09:51:45..."),
+        # więc porównujemy leksykograficznie znormalizowanym ISO (format YYYY-MM-DDTHH:MM:SS).
+        def _norm_iso(v):
             try:
                 dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-                return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+                if dt.tzinfo:
+                    dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+                return dt.strftime("%Y-%m-%dT%H:%M:%S")
             except Exception:
                 return None
-        dt_from, dt_to = (_parse_dt(added_from) if added_from else None), (_parse_dt(added_to) if added_to else None)
+        dt_from, dt_to = (_norm_iso(added_from) if added_from else None), (_norm_iso(added_to) if added_to else None)
         if dt_from or dt_to:
             cond = {}
             if dt_from:

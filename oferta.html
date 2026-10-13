@@ -1416,6 +1416,7 @@ async function renderOffer(l, all) {
         transaction: l.transaction || 'sprzedaz',
       });
       if (l.area_m2) params.set('area', String(l.area_m2));
+      if (l.price) params.set('price', String(l.price));
       if (l.market_type) params.set('market_type', l.market_type);
       if (l.lat != null && l.lon != null) { params.set('lat', String(l.lat)); params.set('lon', String(l.lon)); }
       const exId = String(l.external_id || l.id || '').replace(/^otodom-/, '');

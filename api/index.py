@@ -1866,6 +1866,7 @@ async def similar_offers_endpoint(
     lon: Optional[float] = None,
     market_type: Optional[str] = None,
     exclude_id: Optional[str] = None,
+    price: Optional[float] = None,  # cena analizowanej oferty — wyklucza jej duplikaty z innych portali
     limit: int = 50,
 ):
     """
@@ -2006,6 +2007,9 @@ async def similar_offers_endpoint(
         a = d.get("area_m2") or 0
         if p > 1000 and a > 5:
             if ex_id and str(d.get("external_id") or "") == ex_id:
+                continue
+            # Ta sama oferta na innym portalu (identyczna cena i metraż) — to nie jest „podobna”, to duplikat
+            if price and area and p == price and round(a) == round(area):
                 continue
             # Dedup cross-portal: ta sama oferta (cena + metraż + miasto) na kilku serwisach liczy się raz
             key = (p, round(a), (d.get("city") or "").lower())

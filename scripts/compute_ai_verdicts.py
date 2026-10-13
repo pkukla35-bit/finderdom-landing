@@ -130,6 +130,7 @@ def main():
 
     now = datetime.now(timezone.utc).isoformat()
     updates, stats = [], defaultdict(int)
+    by_type = defaultdict(lambda: defaultdict(int))
     for d in docs:
         price = d.get("price") or 0
         res = None  # (median, n, scope)
@@ -166,10 +167,13 @@ def main():
                 fields = {"ai_verdict": "none", "ai_delta_pct": 0, "ai_median_ppm2": None, "ai_sample_n": 0,
                           "ai_scope": "za mało podobnych ofert w okolicy", "ai_computed_at": now}
         stats[fields["ai_verdict"]] += 1
+        by_type[(d["_t"], d["_tr"])][fields["ai_verdict"]] += 1
         if d.get("ai_verdict") != fields["ai_verdict"] or d.get("ai_delta_pct") != fields["ai_delta_pct"] or not d.get("ai_verdict"):
             updates.append(UpdateOne({"_id": d["_id"]}, {"$set": fields}))
 
     print(f"Computed in {time.time()-t0:.1f}s. Verdicts: {dict(stats)}. Changed: {len(updates)}")
+    for k in sorted(by_type):
+        print(f"  {k[0]}/{k[1]}: {dict(by_type[k])}")
     if args.dry_run:
         print("(dry run — nothing written)")
         return

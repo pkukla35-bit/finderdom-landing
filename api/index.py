@@ -3173,6 +3173,7 @@ async def get_rcn_stats(city: str, prop_type: str, area_m2: Optional[float] = No
             "kondygnacja": d.get("kondygnacja"), "rynek": d.get("rodzaj_rynku"),
             "dist_km": round(_haversine_km(lat, lon, d["lat"], d["lng"]), 1)
             if lat is not None and lon is not None and d.get("lat") is not None and d.get("lng") is not None else None,
+            "lat": d.get("lat"), "lon": d.get("lng"), "city": d.get("city"),
         })
 
     return {
@@ -4775,8 +4776,65 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
         _p3_subtitle,
         ParagraphStyle("p3s", fontName=face, fontSize=8, leading=11, textColor=TEXT_MUTED, spaceAfter=6)))
 
+    _rcn_recent = (rcn_stats or {}).get("recent") if rcn_source_label else None
+    if _rcn_recent:
+        # ── Realne transakcje z RCN: mapa + tabela (bez syntetycznych dat i mnożnika 0.94) ──
+        if map_lat is not None and map_lon is not None:
+            tx_pts = [{"lat": t["lat"], "lon": t["lon"], "price_pm2": t.get("cena_m2"), "id": f"rcn-{i}"}
+                      for i, t in enumerate(_rcn_recent) if t.get("lat") is not None and t.get("lon") is not None and t.get("cena_m2")]
+            if tx_pts:
+                map_bytes2 = _build_map_with_price_labels(map_lat, map_lon, tx_pts[:12], width=1000, height=560)
+                if map_bytes2:
+                    from reportlab.platypus import Image as RLImage
+                    img = RLImage(io.BytesIO(map_bytes2), width=180*mm, height=100*mm)
+                    img.hAlign = "CENTER"
+                    story.append(img)
+                    story.append(Paragraph(
+                        "© Mapbox · © OpenStreetMap · Realne ceny transakcyjne z RCN (zł/m²) — lokalizacja wg adresu z aktu",
+                        ParagraphStyle("attr2r", fontName=face, fontSize=6, textColor=TEXT_MUTED, alignment=TA_CENTER)))
+                    story.append(Spacer(1, 4*mm))
+        has_floor_r = any(t.get("kondygnacja") is not None for t in _rcn_recent)
+        tbl_data = [["Adres", "Data\ntransakcji", "Powierzchnia", "Izby"] + (["Piętro"] if has_floor_r else []) + ["Cena za m²", "Cena"]]
+        cell_style = ParagraphStyle("cellr", fontName=face, fontSize=7.5, leading=10, textColor=TEXT_DARK, alignment=TA_LEFT)
+        cell_center = ParagraphStyle("cellrc", fontName=face, fontSize=7.5, leading=10, textColor=TEXT_DARK, alignment=TA_CENTER)
+        for t in _rcn_recent[:12]:
+            addr = ", ".join(x for x in [t.get("ulica"), t.get("city")] if x) or "—"
+            if t.get("dist_km") is not None:
+                addr += f" ({t['dist_km']} km)"
+            dd = t.get("data") or ""
+            date_str = f"{dd[8:10]}.{dd[5:7]}.{dd[:4]}" if len(dd) >= 10 else "—"
+            row = [Paragraph(addr, cell_style), Paragraph(date_str, cell_center),
+                   Paragraph(f"{t.get('powierzchnia')} m²" if t.get("powierzchnia") else "—", cell_center),
+                   Paragraph(str(t.get("izby") or "—"), cell_center)]
+            if has_floor_r:
+                row.append(Paragraph(str(t.get("kondygnacja")) if t.get("kondygnacja") is not None else "—", cell_center))
+            row.extend([Paragraph(fmt_pm2(int(t.get("cena_m2") or 0)), cell_center),
+                        Paragraph(fmt_pln(int(t.get("cena") or 0)), cell_center)])
+            tbl_data.append(row)
+        col_w = [52*mm, 22*mm, 22*mm, 14*mm, 15*mm, 27*mm, 28*mm] if has_floor_r else [58*mm, 24*mm, 24*mm, 16*mm, 29*mm, 29*mm]
+        tbl = Table(tbl_data, colWidths=col_w)
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,0), PRIMARY), ("TEXTCOLOR", (0,0),(-1,0), colors.white),
+            ("FONTNAME", (0,0),(-1,0), face_bold), ("FONTSIZE", (0,0),(-1,0), 8),
+            ("FONTNAME", (0,1),(-1,-1), face), ("FONTSIZE", (0,1),(-1,-1), 8),
+            ("TEXTCOLOR", (0,1),(-1,-1), TEXT_DARK), ("ROWBACKGROUNDS", (0,1),(-1,-1), [colors.white, BG_LIGHT]),
+            ("BOX", (0,0),(-1,-1), 0.3, BORDER), ("LINEBELOW", (0,0),(-1,0), 0.5, PRIMARY_DARK),
+            ("INNERGRID", (0,1),(-1,-1), 0.2, BORDER), ("ALIGN", (1,0),(-1,-1), "CENTER"),
+            ("ALIGN", (0,0),(0,-1), "LEFT"), ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
+            ("TOPPADDING", (0,0),(-1,-1), 5), ("BOTTOMPADDING", (0,0),(-1,-1), 5), ("LEFTPADDING", (0,0),(-1,-1), 6),
+        ]))
+        story.append(tbl)
+        story.append(Spacer(1, 3*mm))
+        _rs = rcn_stats
+        _trend = f" Trend 6 mies.: {'+' if _rs['trend_pct'] > 0 else ''}{_rs['trend_pct']}%." if _rs.get("trend_pct") is not None else ""
+        story.append(Paragraph(
+            f"Statystyka RCN ({_rs['n']} transakcji{', ' + _rs['scope'] if _rs.get('scope') else ''}): mediana {fmt_pm2(_rs['median_pm2'])}, "
+            f"kwartyle {fmt_pm2(_rs['p25_pm2'])} – {fmt_pm2(_rs['p75_pm2'])}, zakres 5–95%: {fmt_pm2(_rs['min_pm2'])} – {fmt_pm2(_rs['max_pm2'])}. "
+            f"Okres: {(_rs.get('first_date') or '')[:7]} – {(_rs.get('last_date') or '')[:7]}.{_trend} "
+            "Źródło: Rejestr Cen Nieruchomości, GUGiK (geoportal.gov.pl); dane trafiają do rejestru z opóźnieniem 1–3 miesięcy.",
+            ParagraphStyle("rcnsum", fontName=face, fontSize=7.5, leading=10.5, textColor=TEXT_MUTED)))
     # Reuse map from page 2 (with tx prices instead of listing prices)
-    if map_lat is not None and map_lon is not None:
+    if not _rcn_recent and map_lat is not None and map_lon is not None:
         offers_with_gps = []
         for o in local_offers[:10]:
             olat, olon = _offer_gps(o)
@@ -4809,7 +4867,7 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
                     ParagraphStyle("attr2", fontName=face, fontSize=6, textColor=TEXT_MUTED, alignment=TA_CENTER)))
                 story.append(Spacer(1, 4*mm))
 
-    if local_offers:
+    if not _rcn_recent and local_offers:
         # Check if any offer has valid floor data
         has_floor_data3 = any(
             o.get("floor") is not None and o.get("floor") > 0

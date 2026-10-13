@@ -1373,6 +1373,8 @@ async function renderOffer(l, all) {
     for (const km of radiusSteps) {
       const nearby = all.filter(x =>
         x.id !== l.id &&
+        // duplikat tej samej oferty z innego portalu (identyczna cena + metraż) — nie porównujemy oferty z samą sobą
+        !(x.price === l.price && Math.round(x.area_m2 || 0) === Math.round(thisArea)) &&
         x.type === l.type &&
         x.transaction === l.transaction &&
         // 🎯 Ten sam rynek (pierwotny vs wtórny) — bo ceny są bardzo różne

@@ -941,6 +941,9 @@ async function loadListings() {
     // "Bez określenia" (__unknown__) zostaje client-side — wtedy nie zawężamy po stronie API.
     const activeMarket = Array.from(document.querySelectorAll('.chip.active[data-filter="market_type"]')).map(c => c.dataset.value);
     if (activeMarket.length && !activeMarket.includes('__unknown__')) apiParams.set('market_type', activeMarket.join(','));
+    // Typ domu (wolnostojący / bliźniak / szeregowiec…) → backend filtruje pełną bazę (6k domów, nie batch 1000)
+    const activeBt = Array.from(document.querySelectorAll('#subTypeChips .chip.active[data-filter="building_type"]')).map(c => c.dataset.value);
+    if (activeBt.length) apiParams.set('building_type', activeBt.join(','));
     // Data dodania → backend (added_at w pełnej bazie)
     (function(){
       const mode = document.querySelector('.date-chip.active')?.dataset.date || 'all';
@@ -1647,13 +1650,12 @@ function updateSubType(type){
       });
     });
   }
-  // Podpięcie handlerów: chipy z data-filter wywołują applyAllFilters, reszta tylko toggle
+  // Podpięcie handlerów: typ domu → refetch z API (backend filtruje pełną bazę); reszta client-side
   document.querySelectorAll('#subTypeChips .chip').forEach(c => {
     c.addEventListener('click', () => {
       c.classList.toggle('active');
-      if (c.hasAttribute('data-filter') && typeof applyAllFilters === 'function') {
-        applyAllFilters();
-      }
+      if (c.dataset.filter === 'building_type' && typeof loadListings === 'function') loadListings();
+      else if (c.hasAttribute('data-filter') && typeof applyAllFilters === 'function') applyAllFilters();
     });
   });
 
@@ -1888,6 +1890,9 @@ function applyAllFilters() {
 
     // Dynamic filters (typ budynku, standard, market_type, has_*)
     for (const [key, allowed] of Object.entries(f.dynamic)) {
+      // building_type (typ domu) filtruje backend na pełnej bazie — nie odrzucaj ponownie client-side
+      // (fallback z tytułu po stronie API może dać inny podtyp niż lokalna detekcja)
+      if (key === 'building_type') continue;
       const v = l[key];
       // Boolean features: chip "true" matches when listing is truthy
       if (allowed.has("true")) {

@@ -1622,6 +1622,7 @@ async def listings_scraped_endpoint(
     seller_type: Optional[str] = None,
     rooms: Optional[str] = None,   # "1", "2", "3", "4", "5+" lub "2,3,4" (multi)
     market_type: Optional[str] = None,  # "pierwotny" | "wtorny" | "pierwotny,wtorny"
+    building_type: Optional[str] = None,  # typ domu: "wolnostojacy,blizniak,szeregowiec,siedliskowy,rezydencja,letniskowy"
     portals: Optional[str] = None,  # "unique" (tylko 1 portal) | "multi" (2+ portali)
     added_from: Optional[str] = None,  # ISO datetime — oferty dodane od
     added_to: Optional[str] = None,    # ISO datetime — oferty dodane do (exclusive)
@@ -1689,6 +1690,27 @@ async def listings_scraped_endpoint(
                 query["market_type"] = mt_vals[0]
             elif len(mt_vals) > 1:
                 query["market_type"] = {"$in": mt_vals}
+        # Typ domu (wolnostojący / bliźniak / szeregowiec / ...) — na pełnej bazie.
+        # ~25% domów nie ma building_type w DB → dla nich fallback: regex po tytule (spójny z detekcją na froncie).
+        has_bt = False
+        if building_type:
+            bt_regex = {
+                "wolnostojacy": r"wolno.?stoj|jednorodzinn|parterow|pi[eę]trow|kanadyjs|szkieletow|dom.z.bali|pasywn",
+                "blizniak": r"bli[zź]niak|bli[zź]niacz|dwurodzin|duplex|dwupak",
+                "szeregowiec": r"szereg(?:ow|owc|owk)|w szeregu|segment|townhouse",
+                "siedliskowy": r"siedlisk|zagrod|gospodarstw",
+                "rezydencja": r"rezydencj|\bwilla\b|willow|dw[oó]r(?:ek|ku|em|u|a)|pa[lł]ac|posiad[lł]o[sś][cć]",
+                "letniskowy": r"letnisk|rekreac|\brod\b|weekendow",
+            }
+            bt_vals = [b.strip().lower() for b in building_type.split(",") if b.strip().lower() in bt_regex]
+            if bt_vals:
+                has_bt = True
+                title_pat = "|".join(bt_regex[b] for b in bt_vals)
+                bt_or = [
+                    {"building_type": {"$in": bt_vals}},
+                    {"building_type": {"$in": [None, ""]}, "title": {"$regex": title_pat, "$options": "i"}},
+                ]
+                query.setdefault("$and", []).append({"$or": bt_or})
         # Obecność na portalach: unique = oferta tylko w 1 serwisie, multi = ta sama oferta na 2+ serwisach
         # (tablica `sources`; "sources.1" istnieje ⇔ ≥2 elementy)
         if portals == "multi":
@@ -1775,14 +1797,14 @@ async def listings_scraped_endpoint(
         # Sortowanie: gdy filtr po mieście/typie już zawęża do ~500-2000 rekordów, można sortować po added_at.
         # Gdy BRAK filtrów (cała baza 50k) sort byłby zbyt kosztowny → skip sort dla wydajności.
         cursor = coll.find(query, projection)
-        if city or type or transaction or seller_type or market_type or has_range or portals or has_date:
+        if city or type or transaction or seller_type or market_type or has_bt or has_range or portals or has_date:
             cursor = cursor.sort("added_at", -1)
         cursor = cursor.skip(offset).limit(limit)
 
         # Total count (dla frontend: pokazuje "Znaleziono X ofert" nawet gdy załadowaliśmy tylko limit)
         async def _count():
             try:
-                if not (city or type or transaction or seller_type or rooms or market_type or use_geo or has_range or portals or has_date):
+                if not (city or type or transaction or seller_type or rooms or market_type or has_bt or use_geo or has_range or portals or has_date):
                     # Cała baza — estimated_document_count jest instant (używa metadata)
                     return await coll.estimated_document_count()
                 return await coll.count_documents(query, maxTimeMS=3000)

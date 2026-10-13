@@ -347,6 +347,7 @@ gtag('set', 'url_passthrough', false);
           </div>
         </div>
 
+        <div id="rcnPreview" style="display:none;margin:4px 0 14px;padding:12px 14px;border-radius:12px;background:rgba(255,184,0,0.07);border:1px solid rgba(255,184,0,0.25);font-size:13px;line-height:1.5;color:#c5d0e6"></div>
         <button type="submit" class="val-btn" id="vSubmit">💳 Zapłać 32 zł kartą / BLIK →</button>
         <div class="val-small">Płatność bezpieczna przez Stripe. Po opłacie natychmiast wygenerujemy Twój PDF.</div>
       </form>
@@ -373,6 +374,45 @@ gtag('set', 'url_passthrough', false);
   // Ukryj pole "Winda" gdy typ to Dom lub Działka
   document.getElementById('vType').addEventListener('change', function(){
     document.body.dataset.vtype = this.value;
+  });
+
+  // 🏛️ Podgląd danych RCN dla wpisanej lokalizacji (realne akty notarialne, GUGiK)
+  let rcnTimer = null, rcnLastKey = '';
+  async function previewRcn(){
+    const box = document.getElementById('rcnPreview');
+    const city = document.getElementById('vCity').value.trim();
+    const type = document.getElementById('vType').value;
+    const area = parseFloat(document.getElementById('vArea').value) || 0;
+    const market = (document.getElementById('vMarket') || {}).value || '';
+    if (city.length < 3 || !type) { box.style.display = 'none'; return; }
+    if (type === 'dom') {
+      box.style.display = 'block';
+      box.innerHTML = '🏡 Dla domów Rejestr Cen Nieruchomości nie publikuje powierzchni użytkowej, więc raport oprze się na aktualnych cenach ofertowych domów w okolicy.';
+      return;
+    }
+    const key = [city, type, area, market].join('|');
+    if (key === rcnLastKey) return;
+    rcnLastKey = key;
+    try {
+      const p = new URLSearchParams({ city, type });
+      if (area > 0) p.set('area', String(area));
+      if (market) p.set('market', market);
+      const r = await fetch('/api/rcn/stats?' + p.toString());
+      const d = r.ok ? await r.json() : null;
+      box.style.display = 'block';
+      if (d && d.ok && d.median_pm2) {
+        const fmt = n => Number(n).toLocaleString('pl-PL');
+        box.innerHTML = `🏛️ <strong style="color:#FFB800">Realne dane z Rejestru Cen Nieruchomości:</strong> dla <strong>${city}</strong> mamy <strong>${fmt(d.n)} transakcji</strong>${area > 0 ? ' o podobnym metrażu' : ''} (akty notarialne, ostatnia ${d.last_date || '—'}). Mediana <strong>${fmt(d.median_pm2)} zł/m²</strong>, przedział ${fmt(d.p25_pm2)}–${fmt(d.p75_pm2)} zł/m². Raport pokaże konkretne transakcje z okolicy.`;
+      } else {
+        box.innerHTML = `🏛️ Dla <strong>${city}</strong> nie mamy jeszcze wystarczającej liczby transakcji w Rejestrze Cen Nieruchomości — raport oprze się na aktualnych cenach ofertowych z okolicy.`;
+      }
+    } catch (e) { box.style.display = 'none'; }
+  }
+  ['vCity','vType','vArea','vMarket'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => { clearTimeout(rcnTimer); rcnTimer = setTimeout(previewRcn, 600); });
+    el.addEventListener('change', () => { clearTimeout(rcnTimer); rcnTimer = setTimeout(previewRcn, 200); });
   });
 
   async function submitValuation(e){    e.preventDefault();

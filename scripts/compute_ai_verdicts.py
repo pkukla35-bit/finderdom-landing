@@ -36,14 +36,27 @@ def cell_of(lat, lng):
     return (int(lat // CELL), int(lng // CELL))
 
 
-def verdict_for(delta):
-    if delta <= -50:
+# Progi (%, odchylenie od mediany): (outlier_low, deal, normal_hi, over_hi)
+# Domy i działki mają naturalnie dużo większy rozrzut cen/m² (działka, stan, standard) niż mieszkania,
+# więc progi są szersze — inaczej 1/4 domów lądowała w „outlier”.
+THRESHOLDS = {
+    "mieszkanie": (-50, -12, 12, 35),
+    "lokal": (-50, -12, 12, 35),
+    "dom": (-65, -15, 15, 45),
+    "dzialka": (-70, -20, 20, 60),
+}
+DEFAULT_THR = (-50, -12, 12, 35)
+
+
+def verdict_for(delta, t=""):
+    lo, deal, hi, over = THRESHOLDS.get(t, DEFAULT_THR)
+    if delta <= lo:
         return "outlier"
-    if delta <= -12:
+    if delta <= deal:
         return "deal"
-    if delta < 12:
+    if delta < hi:
         return "normal"
-    if delta < 35:
+    if delta < over:
         return "over"
     return "outlier"
 
@@ -160,7 +173,7 @@ def main():
             if res:
                 med, n, scope = res
                 delta = (d["_ppm"] - med) / med * 100
-                v = verdict_for(delta)
+                v = verdict_for(delta, t)
                 fields = {"ai_verdict": v, "ai_delta_pct": round(delta), "ai_median_ppm2": round(med),
                           "ai_sample_n": n, "ai_scope": scope, "ai_computed_at": now}
             else:

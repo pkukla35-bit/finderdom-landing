@@ -3102,9 +3102,19 @@ async def get_rcn_stats(city: str, prop_type: str, area_m2: Optional[float] = No
     docs: list = []
     radius_used = None
     scope = ""
+    # Brak GPS, ale znamy miasto → środek miasta z city-coords.js (promień szerszy, bo to „całe miasto”)
+    city_center_mode = False
+    if (lat is None or lon is None) and city:
+        cc = CITY_COORDS.get(_normalize_city_name(city))
+        if cc:
+            lat, lon = cc
+            city_center_mode = True
     # 1) GEO
     if lat is not None and lon is not None:
-        steps = [1.0, 2.0, 3.5, 6.0] if kind == "lokal" else [3.0, 6.0, 12.0]
+        if city_center_mode:
+            steps = [4.0, 8.0, 12.0] if kind == "lokal" else [8.0, 15.0]
+        else:
+            steps = [1.0, 2.0, 3.5, 6.0] if kind == "lokal" else [3.0, 6.0, 12.0]
         for since in (since18, since36):
             for km in steps:
                 dlat = km / 111.0
@@ -3116,17 +3126,19 @@ async def get_rcn_stats(city: str, prop_type: str, area_m2: Optional[float] = No
                 cand = [d for d in cand if d.get("lat") is not None and d.get("lng") is not None
                         and _haversine_km(lat, lon, d["lat"], d["lng"]) <= km]
                 if len(cand) >= max(min_sample, 8):
-                    docs, radius_used = cand, km
-                    scope = f"w promieniu {km:g} km" + (" (ostatnie 3 lata)" if since == since36 else "")
+                    docs = cand
+                    radius_used = None if city_center_mode else km
+                    scope = (f"w {city.strip()} (do {km:g} km od centrum)" if city_center_mode else f"w promieniu {km:g} km") \
+                        + (" (ostatnie 3 lata)" if since == since36 else "")
                     break
             if docs:
                 break
     # 2) Miasto
     if not docs and city:
-        city_regex = "^" + re.escape(city.strip()) + "$"
+        city_regex = "^" + _build_diacritic_regex(city.strip()) + "$"
         for since in (since18, since36):
             q = base_q(since)
-            q["city"] = {"$regex": city_regex, "$options": "i"}
+            q["city"] = {"$regex": city_regex}
             docs = await run(q)
             if len(docs) >= min_sample:
                 scope = f"w mieście {city.strip()}"

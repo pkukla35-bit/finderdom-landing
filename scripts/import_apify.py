@@ -276,7 +276,7 @@ def normalize(item: dict, prop_type_hint: str = None) -> dict | None:
         "price": price,
         "area_m2": area,
         "price_pm2": ppm2,
-        "rooms": item.get("rooms"),
+        "rooms": item.get("rooms") or detect_rooms_from_text(item.get("title") or "", item.get("descriptionText") or ""),
         "floor": item.get("floor"),
         "build_year": item.get("buildYear"),
         "lat": item.get("latitude"),
@@ -298,6 +298,30 @@ def normalize(item: dict, prop_type_hint: str = None) -> dict | None:
         "building_type": building_type,
         "scraped_via": "apify",
     }
+
+
+_ROOM_WORDS = {
+    "jednopokojow": 1, "kawalerk": 1, "dwupokojow": 2, "trzypokojow": 3, "czteropokojow": 4,
+    "pięciopokojow": 5, "pieciopokojow": 5, "sześciopokojow": 6, "szesciopokojow": 6,
+    "siedmiopokojow": 7, "ośmiopokojow": 8, "osmiopokojow": 8,
+}
+_ROOM_RE = re.compile(r"(?<!\d)(\d{1,2})\s*[- ]?\s*(?:pok(?:oj|oje|ój|oi|\.|owe|owy|ojow)|pomieszcze[nń])", re.I)
+
+
+def detect_rooms_from_text(title: str, description: str = "") -> int | None:
+    """Fallback gdy portal nie podał liczby pokoi: '5 pokoi', '4-pokojowy', 'trzypokojowy', 'kawalerka'."""
+    text = f"{title or ''} {(description or '')[:600]}".lower()
+    if not text.strip():
+        return None
+    for k, v in _ROOM_WORDS.items():
+        if k in text:
+            return v
+    m = _ROOM_RE.search(text)
+    if m:
+        n = int(m.group(1))
+        if 1 <= n <= 30:
+            return n
+    return None
 
 
 def fetch_dataset(dataset_id: str, token: str) -> list:

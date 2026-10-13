@@ -1,0 +1,72 @@
+name: Backfill liczby pokoi (rooms) z tytułu/opisu
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Tylko podglad (nie zapisuj)'
+        required: false
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+        default: 'no'
+      type_filter:
+        description: 'Typ nieruchomości (dom / mieszkanie / puste = oba)'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install pymongo
+      - name: Backfill rooms
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+          DRY: ${{ inputs.dry_run }}
+          TYPE_FILTER: ${{ inputs.type_filter }}
+        run: |
+          python3 <<'PYEOF'
+          import os, sys
+          from collections import Counter
+          from pymongo import MongoClient, UpdateOne
+          sys.path.insert(0, 'scripts')
+          from import_apify import detect_rooms_from_text
+
+          dry = os.environ.get('DRY') == 'yes'
+          tf = (os.environ.get('TYPE_FILTER') or '').strip().lower()
+          db = MongoClient(os.environ['MONGODB_URI'])[os.environ.get('MONGODB_DB', 'finderdom')]
+
+          q = {'$or': [{'rooms': None}, {'rooms': {'$exists': False}}, {'rooms': 0}]}
+          q['type'] = {'$regex': f'^{tf}', '$options': 'i'} if tf else {'$in': ['dom', 'mieszkanie']}
+          docs = list(db.listings.find(q, {'_id': 1, 'title': 1, 'description': 1, 'type': 1}))
+          print(f'Kandydaci bez rooms (type={tf or "dom+mieszkanie"}): {len(docs)}')
+
+          updates, stats, samples = [], Counter(), []
+          for d in docs:
+              n = detect_rooms_from_text(d.get('title') or '', d.get('description') or '')
+              if n:
+                  stats[n] += 1
+                  updates.append(UpdateOne({'_id': d['_id']}, {'$set': {'rooms': n}}))
+                  if len(samples) < 25:
+                      samples.append(f"  {n} <- {(d.get('title') or '')[:90]}")
+          print(f'Rozpoznano: {len(updates)} / {len(docs)}')
+          for k, v in sorted(stats.items()):
+              print(f'  {k} pok.: {v}')
+          print('Próbki:'); print('\n'.join(samples))
+
+          if dry:
+              print('(DRY RUN — nic nie zapisano)')
+          elif updates:
+              total = 0
+              for i in range(0, len(updates), 500):
+                  total += db.listings.bulk_write(updates[i:i+500], ordered=False).modified_count
+              print(f'✅ Updated: {total}')
+          PYEOF

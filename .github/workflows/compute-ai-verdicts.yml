@@ -1,0 +1,36 @@
+name: AI verdicts (okazja / norma / zawyżona) — pełna baza
+
+on:
+  schedule:
+    # codziennie po nocnym scrapingu (03:30 UTC) → 05:30 UTC
+    - cron: '30 5 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Tylko podglad (nie zapisuj)'
+        required: false
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+        default: 'no'
+
+jobs:
+  verdicts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install pymongo
+      - name: Compute AI verdicts
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "yes" ]; then
+            python scripts/compute_ai_verdicts.py --dry-run
+          else
+            python scripts/compute_ai_verdicts.py
+          fi

@@ -739,6 +739,9 @@ function normalizeScrapedListing(raw) {
     seller_type: sellerType, seller_label: sellerLabel,
     verdict_badge: 'normal', verdict_text: '✨ Nowa',
     verdict_full: 'Świeżo zescrapowana', ai_delta_pct: 0,
+    // Prekomputowana analiza AI (scripts/compute_ai_verdicts.py, pełna baza) — ma pierwszeństwo przed lokalną
+    ai_verdict: raw.ai_verdict || null, ai_delta_srv: raw.ai_delta_pct, ai_median_srv: raw.ai_median_ppm2,
+    ai_scope: raw.ai_scope || '', ai_sample_n: raw.ai_sample_n || 0,
     dzialka_type: landPurpose || undefined,
     land_purpose: landPurpose || undefined,
     building_type: buildingType || undefined,
@@ -872,6 +875,22 @@ function computeAiVerdicts(listings) {
     return null;
   };
   for (const l of listings) {
+    // ── Werdykt prekomputowany na pełnej bazie (ten sam dla filtra backendowego i plakietki) ──
+    if (l.ai_verdict) {
+      const dp = Math.round(Number(l.ai_delta_srv) || 0);
+      const sign = dp > 0 ? '+' : '';
+      l.ai_delta_pct = dp;
+      if (l.ai_median_srv) l.ai_median_ppm2 = l.ai_median_srv;
+      l.ai_median_source = 'server';
+      const scope = l.ai_scope ? ` ${l.ai_scope}` : '';
+      if (l.ai_verdict === 'noprice') { l.verdict_badge = 'outlier'; l.verdict_text = '⚠️ Brak ceny'; l.verdict_full = 'Brak ceny w ogłoszeniu'; stats.noPrice++; }
+      else if (l.ai_verdict === 'none') { l.verdict_badge = 'normal'; l.verdict_text = '🔍 Brak porównania'; l.verdict_full = 'Za mało podobnych ofert w okolicy, by ocenić cenę'; }
+      else if (l.ai_verdict === 'deal') { l.verdict_badge = 'deal'; l.verdict_text = `🔥 ${dp}%`; l.verdict_full = `Cena za m² niższa o ${Math.abs(dp)}% od mediany podobnych ofert${scope} (${l.ai_sample_n} ofert)`; stats.deal++; }
+      else if (l.ai_verdict === 'normal') { l.verdict_badge = 'normal'; l.verdict_text = `✓ ${sign}${dp}%`; l.verdict_full = `W normie — mediana podobnych ofert${scope} (${l.ai_sample_n} ofert)`; stats.normal++; }
+      else if (l.ai_verdict === 'over') { l.verdict_badge = 'over'; l.verdict_text = `🚫 +${dp}%`; l.verdict_full = `Cena zawyżona o ${dp}% vs. mediana podobnych ofert${scope}`; stats.over++; }
+      else { l.verdict_badge = 'outlier'; l.verdict_text = `⚠️ ${sign}${dp}%`; l.verdict_full = dp < 0 ? `Podejrzanie tania — ${dp}% od mediany (możliwy błąd lub niepełna oferta)` : `Outlier — +${dp}% ponad medianę`; stats.outlier++; }
+      continue;
+    }
     const ppm = Number(l.price_pm2) || 0;
     const price = Number(l.price) || 0;
     const minPpm = minPpm2ForType(l.type);
@@ -976,6 +995,11 @@ async function loadListings() {
     // "Bez określenia" (__unknown__) zostaje client-side — wtedy nie zawężamy po stronie API.
     const activeMarket = Array.from(document.querySelectorAll('.chip.active[data-filter="market_type"]')).map(c => c.dataset.value);
     if (activeMarket.length && !activeMarket.includes('__unknown__')) apiParams.set('market_type', activeMarket.join(','));
+    // Analiza AI (Tylko okazje / W normie / Ukryj zawyżone) → backend, prekomputowane ai_verdict na pełnej bazie
+    const activeV = Array.from(document.querySelectorAll('.chip.active[data-verdict]')).map(c => c.dataset.verdict);
+    const explicitV = activeV.filter(v => v !== 'hide-over');
+    if (explicitV.length) apiParams.set('verdict', explicitV.join(','));
+    if (activeV.includes('hide-over')) apiParams.set('hide_over', '1');
     // Typ domu (wolnostojący / bliźniak / szeregowiec…) → backend filtruje pełną bazę (6k domów, nie batch 1000)
     const activeBt = Array.from(document.querySelectorAll('#subTypeChips .chip.active[data-filter="building_type"]')).map(c => c.dataset.value);
     if (activeBt.length) apiParams.set('building_type', activeBt.join(','));
@@ -2236,7 +2260,7 @@ document.querySelectorAll('.chip[data-verdict]').forEach(c => {
   c.addEventListener('click', (e) => {
     e.stopImmediatePropagation();
     c.classList.toggle('active');
-    applyAllFilters();
+    loadListings();  // werdykty prekomputowane na backendzie → filtr liczy się na pełnej bazie
   }, true);
 });
 

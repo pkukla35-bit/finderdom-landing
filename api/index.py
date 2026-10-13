@@ -1623,6 +1623,8 @@ async def listings_scraped_endpoint(
     rooms: Optional[str] = None,   # "1", "2", "3", "4", "5+" lub "2,3,4" (multi)
     market_type: Optional[str] = None,  # "pierwotny" | "wtorny" | "pierwotny,wtorny"
     building_type: Optional[str] = None,  # typ domu: "wolnostojacy,blizniak,szeregowiec,siedliskowy,rezydencja,letniskowy"
+    verdict: Optional[str] = None,  # AI: "deal" | "normal" | "deal,normal" (prekomputowane ai_verdict, pełna baza)
+    hide_over: Optional[int] = None,  # AI: 1 = ukryj zawyżone (over) i outliery
     portals: Optional[str] = None,  # "unique" (tylko 1 portal) | "multi" (2+ portali)
     added_from: Optional[str] = None,  # ISO datetime — oferty dodane od
     added_to: Optional[str] = None,    # ISO datetime — oferty dodane do (exclusive)
@@ -1711,6 +1713,19 @@ async def listings_scraped_endpoint(
                     {"building_type": {"$in": [None, ""]}, "title": {"$regex": title_pat, "$options": "i"}},
                 ]
                 query.setdefault("$and", []).append({"$or": bt_or})
+        # Analiza AI (prekomputowana w scripts/compute_ai_verdicts.py, cron 05:30 UTC) — filtr na pełnej bazie
+        has_verdict = False
+        if verdict:
+            v_vals = [v.strip() for v in verdict.split(",") if v.strip() in ("deal", "normal", "over", "outlier")]
+            if v_vals:
+                has_verdict = True
+                query["ai_verdict"] = {"$in": v_vals}
+        if hide_over:
+            has_verdict = True
+            if "ai_verdict" in query:
+                query["ai_verdict"]["$nin"] = ["over", "outlier"]
+            else:
+                query["ai_verdict"] = {"$nin": ["over", "outlier"]}
         # Obecność na portalach: unique = oferta tylko w 1 serwisie, multi = ta sama oferta na 2+ serwisach
         # (tablica `sources`; "sources.1" istnieje ⇔ ≥2 elementy)
         if portals == "multi":
@@ -1797,14 +1812,14 @@ async def listings_scraped_endpoint(
         # Sortowanie: gdy filtr po mieście/typie już zawęża do ~500-2000 rekordów, można sortować po added_at.
         # Gdy BRAK filtrów (cała baza 50k) sort byłby zbyt kosztowny → skip sort dla wydajności.
         cursor = coll.find(query, projection)
-        if city or type or transaction or seller_type or market_type or has_bt or has_range or portals or has_date:
+        if city or type or transaction or seller_type or market_type or has_bt or has_verdict or has_range or portals or has_date:
             cursor = cursor.sort("added_at", -1)
         cursor = cursor.skip(offset).limit(limit)
 
         # Total count (dla frontend: pokazuje "Znaleziono X ofert" nawet gdy załadowaliśmy tylko limit)
         async def _count():
             try:
-                if not (city or type or transaction or seller_type or rooms or market_type or has_bt or use_geo or has_range or portals or has_date):
+                if not (city or type or transaction or seller_type or rooms or market_type or has_bt or has_verdict or use_geo or has_range or portals or has_date):
                     # Cała baza — estimated_document_count jest instant (używa metadata)
                     return await coll.estimated_document_count()
                 return await coll.count_documents(query, maxTimeMS=3000)

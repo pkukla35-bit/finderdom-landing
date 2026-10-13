@@ -941,6 +941,22 @@ async function loadListings() {
     // "Bez określenia" (__unknown__) zostaje client-side — wtedy nie zawężamy po stronie API.
     const activeMarket = Array.from(document.querySelectorAll('.chip.active[data-filter="market_type"]')).map(c => c.dataset.value);
     if (activeMarket.length && !activeMarket.includes('__unknown__')) apiParams.set('market_type', activeMarket.join(','));
+    // Data dodania → backend (added_at w pełnej bazie)
+    (function(){
+      const mode = document.querySelector('.date-chip.active')?.dataset.date || 'all';
+      const day = 24*3600*1000; let fromMs = 0, toMs = 0;
+      if (mode === 'today') fromMs = Date.now() - day;
+      else if (mode === '3d') fromMs = Date.now() - 3*day;
+      else if (mode === '7d') fromMs = Date.now() - 7*day;
+      else if (mode === '30d') fromMs = Date.now() - 30*day;
+      else if (mode === 'custom') {
+        const df = document.getElementById('dateFrom')?.value, dt = document.getElementById('dateTo')?.value;
+        if (df) fromMs = new Date(df).getTime();
+        if (dt) toMs = new Date(dt).getTime() + day;
+      }
+      if (fromMs) apiParams.set('added_from', new Date(fromMs).toISOString());
+      if (toMs) apiParams.set('added_to', new Date(toMs).toISOString());
+    })();
     // Obecność na portalach (unikalne / multi-portal) → backend filtruje pełną bazę
     const uniqOn = document.getElementById('chipUnique')?.classList.contains('active');
     const multiOn = document.getElementById('chipMulti')?.classList.contains('active');
@@ -2193,11 +2209,11 @@ document.querySelectorAll('.date-chip').forEach(c => {
     c.classList.add('active');
     const isCustom = c.dataset.date === 'custom';
     document.getElementById('dateCustom').style.display = isCustom ? 'flex' : 'none';
-    applyAllFilters();
+    if (isCustom) applyAllFilters(); else loadListings();  // zakres własny → refetch po wpisaniu dat
   });
 });
-document.getElementById('dateFrom')?.addEventListener('change', applyAllFilters);
-document.getElementById('dateTo')?.addEventListener('change', applyAllFilters);
+document.getElementById('dateFrom')?.addEventListener('change', loadListings);
+document.getElementById('dateTo')?.addEventListener('change', loadListings);
 
 // Sortowanie
 document.getElementById('sortSelect')?.addEventListener('change', applyAllFilters);

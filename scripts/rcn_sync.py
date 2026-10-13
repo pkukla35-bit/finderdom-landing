@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 
 import requests
 from pymongo import MongoClient, UpdateOne, ASCENDING, DESCENDING
+from pymongo.errors import BulkWriteError
 from pyproj import Transformer
 
 log = logging.getLogger("rcn")
@@ -221,6 +222,11 @@ def main():
     if not args.dry_run:
         db = MongoClient(os.environ["MONGODB_URI"])[os.environ.get("MONGODB_DB", "finderdom")]
         coll = db["rcn_transactions"]
+        # stary indeks unikalny z poprzedniej (niedziałającej) wersji skryptu blokował upserty
+        for old in ("rcn_dedup",):
+            if old in coll.index_information():
+                coll.drop_index(old)
+                log.info("Usunięto stary indeks %s", old)
         coll.create_index([("gid", ASCENDING)], unique=True)
         coll.create_index([("rodzaj_nieruchomosci", ASCENDING), ("lat", ASCENDING), ("lng", ASCENDING)])
         coll.create_index([("rodzaj_nieruchomosci", ASCENDING), ("city", ASCENDING), ("data_zawarcia", DESCENDING)])
@@ -250,8 +256,14 @@ def main():
                 ops = [UpdateOne({"gid": g}, {"$set": {**d, "updated_at": now}, "$setOnInsert": {"ingested_at": now}}, upsert=True)
                        for g, d in docs.items()]
                 for j in range(0, len(ops), 1000):
-                    res = coll.bulk_write(ops[j:j + 1000], ordered=False)
-                    total_up += res.upserted_count
+                    try:
+                        res = coll.bulk_write(ops[j:j + 1000], ordered=False)
+                        total_up += res.upserted_count
+                    except BulkWriteError as bwe:
+                        det = bwe.details or {}
+                        total_up += det.get("nUpserted", 0)
+                        log.warning("bulk_write: %d błędów (pierwszy: %s)", len(det.get("writeErrors", [])),
+                                    (det.get("writeErrors") or [{}])[0].get("errmsg", "")[:160])
     log.info("DONE in %.0fs — nowych rekordów: %d", time.time() - t0, total_up)
     if coll is not None:
         log.info("Łącznie w rcn_transactions: %d", coll.estimated_document_count())

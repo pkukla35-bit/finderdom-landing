@@ -1404,7 +1404,11 @@ async function renderOffer(l, all) {
 
   // 🔁 FALLBACK: gdy client-side nie znalazl 8+ podobnych (np. male miasto, mala baza lokalna)
   //    pobierz podobne z pelnej bazy 35k przez backend /api/similar-offers
-  if (!offersPpm2 || localOffers.length < 8) {
+  //    Gdy lista `all` jeszcze się ładuje w tle (pusta) — NIE strzelamy do backendu: rerender z pełną listą
+  //    zrobi lokalną analizę (inaczej spóźniona odpowiedź backendu nadpisywała poprawny wynik lokalny).
+  const aiSeq = (window.__aiSeq = (window.__aiSeq || 0) + 1);
+  let backendScope = '';
+  if ((!offersPpm2 || localOffers.length < 8) && all.length > 0) {
     try {
       const params = new URLSearchParams({
         city: l.city || '',
@@ -1413,8 +1417,11 @@ async function renderOffer(l, all) {
       });
       if (l.area_m2) params.set('area', String(l.area_m2));
       if (l.market_type) params.set('market_type', l.market_type);
-      if (l.external_id || l.id) params.set('exclude_id', l.external_id || l.id);
+      if (l.lat != null && l.lon != null) { params.set('lat', String(l.lat)); params.set('lon', String(l.lon)); }
+      const exId = String(l.external_id || l.id || '').replace(/^otodom-/, '');
+      if (exId) params.set('exclude_id', exId);
       const resp = await fetch('/api/similar-offers?' + params.toString());
+      if (aiSeq !== window.__aiSeq) return;  // w międzyczasie wystartował nowszy render (pełna lista) — nie nadpisuj
       if (resp.ok) {
         const data = await resp.json();
         if (data.stats && data.stats.count >= 5) {
@@ -1422,28 +1429,31 @@ async function renderOffer(l, all) {
           rcnPpm2 = Math.round(offersPpm2 * 0.94);
           localOffers = (data.offers || []).map(o => ({
             id: o.id, title: o.title, city: o.city, district: o.district,
-            price: o.price, price_pm2: o.price_pm2, area_m2: o.area_m2,
+            price: o.price, price_pm2: o.price_pm2, area_m2: o.area_m2, rooms: o.rooms,
             lat: o.lat, lon: o.lon, url: o.url,
+            _dist: (o.lat != null && o.lon != null && l.lat != null && l.lon != null) ? haversineKm(l.lat, l.lon, o.lat, o.lon) : null,
           }));
-          // Ustaw usedRadiusKm zeby ponizej sampleN=localOffers.length
-          usedRadiusKm = 999; // sygnalizuje "backend fallback" (nie lokalny promien)
-          scopeLabel = data.step_used && data.step_used.startsWith('poland')
-            ? `w Polsce (${data.stats.count} podobnych — mało lokalnych danych)`
-            : `w mieście ${l.city} (${data.stats.count} podobnych)`;
-          console.log('AI fallback: uzyto /api/similar-offers, step=', data.step_used, 'count=', data.stats.count);
+          usedRadiusKm = data.radius_km || 0;
+          const step = data.step_used || '';
+          backendScope = data.radius_km ? `w promieniu ${data.radius_km} km`
+            : step.startsWith('poland') ? 'w Polsce (mało lokalnych danych)'
+            : `w mieście ${l.city}`;
+          scopeLabel = backendScope + ` (${data.stats.count} podobnych)`;
+          console.log('AI fallback: uzyto /api/similar-offers, step=', step, 'count=', data.stats.count);
         }
       }
     } catch (fbErr) {
       console.warn('similar-offers fallback failed:', fbErr);
     }
   }
+  if (aiSeq !== window.__aiSeq) return;
 
   if (offersPpm2 && rcnPpm2) {
     // 🎯 Recompute verdict client-side jeśli używamy lokalnej analizy
     // (bo server-side verdict był liczony z miejskiej mediany — może być kompletnie odwrotny do lokalnej)
     let vBadge = l.verdict_badge || 'normal';
     let vText = l.verdict_full || v.text || 'W normie';
-    if (usedRadiusKm && rcnPpm2 && thisPpm2) {
+    if (rcnPpm2 && thisPpm2) {
       const deltaPct = ((thisPpm2 - rcnPpm2) / rcnPpm2) * 100;
       if (deltaPct < -50 || deltaPct > 50) {
         vBadge = 'outlier';
@@ -1473,7 +1483,7 @@ async function renderOffer(l, all) {
     }
 
     let subtitle = '';
-    const scopeText = usedRadiusKm ? `w promieniu ${usedRadiusKm} km` : 'w tym mieście';
+    const scopeText = usedRadiusKm ? `w promieniu ${usedRadiusKm} km` : (backendScope || 'w tym mieście');
     if (l.verdict_badge === 'deal') {
       const diff = rcnPpm2 - thisPpm2;
       subtitle = `Ta oferta jest o <strong style="color:#4ade80">${fmt(diff)} zł/m²</strong> tańsza od realnych cen transakcyjnych (RCN) ${scopeText}.`;
@@ -1504,6 +1514,9 @@ async function renderOffer(l, all) {
     if (usedRadiusKm) {
       sampleN = localOffers.length;
       scopeMsg = `w promieniu <strong>${usedRadiusKm} km</strong> od tej oferty${marketSuffix}`;
+    } else if (backendScope) {
+      sampleN = localOffers.length;
+      scopeMsg = `<strong>${backendScope}</strong>${l.market_type ? (l.market_type === 'pierwotny' ? ' · <strong>rynek pierwotny</strong>' : ' · <strong>rynek wtórny</strong>') : ''}`;
     } else {
       sampleN = all.filter(x => x.city === l.city && x.type === l.type && x.transaction === l.transaction).length;
       scopeMsg = `w mieście <strong>${l.city}</strong>`;
@@ -1513,6 +1526,9 @@ async function renderOffer(l, all) {
     // 🔗 Lista klikalnych ofert użytych w analizie
     if (usedRadiusKm && localOffers.length > 0) {
       renderLocalOffersList(localOffers, usedRadiusKm, thisPpm2, l.market_type);
+    } else if (backendScope && localOffers.length > 0) {
+      const byPrice = localOffers.map(x => ({ ...x, _priceDiff: Math.abs((x.price_pm2 || 0) - thisPpm2) })).sort((a, b) => a._priceDiff - b._priceDiff).slice(0, 30);
+      renderLocalOffersListCity(byPrice, l.city, thisPpm2, localOffers.length);
     } else if (!usedRadiusKm && l.city) {
       // Fallback: brak GPS → pokaż top 30 najbliższych po cenie z tego samego miasta+typu
       const cityMatches = all.filter(x =>

@@ -848,6 +848,29 @@ function computeAiVerdicts(listings) {
   }
   // 3) Dla każdej oferty ustaw verdict
   let stats = {deal:0, normal:0, over:0, outlier:0, noPrice:0};
+  // 🏡 DOMY: mediana z podobnych domów w okolicy (metraż ±30%, ten sam rynek, promień 8→16→24 km),
+  //    fallback: to samo miasto. BEZ fallbacku do mediany ogólnopolskiej — domy 60 m² letniskowe vs 300 m² rezydencje
+  //    oraz wieś vs miasto to zupełnie inne ceny/m², więc porównanie z całą Polską dawało fałszywe „-50%”.
+  const houses = listings.filter(x => (x.type||'').toLowerCase() === 'dom'
+    && (Number(x.price_pm2) || 0) >= minPpm2ForType('dom') && (Number(x.area_m2) || 0) > 0);
+  const medOf = (arr) => { const s = arr.slice().sort((a,b)=>a-b); const m = Math.floor(s.length/2); return s.length%2===0 ? (s[m-1]+s[m])/2 : s[m]; };
+  const houseMedian = (l) => {
+    const a = Number(l.area_m2) || 0;
+    if (!a) return null;
+    const lo = a * 0.7, hi = a * 1.3;
+    const sim = houses.filter(x => x !== l && x.area_m2 >= lo && x.area_m2 <= hi
+      && (!l.market_type || !x.market_type || x.market_type === l.market_type));
+    if (l.lat && l.lng) {
+      for (const km of [8, 16, 24]) {
+        const near = sim.filter(x => x.lat && x.lng && haversineKm(l.lat, l.lng, x.lat, x.lng) <= km);
+        if (near.length >= 5) return { med: medOf(near.map(x => x.price_pm2)), scope: `podobnych domów w promieniu ${km} km`, n: near.length };
+      }
+    }
+    const c = (l.city||'').toLowerCase();
+    const sameCity = c ? sim.filter(x => (x.city||'').toLowerCase() === c) : [];
+    if (sameCity.length >= 5) return { med: medOf(sameCity.map(x => x.price_pm2)), scope: `podobnych domów w ${l.city}`, n: sameCity.length };
+    return null;
+  };
   for (const l of listings) {
     const ppm = Number(l.price_pm2) || 0;
     const price = Number(l.price) || 0;
@@ -870,6 +893,18 @@ function computeAiVerdicts(listings) {
     const key = groupKey(l);
     let med = medians.get(key);
     let source = 'city';
+    let scopeTxt = `dla ${l.city}`;
+    if ((l.type||'').toLowerCase() === 'dom') {
+      const hm = houseMedian(l);
+      if (hm) { med = hm.med; source = 'similar'; scopeTxt = hm.scope; l.ai_sample_n = hm.n; }
+      else {
+        l.verdict_badge = 'normal';
+        l.verdict_text = '🔍 Brak porównania';
+        l.verdict_full = 'Za mało podobnych domów w okolicy, by ocenić cenę';
+        l.ai_delta_pct = 0;
+        continue;
+      }
+    }
     if (!med) { med = typeMed.get(typeKey(l)); source = 'type'; }
     if (!med) {
       l.verdict_badge = 'normal';
@@ -890,12 +925,12 @@ function computeAiVerdicts(listings) {
     } else if (delta <= -12) {
       l.verdict_badge = 'deal';
       l.verdict_text = `🔥 ${Math.round(delta)}%`;
-      l.verdict_full = `Cena za m² niższa o ${Math.abs(Math.round(delta))}% od mediany dla ${l.city}`;
+      l.verdict_full = `Cena za m² niższa o ${Math.abs(Math.round(delta))}% od mediany ${scopeTxt}`;
       stats.deal++;
     } else if (delta > -12 && delta < 12) {
       l.verdict_badge = 'normal';
       l.verdict_text = delta >= 0 ? `✓ +${Math.round(delta)}%` : `✓ ${Math.round(delta)}%`;
-      l.verdict_full = `W normie dla ${l.city}`;
+      l.verdict_full = `W normie ${scopeTxt}`;
       stats.normal++;
     } else if (delta >= 12 && delta < 35) {
       l.verdict_badge = 'over';

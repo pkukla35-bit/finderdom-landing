@@ -1896,7 +1896,7 @@ async def similar_offers_endpoint(
             {"transaction_type": None},
         ]}
     if exclude_id:
-        base_query["external_id"] = {"$ne": exclude_id}
+        base_query["external_id"] = {"$ne": exclude_id.replace("otodom-", "")}
 
     # Diakrytyka: uzywamy _build_diacritic_regex zeby "Kielce" pasowalo do "kielce"/"Kielce"
     if city:
@@ -1904,14 +1904,15 @@ async def similar_offers_endpoint(
         city_re = {"$regex": city_pattern}
 
     projection = {
-        "_id": 0, "price": 1, "area_m2": 1, "city": 1, "district": 1,
-        "market_type": 1, "latitude": 1, "longitude": 1, "url": 1, "title": 1,
+        "_id": 0, "price": 1, "area_m2": 1, "city": 1, "district": 1, "rooms": 1,
+        "market_type": 1, "lat": 1, "lng": 1, "url": 1, "title": 1,
         "external_id": 1, "type": 1, "transaction_type": 1,
     }
 
-    async def run_query(q):
+    async def run_query(q, n=None):
         try:
-            docs_local = await coll.find(q, projection).limit(limit).to_list(length=limit)
+            n = n or limit
+            docs_local = await coll.find(q, projection).limit(n).to_list(length=n)
             return docs_local
         except Exception as e:
             logger.warning("similar-offers query err: %s", e)
@@ -1919,6 +1920,7 @@ async def similar_offers_endpoint(
 
     docs: list = []
     step_used = ""
+    radius_used = 0
 
     def _combine_and(q, extra_clauses):
         """Buduje $and safely (obsluguje transaction filter)."""
@@ -1929,8 +1931,41 @@ async def similar_offers_endpoint(
             q["$and"] = clauses
         return q
 
+
+    def _hav_km(lat1, lon1, lat2, lon2):
+        import math as _m
+        p = _m.pi / 180
+        a = _m.sin((lat2 - lat1) * p / 2) ** 2 + _m.cos(lat1 * p) * _m.cos(lat2 * p) * _m.sin((lon2 - lon1) * p / 2) ** 2
+        return 2 * 6371 * _m.asin(_m.sqrt(a))
+
+    # Step 0: GEO — najbliższe oferty (bounding box, potem sort po dystansie), ten sam metraż ±30% i rynek.
+    # Domy/działki: 8→16→24 km (rzadziej rozsiane), mieszkania: 5→10→15 km.
+    use_geo = lat is not None and lon is not None
+    if use_geo and area and area > 0:
+        import math as _math
+        steps = [5, 10, 15] if (type or "").lower().startswith("mieszkanie") else [8, 16, 24]
+        for km in steps:
+            dlat = km / 111.0
+            dlng = km / (111.0 * max(_math.cos(_math.radians(lat)), 0.1))
+            q = dict(base_query)
+            q["lat"] = {"$gte": lat - dlat, "$lte": lat + dlat}
+            q["lng"] = {"$gte": lon - dlng, "$lte": lon + dlng}
+            q["area_m2"] = {"$gte": area * 0.7, "$lte": area * 1.3}
+            if market_type:
+                q["market_type"] = market_type
+            q = _combine_and(q, [])
+            cand = await run_query(q, 400)
+            cand = [d for d in cand if d.get("lat") is not None and d.get("lng") is not None
+                    and _hav_km(lat, lon, d["lat"], d["lng"]) <= km]
+            if len(cand) >= 8:
+                cand.sort(key=lambda d: _hav_km(lat, lon, d["lat"], d["lng"]))
+                docs = cand[:limit]
+                step_used = f"geo{km}km+area±30%" + ("+market" if market_type else "")
+                radius_used = km
+                break
+
     # Step 1: city + area ±30% + market_type
-    if city and area and area > 0:
+    if len(docs) < 8 and city and area and area > 0:
         q = dict(base_query)
         q = _combine_and(q, [{"$or": [{"city": city_re}, {"district": city_re}]}])
         q["area_m2"] = {"$gte": area * 0.7, "$lte": area * 1.3}
@@ -1964,10 +1999,19 @@ async def similar_offers_endpoint(
 
     # Wylicz cena_m2 i posortuj po odleglosci od naszego area (najbardziej podobne najpierw)
     result = []
+    seen_keys = set()
+    ex_id = (exclude_id or "").replace("otodom-", "")
     for d in docs:
         p = d.get("price") or 0
         a = d.get("area_m2") or 0
         if p > 1000 and a > 5:
+            if ex_id and str(d.get("external_id") or "") == ex_id:
+                continue
+            # Dedup cross-portal: ta sama oferta (cena + metraż + miasto) na kilku serwisach liczy się raz
+            key = (p, round(a), (d.get("city") or "").lower())
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
             result.append({
                 "price": p,
                 "area_m2": a,
@@ -1975,8 +2019,9 @@ async def similar_offers_endpoint(
                 "city": d.get("city") or "",
                 "district": d.get("district") or "",
                 "market_type": d.get("market_type") or "",
-                "lat": d.get("latitude"),
-                "lon": d.get("longitude"),
+                "rooms": d.get("rooms"),
+                "lat": d.get("lat"),
+                "lon": d.get("lng"),
                 "url": d.get("url") or "",
                 "title": d.get("title") or "",
                 "id": d.get("external_id") or "",
@@ -1998,6 +2043,7 @@ async def similar_offers_endpoint(
         "ok": True,
         "count": len(result),
         "step_used": step_used,
+        "radius_km": radius_used,
         "offers": result[:limit],
         "stats": stats,
     }

@@ -1000,6 +1000,9 @@ async function loadListings() {
     const explicitV = activeV.filter(v => v !== 'hide-over');
     if (explicitV.length) apiParams.set('verdict', explicitV.join(','));
     if (activeV.includes('hide-over')) apiParams.set('hide_over', '1');
+    // Przeznaczenie działki → backend (pełna baza 4k działek)
+    const activeDt = Array.from(document.querySelectorAll('#marketOrPurposeChips .chip.active[data-filter="land_purpose"]')).map(c => c.dataset.value);
+    if (activeDt.length) apiParams.set('dzialka_type', activeDt.join(','));
     // Typ domu (wolnostojący / bliźniak / szeregowiec…) → backend filtruje pełną bazę (6k domów, nie batch 1000)
     const activeBt = Array.from(document.querySelectorAll('#subTypeChips .chip.active[data-filter="building_type"]')).map(c => c.dataset.value);
     if (activeBt.length) apiParams.set('building_type', activeBt.join(','));
@@ -1704,7 +1707,7 @@ function updateSubType(type){
     mpChips.querySelectorAll('.chip').forEach(c => {
       c.addEventListener('click', () => {
         c.classList.toggle('active');
-        if (c.dataset.filter === 'market_type' && typeof loadListings === 'function') loadListings();
+        if ((c.dataset.filter === 'market_type' || c.dataset.filter === 'land_purpose') && typeof loadListings === 'function') loadListings();
         else applyAllFilters();
       });
     });
@@ -1951,7 +1954,7 @@ function applyAllFilters() {
     for (const [key, allowed] of Object.entries(f.dynamic)) {
       // building_type (typ domu) filtruje backend na pełnej bazie — nie odrzucaj ponownie client-side
       // (fallback z tytułu po stronie API może dać inny podtyp niż lokalna detekcja)
-      if (key === 'building_type') continue;
+      if (key === 'building_type' || key === 'land_purpose') continue;
       const v = l[key];
       // Boolean features: chip "true" matches when listing is truthy
       if (allowed.has("true")) {

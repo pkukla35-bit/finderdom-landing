@@ -1,2 +1,3 @@
 requests>=2.31,<3
 pymongo>=4.6,<5
+pyproj>=3.6,<4

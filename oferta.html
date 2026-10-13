@@ -545,6 +545,33 @@ function median(arr) {
 }
 
 // Renderuj listę klikalnych ofert użytych w analizie promienia
+function renderRcnTransactions(rcn) {
+  let box = document.getElementById('rcnTransactions');
+  if (!box) {
+    const host = document.getElementById('rcnInfo');
+    if (!host) return;
+    box = document.createElement('div');
+    box.id = 'rcnTransactions';
+    box.style.cssText = 'margin-top:12px;';
+    host.insertAdjacentElement('afterend', box);
+  }
+  if (!rcn || !Array.isArray(rcn.recent) || rcn.recent.length === 0) { box.innerHTML = ''; return; }
+  const fmtN = (n) => (n == null ? '—' : Number(n).toLocaleString('pl-PL'));
+  const rows = rcn.recent.slice(0, 8).map(t => {
+    const where = [t.ulica, t.dist_km != null ? `${t.dist_km} km` : null].filter(Boolean).join(' · ');
+    const meta = [t.powierzchnia ? `${t.powierzchnia} m²` : null, t.izby ? `${t.izby} izb` : null, t.kondygnacja != null ? `p. ${t.kondygnacja}` : null, t.rynek || null].filter(Boolean).join(' · ');
+    return `<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12.5px;">
+      <div style="min-width:0;"><div style="color:#e8edf7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${where || 'adres niepodany'}</div><div style="color:#8b96ad;font-size:11.5px;">${t.data || ''}${meta ? ' · ' + meta : ''}</div></div>
+      <div style="text-align:right;white-space:nowrap;"><div style="color:#FFB800;font-weight:700;">${fmtN(t.cena_m2)} zł/m²</div><div style="color:#8b96ad;font-size:11.5px;">${fmtN(t.cena)} zł</div></div>
+    </div>`;
+  }).join('');
+  box.innerHTML = `<details style="background:rgba(255,184,0,0.05);border:1px solid rgba(255,184,0,0.18);border-radius:10px;padding:10px 12px;">
+    <summary style="cursor:pointer;color:#FFB800;font-weight:700;font-size:13px;">🏛️ Ostatnie transakcje z RCN w okolicy (${rcn.recent.length} z ${rcn.n})</summary>
+    <div style="margin-top:6px;">${rows}</div>
+    <div style="margin-top:8px;color:#8b96ad;font-size:11px;">Źródło: Rejestr Cen Nieruchomości (GUGiK, geoportal.gov.pl) — ceny z aktów notarialnych. Dane trafiają do rejestru z opóźnieniem 1–3 mies.</div>
+  </details>`;
+}
+
 function renderLocalOffersList(offers, radiusKm, thisPpm2, marketType) {
   const section = el('localOffersSection');
   const titleEl = el('localOffersTitle');
@@ -1345,8 +1372,20 @@ async function renderOffer(l, all) {
 
   // AI Analysis (only for premium users)
   if (window.__isPremium) {
-  let rcnPpm2 = l.ai_rcn_pm2 || 0;  // fallback: RCN z całego miasta (~94% mediany ofertowej)
+  let rcnPpm2 = l.ai_rcn_pm2 || 0;  // fallback (szacunek ~94% mediany ofertowej) — nadpisywany realnym RCN poniżej
   const thisPpm2 = l.price_pm2 || 0;
+  // 🏛️ Realne ceny transakcyjne z Rejestru Cen Nieruchomości (GUGiK) — równolegle z analizą ofert
+  let rcnReal = null;
+  const rcnPromise = (l.type === 'mieszkanie' || l.type === 'dzialka') ? (async () => {
+    try {
+      const rp = new URLSearchParams({ city: l.city || '', type: l.type || '' });
+      if (l.area_m2) rp.set('area', String(l.area_m2));
+      if (l.lat != null && l.lon != null) { rp.set('lat', String(l.lat)); rp.set('lon', String(l.lon)); }
+      if (l.market_type) rp.set('market', l.market_type);
+      const rr = await fetch('/api/rcn/stats?' + rp.toString());
+      if (rr.ok) { const rj = await rr.json(); if (rj && rj.ok && rj.median_pm2) rcnReal = rj; }
+    } catch (e) { console.warn('rcn stats failed', e); }
+  })() : Promise.resolve();
 
   // 🎯 LOCAL ANALYSIS (5km) — dla mieszkań z lat/lon liczy medianę z okolicy zamiast miejskiej
   let offersPpm2 = l.ai_offers_pm2 || 0;
@@ -1450,6 +1489,9 @@ async function renderOffer(l, all) {
     }
   }
   if (aiSeq !== window.__aiSeq) return;
+  await rcnPromise;
+  if (aiSeq !== window.__aiSeq) return;
+  if (rcnReal) rcnPpm2 = rcnReal.median_pm2;
 
   if (offersPpm2 && rcnPpm2) {
     // 🎯 Recompute verdict client-side jeśli używamy lokalnej analizy
@@ -1524,7 +1566,18 @@ async function renderOffer(l, all) {
       sampleN = all.filter(x => x.city === l.city && x.type === l.type && x.transaction === l.transaction).length;
       scopeMsg = `w mieście <strong>${l.city}</strong>`;
     }
-    el('rcnInfo').innerHTML = `📊 Analiza oparta na <strong>${sampleN} ofertach</strong> tego samego typu (${TYPE_LABEL[l.type]}) ${scopeMsg}.`;
+    let rcnLine;
+    if (rcnReal) {
+      const rScope = rcnReal.radius_km ? `w promieniu <strong>${rcnReal.radius_km} km</strong>` : `<strong>${rcnReal.scope || 'w tym mieście'}</strong>`;
+      const last = rcnReal.last_date ? ` · ostatnia transakcja ${rcnReal.last_date}` : '';
+      const trend = (rcnReal.trend_pct != null) ? ` · trend 6 mies.: <strong>${rcnReal.trend_pct > 0 ? '+' : ''}${rcnReal.trend_pct}%</strong>` : '';
+      const mkt = rcnReal.market ? ` · rynek ${rcnReal.market}` : '';
+      rcnLine = `🏛️ <strong>RCN (akty notarialne, GUGiK):</strong> mediana z <strong>${rcnReal.n} realnych transakcji</strong> ${rScope}${mkt} — przedział ${fmt(rcnReal.p25_pm2)}–${fmt(rcnReal.p75_pm2)} zł/m²${last}${trend}.`;
+    } else {
+      rcnLine = `🏛️ RCN: brak wystarczającej liczby transakcji w tej okolicy — pokazany szacunek (~94% mediany ofertowej).`;
+    }
+    el('rcnInfo').innerHTML = `📊 Analiza oparta na <strong>${sampleN} ofertach</strong> tego samego typu (${TYPE_LABEL[l.type]}) ${scopeMsg}.<br>${rcnLine}`;
+    renderRcnTransactions(rcnReal);
 
     // 🔗 Lista klikalnych ofert użytych w analizie
     if (usedRadiusKm && localOffers.length > 0) {

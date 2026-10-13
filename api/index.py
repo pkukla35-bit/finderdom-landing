@@ -16,6 +16,7 @@ Endpoints:
 import asyncio
 import io
 import os
+import math
 import re
 import secrets
 import logging
@@ -1869,15 +1870,21 @@ async def listings_scraped_endpoint(
 
 
 @app.get("/api/rcn/stats")
-async def rcn_stats_endpoint(city: str, type: str, area: Optional[float] = None):
-    """Public RCN transaction statistics for a given city + property type.
+async def rcn_stats_endpoint(city: str = "", type: str = "mieszkanie", area: Optional[float] = None,
+                             lat: Optional[float] = None, lon: Optional[float] = None,
+                             market: Optional[str] = None, response: Response = None):
+    """Realne ceny transakcyjne z RCN (GUGiK) dla lokalizacji.
 
     Args:
-        city: e.g. Warszawa
-        type: mieszkanie | dom | dzialka
-        area: optional subject area in m² (filter comparables to ±25%)
+        city: np. Warszawa (fallback gdy brak lat/lon lub mało transakcji w promieniu)
+        type: mieszkanie | dzialka   (dom → brak danych o pow. użytkowej w RCN)
+        area: metraż w m² (porównywalne ±25%)
+        lat/lon: współrzędne — porównywalne w promieniu 1→6 km
+        market: pierwotny | wtorny
     """
-    stats = await get_rcn_stats(city=city, prop_type=type, area_m2=area)
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=3600, s-maxage=21600"
+    stats = await get_rcn_stats(city=city, prop_type=type, area_m2=area, lat=lat, lon=lon, market=market)
     if not stats:
         # also expose sample count so frontend can show "not enough data yet"
         try:
@@ -2854,6 +2861,9 @@ async def valuation_download(session_id: str):
         prop_type=listing.get("type") or "",
         area_m2=listing.get("area_m2"),
         min_sample=5,
+        lat=listing.get("lat"),
+        lon=listing.get("lon"),
+        market=listing.get("market_type"),
     )
 
     pdf_data = await asyncio.to_thread(build_valuation_pdf, listing, all_listings, md.get("email", ""), rcn_stats)
@@ -3045,30 +3055,19 @@ def _haversine_km(lat1, lon1, lat2, lon2):
 # RCN (Rejestr Cen Nieruchomości) — official government data
 # ─────────────────────────────────────────────────────────────
 async def get_rcn_stats(city: str, prop_type: str, area_m2: Optional[float] = None,
-                        min_sample: int = 5) -> Optional[Dict[str, Any]]:
+                        min_sample: int = 5, lat: Optional[float] = None, lon: Optional[float] = None,
+                        market: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
-    Fetch median transactional price per m² from the RCN collection.
-    Falls back to None if insufficient data.
+    Realne ceny transakcyjne z Rejestru Cen Nieruchomości (GUGiK, akty notarialne) — kolekcja
+    `rcn_transactions` zasilana przez scripts/rcn_sync.py (WFS mapy.geoportal.gov.pl/wss/service/rcn).
 
-    Args:
-        city: city name (e.g. "Warszawa") — matched case-insensitively
-        prop_type: our internal type: "mieszkanie" | "dom" | "dzialka"
-        area_m2: subject property area — used to filter comparables within ±25%
-        min_sample: minimum number of transactions for the median to be trusted
-    Returns:
-        dict with median_pm2, min_pm2, max_pm2, n_transactions, avg_area, last_data_date
-        or None if not enough data.
+    Strategia doboru porównywalnych transakcji:
+      1. GEO (gdy lat/lon): mieszkania w promieniu 1 → 2 → 3.5 → 6 km, metraż ±25 %, ten sam rynek (gdy znany),
+         ostatnie 18 mies. (fallback 36). Działki: 3 → 6 → 12 km, metraż ±40 %.
+      2. Fallback: całe miasto (+metraż ±25 %), potem miasto bez metrażu.
+    Domy: w RCN brak powierzchni użytkowej budynków → zwraca None (wycena domów zostaje na ofertach).
     """
-    # Map our types to RCN kinds (rodzaj_nieruchomosci)
-    kind_map = {
-        "mieszkanie": "lokal",
-        "lokal":      "lokal",
-        "dom":        "budynek",
-        "budynek":    "budynek",
-        "dzialka":    "dzialka",
-        "działka":    "dzialka",
-    }
-    kind = kind_map.get((prop_type or "").lower())
+    kind = {"mieszkanie": "lokal", "lokal": "lokal", "dzialka": "dzialka", "działka": "dzialka"}.get((prop_type or "").lower())
     if not kind:
         return None
     try:
@@ -3077,72 +3076,120 @@ async def get_rcn_stats(city: str, prop_type: str, area_m2: Optional[float] = No
         logger.debug("get_rcn_stats: no rcn_transactions collection: %s", e)
         return None
 
-    # Regex to match city case-insensitively — use string pattern (Motor doesn't
-    # accept compiled regex in $regex operator).
-    city_regex = "^" + re.escape((city or "").strip()) + "$"
-
-    # Only use transactions from the last 3 years, with valid cena_m2 and area
     now = datetime.now(timezone.utc)
-    since = (now.replace(year=now.year - 3)).strftime("%Y-%m-%d")
+    since18 = (now - timedelta(days=548)).strftime("%Y-%m-%d")
+    since36 = (now - timedelta(days=1096)).strftime("%Y-%m-%d")
+    proj = {"_id": 0, "cena_m2": 1, "powierzchnia": 1, "data_zawarcia": 1, "cena_brutto": 1, "ulica": 1,
+            "izby": 1, "kondygnacja": 1, "rodzaj_rynku": 1, "lat": 1, "lng": 1, "city": 1}
+    market_db = {"pierwotny": "pierwotny", "wtorny": "wtórny", "wtórny": "wtórny"}.get((market or "").lower())
+    area_tol = 0.25 if kind == "lokal" else 0.40
 
-    query: Dict[str, Any] = {
-        "city": {"$regex": city_regex, "$options": "i"},
-        "rodzaj_nieruchomosci": kind,
-        "cena_m2": {"$gt": 0},
-        "data_zawarcia": {"$gte": since},
-    }
+    def base_q(since):
+        q: Dict[str, Any] = {"rodzaj_nieruchomosci": kind, "cena_m2": {"$gt": 0}, "data_zawarcia": {"$gte": since}}
+        if area_m2 and area_m2 > 0:
+            q["powierzchnia"] = {"$gte": area_m2 * (1 - area_tol), "$lte": area_m2 * (1 + area_tol)}
+        if market_db and kind == "lokal":
+            q["rodzaj_rynku"] = market_db
+        return q
 
-    # Constrain by area ±25% when subject area is known
-    if area_m2 and area_m2 > 0:
-        query["powierzchnia"] = {"$gte": area_m2 * 0.75, "$lte": area_m2 * 1.25}
-
-    try:
-        docs = await coll.find(
-            query,
-            {"cena_m2": 1, "powierzchnia": 1, "data_zawarcia": 1, "_id": 0}
-        ).limit(500).to_list(length=500)
-    except Exception as e:
-        logger.debug("get_rcn_stats query failed: %s", e)
-        return None
-
-    # If ±25% area constraint returned too few, retry without area constraint
-    if len(docs) < min_sample and "powierzchnia" in query:
-        query.pop("powierzchnia", None)
+    async def run(q, limit=800):
         try:
-            docs = await coll.find(
-                query,
-                {"cena_m2": 1, "powierzchnia": 1, "data_zawarcia": 1, "_id": 0}
-            ).limit(500).to_list(length=500)
+            return await coll.find(q, proj).sort("data_zawarcia", -1).limit(limit).to_list(length=limit)
         except Exception as e:
-            logger.debug("get_rcn_stats query (no area) failed: %s", e)
-            return None
+            logger.debug("get_rcn_stats query failed: %s", e)
+            return []
 
+    docs: list = []
+    radius_used = None
+    scope = ""
+    # 1) GEO
+    if lat is not None and lon is not None:
+        steps = [1.0, 2.0, 3.5, 6.0] if kind == "lokal" else [3.0, 6.0, 12.0]
+        for since in (since18, since36):
+            for km in steps:
+                dlat = km / 111.0
+                dlon = km / (111.0 * max(math.cos(math.radians(lat)), 0.1))
+                q = base_q(since)
+                q["lat"] = {"$gte": lat - dlat, "$lte": lat + dlat}
+                q["lng"] = {"$gte": lon - dlon, "$lte": lon + dlon}
+                cand = await run(q)
+                cand = [d for d in cand if d.get("lat") is not None and d.get("lng") is not None
+                        and _haversine_km(lat, lon, d["lat"], d["lng"]) <= km]
+                if len(cand) >= max(min_sample, 8):
+                    docs, radius_used = cand, km
+                    scope = f"w promieniu {km:g} km" + (" (ostatnie 3 lata)" if since == since36 else "")
+                    break
+            if docs:
+                break
+    # 2) Miasto
+    if not docs and city:
+        city_regex = "^" + re.escape(city.strip()) + "$"
+        for since in (since18, since36):
+            q = base_q(since)
+            q["city"] = {"$regex": city_regex, "$options": "i"}
+            docs = await run(q)
+            if len(docs) >= min_sample:
+                scope = f"w mieście {city.strip()}"
+                break
+            if "powierzchnia" in q:
+                q.pop("powierzchnia")
+                docs = await run(q)
+                if len(docs) >= min_sample:
+                    scope = f"w mieście {city.strip()} (wszystkie metraże)"
+                    break
+            docs = []
     if len(docs) < min_sample:
         return None
 
     pm2_values = sorted(float(d["cena_m2"]) for d in docs if d.get("cena_m2"))
-    if len(pm2_values) < min_sample:
+    n = len(pm2_values)
+    if n < min_sample:
         return None
 
-    # Robust median + trimmed range (5%..95%)
-    n = len(pm2_values)
-    median_pm2 = pm2_values[n // 2] if n % 2 else (pm2_values[n // 2 - 1] + pm2_values[n // 2]) / 2
-    p5_idx = max(0, int(n * 0.05))
-    p95_idx = min(n - 1, int(n * 0.95))
-    min_pm2 = pm2_values[p5_idx]
-    max_pm2 = pm2_values[p95_idx]
+    def pct(p):
+        return pm2_values[min(n - 1, max(0, int(n * p)))]
 
+    median_pm2 = pm2_values[n // 2] if n % 2 else (pm2_values[n // 2 - 1] + pm2_values[n // 2]) / 2
     areas = [float(d["powierzchnia"]) for d in docs if d.get("powierzchnia")]
-    avg_area = round(sum(areas) / len(areas), 1) if areas else None
-    last_date = max((d.get("data_zawarcia") for d in docs if d.get("data_zawarcia")), default=None)
+    dates = sorted(d.get("data_zawarcia") for d in docs if d.get("data_zawarcia"))
+
+    # Trend: mediana ostatnich 6 mies. vs poprzednich 6 mies. (gdy po ≥5 transakcji)
+    trend_pct = None
+    cut6 = (now - timedelta(days=183)).strftime("%Y-%m-%d")
+    cut12 = (now - timedelta(days=366)).strftime("%Y-%m-%d")
+    recent_v = sorted(float(d["cena_m2"]) for d in docs if (d.get("data_zawarcia") or "") >= cut6)
+    prev_v = sorted(float(d["cena_m2"]) for d in docs if cut12 <= (d.get("data_zawarcia") or "") < cut6)
+    if len(recent_v) >= 5 and len(prev_v) >= 5:
+        m_r = recent_v[len(recent_v) // 2]
+        m_p = prev_v[len(prev_v) // 2]
+        if m_p:
+            trend_pct = round((m_r - m_p) / m_p * 100, 1)
+
+    recent = []
+    for d in sorted(docs, key=lambda x: x.get("data_zawarcia") or "", reverse=True)[:12]:
+        recent.append({
+            "data": d.get("data_zawarcia"), "powierzchnia": d.get("powierzchnia"), "cena": d.get("cena_brutto"),
+            "cena_m2": int(d.get("cena_m2") or 0), "ulica": d.get("ulica"), "izby": d.get("izby"),
+            "kondygnacja": d.get("kondygnacja"), "rynek": d.get("rodzaj_rynku"),
+            "dist_km": round(_haversine_km(lat, lon, d["lat"], d["lng"]), 1)
+            if lat is not None and lon is not None and d.get("lat") is not None and d.get("lng") is not None else None,
+        })
 
     return {
         "median_pm2": int(median_pm2),
-        "min_pm2":    int(min_pm2),
-        "max_pm2":    int(max_pm2),
+        "p25_pm2":    int(pct(0.25)),
+        "p75_pm2":    int(pct(0.75)),
+        "min_pm2":    int(pct(0.05)),
+        "max_pm2":    int(pct(0.95)),
         "n":          n,
-        "avg_area":   avg_area,
-        "last_date":  last_date,
+        "avg_area":   round(sum(areas) / len(areas), 1) if areas else None,
+        "first_date": dates[0] if dates else None,
+        "last_date":  dates[-1] if dates else None,
+        "radius_km":  radius_used,
+        "scope":      scope,
+        "market":     market_db,
+        "trend_pct":  trend_pct,
+        "recent":     recent,
         "source":     "RCN (akty notarialne, GUGiK)",
     }
 
@@ -4222,7 +4269,10 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
 
     # Transakcyjna (RCN akty notarialne LUB szacunek 94% ofertowej)
     _tx_title = "Realna cena transakcyjna" if rcn_source_label else "Szacowana cena transakcyjna sprzedaży"
-    _tx_sub   = (f"mediana z {rcn_stats['n']} aktów notarialnych — Rejestr Cen Nieruchomości (GUGiK)."
+    _tx_sub   = ((f"mediana z {rcn_stats['n']} aktów notarialnych "
+                  + (f"w promieniu {rcn_stats['radius_km']:g} km" if rcn_stats.get('radius_km') else (rcn_stats.get('scope') or ''))
+                  + (f", {rcn_stats['first_date'][:7]}–{rcn_stats['last_date'][:7]}" if rcn_stats.get('first_date') and rcn_stats.get('last_date') else '')
+                  + " — Rejestr Cen Nieruchomości (GUGiK).")
                  if rcn_source_label and rcn_stats else
                  "kwota, za jaką sprzedano podobne nieruchomości.")
     for el in _price_card(

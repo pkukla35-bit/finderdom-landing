@@ -1,87 +1,51 @@
-name: RCN — refresh transactional prices
+name: RCN — ceny transakcyjne (GUGiK WFS → MongoDB)
 
 on:
   workflow_dispatch:
     inputs:
       city:
-        description: 'Import only one city (optional). Leave empty for all 20 cities.'
-        required: false
-        type: choice
-        default: ''
-        options:
-          - ''
-          - Warszawa
-          - Kraków
-          - Wrocław
-          - Łódź
-          - Poznań
-          - Gdańsk
-          - Szczecin
-          - Bydgoszcz
-          - Lublin
-          - Białystok
-          - Katowice
-          - Gdynia
-          - Częstochowa
-          - Radom
-          - Toruń
-          - Rzeszów
-          - Kielce
-          - Olsztyn
-          - Zabrze
-          - Sosnowiec
-      since:
-        description: 'Only import transactions since (YYYY-MM-DD). Empty = all.'
+        description: 'Tylko jedno miasto (np. Kraków). Puste = wszystkie ~196 miast z city-coords.js'
         required: false
         type: string
-        default: '2023-01-01'
+        default: ''
+      since:
+        description: 'Transakcje od daty (YYYY-MM-DD)'
+        required: false
+        type: string
+        default: '2025-01-01'
+      layers:
+        description: 'Warstwy: lokale,dzialki'
+        required: false
+        type: string
+        default: 'lokale,dzialki'
+      limit_cities:
+        description: 'Ogranicz do N pierwszych miast (0 = wszystkie)'
+        required: false
+        type: string
+        default: '0'
   schedule:
-    - cron: '0 3 1 * *'
+    # 1. i 15. dnia miesiąca o 04:30 UTC — RCN odświeża się co ~2 tyg.; sync jest idempotentny (upsert po gid)
+    - cron: '30 4 1,15 * *'
 
 jobs:
-  refresh:
-    name: Refresh RCN
+  sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
           cache-dependency-path: 'scripts/requirements.txt'
-
-      - name: Install dependencies
-        run: pip install -r scripts/requirements.txt
-
-      - name: Probe WFS layers (health check)
-        run: python scripts/rcn_ingest.py --probe
+      - run: pip install -r scripts/requirements.txt
+      - name: Sync RCN
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
-
-      - name: Ingest RCN data
         run: |
-          ARGS=""
-          if [ -n "${{ inputs.city }}" ]; then
-            ARGS="$ARGS --city ${{ inputs.city }}"
-          fi
-          if [ -n "${{ inputs.since }}" ]; then
-            ARGS="$ARGS --since ${{ inputs.since }}"
-          fi
-          echo "Running: python scripts/rcn_ingest.py $ARGS"
-          python scripts/rcn_ingest.py $ARGS
-        env:
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "### RCN import complete" >> $GITHUB_STEP_SUMMARY
-          echo "City: ${{ inputs.city || 'ALL (20 cities)' }}" >> $GITHUB_STEP_SUMMARY
-          echo "Since: ${{ inputs.since || 'no date filter' }}" >> $GITHUB_STEP_SUMMARY
-          echo "Trigger: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          ARGS="--since ${{ inputs.since || '2025-01-01' }} --layers ${{ inputs.layers || 'lokale,dzialki' }}"
+          if [ -n "${{ inputs.city }}" ]; then ARGS="$ARGS --city '${{ inputs.city }}'"; fi
+          if [ "${{ inputs.limit_cities || '0' }}" != "0" ]; then ARGS="$ARGS --limit-cities ${{ inputs.limit_cities }}"; fi
+          echo "python scripts/rcn_sync.py $ARGS"
+          eval python scripts/rcn_sync.py $ARGS

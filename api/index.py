@@ -4082,6 +4082,16 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
         if len(pool_sim) >= 8:
             break
     pool_sim.sort(key=_similarity)
+    # Deduplikacja cross-portal (ta sama oferta z 2 źródeł: ten sam metraż + cena + pokoje)
+    _seen_sig = set()
+    _dedup = []
+    for c in pool_sim:
+        sig = (round(float(c.get("area_m2") or 0), 1), int(c.get("price") or 0), c.get("rooms"))
+        if sig in _seen_sig:
+            continue
+        _seen_sig.add(sig)
+        _dedup.append(c)
+    pool_sim = _dedup
     local_pool = pool_sim[:20]    # do mediany ofertowej (stabilniejsza niż z 10)
     local_offers = pool_sim[:10]  # do tabeli i mapy
     used_radius = 0

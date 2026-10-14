@@ -3998,10 +3998,21 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
                 if prop_lat is not None:
                     break
 
-    # ---- STEP 2: Find comparable local offers
-    # Strategy A: Match by city name (normalized, diacritic-insensitive) — ALWAYS included first
+    # ---- STEP 2: Find comparable local offers — scored by SIMILARITY (distance, metraż,
+    # pokoje, rynek), not "first 10 offers in the city".
     target_city_norm = _normalize_city_name(l.get("city") or "")
     target_type = l.get("type")
+    target_area = float(l.get("area_m2") or 0)
+    target_rooms = l.get("rooms")
+    target_market = l.get("market_type")
+    target_district_norm = _normalize_city_name(l.get("district") or "")
+
+    def _median(nums):
+        s = sorted(x for x in nums if x)
+        if not s:
+            return 0
+        n = len(s)
+        return s[n//2] if n % 2 == 1 else (s[n//2-1] + s[n//2]) / 2
 
     def _offer_matches(x):
         return (x.get("id") != l.get("id")
@@ -4010,64 +4021,72 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
                 and x.get("is_original") is not False
                 and x.get("price_pm2"))
 
-    city_matches = [
-        {**x, "_dist": None}
-        for x in all_listings
-        if _offer_matches(x) and _normalize_city_name(x.get("city") or "") == target_city_norm
-    ]
+    def _offer_coords(x):
+        """Prefer offer's own GPS, fall back to city-center coords."""
+        xlat, xlon = x.get("lat"), x.get("lon")
+        if xlat is not None and xlon is not None:
+            return xlat, xlon
+        ck = _normalize_city_name(x.get("city") or "")
+        if ck in CITY_COORDS:
+            return CITY_COORDS[ck]
+        return None, None
 
-    local_offers = list(city_matches)
-    used_radius = 0
-
-    # Strategy B: If <10 city matches, extend with nearby offers by GPS distance
-    if len(local_offers) < 10 and prop_lat is not None and prop_lon is not None:
-        seen_ids = {o.get("id") for o in local_offers}
-        # 20km max for listing GPS, 30km max for geocoded rural (nearest bigger city)
-        max_km = 20 if coords_source == "listing" else 30
-
-        def _offer_coords(x):
-            """Prefer offer's own GPS, fall back to city-center coords."""
-            xlat, xlon = x.get("lat"), x.get("lon")
-            if xlat is not None and xlon is not None:
-                return xlat, xlon
-            ck = _normalize_city_name(x.get("city") or "")
-            if ck in CITY_COORDS:
-                return CITY_COORDS[ck]
-            return None, None
-
-        gps_candidates = []
-        for x in all_listings:
-            if not (_offer_matches(x) and x.get("id") not in seen_ids):
-                continue
+    # Kandydaci: to samo miasto LUB (gdy znamy GPS) w promieniu max_km
+    max_km = 20 if coords_source == "listing" else 30
+    candidates = []
+    for x in all_listings:
+        if not _offer_matches(x):
+            continue
+        same_city = _normalize_city_name(x.get("city") or "") == target_city_norm
+        d = None
+        if prop_lat is not None and prop_lon is not None:
             xlat, xlon = _offer_coords(x)
-            if xlat is None or xlon is None:
-                continue
-            d = _haversine_km(prop_lat, prop_lon, xlat, xlon)
-            if d <= max_km:
-                gps_candidates.append({**x, "_dist": round(d, 2)})
+            if xlat is not None and xlon is not None:
+                d = round(_haversine_km(prop_lat, prop_lon, xlat, xlon), 2)
+        if not same_city and (d is None or d > max_km):
+            continue
+        candidates.append({**x, "_dist": d, "_same_city": same_city})
 
-        # Progressive expansion until total offers ≥ 3
-        gps_candidates.sort(key=lambda t: t["_dist"])
-        if coords_source == "listing":
-            radii = [5, 8, 12, 20]
+    # Outliery cenowe (np. „mieszkanie” 4 500 zł/m² = błędnie otagowany garaż/dom) psują medianę i tabelę
+    if len(candidates) >= 8:
+        med_c = _median([c["price_pm2"] for c in candidates])
+        if med_c:
+            filtered = [c for c in candidates if 0.45 * med_c <= c["price_pm2"] <= 2.2 * med_c]
+            if len(filtered) >= 5:
+                candidates = filtered
+
+    def _similarity(c):
+        s = 0.0
+        if c["_dist"] is not None:
+            s += min(c["_dist"], 25) * 1.2                      # 1 km ≈ 1,2 pkt
         else:
-            # Geocoded villages: 10 → 20 → 30 km (typical distance to nearest city)
-            radii = [10, 20, 30]
-
-        for km in radii:
-            extra = [c for c in gps_candidates if c["_dist"] <= km]
-            combined = local_offers + extra
-            if len(combined) >= 3:
-                local_offers = combined
-                used_radius = km
-                break
+            s += 6.0 if c["_same_city"] else 15.0
+        if target_district_norm and _normalize_city_name(c.get("district") or "") == target_district_norm:
+            s -= 2.0
+        if target_area and c.get("area_m2"):
+            s += abs(c["area_m2"] - target_area) / target_area * 20  # 10 % różnicy metrażu ≈ 2 pkt
         else:
-            local_offers = local_offers + gps_candidates
-            used_radius = max_km
+            s += 4.0
+        if target_rooms and c.get("rooms"):
+            s += abs(int(c["rooms"]) - int(target_rooms)) * 1.5
+        if target_market and c.get("market_type") and c["market_type"] != target_market:
+            s += 3.0
+        return s
 
-    # Sort: city matches first (dist=None) then by distance
-    local_offers.sort(key=lambda x: (x.get("_dist") if x.get("_dist") is not None else -1,))
-    local_offers = local_offers[:10]
+    # Bramka metrażu: ±35 % → ±60 % → bez ograniczenia (gdy za mało danych)
+    pool_sim = candidates
+    for tol in (0.35, 0.6, None):
+        pool_sim = [c for c in candidates
+                    if tol is None or not target_area or not c.get("area_m2")
+                    or abs(c["area_m2"] - target_area) <= target_area * tol]
+        if len(pool_sim) >= 8:
+            break
+    pool_sim.sort(key=_similarity)
+    local_pool = pool_sim[:20]    # do mediany ofertowej (stabilniejsza niż z 10)
+    local_offers = pool_sim[:10]  # do tabeli i mapy
+    used_radius = 0
+    if local_offers and all(o["_dist"] is not None for o in local_offers):
+        used_radius = round(max(o["_dist"] for o in local_offers), 1)
 
     # City-wide offers (SALE only, same type)
     city_offers = [
@@ -4080,14 +4099,7 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
     ]
 
     # Compute medians
-    def _median(nums):
-        s = sorted(x for x in nums if x)
-        if not s:
-            return 0
-        n = len(s)
-        return s[n//2] if n % 2 == 1 else (s[n//2-1] + s[n//2]) / 2
-
-    ppm2_local = _median([o["price_pm2"] for o in local_offers])
+    ppm2_local = _median([o["price_pm2"] for o in (local_pool or local_offers)])
     ppm2_this = l.get("price_pm2") or 0
 
     # ── RCN transactional prices (real notary deals from GUGiK) ────────
@@ -4323,7 +4335,7 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
         ]
         col2 = [
             Paragraph("Cena za m²", card_label),
-            Paragraph(fmt_pln_short(price_pm2), big_num),
+            Paragraph(fmt_pln(price_pm2) if price_pm2 else "—", big_num),
         ]
         col3 = [
             Paragraph("Szacowany zakres cen", card_label),
@@ -4345,7 +4357,7 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
         return [title_row, sub_row, cards, Spacer(1, 3*mm)]
 
     # Transakcyjna (RCN akty notarialne LUB szacunek 94% ofertowej)
-    _tx_title = "Realna cena transakcyjna" if rcn_source_label else "Szacowana cena transakcyjna sprzedaży"
+    _tx_title = "Realna cena transakcyjna (mediana porównywalnych)" if rcn_source_label else "Szacowana cena transakcyjna sprzedaży"
     _tx_sub   = ((f"mediana z {rcn_stats['n']} aktów notarialnych "
                   + (f"w promieniu {rcn_stats['radius_km']:g} km" if rcn_stats.get('radius_km') else (rcn_stats.get('scope') or ''))
                   + (f", {rcn_stats['first_date'][:7]}–{rcn_stats['last_date'][:7]}" if rcn_stats.get('first_date') and rcn_stats.get('last_date') else '')
@@ -4361,7 +4373,7 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
 
     # Ofertowa
     for el in _price_card(
-        "Szacowana cena ofertowa sprzedaży",
+        "Szacowana cena ofertowa sprzedaży (mediana podobnych ofert)",
         "kwota, za jaką wystawiono podobne nieruchomości na portalach ogłoszeniowych.",
         offer_price_mid, ppm2_local, offer_price_low, offer_price_high,
     ):
@@ -4370,8 +4382,9 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
     # === Parametry nieruchomości ===
     ptype_lbl = {"mieszkanie": "Mieszkanie", "dom": "Dom", "dzialka": "Działka"}.get(l.get("type",""), l.get("type",""))
     market_lbl = {"pierwotny": "Rynek pierwotny", "wtorny": "Rynek wtórny"}.get(l.get("market_type",""), "—")
-    std_lbl = {"deweloperski": "Deweloperski", "wysoki": "Wysoki (Premium)",
-               "standardowy": "Standardowy", "do_odswiezenia": "Do odświeżenia",
+    std_lbl = {"deweloperski": "Deweloperski (do wykończenia)", "wysoki": "Wysoki (po remoncie)",
+               "dobry": "Dobry (do wprowadzenia)", "standardowy": "Dobry (do wprowadzenia)",
+               "do_odswiezenia": "Do odświeżenia",
                "do_remontu": "Do remontu"}.get(l.get("standard",""), l.get("standard","") or "—")
 
     param_rows = []
@@ -4428,20 +4441,253 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
         ]))
         story.append(pt)
 
+    # === Wpływ parametrów na cenę za m² (list z arrows) ===
+    param_impacts = []
+    # Nowe budownictwo
+    if l.get("build_year") and l["build_year"] >= 2015:
+        param_impacts.append(("↑", "Nowe budownictwo (od 2015)", "+2%", SUCCESS))
+    elif l.get("build_year") and l["build_year"] < 1980:
+        param_impacts.append(("↓", "Starsze budownictwo (przed 1980)", "-3%", DANGER))
+    # Metraż (dla mieszkań)
+    if l.get("type") == "mieszkanie" and l.get("area_m2"):
+        a = l["area_m2"]
+        if 31 <= a <= 45:
+            param_impacts.append(("↑", "Mały metraż (31-45 m²)", "+2%", SUCCESS))
+        elif a > 80:
+            param_impacts.append(("↓", "Duży metraż (powyżej 80 m²)", "-2%", DANGER))
+    # Piętro
+    if l.get("floor") is not None:
+        if l["floor"] <= 4 and l["floor"] > 0:
+            param_impacts.append(("↑", "Niskie piętro (1-4)", "+1%", SUCCESS))
+        elif l["floor"] == 0:
+            param_impacts.append(("↓", "Parter", "-2%", DANGER))
+    # Winda
+    if l.get("elevator") == "tak":
+        param_impacts.append(("↑", "Winda w budynku", "+1%", SUCCESS))
+    elif l.get("elevator") == "nie" and (l.get("floor") or 0) >= 4:
+        param_impacts.append(("↓", "Brak windy przy wysokim piętrze", "-3%", DANGER))
+    # Parking
+    if l.get("parking") == "tak":
+        param_impacts.append(("↑", "Miejsce postojowe", "+2%", SUCCESS))
+    # Standard
+    if l.get("standard") == "wysoki":
+        param_impacts.append(("↑", "Wysoki standard (po remoncie)", "+8%", SUCCESS))
+    elif l.get("standard") == "deweloperski":
+        param_impacts.append(("↓", "Stan deweloperski (do wykończenia)", "-5%", DANGER))
+    elif l.get("standard") in ("do_remontu", "do_odswiezenia"):
+        param_impacts.append(("↓", "Do remontu", "-15%", DANGER))
+
+    # === Odpowiedź AI co do ceny ===
+    # Werdykt oparty na danych: realne transakcje RCN (lub 94 % cen ofertowych), podobne oferty,
+    # korekty parametrów, trend 6 mies., pozycja dzielnicy. Konkretne kwoty: wartość, cena
+    # wywoławcza, szybka sprzedaż, dolna granica.
+    ai_lines = []
+    ai_verdict_title = "Odpowiedź AI: ile jest warta i za ile wystawić"
+    ai_headline = None  # (label, value) pary do nagłówka boksu
+
+    def _pct_num(s):
+        try:
+            return int(str(s).replace("%", "").replace("+", "").strip())
+        except (ValueError, TypeError):
+            return 0
+
+    def _rnd(v, step=1000):
+        try:
+            return int(round(float(v) / step) * step)
+        except (ValueError, TypeError):
+            return 0
+
+    def _pct_txt(v, digits=1):
+        return (f"{v:+.{digits}f}".replace(".", ",")) + "%"
+
+    base_tx_pm2 = ppm2_rcn or (int(ppm2_local * 0.94) if ppm2_local else 0)
+    base_offer_pm2 = ppm2_local or (int(base_tx_pm2 / 0.94) if base_tx_pm2 else 0)
+
+    if area and base_tx_pm2 > 0:
+        adj_pct = max(-25, min(15, sum(_pct_num(p[2]) for p in param_impacts)))
+        adj = 1 + adj_pct / 100.0
+        tx_pm2_adj = int(base_tx_pm2 * adj)
+        offer_pm2_adj = int(base_offer_pm2 * adj)
+
+        value_mid = _rnd(tx_pm2_adj * area)
+        if rcn_source_label and rcn_stats and rcn_stats.get("p25_pm2") and rcn_stats.get("p75_pm2"):
+            value_low = _rnd(rcn_stats["p25_pm2"] * adj * area)
+            value_high = _rnd(rcn_stats["p75_pm2"] * adj * area)
+        else:
+            value_low = _rnd(value_mid * 0.93)
+            value_high = _rnd(value_mid * 1.07)
+        value_low = min(value_low, value_mid)
+        value_high = max(value_high, value_mid)
+
+        ask_step = 10000 if value_mid >= 1_000_000 else 5000
+        ask_rec = _rnd(max(offer_pm2_adj * area, value_mid * 1.04), ask_step)
+        quick_sale = _rnd(value_mid * 0.97)
+        floor_price = value_low
+        gap_pct = ((base_offer_pm2 - base_tx_pm2) / base_offer_pm2 * 100.0) if base_offer_pm2 else 0.0
+        margin_pct = ((ask_rec - value_mid) / ask_rec * 100.0) if ask_rec else 0.0
+
+        ai_headline = [("Realna wartość", fmt_pln(value_mid)),
+                       ("Cena wywoławcza", fmt_pln(ask_rec)),
+                       ("Nie schodź poniżej", fmt_pln(floor_price))]
+
+        # 1) Wartość i podstawa
+        if rcn_source_label and rcn_stats:
+            _basis = (f"{rcn_stats['n']} aktów notarialnych RCN "
+                      + (f"w promieniu {rcn_stats['radius_km']:g} km" if rcn_stats.get("radius_km") else (rcn_stats.get("scope") or "z okolicy"))
+                      + f" (mediana {fmt_pm2(base_tx_pm2)})")
+        else:
+            _basis = (f"{len(local_pool or local_offers)} podobnych ofert z okolicy (mediana {fmt_pm2(base_offer_pm2)}) "
+                      f"— ceny transakcyjne przyjęto jako 94% ofertowych, bo RCN nie ma danych dla tej lokalizacji/typu")
+        _adj_txt = ""
+        if adj_pct:
+            _adj_txt = (f" Korekta za parametry: <b>{_pct_txt(adj_pct, 0)}</b> ("
+                        + ", ".join(f"{_pct_txt(_pct_num(p[2]), 0)} {p[1].lower()}" for p in param_impacts) + ").")
+        ai_lines.append(
+            f"<b>Realna wartość rynkowa: {fmt_pln(value_mid)}</b> ({fmt_pm2(tx_pm2_adj)}), "
+            f"typowe widełki transakcyjne <b>{fmt_pln(value_low)} – {fmt_pln(value_high)}</b>. "
+            f"Podstawa: {_basis}.{_adj_txt}"
+        )
+
+        # 2) Cena wywoławcza i negocjacje
+        if gap_pct >= 1.0:
+            _gap_src = (f"w tej okolicy oferty są wystawiane średnio o <b>{gap_pct:.0f}%</b> drożej, niż faktycznie się sprzedają (oferty vs akty RCN)"
+                        if rcn_source_label else
+                        f"przyjmujemy typową dla rynku różnicę ok. <b>{gap_pct:.0f}%</b> między ceną ofertową a transakcyjną")
+            ai_lines.append(
+                f"<b>Wystaw za {fmt_pln(ask_rec)}.</b> To zostawia ok. <b>{margin_pct:.0f}%</b> marginesu na negocjacje — {_gap_src}. "
+                f"Szybka sprzedaż (2–4 tyg.): <b>{fmt_pln(quick_sale)}</b>. "
+                f"Dolna granica: <b>{fmt_pln(floor_price)}</b> — poniżej sprzedajesz taniej niż 75% transakcji w okolicy."
+            )
+        else:
+            ai_lines.append(
+                f"<b>Wystaw za {fmt_pln(ask_rec)}.</b> Transakcje w okolicy zamykają się na poziomie cen ofertowych lub wyżej "
+                f"(rynek sprzedającego), więc duży bufor negocjacyjny nie jest potrzebny. "
+                f"Szybka sprzedaż (2–4 tyg.): <b>{fmt_pln(quick_sale)}</b>. Dolna granica: <b>{fmt_pln(floor_price)}</b>."
+            )
+
+        # 3) Twoja cena (jeśli podana)
+        if ppm2_this and l.get("price"):
+            diff = (l["price"] - value_mid) / value_mid * 100.0
+            if diff > 12:
+                _c, _t = DANGER, f"o <b>{diff:.0f}% powyżej</b> realnej wartości — spodziewaj się długiej sprzedaży (6+ mies.) lub braku ofert; rozważ zejście do {fmt_pln(ask_rec)}"
+            elif diff > 4:
+                _c, _t = colors.HexColor("#F59E0B"), f"o <b>{diff:.0f}% powyżej</b> realnej wartości — to rozsądna cena wywoławcza z miejscem na negocjacje"
+            elif diff >= -4:
+                _c, _t = SUCCESS, "<b>zgodna z realną wartością</b> — kupujący nie będą mieli argumentu do dużej obniżki"
+            else:
+                _c, _t = SUCCESS, f"o <b>{abs(diff):.0f}% poniżej</b> realnej wartości — sprzedasz szybko, ale zostawiasz pieniądze na stole; możesz podnieść do {fmt_pln(ask_rec)}"
+            ai_lines.append(f'Twoja cena <b>{fmt_pln(l["price"])}</b> jest <font color="{_c.hexval()}">{_t}</font>.')
+
+        # 4) Trend RCN
+        _tr = (rcn_stats or {}).get("trend_pct") if rcn_source_label else None
+        if _tr is not None:
+            if _tr >= 2:
+                ai_lines.append(f"Ceny transakcyjne w okolicy <b>wzrosły o {_pct_txt(_tr)}</b> przez ostatnie 6 mies. — rynek rośnie, nie ma presji na obniżki; możesz celować w górę widełek.")
+            elif _tr <= -2:
+                ai_lines.append(f"Ceny transakcyjne w okolicy <b>spadły o {_pct_txt(_tr)}</b> przez ostatnie 6 mies. — jeśli planujesz sprzedaż, nie czekaj i wyceniaj realistycznie od początku.")
+            else:
+                ai_lines.append(f"Ceny transakcyjne w okolicy są <b>stabilne</b> ({_pct_txt(_tr)} przez 6 mies.) — wycena nie powinna się istotnie zmienić w najbliższych miesiącach.")
+
+        # 5) Pozycja dzielnicy na tle miasta
+        _ud = (l.get("district") or "").strip()
+        if _ud and len(city_offers) >= 20:
+            _d_pm2 = [o["price_pm2"] for o in city_offers if (o.get("district") or "").lower() == _ud.lower() and o.get("price_pm2")]
+            _c_pm2 = [o["price_pm2"] for o in city_offers if o.get("price_pm2")]
+            if len(_d_pm2) >= 5 and _c_pm2:
+                _dm, _cm = _median(_d_pm2), _median(_c_pm2)
+                _rel = (_dm - _cm) / _cm * 100.0 if _cm else 0
+                _rel_txt = (f"o {abs(_rel):.0f}% {'powyżej' if _rel > 0 else 'poniżej'} mediany miasta" if abs(_rel) >= 1 else "na poziomie mediany miasta")
+                ai_lines.append(f"Dzielnica <b>{_ud}</b>: {fmt_pm2(int(_dm))} w ofertach ({len(_d_pm2)} ofert) — {_rel_txt} ({fmt_pm2(int(_cm))}).")
+
+        # 6) Rekomendacja wg celu
+        reason = (l.get("reason") or "").lower()
+        if reason == "sprzedaz":
+            step2 = _rnd(value_mid * 1.02, ask_step)
+            ai_lines.append(
+                f"<b>Plan sprzedaży:</b> start <b>{fmt_pln(ask_rec)}</b> → jeśli po 3–4 tygodniach brak konkretnych ofert, "
+                f"zejdź do <b>{fmt_pln(step2)}</b> → finalnie oczekuj ok. <b>{fmt_pln(value_mid)}</b>. "
+                f"Typowy czas sprzedaży przy takiej wycenie: 6–10 tygodni."
+            )
+        elif reason == "agent":
+            ai_lines.append(
+                f"<b>Dla klienta:</b> cena wywoławcza <b>{fmt_pln(ask_rec)}</b>, cel <b>{fmt_pln(value_mid)}</b>, dolna granica <b>{fmt_pln(floor_price)}</b>. "
+                + (f"Argument w rozmowie: {rcn_stats['n']} realnych transakcji RCN z okolicy o medianie {fmt_pm2(base_tx_pm2)}."
+                   if rcn_source_label and rcn_stats else "Argument w rozmowie: mediana podobnych ofert w okolicy i ich czas ekspozycji.")
+            )
+        else:
+            ai_lines.append(
+                f"<b>Jeśli nie planujesz sprzedaży:</b> {fmt_pln(value_mid)} to punkt odniesienia do kredytu, ubezpieczenia czy podziału majątku. "
+                f"Wartość warto odświeżać co 6 mies. — tyle wynosi typowy cykl zmian cen w RCN."
+            )
+
+        # 7) Rok budowy
+        if l.get("build_year"):
+            by = l["build_year"]
+            if by >= 2020:
+                ai_lines.append(f"Nowe budownictwo (od {by}) — utrzymuje wartość lepiej niż średnia rynkowa.")
+            elif by < 1990:
+                ai_lines.append(f"Starsze budownictwo ({by}) — remont podnosi wartość o 8-15%.")
+
+    if ai_lines:
+        story.append(Spacer(1, 5*mm))
+        # Header with icon
+        story.append(Paragraph(ai_verdict_title, ParagraphStyle(
+            "aih", fontName=face_bold, fontSize=11, leading=14,
+            textColor=PRIMARY, spaceAfter=4)))
+        # Content in a light purple/indigo box
+        ai_content_parts = []
+        if ai_headline:
+            _hl_cells = []
+            for _lbl, _val in ai_headline:
+                _hl_cells.append([
+                    Paragraph(_lbl, ParagraphStyle("hll", fontName=face, fontSize=7, leading=9, textColor=TEXT_MUTED, alignment=TA_CENTER)),
+                    Paragraph(f"<b>{_val}</b>", ParagraphStyle("hlv", fontName=face_bold, fontSize=13, leading=16, textColor=PRIMARY_DARK, alignment=TA_CENTER)),
+                ])
+            _hl = Table([_hl_cells], colWidths=[52*mm] * len(_hl_cells))
+            _hl.setStyle(TableStyle([
+                ("BACKGROUND", (0,0),(-1,-1), colors.white),
+                ("BOX", (0,0),(-1,-1), 0.5, BORDER),
+                ("INNERGRID", (0,0),(-1,-1), 0.5, BORDER),
+                ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
+                ("TOPPADDING", (0,0),(-1,-1), 5), ("BOTTOMPADDING", (0,0),(-1,-1), 5),
+            ]))
+            ai_content_parts.append(_hl)
+            ai_content_parts.append(Spacer(1, 3*mm))
+        for line in ai_lines:
+            ai_content_parts.append(Paragraph(line, ParagraphStyle(
+                "aic", fontName=face, fontSize=9, leading=12,
+                textColor=TEXT_DARK, spaceAfter=3)))
+        ai_box = Table([[ai_content_parts]], colWidths=[180*mm])
+        ai_box.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,-1), colors.HexColor("#EEF2FF")),
+            ("BOX", (0,0),(-1,-1), 0.8, PRIMARY),
+            ("VALIGN", (0,0),(-1,-1), "TOP"),
+            ("TOPPADDING", (0,0),(-1,-1), 10),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 10),
+            ("LEFTPADDING", (0,0),(-1,-1), 12),
+            ("RIGHTPADDING", (0,0),(-1,-1), 12),
+        ]))
+        story.append(ai_box)
+
+    # ============ PAGE 2: Czynniki ceny + Podobne oferty ============
+    story.append(PageBreak())
     # === Wpływ standardu na cenę (bar chart) - dla mieszkań I domów ===
-    if l.get("type") in ("mieszkanie", "dom") and len(city_offers) >= 5:
+    # Oferty w bazie nie mają pola `standard` → słupki to szacunek względem mediany ofertowej
+    # (mnożniki rynkowe), wyraźnie opisany jako szacunek. Kategorie = opcje formularza wyceny.
+    STD_MULT = {"do_remontu": 0.82, "deweloperski": 0.95, "dobry": 1.00, "wysoki": 1.10}
+    _user_std = {"standardowy": "dobry", "do_odswiezenia": "do_remontu"}.get(l.get("standard") or "", l.get("standard") or "")
+    if l.get("type") in ("mieszkanie", "dom") and len(city_offers) >= 5 and ppm2_local:
         from collections import defaultdict as _dd
         std_map = _dd(list)
-        std_labels_order = ["do_remontu", "do_odswiezenia", "standardowy", "wysoki", "deweloperski"]
+        std_labels_order = ["do_remontu", "deweloperski", "dobry", "wysoki"]
         std_display = {
-            "do_remontu": "Bardzo zły",
-            "do_odswiezenia": "Zły",
-            "standardowy": "Standardowy",
-            "wysoki": "Premium",
-            "deweloperski": "Luksusowy",
+            "do_remontu": "Do remontu",
+            "deweloperski": "Deweloperski",
+            "dobry": "Dobry",
+            "wysoki": "Wysoki (po remoncie)",
         }
         for o in city_offers:
-            s = o.get("standard") or ""
+            s = {"standardowy": "dobry"}.get(o.get("standard") or "", o.get("standard") or "")
             if s in std_labels_order and o.get("price_pm2"):
                 std_map[s].append(o["price_pm2"])
 
@@ -4450,22 +4696,17 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
         highlight_std_idx = -1
         for i, key in enumerate(std_labels_order):
             arr = std_map.get(key, [])
-            if arr:
+            if len(arr) >= 5:
                 med = _median(arr)
             else:
-                # Estimate: below/above median
-                base = ppm2_local or 10000
-                mults = {"do_remontu": 0.80, "do_odswiezenia": 0.90,
-                         "standardowy": 1.00, "wysoki": 1.15, "deweloperski": 1.30}
-                med = int(base * mults.get(key, 1.0))
+                med = int(ppm2_local * STD_MULT.get(key, 1.0))
             std_data.append(int(med * (area or 50)))
             std_categories.append(std_display[key])
-            if l.get("standard") == key:
+            if _user_std == key:
                 highlight_std_idx = i
 
         if std_data:
-            story.append(Spacer(1, 6*mm))
-            story.append(Paragraph("Wpływ standardu na cenę", ParagraphStyle(
+            story.append(Paragraph("Wpływ standardu na cenę ofertową (szacunek)", ParagraphStyle(
                 "wsh", fontName=face_bold, fontSize=11, leading=14,
                 textColor=TEXT_DARK, spaceAfter=4)))
 
@@ -4473,7 +4714,7 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
             from reportlab.graphics.charts.barcharts import VerticalBarChart
             from reportlab.lib import colors as _c
 
-            dw, dh = 180*mm, 42*mm
+            dw, dh = 180*mm, 36*mm
             drw = Drawing(dw, dh)
             bc = VerticalBarChart()
             bc.x = 25
@@ -4509,42 +4750,6 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
             drw.add(bc)
             story.append(drw)
 
-    # === Wpływ parametrów na cenę za m² (list z arrows) ===
-    param_impacts = []
-    # Nowe budownictwo
-    if l.get("build_year") and l["build_year"] >= 2015:
-        param_impacts.append(("↑", "Nowe budownictwo (od 2015)", "+2%", SUCCESS))
-    elif l.get("build_year") and l["build_year"] < 1980:
-        param_impacts.append(("↓", "Starsze budownictwo (przed 1980)", "-3%", DANGER))
-    # Metraż (dla mieszkań)
-    if l.get("type") == "mieszkanie" and l.get("area_m2"):
-        a = l["area_m2"]
-        if 31 <= a <= 45:
-            param_impacts.append(("↑", "Mały metraż (31-45 m²)", "+2%", SUCCESS))
-        elif a > 80:
-            param_impacts.append(("↓", "Duży metraż (powyżej 80 m²)", "-2%", DANGER))
-    # Piętro
-    if l.get("floor") is not None:
-        if l["floor"] <= 4 and l["floor"] > 0:
-            param_impacts.append(("↑", "Niskie piętro (1-4)", "+1%", SUCCESS))
-        elif l["floor"] == 0:
-            param_impacts.append(("↓", "Parter", "-2%", DANGER))
-    # Winda
-    if l.get("elevator") == "tak":
-        param_impacts.append(("↑", "Winda w budynku", "+1%", SUCCESS))
-    elif l.get("elevator") == "nie" and (l.get("floor") or 0) >= 4:
-        param_impacts.append(("↓", "Brak windy przy wysokim piętrze", "-3%", DANGER))
-    # Parking
-    if l.get("parking") == "tak":
-        param_impacts.append(("↑", "Miejsce postojowe", "+2%", SUCCESS))
-    # Standard
-    if l.get("standard") == "wysoki":
-        param_impacts.append(("↑", "Wysoki standard (Premium)", "+8%", SUCCESS))
-    elif l.get("standard") == "deweloperski":
-        param_impacts.append(("↑", "Stan deweloperski", "+3%", SUCCESS))
-    elif l.get("standard") == "do_remontu":
-        param_impacts.append(("↓", "Do remontu", "-15%", DANGER))
-
     if param_impacts:
         story.append(Spacer(1, 5*mm))
         story.append(Paragraph("Wpływ parametrów na cenę za m²", ParagraphStyle(
@@ -4575,144 +4780,14 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
         ]))
         story.append(pt2)
 
-    # === Rekomendacja AI: kupić czy sprzedać? ===
-    # Rule-based verdict based on user's position in the market
-    ai_lines = []
-    ai_verdict_title = "💡 Rekomendacja AI"
-    ai_verdict_color = PRIMARY
-
-    # Compute city median as fallback if local median is 0
-    ai_ppm2_ref = ppm2_local
-    if ai_ppm2_ref <= 0 and city_offers:
-        ai_ppm2_ref = int(_median([o["price_pm2"] for o in city_offers if o.get("price_pm2")]))
-    ai_offer_mid = int(ai_ppm2_ref * area) if area and ai_ppm2_ref else offer_price_mid
-    ai_offer_low = int(ai_offer_mid * 0.92)
-    ai_offer_high = int(ai_offer_mid * 1.08)
-
-    if len(city_offers) >= 3 and ai_ppm2_ref > 0:
-        # Compute percentile of user's price in city
-        all_pm2 = sorted(o["price_pm2"] for o in city_offers if o.get("price_pm2"))
-        user_pm2 = ppm2_this or ai_ppm2_ref
-        percentile = 50
-        if all_pm2:
-            below = sum(1 for p in all_pm2 if p < user_pm2)
-            percentile = int(below / len(all_pm2) * 100)
-
-        # Reason from user's form
-        reason = (l.get("reason") or "").lower()
-
-        # Position analysis
-        if percentile <= 25:
-            pos_txt = f"<b>tanio na tle rynku</b> ({percentile}. percentyl — tańsza od {100-percentile}% podobnych ofert)"
-            pos_color = SUCCESS
-        elif percentile <= 45:
-            pos_txt = f"<b>lekko poniżej mediany</b> ({percentile}. percentyl)"
-            pos_color = SUCCESS
-        elif percentile <= 60:
-            pos_txt = f"<b>w średniej rynkowej</b> ({percentile}. percentyl — jak {100-percentile}% podobnych)"
-            pos_color = PRIMARY
-        elif percentile <= 80:
-            pos_txt = f"<b>powyżej mediany</b> ({percentile}. percentyl — droższa od {percentile}% ofert)"
-            pos_color = colors.HexColor("#F59E0B")
-        else:
-            pos_txt = f"<b>drogo na tle rynku</b> ({percentile}. percentyl — droższa od {percentile}% ofert)"
-            pos_color = DANGER
-
-        ai_lines.append(f'📊 Twoja nieruchomość jest wyceniona <font color="{pos_color.hexval()}">{pos_txt}</font>.')
-
-        # Recommendation based on reason
-        if reason == "sprzedaz":
-            if percentile <= 30:
-                ai_lines.append(
-                    f"🎯 <b>Rekomendacja: sprzedawaj strategicznie.</b> Twoja nieruchomość jest atrakcyjnie wyceniona — "
-                    f"celuj w <b>{fmt_pln_short(ai_offer_mid)}</b> (najszybsza sprzedaż) lub "
-                    f"<b>{fmt_pln_short(ai_offer_high)}</b> jeśli nie spieszy Ci się (ok. 2-4 miesięcy)."
-                )
-            elif percentile <= 60:
-                ai_lines.append(
-                    f"🎯 <b>Rekomendacja: sprzedawaj z lekką przewagą.</b> Cena w środku widełek "
-                    f"<b>{fmt_pln_short(ai_offer_low)} – {fmt_pln_short(ai_offer_high)}</b> "
-                    f"zwykle sprzedaje się w 6-8 tygodni. Środek widełek (~{fmt_pln_short(ai_offer_mid)}) "
-                    f"to złoty środek między szybkością a maksymalizacją zysku."
-                )
-            else:
-                ai_lines.append(
-                    f"🎯 <b>Rekomendacja: rozważ obniżkę.</b> Cena powyżej mediany wydłuża czas sprzedaży. "
-                    f"Zejdź do <b>{fmt_pln_short(ai_offer_mid)}</b> (mediana rynkowa), a sprzedasz w 4-6 tygodni. "
-                    f"Trzymanie ceny powyżej ryzykuje 6+ miesięcy bez zainteresowania."
-                )
-        elif reason == "ciekawosc":
-            if percentile <= 30:
-                ai_lines.append(
-                    f"🎯 <b>Wartość Twojej nieruchomości rośnie.</b> W obecnych warunkach rynkowych "
-                    f"(mediana Krakowa: {fmt_pm2(ai_ppm2_ref)}) Twoja nieruchomość ma <b>potencjał wzrostu</b>. "
-                    f"Trzymaj lub rozważ rynek najmu (typowe stopy zwrotu: 4-6% rocznie)."
-                )
-            elif percentile <= 60:
-                ai_lines.append(
-                    f"🎯 <b>Twoja nieruchomość jest wyceniona zgodnie z rynkiem.</b> Jeśli planujesz sprzedaż w ciągu 2-3 lat, "
-                    f"kalkuluj cenę wywoławczą w widełkach <b>{fmt_pln_short(ai_offer_low)} – {fmt_pln_short(ai_offer_high)}</b>. "
-                    f"Standard nieruchomości i ewentualny remont mogą podnieść wartość o 8-15%."
-                )
-            else:
-                ai_lines.append(
-                    f"🎯 <b>Twoja nieruchomość ma premium cenowe.</b> Prawdopodobnie wpływają na to: lokalizacja, standard, "
-                    f"lub niska liczba podobnych ofert. Utrzymanie tej wartości wymaga zachowania standardu — "
-                    f"remont co 5-7 lat pomaga zatrzymać premium."
-                )
-        elif reason == "agent":
-            ai_lines.append(
-                f"🎯 <b>Punkt startowy dla klienta:</b> mediana rynkowa {fmt_pln_short(ai_offer_mid)} "
-                f"(zł/m²: {fmt_pm2(ai_ppm2_ref)}). Rekomendowana cena wywoławcza: <b>{fmt_pln_short(ai_offer_high)}</b> "
-                f"(dla przestrzeni negocjacyjnej), cena szybkiej sprzedaży: <b>{fmt_pln_short(ai_offer_mid)}</b>. "
-                f"Realny czas na rynku: 4-8 tygodni przy dobrym marketingu."
-            )
-        else:
-            ai_lines.append(
-                f"🎯 <b>Rekomendacja neutralna:</b> mediana rynkowa {fmt_pln_short(ai_offer_mid)}, "
-                f"widełki cenowe <b>{fmt_pln_short(ai_offer_low)} – {fmt_pln_short(ai_offer_high)}</b>. "
-                f"Typowy czas sprzedaży w tej lokalizacji: 4-8 tygodni."
-            )
-
-        # Add trend hint
-        if l.get("build_year"):
-            by = l["build_year"]
-            if by >= 2020:
-                ai_lines.append(f"🏗️ Nowe budownictwo (od {by}) — utrzymuje wartość lepiej niż średnia rynkowa.")
-            elif by < 1990:
-                ai_lines.append(f"🏗️ Starsze budownictwo ({by}) — remont podnosi wartość o 8-15%.")
-
-    if ai_lines:
-        story.append(Spacer(1, 5*mm))
-        # Header with icon
-        story.append(Paragraph(ai_verdict_title, ParagraphStyle(
-            "aih", fontName=face_bold, fontSize=11, leading=14,
-            textColor=PRIMARY, spaceAfter=4)))
-        # Content in a light purple/indigo box
-        ai_content_parts = []
-        for line in ai_lines:
-            ai_content_parts.append(Paragraph(line, ParagraphStyle(
-                "aic", fontName=face, fontSize=9, leading=12,
-                textColor=TEXT_DARK, spaceAfter=3)))
-        ai_box = Table([[ai_content_parts]], colWidths=[180*mm])
-        ai_box.setStyle(TableStyle([
-            ("BACKGROUND", (0,0),(-1,-1), colors.HexColor("#EEF2FF")),
-            ("BOX", (0,0),(-1,-1), 0.8, PRIMARY),
-            ("VALIGN", (0,0),(-1,-1), "TOP"),
-            ("TOPPADDING", (0,0),(-1,-1), 10),
-            ("BOTTOMPADDING", (0,0),(-1,-1), 10),
-            ("LEFTPADDING", (0,0),(-1,-1), 12),
-            ("RIGHTPADDING", (0,0),(-1,-1), 12),
-        ]))
-        story.append(ai_box)
-
     # ============ PAGE 2: Podobne oferty sprzedaży ============
-    story.append(PageBreak())
+    story.append(Spacer(1, 6*mm))
     story.append(Paragraph("Podobne oferty sprzedaży", ParagraphStyle(
         "p2t", fontName=face_bold, fontSize=15, leading=20, textColor=TEXT_DARK, spaceAfter=3)))
-    scope_txt = f"promień {used_radius} km" if used_radius else f"{l.get('city','—')}"
+    scope_txt = (f"{l.get('district') + ', ' if l.get('district') else ''}{l.get('city','—')}"
+                 + (f", do {used_radius:g} km od nieruchomości" if used_radius else ""))
     story.append(Paragraph(
-        f"Aktualne oferty sprzedaży w okolicy ({scope_txt}). "
+        f"Najbardziej podobne aktualne oferty sprzedaży ({scope_txt}) — dobrane wg odległości, metrażu, liczby pokoi i rynku. "
         f"Podane ceny to wartości ofertowe – ceny transakcyjne są zwykle 5-8% niższe.",
         ParagraphStyle("p2s", fontName=face, fontSize=8, leading=11, textColor=TEXT_MUTED, spaceAfter=6)))
 
@@ -4760,10 +4835,10 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
         # Only render the map if we have offers to place on it
         if offers_with_gps:
             map_bytes = _build_map_with_price_labels(map_lat, map_lon, offers_with_gps,
-                                                      width=1000, height=560)
+                                                      width=1000, height=456)
             if map_bytes:
                 from reportlab.platypus import Image as RLImage
-                img = RLImage(io.BytesIO(map_bytes), width=180*mm, height=100*mm)
+                img = RLImage(io.BytesIO(map_bytes), width=180*mm, height=82*mm)
                 img.hAlign = "CENTER"
                 story.append(img)
                 story.append(Paragraph(
@@ -4795,6 +4870,8 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
             sub_o = o.get("sub_location") or ""
             addr_parts = [x for x in [sub_o, district_o, city_o] if x]
             addr = ", ".join(addr_parts) or "—"
+            if o.get("_dist") is not None:
+                addr += f" ({o['_dist']:.1f} km)"
             area_o = f"{o.get('area_m2','—')} m²" if o.get('area_m2') else "—"
             rooms_o = str(o.get("rooms","—")) if o.get("rooms") else "—"
             row = [
@@ -5020,7 +5097,7 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
         story.append(Paragraph(f"Ranking dzielnic w mieście {l.get('city','—')}", ParagraphStyle(
             "trh", fontName=face_bold, fontSize=13, leading=17, textColor=TEXT_DARK, spaceAfter=3)))
         story.append(Paragraph(
-            f"Aktualne mediany cen sprzedaży {ptype_lbl.lower()} per dzielnica. "
+            f"Aktualne mediany cen sprzedaży {({'mieszkanie': 'mieszkań', 'dom': 'domów', 'dzialka': 'działek'}).get(l.get('type',''), ptype_lbl.lower())} per dzielnica. "
             f"Niebieski słupek to Twoja dzielnica ({l.get('district') or '—'}).",
             ParagraphStyle("trs", fontName=face, fontSize=8, leading=11, textColor=TEXT_MUTED, spaceAfter=6)))
 

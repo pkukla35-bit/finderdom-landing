@@ -4874,7 +4874,7 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
         cell_style = ParagraphStyle("cellr", fontName=face, fontSize=7.5, leading=10, textColor=TEXT_DARK, alignment=TA_LEFT)
         cell_center = ParagraphStyle("cellrc", fontName=face, fontSize=7.5, leading=10, textColor=TEXT_DARK, alignment=TA_CENTER)
         for t in _rcn_recent[:12]:
-            addr = ", ".join(x for x in [t.get("ulica"), t.get("city")] if x) or "—"
+            addr = ", ".join((x.title() if x.isupper() else x) for x in [t.get("ulica"), t.get("city")] if x) or "—"
             if t.get("dist_km") is not None:
                 addr += f" ({t['dist_km']} km)"
             dd = t.get("data") or ""

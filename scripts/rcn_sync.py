@@ -142,7 +142,13 @@ def addr_parts(s: str | None):
         return None, None
     d = dict(p.split(":", 1) for p in s.split(";") if ":" in p)
     ul = (d.get("UL") or "").replace("ulica ", "").replace("aleja ", "al. ").strip() or None
-    return (d.get("MSC") or "").strip() or None, ul
+    msc = (d.get("MSC") or "").strip() or None
+    # RCN często ma WIELKIE LITERY → czytelna wersja (Profesora Michała Bobrzyńskiego)
+    if ul and ul.isupper():
+        ul = ul.title()
+    if msc and msc.isupper():
+        msc = msc.title()
+    return msc, ul
 
 
 def market_of(f: str):

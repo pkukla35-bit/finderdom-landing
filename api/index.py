@@ -2775,6 +2775,67 @@ async def debug_map():
     return result
 
 
+def _listing_doc_to_valuation(d: dict) -> dict:
+    """Dokument Mongo `listings` → płaski rekord używany przez build_valuation_pdf."""
+    price = d.get("price") or 0
+    area = d.get("area_m2") or 0
+    ppm = d.get("price_pm2") or (round(price / area) if price and area else None)
+    return {
+        "id": f"otodom-{d.get('external_id')}" if d.get("external_id") else str(d.get("_id")),
+        "external_id": d.get("external_id"), "title": d.get("title") or "", "url": d.get("url") or "",
+        "city": d.get("city") or "", "district": d.get("district") or "", "sub_location": d.get("sub_location") or "",
+        "type": (d.get("type") or "").lower(), "transaction": "wynajem" if (d.get("transaction_type") or "").lower().startswith("wynaj") else "sprzedaz",
+        "price": price, "area_m2": area, "price_pm2": ppm, "rooms": d.get("rooms"),
+        "floor": d.get("floor"), "max_floor": d.get("max_floor"), "standard": d.get("standard"),
+        "market_type": d.get("market_type"), "build_year": d.get("build_year"), "elevator": d.get("elevator"),
+        "lat": d.get("lat"), "lon": d.get("lng"), "is_original": True, "source": d.get("source"),
+        "image": (d.get("images") or [None])[0] if isinstance(d.get("images"), list) else d.get("image"),
+    }
+
+
+async def _load_valuation_pool(city: str, prop_type: str, limit: int = 3000) -> list:
+    """Oferty sprzedaży tego samego typu w mieście (pula porównawcza do wyceny)."""
+    q: Dict[str, Any] = {"transaction_type": {"$regex": "^sprzeda", "$options": "i"}, "price": {"$gt": 1000}}
+    if prop_type:
+        q["type"] = {"$regex": f"^{re.escape(prop_type)}", "$options": "i"}
+    if city:
+        q["city"] = {"$regex": "^" + _build_diacritic_regex(city.strip()) + "$"}
+    try:
+        docs = await database().listings.find(q).sort("added_at", -1).limit(limit).to_list(length=limit)
+    except Exception as e:
+        logger.warning("valuation pool failed: %s", e)
+        return []
+    return [_listing_doc_to_valuation(d) for d in docs]
+
+
+async def _load_listing_for_valuation(listing_id: str) -> Optional[dict]:
+    ext = listing_id.replace("otodom-", "")
+    try:
+        d = await database().listings.find_one({"external_id": ext})
+    except Exception:
+        d = None
+    return _listing_doc_to_valuation(d) if d else None
+
+
+async def _geocode_address(address: str, city: str, district: str = "") -> Optional[tuple]:
+    """Nominatim (OSM) — adres → (lat, lon); zwraca None gdy brak trafienia w mieście."""
+    import urllib.parse, urllib.request, json as _json
+    q = ", ".join(x for x in [address, district, city, "Polska"] if x)
+    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({"q": q, "format": "json", "limit": 1, "countrycodes": "pl"})
+
+    def _fetch():
+        req = urllib.request.Request(url, headers={"User-Agent": "FinderDom.pl valuation (kontakt@finderdom.pl)"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return _json.loads(r.read().decode())
+    try:
+        res = await asyncio.to_thread(_fetch)
+        if res:
+            return float(res[0]["lat"]), float(res[0]["lon"])
+    except Exception as e:
+        logger.info("geocode failed for %s: %s", q, e)
+    return None
+
+
 @app.get("/api/valuation/download")
 async def valuation_download(session_id: str):
     """Verify Stripe payment and stream PDF."""
@@ -2797,27 +2858,29 @@ async def valuation_download(session_id: str):
     if val_type not in ("valuation", "valuation_custom"):
         raise HTTPException(400, "Sesja nie jest wyceną")
 
-    # Fetch public listings.json (used dla obu typów)
-    import urllib.request, json as _json
-    try:
-        with urllib.request.urlopen(f"{DOMAIN}/data/listings.json", timeout=15) as r:
-            data = _json.loads(r.read().decode())
-    except Exception as e:
-        raise HTTPException(500, f"Nie można pobrać listingów: {str(e)[:100]}")
-
-    all_listings = data if isinstance(data, list) else data.get("listings", [])
-
+    # Pula porównawcza z MongoDB (dawniej statyczny /data/listings.json — już nie istnieje → 404 i brak PDF po zapłacie)
+    import json as _json
     if val_type == "valuation":
-        listing_id = md.get("listing_id")
-        listing = next((l for l in all_listings if str(l.get("id")) == str(listing_id)), None)
-        if not listing:
+        listing_id = str(md.get("listing_id") or "")
+        base = await _load_listing_for_valuation(listing_id)
+        if not base:
             raise HTTPException(404, "Oferta nie znaleziona")
+        listing = base
+        all_listings = await _load_valuation_pool(listing.get("city") or "", listing.get("type") or "")
+        if not any(str(x.get("id")) == str(listing.get("id")) for x in all_listings):
+            all_listings.append(listing)
     else:
         # Custom valuation - property is in metadata
         listing = _json.loads(md.get("property_json") or "{}")
         listing["id"] = f"custom-{session_id[-8:]}"
+        all_listings = await _load_valuation_pool(listing.get("city") or "", listing.get("type") or "")
+        # Adres → GPS (Nominatim), żeby RCN i oferty liczyły się w promieniu od faktycznej lokalizacji
+        if listing.get("address"):
+            geo = await _geocode_address(listing.get("address"), listing.get("city") or "", listing.get("district") or "")
+            if geo:
+                listing["lat"], listing["lon"] = geo
 
-        # Geocode: użyj mediany lat/lon istniejących ofert w tym mieście+dzielnicy
+        # Geocode fallback: mediana lat/lon istniejących ofert w tym mieście+dzielnicy
         # (SALE only, same type), żeby radius search miał punkt odniesienia
         city_lc = (listing.get("city") or "").lower()
         district_lc = (listing.get("district") or "").lower()
@@ -2831,7 +2894,9 @@ async def valuation_download(session_id: str):
         center_pool = [x for x in same_txn_type if district_lc and x.get("district", "").lower() == district_lc]
         if not center_pool:
             center_pool = same_txn_type
-        if center_pool:
+        if listing.get("lat") is not None and listing.get("lon") is not None:
+            pass  # GPS z adresu
+        elif center_pool:
             lats = sorted(x["lat"] for x in center_pool)
             lons = sorted(x["lon"] for x in center_pool)
             n = len(lats)

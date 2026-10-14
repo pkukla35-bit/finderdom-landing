@@ -2226,7 +2226,6 @@ async def create_checkout(body: CheckoutRequest, user: dict = Depends(current_us
     def create():
         return stripe.checkout.Session.create(
             mode="payment",
-            payment_method_types=["card", "blik"],
             line_items=[{
                 "price_data": {
                     "currency": "pln",
@@ -2665,7 +2664,6 @@ async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
     def create():
         return stripe.checkout.Session.create(
             mode="payment",
-            payment_method_types=["card", "blik"],
             line_items=[{
                 "price_data": {
                     "currency": "pln",
@@ -2703,7 +2701,6 @@ async def valuation_checkout(body: ValuationCheckoutReq):
     def create():
         return stripe.checkout.Session.create(
             mode="payment",
-            payment_method_types=["card", "blik"],
             line_items=[{
                 "price_data": {
                     "currency": "pln",

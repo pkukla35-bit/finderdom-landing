@@ -1101,7 +1101,7 @@ async def admin_stats(admin: dict = Depends(require_admin)):
 
     # Revenue (from invoices — amount stored in grosze)
     async def _sum_amount(match):
-        pipeline = [{"$match": match}, {"$group": {"_id": None, "total": {"$sum": "$amount_grosze"}}}]
+        pipeline = [{"$match": match}, {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$amount", "$amount_grosze"]}}}}]
         cur = invoices_col.aggregate(pipeline)
         async for row in cur:
             return int(row.get("total") or 0)
@@ -1122,7 +1122,12 @@ async def admin_stats(admin: dict = Depends(require_admin)):
     try:
         listings_total = await listings_col.count_documents({})
         # Ostatnie 24h
-        listings_24h = await listings_col.count_documents({"scraped_at": {"$gte": now - timedelta(hours=24)}})
+        # last_seen_at / added_at są ISO-stringami (nie datetime) — porównanie tekstowe
+        _since_iso = (now - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
+        listings_24h = await listings_col.count_documents({"$or": [
+            {"last_seen_at": {"$gte": _since_iso}},
+            {"added_at": {"$gte": _since_iso}},
+        ]})
     except Exception:
         listings_total = 0
         listings_24h = 0
@@ -1193,15 +1198,28 @@ async def admin_invoices(limit: int = 30, offset: int = 0, admin: dict = Depends
     inv_col = database().invoices
     total = await inv_col.count_documents({})
     cursor = inv_col.find({}).sort("created_at", -1).skip(offset).limit(limit)
+    raw = [inv async for inv in cursor]
+    # e-mail użytkownika (faktury trzymają tylko user_id)
+    _uids = []
+    for inv in raw:
+        try:
+            if inv.get("user_id") and not inv.get("user_email"):
+                _uids.append(ObjectId(str(inv["user_id"])))
+        except Exception:
+            pass
+    _emails = {}
+    if _uids:
+        async for u in database().users.find({"_id": {"$in": _uids}}, {"email": 1}):
+            _emails[str(u["_id"])] = u.get("email")
     items = []
-    async for inv in cursor:
+    for inv in raw:
         items.append({
             "id": str(inv["_id"]),
             "invoice_number": inv.get("invoice_number"),
             "user_id": str(inv.get("user_id")) if inv.get("user_id") else None,
-            "user_email": inv.get("user_email"),
+            "user_email": inv.get("user_email") or _emails.get(str(inv.get("user_id"))),
             "plan": inv.get("plan"),
-            "amount_pln": round((inv.get("amount_grosze") or 0) / 100, 2),
+            "amount_pln": round((inv.get("amount") or inv.get("amount_grosze") or 0) / 100, 2),
             "stripe_session_id": inv.get("stripe_session_id"),
             "created_at": inv["created_at"].isoformat() if isinstance(inv.get("created_at"), datetime) else inv.get("created_at"),
         })
@@ -1241,26 +1259,38 @@ async def admin_scraper_status(admin: dict = Depends(require_admin)):
     listings_col = db.listings
     # Group by (city, type) and get count + latest scraped_at
     try:
+        # Pola z importera: last_seen_at / added_at (ISO string), portals (lista), source
         pipeline = [
             {"$group": {
                 "_id": {"city": "$city", "type": "$type"},
                 "count": {"$sum": 1},
-                "last_scraped": {"$max": "$scraped_at"},
-                "portals": {"$addToSet": "$portal"},
+                "last_scraped": {"$max": {"$ifNull": ["$last_seen_at", "$added_at"]}},
+                "last_added": {"$max": "$added_at"},
+                "portals": {"$push": {"$ifNull": ["$portals", []]}},
+                "sources": {"$addToSet": "$source"},
             }},
-            {"$sort": {"_id.city": 1, "_id.type": 1}},
+            {"$project": {
+                "count": 1, "last_scraped": 1, "last_added": 1, "sources": 1,
+                "portals": {"$reduce": {"input": "$portals", "initialValue": [],
+                                        "in": {"$setUnion": ["$$value", "$$this"]}}},
+            }},
+            {"$sort": {"count": -1}},
             {"$limit": 500},
         ]
         cursor = listings_col.aggregate(pipeline)
         items = []
         async for row in cursor:
             last = row.get("last_scraped")
+            portals = [p for p in (row.get("portals") or []) if p]
+            if not portals:
+                portals = [x for x in (row.get("sources") or []) if x]
             items.append({
                 "city": (row["_id"].get("city") or "?"),
                 "type": (row["_id"].get("type") or "?"),
                 "count": row.get("count", 0),
                 "last_scraped": last.isoformat() if isinstance(last, datetime) else last,
-                "portals": row.get("portals", []),
+                "last_added": row.get("last_added"),
+                "portals": portals,
             })
         return {"items": items, "total_groups": len(items)}
     except Exception as e:
@@ -1293,7 +1323,7 @@ async def admin_timeseries(days: int = 30, admin: dict = Depends(require_admin))
         {"$match": {"created_at": {"$gte": since}}},
         {"$group": {
             "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}},
-            "amount_grosze": {"$sum": "$amount_grosze"},
+            "amount_grosze": {"$sum": {"$ifNull": ["$amount", "$amount_grosze"]}},
             "count": {"$sum": 1},
         }},
         {"$sort": {"_id": 1}},

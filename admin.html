@@ -199,6 +199,7 @@
 const API_BASE = (typeof window !== 'undefined' && window.EXPO_BACKEND_URL) ? window.EXPO_BACKEND_URL + '/api' : '/api';
 const TOKEN_KEY = 'finderdom_token';
 
+function setHtml(id, html){ const el = document.getElementById(id); if (!el) return; el.classList.remove('loader'); el.innerHTML = html; }
 function getToken(){ return localStorage.getItem(TOKEN_KEY) || ''; }
 function doLogout(){ localStorage.removeItem(TOKEN_KEY); localStorage.removeItem('finderdom_user'); location.href='/logowanie'; }
 
@@ -467,7 +468,7 @@ async function loadUsers(){
     const d = await api('/admin/users?limit=100');
     document.getElementById('usersCount').textContent = `${d.total} użytkowników w bazie (pokazuję ${d.items.length})`;
     if (!d.items.length) {
-      document.getElementById('usersTable').innerHTML = '<div class="empty">Brak użytkowników w bazie</div>';
+      setHtml('usersTable', '<div class="empty">Brak użytkowników w bazie</div>');
       return;
     }
     const rows = d.items.map(u => `
@@ -482,16 +483,16 @@ async function loadUsers(){
         <td><button class="btn-mini" onclick="grantTier('${u.id}','${escapeHtml(u.email)}')">Nadaj plan</button></td>
       </tr>
     `).join('');
-    document.getElementById('usersTable').innerHTML = `
+    setHtml('usersTable', `
       <table>
         <thead><tr>
           <th>Email</th><th>Typ</th><th>Plan</th><th>NIP</th><th>Firma</th><th>Wygasa</th><th>Rejestracja</th><th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    `;
+    `);
   } catch(e){
-    document.getElementById('usersTable').innerHTML = `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`;
+    setHtml('usersTable', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`);
   }
 }
 
@@ -500,7 +501,7 @@ async function loadPayments(){
     const d = await api('/admin/invoices?limit=100');
     document.getElementById('paymentsCount').textContent = `${d.total} płatności w bazie`;
     if (!d.items.length) {
-      document.getElementById('paymentsTable').innerHTML = '<div class="empty">Brak płatności w bazie</div>';
+      setHtml('paymentsTable', '<div class="empty">Brak płatności w bazie</div>');
       return;
     }
     const rows = d.items.map(p => `
@@ -513,16 +514,16 @@ async function loadPayments(){
         <td>${fmtDate(p.created_at)}</td>
       </tr>
     `).join('');
-    document.getElementById('paymentsTable').innerHTML = `
+    setHtml('paymentsTable', `
       <table>
         <thead><tr>
           <th>Numer FV</th><th>Email</th><th>Plan</th><th>Kwota</th><th>Stripe Session</th><th>Data</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    `;
+    `);
   } catch(e){
-    document.getElementById('paymentsTable').innerHTML = `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`;
+    setHtml('paymentsTable', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`);
   }
 }
 
@@ -531,7 +532,7 @@ async function loadLeads(){
     const d = await api('/admin/leads?limit=100');
     document.getElementById('leadsCount').textContent = `${d.total} leadów w bazie`;
     if (!d.items.length) {
-      document.getElementById('leadsTable').innerHTML = '<div class="empty">Brak leadów w bazie</div>';
+      setHtml('leadsTable', '<div class="empty">Brak leadów w bazie</div>');
       return;
     }
     const rows = d.items.map(l => `
@@ -545,16 +546,16 @@ async function loadLeads(){
         <td>${fmtDate(l.created_at)}</td>
       </tr>
     `).join('');
-    document.getElementById('leadsTable').innerHTML = `
+    setHtml('leadsTable', `
       <table>
         <thead><tr>
           <th>Email</th><th>Imię</th><th>Telefon</th><th>Miasto</th><th>Oferta</th><th>Status</th><th>Data</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    `;
+    `);
   } catch(e){
-    document.getElementById('leadsTable').innerHTML = `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`;
+    setHtml('leadsTable', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`);
   }
 }
 
@@ -563,7 +564,7 @@ async function loadScrapers(){
     const d = await api('/admin/scraper-status');
     document.getElementById('scrapersCount').textContent = `${d.total_groups} grup (miasto+typ)`;
     if (!d.items.length) {
-      document.getElementById('scrapersTable').innerHTML = '<div class="empty">Brak zeskrapowanych ofert w bazie</div>';
+      setHtml('scrapersTable', '<div class="empty">Brak zeskrapowanych ofert w bazie</div>');
       return;
     }
     // Sort by count desc
@@ -582,16 +583,16 @@ async function loadScrapers(){
         </tr>
       `;
     }).join('');
-    document.getElementById('scrapersTable').innerHTML = `
+    setHtml('scrapersTable', `
       <table>
         <thead><tr>
           <th>Miasto</th><th>Typ</th><th>Ofert</th><th>Portale</th><th>Ostatni scrape</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    `;
+    `);
   } catch(e){
-    document.getElementById('scrapersTable').innerHTML = `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`;
+    setHtml('scrapersTable', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`);
   }
 }
 

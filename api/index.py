@@ -4987,7 +4987,7 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
             _same = _normalize_city_name(city_o) == target_city_norm
             _st = _streets.get(idx) or sub_o
             addr_parts = [x for x in [_st, district_o, ("" if (_same and (_st or district_o)) else city_o)] if x]
-            addr = ", ".join(addr_parts) or "—"
+            addr = ", ".join(addr_parts) or (l.get("city") or "—")
             if o.get("_dist") is not None:
                 addr += f" ({o['_dist']:.1f} km)"
             area_o = f"{o.get('area_m2','—')} m²" if o.get('area_m2') else "—"

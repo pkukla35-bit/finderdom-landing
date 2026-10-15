@@ -1266,13 +1266,9 @@ async def admin_scraper_status(admin: dict = Depends(require_admin)):
                 "count": {"$sum": 1},
                 "last_scraped": {"$max": {"$ifNull": ["$last_seen_at", "$added_at"]}},
                 "last_added": {"$max": "$added_at"},
-                "portals": {"$push": {"$ifNull": ["$portals", []]}},
+                # $addToSet tablic (mało unikalnych kombinacji) zamiast $push — $push przekraczał limit pamięci $group
+                "portals": {"$addToSet": {"$ifNull": ["$portals", []]}},
                 "sources": {"$addToSet": "$source"},
-            }},
-            {"$project": {
-                "count": 1, "last_scraped": 1, "last_added": 1, "sources": 1,
-                "portals": {"$reduce": {"input": "$portals", "initialValue": [],
-                                        "in": {"$setUnion": ["$$value", "$$this"]}}},
             }},
             {"$sort": {"count": -1}},
             {"$limit": 500},
@@ -1281,7 +1277,7 @@ async def admin_scraper_status(admin: dict = Depends(require_admin)):
         items = []
         async for row in cursor:
             last = row.get("last_scraped")
-            portals = [p for p in (row.get("portals") or []) if p]
+            portals = sorted({p for arr in (row.get("portals") or []) for p in (arr if isinstance(arr, list) else [arr]) if p})
             if not portals:
                 portals = [x for x in (row.get("sources") or []) if x]
             items.append({

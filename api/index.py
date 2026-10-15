@@ -2789,8 +2789,103 @@ def _listing_doc_to_valuation(d: dict) -> dict:
         "floor": d.get("floor"), "max_floor": d.get("max_floor"), "standard": d.get("standard"),
         "market_type": d.get("market_type"), "build_year": d.get("build_year"), "elevator": d.get("elevator"),
         "lat": d.get("lat"), "lon": d.get("lng"), "is_original": True, "source": d.get("source"),
+        "location": d.get("location") or "", "description": (d.get("description") or "")[:2000],
         "image": (d.get("images") or [None])[0] if isinstance(d.get("images"), list) else d.get("image"),
     }
+
+
+_STREET_RE = re.compile(
+    r"(?:\bul\.\s*|\bulic[aąy]\s+|\bal\.\s*|\balej[aią]\s+|\bos\.\s*|\bosiedl[eu]\s+|\bpl\.\s*|\bplacu?\s+|\bprzy\s+ul\.\s*)"
+    r"([A-ZŁŚŻŹĆŃÓ][\w\.\-]+(?:\s+(?:[A-ZŁŚŻŹĆŃÓ][\w\.\-]*|\d+[a-zA-Z]?)){0,3})",
+    re.UNICODE,
+)
+_STREET_STOP = {"Istnieje", "Funkcjonalny", "Opis", "OPIS", "Kraków", "Warszawa", "Mieszkanie", "Oferta", "Nieruchomość",
+                "Nieruchomości", "Lokal", "Pokoje", "Apartament", "Dom", "Kawalerka", "Zapraszam", "Zapraszamy", "Biuro", "Oferujemy", "To"}
+_STREET_AGENCY_CTX = re.compile(r"(biuro|nieruchomo|agencj|kancelari|siedzib|NIP|sp\. z o\.o\.|S\.A\.)", re.I)
+
+
+def _extract_street(o: dict) -> str:
+    """Ulica z `location`/`title`/`description` oferty (np. 'ul. Słomiana', 'os. Podwawelskie')."""
+    for src in (o.get("location") or "", o.get("title") or "", o.get("description") or ""):
+        if not src:
+            continue
+        m = None
+        for cand in _STREET_RE.finditer(src):
+            # odrzuć "osiedle Gaz: brak" oraz adresy biur nieruchomości w opisie (nazwa biura / telefon przed, kod pocztowy po)
+            if src[cand.end():cand.end() + 1] == ":":
+                continue
+            before = src[max(0, cand.start() - 70):cand.start()]
+            after = src[cand.end():cand.end() + 40]
+            if _STREET_AGENCY_CTX.search(before) or re.search(r"\d{3}[\s-]?\d{3}[\s-]?\d{3}", before) or re.search(r"\b\d{2}-\d{3}\b", after):
+                continue
+            m = cand
+            break
+        if not m:
+            continue
+        prefix = m.group(0)[:m.start(1) - m.start(0)].strip().lower()
+        words = [w.strip(".,;:-") for w in re.split(r"\s+|-\s", m.group(1))]
+        out = []
+        for w in words:
+            if not w or w in _STREET_STOP or (out and w.isupper() and len(w) > 1):
+                break
+            w = re.sub(r"(?<=[a-ząęółśżźćń])(?=[A-ZŁŚŻŹĆŃÓ])", " ", w).split()[0]  # "GlogeraNowoczesne" → "Glogera"
+            if not w or (out and w[0].isdigit() and len(out) == 0):
+                break
+            out.append(w)
+            if w[0].isdigit():
+                break
+        if out and len(out) > 1 and out[-1] in ("To", "Z", "W", "Na", "Oferujemy", "Biuro"):
+            out = out[:-1]
+        if not out:
+            continue
+        if prefix.startswith("os") or prefix.startswith("osiedl"):
+            pfx = "os."
+        elif prefix.startswith("al"):
+            pfx = "al."
+        elif prefix.startswith("pl"):
+            pfx = "pl."
+        else:
+            pfx = "ul."
+        return f"{pfx} {' '.join(out)}"
+    return ""
+
+
+def _reverse_geocode_streets(points: list) -> dict:
+    """[(key, lat, lon)] → {key: 'ul. X'} przez Mapbox (równolegle, max ~3 s). Pusty dict bez tokenu."""
+    if not MAPBOX_TOKEN or not points:
+        return {}
+    import concurrent.futures as _cf
+
+    def _one(item):
+        key, lat, lon = item
+        try:
+            r = httpx.get(
+                "https://api.mapbox.com/search/geocode/v6/reverse",
+                params={"longitude": lon, "latitude": lat, "types": "street,address",
+                        "language": "pl", "limit": 1, "access_token": MAPBOX_TOKEN},
+                timeout=3.0,
+            )
+            if r.status_code != 200:
+                return key, ""
+            feats = r.json().get("features") or []
+            if not feats:
+                return key, ""
+            props = feats[0].get("properties") or {}
+            ctx = props.get("context") or {}
+            name = (ctx.get("street") or {}).get("name") or props.get("name") or ""
+            name = re.sub(r"^(ulica|ul\.|aleja|al\.|osiedle|os\.|plac|pl\.)\s+", "", name, flags=re.I).strip()
+            if not name:
+                return key, ""
+            return key, f"ul. {name}"
+        except Exception:
+            return key, ""
+
+    out = {}
+    with _cf.ThreadPoolExecutor(max_workers=min(10, len(points))) as ex:
+        for key, street in ex.map(_one, points):
+            if street:
+                out[key] = street
+    return out
 
 
 async def _load_valuation_pool(city: str, prop_type: str, limit: int = 3000) -> list:
@@ -4874,11 +4969,24 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
             tbl_data = [["Adres", "Powierzchnia", "Pokoje", "Piętro", "Cena", "Cena za m²"]]
         else:
             tbl_data = [["Adres", "Powierzchnia", "Pokoje", "Cena", "Cena za m²"]]
-        for o in local_offers[:10]:
+        # Ulice: z treści ogłoszenia (location/title/opis), a gdy brak — reverse geocoding po GPS ("ok. ul. X")
+        _streets = {}
+        _geo_pts = []
+        for idx, o in enumerate(local_offers[:10]):
+            st = _extract_street(o)
+            if st:
+                _streets[idx] = st
+            elif o.get("lat") is not None and o.get("lon") is not None:
+                _geo_pts.append((idx, o["lat"], o["lon"]))
+        for idx, st in _reverse_geocode_streets(_geo_pts).items():
+            _streets[idx] = f"ok. {st}"
+        for idx, o in enumerate(local_offers[:10]):
             city_o = o.get("city") or ""
             district_o = o.get("district") or ""
             sub_o = o.get("sub_location") or ""
-            addr_parts = [x for x in [sub_o, district_o, city_o] if x]
+            _same = _normalize_city_name(city_o) == target_city_norm
+            _st = _streets.get(idx) or sub_o
+            addr_parts = [x for x in [_st, district_o, ("" if (_same and (_st or district_o)) else city_o)] if x]
             addr = ", ".join(addr_parts) or "—"
             if o.get("_dist") is not None:
                 addr += f" ({o['_dist']:.1f} km)"

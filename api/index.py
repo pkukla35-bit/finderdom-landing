@@ -48,9 +48,10 @@ JWT_SECRET = os.environ.get("JWT_SECRET")
 DB_NAME = os.environ.get("MONGODB_DB", "finderdom")
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-COMPANY_NAME = os.environ.get("COMPANY_NAME", "FinderDom Paweł Kukla")
-COMPANY_NIP = os.environ.get("COMPANY_NIP", "9441419164")
-COMPANY_ADDRESS = os.environ.get("COMPANY_ADDRESS", "ul. Tymotkowa 16, 30-382 Kraków")
+# Dane sprzedawcy na fakturach (stałe — w Vercel zostały placeholdery COMPANY_* z NIP 0000000000, ignorujemy je)
+COMPANY_NAME = "FinderDom Paweł Kukla"
+COMPANY_NIP = "9441419164"
+COMPANY_ADDRESS = "ul. Tymotkowa 16, 30-382 Kraków"
 DOMAIN = os.environ.get("DOMAIN", "https://finderdom.pl")
 JWT_ALGORITHM = "HS256"
 JWT_DAYS = 7

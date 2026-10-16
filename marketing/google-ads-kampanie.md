@@ -155,9 +155,9 @@ FinderDom.pl dla Pośredników
 ```
 Opisy:
 ```
-Wszystkie portale, cała Polska, 4 loginy dla agentów i wyceny PDF bez limitu — 199 zł/mies.
+Wszystkie portale, cała Polska, 4 loginy dla agentów, wyceny bez limitu — 199 zł/mies.
 Oferty bezpośrednie od właścicieli z filtrem „ostatnie 24h” — dzwoń przed konkurencją.
-Wyceny z realnymi transakcjami z Rejestru Cen Nieruchomości — mocny argument u właściciela.
+Wyceny z realnymi transakcjami z Rejestru Cen Nieruchomości — argument u właściciela.
 7 dni za darmo dla firm z NIP, bez karty i umowy. Faktura VAT automatycznie po płatności.
 ```
 Ścieżka wyświetlana: `finderdom.pl/Dla-Biur/199zl`

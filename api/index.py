@@ -2750,6 +2750,8 @@ async def admin_stripe_account(admin: dict = Depends(require_admin)):
         "charges_enabled": acct.get("charges_enabled"),
         "payouts_enabled": acct.get("payouts_enabled"),
         "disabled_reason": req.get("disabled_reason"),
+        "mcc": (acct.get("business_profile") or {}).get("mcc"),
+        "business_type": acct.get("business_type"),
         "currently_due": req.get("currently_due") or [],
         "past_due": req.get("past_due") or [],
         "eventually_due": req.get("eventually_due") or [],

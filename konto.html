@@ -171,7 +171,7 @@ gtag('set', 'url_passthrough', false);
       <div id="trialBanner" style="display:none"></div>
       <div class="card">
         <h2>Twoja subskrypcja</h2>
-        <div class="row"><div class="k">Aktualny plan</div><div class="v"><span id="tierBadge" class="badge badge-free">Free</span></div></div>
+        <div class="row"><div class="k">Aktualny plan</div><div class="v"><span id="tierBadge" class="badge badge-free">Bez planu</span></div></div>
         <div class="row"><div class="k">Status</div><div class="v" id="subStatus">Aktywny</div></div>
         <div class="row"><div class="k">Ważny do</div><div class="v" id="subExpires">—</div></div>
       </div>
@@ -180,19 +180,19 @@ gtag('set', 'url_passthrough', false);
         <h2>Wybierz plan</h2>
         <div class="plans">
           <div class="plan" data-plan="free">
-            <div class="p-name">Free</div>
-            <div class="p-price">0 zł <span class="m">/mies.</span></div>
-            <div class="p-desc">Podstawowe wyszukiwanie ofert.</div>
+            <div class="p-name">Bez planu</div>
+            <div class="p-price">0 zł <span class="m">podgląd</span></div>
+            <div class="p-desc">Tylko podgląd — 5 pierwszych ofert, bez linków do ogłoszeń i analizy AI.</div>
             <ul class="p-list">
-              <li>Wyszukiwarka portalu</li>
-              <li>Standardowe filtry</li>
+              <li>Podgląd 5 ofert w wyszukiwarce</li>
+              <li>Wycena PDF 45 zł / szt.</li>
             </ul>
-            <button type="button" class="p-btn" data-buy="free" disabled>Twój plan</button>
+            <button type="button" class="p-btn" data-buy="free" disabled>Bez planu</button>
           </div>
           <div class="plan recommended" data-plan="individual">
             <div class="plan-tag">Polecane</div>
             <div class="p-name">Osobisty</div>
-            <div class="p-price">35 zł <span class="m">/30 dni</span></div>
+            <div class="p-price">45 zł <span class="m">/30 dni</span></div>
             <div class="p-desc">Dla osób prywatnych szukających mieszkania lub domu.</div>
             <ul class="p-list">
               <li>Analiza AI ceny w promieniu 5 km</li>
@@ -200,7 +200,7 @@ gtag('set', 'url_passthrough', false);
               <li>Zaawansowane filtry</li>
               <li>Bez reklam</li>
             </ul>
-            <button type="button" class="p-btn pay" data-buy="individual">Zapłać 35 zł</button>
+            <button type="button" class="p-btn pay" data-buy="individual">Zapłać 45 zł</button>
           </div>
           <div class="plan" data-plan="business">
             <div class="p-name">Firmowy B2B</div>
@@ -284,7 +284,7 @@ gtag('set', 'url_passthrough', false);
   const token = localStorage.getItem('finderdom_token');
   if (!token) window.location.href = '/logowanie';
 
-  const PLAN_LABEL = { free: 'Darmowy', individual: 'Osobisty', business: 'Firmowy' };
+  const PLAN_LABEL = { free: 'Bez planu', individual: 'Osobisty', business: 'Firmowy' };
 
   function fmtDate(iso){
     if (!iso) return '—';
@@ -297,7 +297,7 @@ gtag('set', 'url_passthrough', false);
     const el = document.getElementById('tierBadge');
     if (tier === 'individual'){ el.className='badge badge-ind'; el.textContent='Osobisty'; }
     else if (tier === 'business'){ el.className='badge badge-biz'; el.textContent='Firmowy'; }
-    else { el.className='badge badge-free'; el.textContent='Free'; }
+    else { el.className='badge badge-free'; el.textContent='Bez planu'; }
   }
 
   async function loadMe(){
@@ -362,14 +362,14 @@ gtag('set', 'url_passthrough', false);
       if (!u.is_trial) {
         document.getElementById('subStatus').textContent = u.tier === 'free' ? 'Bez subskrypcji' : 'Aktywny';
       }
-      document.getElementById('subExpires').textContent = u.expires_at ? fmtDate(u.expires_at) : '— (plan darmowy)';
+      document.getElementById('subExpires').textContent = u.expires_at ? fmtDate(u.expires_at) : '— (bez planu)';
 
       document.querySelectorAll('.plan').forEach(p => {
         p.classList.remove('current');
         const btn = p.querySelector('.p-btn');
         if (p.dataset.plan === u.tier){
           p.classList.add('current');
-          btn.textContent = u.tier === 'free' ? 'Twój plan' : 'Aktywny plan';
+          btn.textContent = u.tier === 'free' ? 'Bez planu' : 'Aktywny plan';
           btn.disabled = true;
         }
       });

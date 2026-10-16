@@ -79,9 +79,9 @@ async def _stripe_cfg():
         stripe.api_key = _STRIPE_RT["secret"]
     return _STRIPE_RT["secret"], _STRIPE_RT["whsec"]
 
-PLANS = {"individual": 35, "business": 199}  # gross PLN per 30 days
+PLANS = {"individual": 45, "business": 199}  # gross PLN per 30 days
 PLAN_LABELS = {"individual": "Osobisty", "business": "Firmowy"}
-VALUATION_PRICE = 32  # PLN one-time per property valuation PDF
+VALUATION_PRICE = 35  # PLN one-time per property valuation PDF
 
 # Email (Emergent managed Resend)
 EMAIL_BASE_URL = "https://integrations.emergentagent.com"  # constant, NOT env
@@ -333,6 +333,28 @@ async def effective_tier_async(user: dict) -> str:
         except Exception:
             pass
     return effective_tier(user)
+
+
+FREE_PREVIEW_LIMIT = 5  # ile ofert widzi użytkownik bez opłaconego planu
+
+
+async def _paid_user_from_request(request: Request) -> Optional[dict]:
+    """Zwraca użytkownika z aktywnym płatnym planem (lub admina) na podstawie nagłówka Authorization; None gdy brak/free."""
+    auth = (request.headers.get("authorization") or "")
+    if not auth.lower().startswith("bearer "):
+        return None
+    try:
+        payload = jwt.decode(auth[7:].strip(), JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access" or not payload.get("sub"):
+            return None
+        user = await (await users_collection()).find_one({"_id": ObjectId(payload["sub"])})
+    except Exception:
+        return None
+    if not user or user.get("active") is False:
+        return None
+    if (user.get("email") or "").lower() in ADMIN_EMAILS:
+        return user
+    return user if await effective_tier_async(user) != "free" else None
 
 
 def public_user(user: dict) -> dict:
@@ -1631,7 +1653,7 @@ async def kredyt_lead(body: KredytLeadRequest):
 
 
 @app.get("/api/listing/{listing_id}")
-async def listing_single(listing_id: str, response: Response):
+async def listing_single(listing_id: str, request: Request, response: Response):
     """Zwraca pojedynczą ofertę po ID - szybki endpoint (<500ms) dla oferta.html.
 
     ID format: 'otodom-XXX' albo 'XXX' albo cluster ID.
@@ -1650,8 +1672,15 @@ async def listing_single(listing_id: str, response: Response):
         if not doc:
             response.status_code = 404
             return {"error": "Listing not found", "id": listing_id}
-        response.headers["Cache-Control"] = "public, max-age=300, s-maxage=600, stale-while-revalidate=120"
-        return {"listing": doc}
+        paid = await _paid_user_from_request(request)
+        if paid is None:
+            # 🔒 bez planu: oferta widoczna, ale bez linku do portalu źródłowego
+            for k in ("url", "source_url", "offer_url", "phone", "contact_phone"):
+                doc.pop(k, None)
+            response.headers["Cache-Control"] = "public, max-age=300, s-maxage=600, stale-while-revalidate=120"
+            return {"listing": doc, "locked": True}
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return {"listing": doc, "locked": False}
     except Exception as e:
         logger.warning("listing/{%s} error: %s", listing_id, e)
         response.status_code = 500
@@ -1660,6 +1689,7 @@ async def listing_single(listing_id: str, response: Response):
 
 @app.get("/api/listings-scraped")
 async def listings_scraped_endpoint(
+    request: Request,
     response: Response,
     limit: int = 1000,
     offset: int = 0,
@@ -1908,9 +1938,20 @@ async def listings_scraped_endpoint(
                 # `image` to duplikat images[0] — nie wysyłaj dwa razy (frontend ma fallback na images[0])
                 if d.get("image") and isinstance(imgs, list) and imgs and d["image"] == imgs[0]:
                     d.pop("image", None)
-        # CDN: 15 min świeże + do 24h stale-while-revalidate (Vercel odświeża w tle, user dostaje odpowiedź natychmiast)
-        response.headers["Cache-Control"] = "public, max-age=120, s-maxage=900, stale-while-revalidate=86400"
-        return {"listings": docs, "count": len(docs), "total_count": total_count, "offset": offset, "limit": limit, "lite": bool(lite), "filtered": bool(city or type)}
+        # 🔒 PAYWALL: bez opłaconego planu tylko podgląd FREE_PREVIEW_LIMIT ofert (odpowiedź publiczna → CDN cache),
+        #    opłacony plan → pełna lista, odpowiedź prywatna (frontend dodaje &p=1, więc CDN nie pomiesza cache).
+        paid = await _paid_user_from_request(request)
+        locked = paid is None
+        if locked:
+            docs = docs[:FREE_PREVIEW_LIMIT]
+            for d in docs:  # bez planu: brak linków do portali źródłowych
+                for k in ("url", "source_url", "offer_url", "phone", "contact_phone"):
+                    d.pop(k, None)
+            response.headers["Cache-Control"] = "public, max-age=120, s-maxage=900, stale-while-revalidate=86400"
+        else:
+            response.headers["Cache-Control"] = "private, max-age=60"
+        return {"listings": docs, "count": len(docs), "total_count": total_count, "offset": offset, "limit": limit, "lite": bool(lite),
+                "filtered": bool(city or type), "locked": locked, "preview_limit": FREE_PREVIEW_LIMIT if locked else None}
     except Exception as e:
         logger.warning("listings-scraped error: %s", e)
         return {"listings": [], "count": 0, "error": str(e)[:200]}
@@ -1948,6 +1989,7 @@ async def rcn_stats_endpoint(city: str = "", type: str = "mieszkanie", area: Opt
 # --- Podobne oferty dla AI Analizy Ceny (fetch z pelnej bazy 35k) ---
 @app.get("/api/similar-offers")
 async def similar_offers_endpoint(
+    request: Request,
     city: str,
     type: str,
     transaction: str = "sprzedaz",
@@ -1969,6 +2011,8 @@ async def similar_offers_endpoint(
 
     Kolejnosc pol zwrotu: cena, m2, cena_m2, city, district, market_type, area_m2
     """
+    if await _paid_user_from_request(request) is None:
+        raise HTTPException(402, "Analiza AI dostępna w planie Osobistym lub Firmowym")
     limit = max(1, min(limit, 200))
     coll = database().listings
 
@@ -2770,26 +2814,26 @@ MAIL_TEMPLATES: Dict[str, dict] = {
             "<b>Zobacz analizę AI</b> przy ofercie: okazja, cena typowa czy zawyżona.",
         ],
         "cta": "🔍 Otwórz wyszukiwarkę", "url": "/szukaj",
-        "ps": "PS. Gdy znajdziesz coś ciekawego, sprawdź realną wartość raportem PDF z aktami notarialnymi — kosztuje 32 zł i masz go w 2 minuty.",
+        "ps": "PS. Gdy znajdziesz coś ciekawego, sprawdź realną wartość raportem PDF z aktami notarialnymi — kosztuje 35 zł i masz go w 2 minuty.",
     },
     "p2": {
-        "audience": "personal", "day": 4, "name": "Dzień 4 — Wycena PDF za 32 zł",
-        "subject": "Czy ta cena jest uczciwa? Sprawdź w 2 minuty za 32 zł",
+        "audience": "personal", "day": 4, "name": "Dzień 4 — Wycena PDF za 35 zł",
+        "subject": "Czy ta cena jest uczciwa? Sprawdź w 2 minuty za 35 zł",
         "title": "Zawyżenie o 3% przy mieszkaniu za 600 000 zł to 18 000 zł",
         "intro": "Zanim zdecydujesz się na zakup (albo wystawisz swoją nieruchomość), sprawdź, ile jest naprawdę warta. Nasz raport PDF opiera się nie na cenach ofertowych, ale na prawdziwych transakcjach z Rejestru Cen Nieruchomości.",
         "bullets": [
             "<b>Realna wartość rynkowa</b> i zakres min–max dla Twojej nieruchomości.",
             "<b>Porównanie z aktami notarialnymi</b> z okolicy — ceny, za które faktycznie sprzedano podobne mieszkania i domy.",
             "<b>Podobne oferty</b> w promieniu kilku kilometrów i <b>opinia AI o cenie</b>.",
-            "<b>Bez abonamentu</b> — płacisz 32 zł BLIK-iem lub kartą i od razu pobierasz PDF.",
+            "<b>Bez abonamentu</b> — płacisz 35 zł BLIK-iem lub kartą i od razu pobierasz PDF.",
         ],
-        "cta": "💎 Wyceń nieruchomość za 32 zł", "url": "/wycena",
+        "cta": "💎 Wyceń nieruchomość za 35 zł", "url": "/wycena",
         "ps": "Działa dla mieszkań, domów, działek i lokali. Raport możesz pokazać sprzedającemu podczas negocjacji.",
     },
     "p3": {
-        "audience": "personal", "day": 10, "name": "Dzień 10 — Plan Osobisty 35 zł",
-        "subject": "Analiza AI, alerty cenowe i podobne oferty — 35 zł/mies, anulujesz kiedy chcesz",
-        "title": "Szukasz dalej? Odblokuj pełną analizę za 35 zł miesięcznie",
+        "audience": "personal", "day": 10, "name": "Dzień 10 — Plan Osobisty 45 zł",
+        "subject": "Analiza AI, alerty cenowe i podobne oferty — 45 zł/mies, anulujesz kiedy chcesz",
+        "title": "Szukasz dalej? Odblokuj pełną analizę za 45 zł miesięcznie",
         "intro": "Darmowe konto pokazuje oferty. Plan Osobisty pokazuje, które z nich są naprawdę warte uwagi — i pilnuje za Ciebie zmian cen.",
         "bullets": [
             "<b>Analiza AI</b> przy każdej ofercie: okazja / w normie / zawyżona.",
@@ -2798,7 +2842,7 @@ MAIL_TEMPLATES: Dict[str, dict] = {
             "<b>Zaawansowane filtry</b>: rok budowy, standard, komunikacja. Bez reklam.",
         ],
         "cta": "👤 Zobacz plan Osobisty", "url": "/konto",
-        "ps": "35 zł za 30 dni, bez umowy. Jedna dobrze wynegocjowana oferta zwraca to kilkaset razy.",
+        "ps": "45 zł za 30 dni, bez umowy. Jedna dobrze wynegocjowana oferta zwraca to kilkaset razy.",
     },
     "b1": {
         "audience": "business", "day": 1, "name": "Dzień 1 — Trial: dodaj agentów",

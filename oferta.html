@@ -415,7 +415,7 @@ gtag('set', 'url_passthrough', false);
         <li>Ulubione oferty i alerty cenowe</li>
       </ul>
       <a href="/konto" class="lock-cta">💎 Opłać subskrypcję miesięczną</a>
-      <div class="lock-price">Osobisty <strong>35 zł</strong> / 30 dni <small>· Firmowy 199 zł</small></div>
+      <div class="lock-price">Osobisty <strong>45 zł</strong> / 30 dni <small>· Firmowy 199 zł</small></div>
       <div class="lock-login" id="lockAiLogin">
         Masz konto? <a href="/logowanie">Zaloguj się</a>
       </div>
@@ -470,7 +470,7 @@ gtag('set', 'url_passthrough', false);
   <h3>Zobacz Podobne Oferty w Okolicy</h3>
   <p class="lock-sub">Znajdź lepsze oferty w tej samej lokalizacji, żeby nie przepłacać. Baza aktualizowana codziennie.</p>
   <a href="/konto" class="lock-cta">💎 Opłać subskrypcję miesięczną</a>
-  <div class="lock-price">Osobisty <strong>35 zł</strong> / 30 dni <small>· Firmowy 199 zł</small></div>
+  <div class="lock-price">Osobisty <strong>45 zł</strong> / 30 dni <small>· Firmowy 199 zł</small></div>
   <div class="lock-login" id="lockSimLogin">
     Masz konto? <a href="/logowanie">Zaloguj się</a>
   </div>
@@ -684,10 +684,12 @@ async function loadOffer() {
     const idParam = new URLSearchParams(location.search).get('id') || '';
     if (idParam) {
       try {
-        const fastRes = await fetch('/api/listing/' + encodeURIComponent(idParam));
+        const __tok = localStorage.getItem('finderdom_token');
+        const fastRes = await fetch('/api/listing/' + encodeURIComponent(idParam) + (__tok ? '?p=1' : ''), __tok ? { headers: { 'Authorization': 'Bearer ' + __tok } } : {});
         if (fastRes.ok) {
           const fd = await fastRes.json();
           if (fd.listing) {
+            window.__listingLocked = !!fd.locked;
             const normalized = normalizeScrapedListing(fd.listing);
             if (normalized) {
               currentListing = normalized;
@@ -700,7 +702,8 @@ async function loadOffer() {
                 if (normalized.city) bgParams.set('city', normalized.city);
                 if (normalized.type) bgParams.set('type', normalized.type);
                 if (normalized.transaction) bgParams.set('transaction', normalized.transaction);
-                fetch('/api/listings-scraped' + (bgParams.toString() ? '?' + bgParams.toString() : '')).then(r => r.ok ? r.json() : null).then(d => {
+                if (__tok) bgParams.set('p', '1');
+                fetch('/api/listings-scraped?' + bgParams.toString(), __tok ? { headers: { 'Authorization': 'Bearer ' + __tok } } : {}).then(r => r.ok ? r.json() : null).then(d => {
                   if (d && d.listings) {
                     // Normalizujemy WSZYSTKIE (dla AI porównywarki potrzebujemy lat/lon/price_pm2/area_m2/market_type)
                     const normAll = d.listings.map(normalizeScrapedListing).filter(Boolean);
@@ -1330,7 +1333,17 @@ async function renderOffer(l, all) {
 
   // Source link — dynamiczny tekst per portal
   const portalName = l.portal || 'portal źródłowy';
-  if (l.source_url) {
+  if (!l.source_url && (window.__listingLocked || !window.__isPremium)) {
+    // 🔒 bez planu: link do ogłoszenia ukryty — CTA do planu
+    const logged = !!localStorage.getItem('finderdom_token');
+    const dest = logged ? '/konto' : '/rejestracja';
+    el('sourceLink').href = dest; el('sourceLink').removeAttribute('target');
+    el('sourceLink').textContent = '🔒 Link do ogłoszenia — w planie 45 zł/mies';
+    el('ctaOtodom').href = dest; el('ctaOtodom').removeAttribute('target');
+    el('ctaOtodom').textContent = logged ? '💎 Odblokuj link do ogłoszenia — 45 zł/mies' : '💎 Załóż konto i odblokuj link — 45 zł/mies';
+    const ctaHint = document.getElementById('ctaHint');
+    if (ctaHint) ctaHint.innerHTML = '<strong>🔒 Bez planu</strong> widzisz ofertę, ale link do portalu, numer telefonu i analiza AI są w planie Osobistym (45 zł/30 dni) lub Firmowym.';
+  } else if (l.source_url) {
     el('sourceLink').href = l.source_url;
     el('sourceLink').textContent = `Zobacz na ${portalName} ↗`;
     el('ctaOtodom').href = l.source_url;
@@ -1846,7 +1859,7 @@ loadOffer();
 <script src="/scripts/ads.js" defer></script>
 <script src="/scripts/kredyt.js?v=8" defer></script>
 
-<!-- Modal Wycena Premium (32 zł) -->
+<!-- Modal Wycena Premium (35 zł) -->
 <div class="val-modal-bg" id="valModal">
   <div class="val-modal">
     <button type="button" class="close-x" onclick="closeValuationModal()">×</button>
@@ -1861,7 +1874,7 @@ loadOffer();
     <div id="valErr" class="val-err"></div>
     <label for="valEmail">Twój email (na który wyślemy potwierdzenie)</label>
     <input type="email" id="valEmail" placeholder="twoj@email.pl" autocomplete="email" required>
-    <button type="button" class="val-btn" id="valBuyBtn" onclick="startValuationCheckout()">Zapłać 32 zł kartą / BLIK →</button>
+    <button type="button" class="val-btn" id="valBuyBtn" onclick="startValuationCheckout()">Zapłać 35 zł kartą / BLIK →</button>
     <div class="val-small">Płatność bezpieczna przez Stripe. Po opłacie automatycznie wygenerujemy PDF.</div>
   </div>
 </div>

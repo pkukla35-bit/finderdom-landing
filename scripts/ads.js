@@ -13,7 +13,7 @@
  *    - SLOTS: wklej ID bloków reklamowych (10-cyfrowe liczby)
  *    (bez ID bloki działają jako ogólne bloki Display — reklamy ruszą po zatwierdzeniu witryny)
  *
- * Reklamy są AUTOMATYCZNIE UKRYWANE dla użytkowników z planem Osobisty (35 zł) i Firmowy (199 zł).
+ * Reklamy są AUTOMATYCZNIE UKRYWANE dla użytkowników z planem Osobisty (45 zł) i Firmowy (199 zł).
  */
 window.FD_ADS = {
   // Konto FIRMOWE: Taxigo Paweł Kukla (Profil ID: 6953-2167-7812)

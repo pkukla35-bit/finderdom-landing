@@ -228,6 +228,16 @@ gtag('set', 'url_passthrough', false);
     .nav-links{gap:12px;font-size:12px}
     .nav-links .hide-mob{display:none}
   }
+  .paywall-card{background:linear-gradient(135deg,rgba(255,184,0,0.14),rgba(255,255,255,0.03));border:2px solid rgba(255,184,0,0.45);border-radius:20px;padding:32px 24px;text-align:center;margin-top:8px}
+  .paywall-card .pw-icon{font-size:40px;margin-bottom:8px}
+  .paywall-card .pw-title{font-size:22px;font-weight:900;color:#fff;margin-bottom:8px}
+  .paywall-card .pw-sub{color:#c5d0e6;font-size:14px;line-height:1.6;max-width:640px;margin:0 auto 18px}
+  .paywall-card .pw-sub b{color:#FFB800}
+  .paywall-card .pw-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .paywall-card .pw-btn{display:inline-block;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:14px 24px;border-radius:12px;text-decoration:none;font-size:14px;min-height:44px;box-shadow:0 6px 20px rgba(255,184,0,0.3)}
+  .paywall-card .pw-btn.pw-outline{background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.2);box-shadow:none}
+  .paywall-card .pw-note{margin-top:14px;font-size:12px;color:#8ba3d4}
+  .paywall-card .pw-note a{color:#FFB800}
 </style>
 <script src="/scripts/city-coords.js"></script>
 <script src="/scripts/ads.js" defer></script>
@@ -1059,7 +1069,10 @@ async function loadListings() {
     const quickParams = new URLSearchParams(apiParams);
     quickParams.set('limit', String(PAGE_SIZE));
     const quickUrl = '/api/listings-scraped?' + quickParams.toString();
-    const fetchJson = (u) => fetch(u).then(r => r.ok ? r.json() : null).catch(() => null);
+    // 🔒 Zalogowani wysyłają token (opłacony plan = pełna lista); &p=1 rozdziela cache CDN od publicznego podglądu
+    const __tok = localStorage.getItem('finderdom_token');
+    const fetchJson = (u) => fetch(__tok ? u + (u.includes('?') ? '&' : '?') + 'p=1' : u, __tok ? { headers: { 'Authorization': 'Bearer ' + __tok } } : {})
+      .then(r => r.ok ? r.json() : null).catch(() => null);
     const fullPromise = fetchJson(scrapedUrl);
     let fullApplied = false;
     const quick = await fetchJson(quickUrl);
@@ -1082,6 +1095,8 @@ function applyScrapedData(d) {
     {
       const raw = d.listings || [];
       scrapedTotalCount = Number(d.total_count) || 0;
+      window.__locked = !!d.locked;
+      window.__previewLimit = Number(d.preview_limit) || 5;
       // ── Dedup wewnątrz scraped: apify > scrapingbee dla tego samego URL/external_id
       const scrapedByKey = new Map();
       for (const r of raw) {
@@ -1305,6 +1320,25 @@ function renderListings(list) {
   renderPage();
 }
 
+
+// 🔒 PAYWALL — karta po 5 ofertach podglądu dla użytkowników bez opłaconego planu
+function paywallCardHtml() {
+  const total = window.__scrapedTotalCount || 0;
+  const shown = Math.min(window.__previewLimit || 5, CURRENT_FILTERED.length);
+  const logged = !!localStorage.getItem('finderdom_token');
+  const totalTxt = total > shown ? `${shown} z ${total.toLocaleString('pl-PL')}` : `${shown}`;
+  const btns = logged
+    ? `<a href="/konto" class="pw-btn">💎 Wykup plan Osobisty — 45 zł/mies</a><a href="/dla-biur" class="pw-btn pw-outline">🏢 Biuro? Plan Firmowy — 7 dni za darmo</a>`
+    : `<a href="/rejestracja" class="pw-btn">💎 Załóż konto i odblokuj — 45 zł/mies</a><a href="/logowanie" class="pw-btn pw-outline">Mam już konto — zaloguj</a>`;
+  return `<div class="paywall-card" style="grid-column:1/-1">
+    <div class="pw-icon">🔒</div>
+    <div class="pw-title">Pokazujemy ${totalTxt} ofert</div>
+    <div class="pw-sub">Odblokuj <b>wszystkie oferty ze wszystkich portali</b>, analizę AI (okazja / zawyżona), linki do ogłoszeń, ulubione i alerty cenowe. Plan Osobisty <b>45 zł za 30 dni</b> — bez umowy, anulujesz kiedy chcesz.</div>
+    <div class="pw-btns">${btns}</div>
+    <div class="pw-note">Wycena PDF z aktami notarialnymi dostępna bez planu — <a href="/wycena">45 zł za raport</a>.</div>
+  </div>`;
+}
+
 function renderPage() {
   const grid = document.getElementById('grid');
   const btn = document.getElementById('loadMoreBtn');
@@ -1400,6 +1434,7 @@ function renderPage() {
     return cardHtml;
   }).join('');
   grid.innerHTML = cardsHtml;
+  if (window.__locked) grid.insertAdjacentHTML('beforeend', paywallCardHtml());
 
   // Fallback dla zdjęć karty: próbuje kolejnego z listy imgs, potem og-image (data-og), a jak wszystkie zawiodą — pokazuje placeholder emoji
   if (!window.__cardImgFallback) {
@@ -1547,7 +1582,7 @@ function renderPage() {
   // Load more button
   const remaining = CURRENT_FILTERED.length - slice.length;
   if (btn) {
-    if (remaining > 0) {
+    if (remaining > 0 && !window.__locked) {
       btn.style.display = 'inline-block';
       btn.textContent = `Załaduj więcej ofert ↓ (${remaining.toLocaleString('pl-PL')} pozostało)`;
     } else {

@@ -732,11 +732,15 @@ async function previewMailing(id){
         <div><button class="refresh-btn" onclick="copyMailHtml()">📋 Kopiuj HTML (do Gmaila/Mailchimpa)</button>
              <button class="refresh-btn" onclick="downloadMailHtml('${id}')">⬇ Pobierz .html</button></div>
       </div>
+      ${d.text ? `<div style="margin:0 0 12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b>Wersja tekstowa (wklej do Gmaila / Outlooka):</b><button class="refresh-btn" onclick="copyMailText()">📋 Kopiuj tekst</button></div>
+        <textarea id="mailText" readonly style="width:100%;min-height:260px;padding:12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#e6e9f2;font-family:inherit;font-size:13px;line-height:1.5"></textarea></div>` : ''}
       <iframe id="mailFrame" style="width:100%;height:720px;border:1px solid rgba(255,255,255,0.15);border-radius:12px;background:#fff"></iframe>`);
+    if (d.text) { window._mailPreviewText = d.text; document.getElementById('mailText').value = d.text; }
     document.getElementById('mailFrame').srcdoc = d.html;
     document.getElementById('mailingPreview').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch(e){ setHtml('mailingPreview', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`); }
 }
+async function copyMailText(){ try { await navigator.clipboard.writeText(window._mailPreviewText || ''); mailingMsg('<span class="ok">✅ Tekst skopiowany do schowka.</span>'); } catch(e){ const t = document.getElementById('mailText'); if (t) { t.select(); document.execCommand('copy'); } } }
 async function copyMailHtml(){ try { await navigator.clipboard.writeText(window._mailPreviewHtml || ''); mailingMsg('<span class="ok">✅ HTML skopiowany do schowka.</span>'); } catch(e){ mailingMsg('<span class="bad">Nie udało się skopiować — użyj „Pobierz .html”.</span>'); } }
 function downloadMailHtml(id){
   const blob = new Blob([window._mailPreviewHtml || ''], { type: 'text/html' });

@@ -2898,6 +2898,41 @@ MAIL_TEMPLATES: Dict[str, dict] = {
         "cta": "💳 Przedłuż dostęp za 199 zł", "url": "/konto",
         "ps": "Płatność BLIK, kartą, Apple/Google Pay. Abonament na 30 dni, bez umowy — anulujesz kiedy chcesz.",
     },
+    "bcold": {
+        "audience": "business", "day": 0, "auto": False, "name": "Marketing — Oferta dla biura nieruchomości (do wysyłki ręcznej)",
+        "subject": "Wszystkie portale, 4 loginy dla agentów i wyceny z aktów notarialnych — 199 zł/mies za całe biuro",
+        "title": "Jedna wyszukiwarka zamiast pięciu portali — dla całego Twojego biura",
+        "intro": "Dzień dobry, piszę z FinderDom.pl — polskiego agregatora ogłoszeń nieruchomości. Zbieramy oferty z Otodom, OLX, Morizon, Gratki i pozostałych portali z całej Polski w jednym miejscu i dodajemy narzędzia, których biura używają na co dzień. Pozwalam sobie przesłać krótką informację o ofercie dla biur:",
+        "bullets": [
+            "<b>Wszystkie województwa w cenie</b> — bez pakietów regionalnych i dopłat za kolejne miasto.",
+            "<b>Aż 4 loginy dla agentów</b> w jednym abonamencie (każdy kolejny 55 zł/mies), wspólna baza i CRM statusów ofert.",
+            "<b>Oferty bezpośrednie od właścicieli</b> z filtrem „ostatnie 24h” — zanim zadzwoni konkurencja.",
+            "<b>20 wycen PDF miesięcznie w cenie</b> — z realnymi transakcjami z Rejestru Cen Nieruchomości, argument nie do podważenia na spotkaniu z właścicielem.",
+            "<b>Leady od właścicieli</b>, którzy zamawiają wycenę i proszą o kontakt agenta z okolicy.",
+            "<b>199 zł/mies za całe biuro</b> — 7 dni za darmo dla firm z NIP, bez karty i bez umowy. Faktura VAT automatycznie.",
+        ],
+        "cta": "🏢 Zobacz ofertę i wypróbuj 7 dni za darmo", "url": "/dla-biur",
+        "ps": "Jeśli ta wiadomość trafiła do Państwa przez pomyłkę lub nie życzą sobie Państwo kolejnych informacji, wystarczy odpowiedzieć „nie” — więcej nie napiszę. Pozdrawiam, Paweł Kukla, FinderDom.pl, kontakt@finderdom.pl",
+        "text": """Dzień dobry,
+
+piszę z FinderDom.pl — polskiego agregatora ogłoszeń nieruchomości. Zbieramy oferty z Otodom, OLX, Morizon, Gratki i pozostałych portali z całej Polski w jednym miejscu i dodajemy narzędzia, których biura używają na co dzień.
+
+Oferta dla biur nieruchomości — Plan Firmowy 199 zł/mies za całe biuro:
+• Wszystkie województwa w cenie — bez pakietów regionalnych.
+• Aż 4 loginy dla agentów w jednym abonamencie (każdy kolejny 55 zł/mies), wspólna baza i CRM statusów ofert.
+• Oferty bezpośrednie od właścicieli z filtrem „ostatnie 24h”.
+• 20 wycen PDF miesięcznie w cenie — z realnymi transakcjami z Rejestru Cen Nieruchomości.
+• Leady od właścicieli, którzy zamawiają wycenę i proszą o kontakt agenta.
+• 7 dni za darmo dla firm z NIP, bez karty i bez umowy. Faktura VAT automatycznie.
+
+Szczegóły i rejestracja: https://www.finderdom.pl/dla-biur
+
+Jeśli ta wiadomość trafiła do Państwa przez pomyłkę lub nie życzą sobie Państwo kolejnych informacji, wystarczy odpowiedzieć „nie” — więcej nie napiszę.
+
+Pozdrawiam,
+Paweł Kukla
+FinderDom.pl · kontakt@finderdom.pl""",
+    },
     "b3": {
         "audience": "business", "day": 12, "auto": False, "name": "Marketing — Po trialu: wróć do nas",
         "subject": "Konkurencja już widzi oferty bezpośrednie z ostatnich 24h. A Ty?",
@@ -3079,7 +3114,7 @@ async def admin_mailing_preview(tpl_id: str, admin: dict = Depends(require_admin
     if tpl_id not in MAIL_TEMPLATES:
         raise HTTPException(404, "Nieznany szablon")
     subject, html = _mail_render(tpl_id, admin.get("email") or "test@finderdom.pl")
-    return {"subject": subject, "html": html}
+    return {"subject": subject, "html": html, "text": MAIL_TEMPLATES[tpl_id].get("text")}
 
 
 class MailingSettingsReq(BaseModel):

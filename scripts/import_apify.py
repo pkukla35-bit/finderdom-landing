@@ -205,6 +205,43 @@ def to_iso(d) -> str | None:
     return None
 
 
+def from_otodom_scraper(item: dict) -> dict:
+    """Przemapuj rekord aktora trev0n/otodom-scraper na kształt aggregatora (żeby normalize() działało 1:1).
+    external_id = ID z końcówki URL (np. ID4ANTy) — identyczne z offerId aggregatora → brak duplikatów między źródłami."""
+    url = item.get("propertyUrl") or item.get("url") or ""
+    m = re.search(r"-(ID[0-9A-Za-z]+)/?$", url)
+    offer_id = m.group(1) if m else (str(item.get("id")) if item.get("id") else None)
+    market = str(item.get("market") or "").upper()
+    images = item.get("images") or ([item.get("mainImage")] if item.get("mainImage") else [])
+    return {
+        "offerId": offer_id,
+        "url": url,
+        "portal": "otodom",
+        "portals": ["otodom"],
+        "sources": [{"portal": "otodom", "url": url, "price": item.get("price")}],
+        "title": item.get("title"),
+        "price": item.get("price"),
+        "area": item.get("area"),
+        "rooms": item.get("rooms"),
+        "floor": item.get("floor"),
+        "buildYear": item.get("buildYear"),
+        "marketType": {"PRIMARY": "pierwotny", "SECONDARY": "wtorny"}.get(market),
+        "city": item.get("city"),
+        "district": item.get("district") or item.get("subdistrict"),
+        "street": item.get("street"),
+        "latitude": item.get("latitude"),
+        "longitude": item.get("longitude"),
+        "imageUrls": images,
+        "descriptionText": item.get("description") or "",
+        "sellerType": item.get("sellerType"),
+        "agency": item.get("agencyName"),
+        "phone": item.get("sellerPhone"),
+        "dateCreated": item.get("dateCreated"),
+        "buildingType": item.get("buildingType"),
+        "_actor": "trev0n/otodom-scraper",
+    }
+
+
 def normalize(item: dict, prop_type_hint: str = None) -> dict | None:
     """Konwertuj Apify aggregator item → schemat naszej bazy MongoDB."""
     offer_id = item.get("offerId") or item.get("clusterId")
@@ -264,7 +301,7 @@ def normalize(item: dict, prop_type_hint: str = None) -> dict | None:
 
     return {
         "source": "apify",
-        "source_actor": "trev0n/polish-real-estate-aggregator",
+        "source_actor": item.get("_actor") or "trev0n/polish-real-estate-aggregator",
         "external_id": str(offer_id),
         "cluster_id": item.get("clusterId"),
         "type": ptype,
@@ -346,6 +383,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset-id", required=True)
     ap.add_argument("--property", type=str, default="", help="Hint typu (dzialka/dom/mieszkanie)")
+    ap.add_argument("--actor", type=str, default="aggregator", choices=["aggregator", "otodom"],
+                    help="Format datasetu: aggregator (domyślnie) lub otodom (trev0n/otodom-scraper)")
     args = ap.parse_args()
 
     token = os.environ.get("APIFY_TOKEN")
@@ -363,6 +402,8 @@ def main():
     items = fetch_dataset(args.dataset_id, token)
     log.info(f"Otrzymano {len(items)} items z Apify")
 
+    if args.actor == "otodom":
+        items = [from_otodom_scraper(it) for it in items]
     docs = [normalize(it, args.property) for it in items]
     docs = [d for d in docs if d]
     log.info(f"Znormalizowano {len(docs)} ofert")

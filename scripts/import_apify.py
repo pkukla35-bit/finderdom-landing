@@ -196,16 +196,19 @@ def detect_purpose(text: str) -> str | None:
 
 
 _PRIMARY_STRONG = re.compile(
-    r"rynek\s+pierwotn|(?:bezpo[sś]rednio\s+)?od\s+dewelopera|w\s+budowie|termin\s+oddania|oddanie\s+(?:w\s+)?(?:20\d\d|[IVX]+\s*kw)|"
-    r"przedsprzeda[żz]|nowa\s+inwestycj|inwestycja\s+deweloperska|nowe\s+budownictwo", re.I)
-_PRIMARY_WEAK = re.compile(r"stan\s+deweloperski|dewelopersk", re.I)
+    r"rynek\s+pierwotn|bezpo[sś]rednio\s+od\s+dewelopera|w\s+budowie|termin\s+oddania|oddanie\s+(?:w\s+)?(?:20\d\d|[IVX]+\s*kw)|"
+    r"przedsprzeda[żz]|nowa\s+inwestycj|inwestycja\s+deweloperska", re.I)
+# Słabe sygnały („kupione od dewelopera w 2018”, „nowe budownictwo z 2015”) → tylko gdy budynek z ostatnich 3 lat
+_PRIMARY_WEAK = re.compile(r"stan\s+deweloperski|dewelopersk|od\s+dewelopera|nowe\s+budownictwo", re.I)
 
 
-def infer_market_type(portal_market: str | None, title: str, description: str, build_year) -> str | None:
+def infer_market_type(portal_market: str | None, title: str, description: str, build_year, ptype: str | None = None) -> str | None:
     """Portale (zwłaszcza dla lokali/domów) prawie zawsze oznaczają SECONDARY — dociągamy rynek pierwotny
     z roku budowy i treści. Nie zmieniamy PRIMARY nadanego przez portal."""
     if portal_market == "pierwotny":
         return "pierwotny"
+    if ptype == "dzialka":
+        return portal_market
     year_now = datetime.now(timezone.utc).year
     try:
         by = int(build_year) if build_year else 0
@@ -349,7 +352,7 @@ def normalize(item: dict, prop_type_hint: str = None) -> dict | None:
         "transaction_type": "sprzedaz",
         "seller_type": seller_type,
         "market_type": infer_market_type(item.get("marketType"), item.get("title") or "",
-                                         item.get("descriptionText") or "", item.get("buildYear")),
+                                         item.get("descriptionText") or "", item.get("buildYear"), ptype),
         "agency": item.get("agency"),
         "phone": item.get("phone"),
         "description": (item.get("descriptionText") or "")[:2000],

@@ -31,7 +31,7 @@ def main():
     by_type = {}
     for d in db.listings.find(q, proj):
         scanned += 1
-        new = infer_market_type(d.get("market_type"), d.get("title") or "", d.get("description") or "", d.get("build_year"))
+        new = infer_market_type(d.get("market_type"), d.get("title") or "", d.get("description") or "", d.get("build_year"), d.get("type"))
         if new == "pierwotny":
             by_type[d.get("type")] = by_type.get(d.get("type"), 0) + 1
             ops.append(UpdateOne({"_id": d["_id"]}, {"$set": {"market_type": "pierwotny"}}))

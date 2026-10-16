@@ -717,9 +717,9 @@ async def invite_agent(req: InviteAgentRequest, user: dict = Depends(current_use
         raise HTTPException(400, "Zaproszenie dla tego emaila już wysłane (wygaśnie za kilka dni)")
 
     # === LIMIT AGENTÓW ===
-    # Plan Firmowy 199 zł/mies zawiera do 4 agentów w cenie. 5. i każdy kolejny = 48 zł/mies extra.
+    # Plan Firmowy 199 zł/mies zawiera do 4 agentów w cenie. 5. i każdy kolejny = 55 zł/mies extra.
     AGENT_LIMIT_INCLUDED = 4
-    EXTRA_AGENT_PRICE = 48
+    EXTRA_AGENT_PRICE = 55
     _now_check = datetime.now(timezone.utc)
     users_col = await users_collection()
     active_agents = await users_col.count_documents({"master_id": str(user["_id"]), "active": True})

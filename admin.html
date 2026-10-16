@@ -602,11 +602,50 @@ function renderStripe(d){
       <div style="color:#8ba3d4">Klucz</div><div class="mono">${escapeHtml(d.key_hint || '—')} ${d.source ? '(' + (d.source === 'panel' ? 'z panelu' : 'z Vercel') + ')' : ''}</div>
       <div style="color:#8ba3d4">Webhook</div><div>${d.webhook_configured ? '<span class="ok">✓ skonfigurowany</span>' : '<span class="bad">✗ brak — płatności nie aktywują planów/faktur</span>'} ${d.webhook_url ? '<span class="mono" style="font-size:12px">' + escapeHtml(d.webhook_url) + '</span>' : ''}</div>
       <div style="color:#8ba3d4">Ostatnia zmiana</div><div>${d.updated_at ? fmtDate(d.updated_at) : '—'}</div>
-    </div>`);
+    </div>
+    <div id="stripeAccount" class="loader" style="margin-top:14px">Sprawdzam aktywację konta…</div>`);
+}
+const STRIPE_REQ_PL = {
+  'business_profile.url':'Adres strony www firmy','business_profile.mcc':'Branża (MCC)','business_profile.product_description':'Opis produktu',
+  'company.tax_id':'NIP firmy','company.name':'Nazwa firmy','company.address.line1':'Adres firmy','company.phone':'Telefon firmy',
+  'individual.first_name':'Imię','individual.last_name':'Nazwisko','individual.dob.day':'Data urodzenia','individual.address.line1':'Adres zamieszkania',
+  'individual.phone':'Telefon (weryfikacja SMS)','individual.email':'E-mail','individual.id_number':'PESEL','individual.verification.document':'Dokument tożsamości (skan dowodu)',
+  'individual.verification.additional_document':'Dodatkowy dokument (potwierdzenie adresu)','external_account':'Konto bankowe (IBAN)','tos_acceptance.date':'Akceptacja regulaminu Stripe',
+  'representative.first_name':'Imię reprezentanta','representative.last_name':'Nazwisko reprezentanta','representative.verification.document':'Dokument reprezentanta',
+  'settings.payments.statement_descriptor':'Opis na wyciągu klienta','business_type':'Typ działalności'
+};
+function reqLabel(k){ return STRIPE_REQ_PL[k] || k; }
+function capBadge(s){
+  if (s === 'active') return '<span class="ok">✓ aktywna</span>';
+  if (s === 'pending') return '<span class="warn">⏳ oczekuje na weryfikację</span>';
+  if (s === 'inactive') return '<span class="bad">✗ nieaktywna</span>';
+  return '<span style="color:#8ba3d4">— nie włączona w Stripe</span>';
+}
+function renderStripeAccount(a){
+  const due = [...new Set([...(a.past_due||[]), ...(a.currently_due||[])])];
+  const pending = a.pending_verification || [];
+  const later = (a.eventually_due||[]).filter(k => !due.includes(k) && !pending.includes(k));
+  setHtml('stripeAccount', `
+    <h3 style="margin:0 0 8px;font-size:15px">Aktywacja konta Stripe</h3>
+    <div style="display:grid;grid-template-columns:160px 1fr;gap:6px 14px;font-size:14px">
+      <div style="color:#8ba3d4">Przyjmowanie płatności</div><div>${a.charges_enabled ? '<span class="ok">✓ włączone</span>' : '<span class="bad">✗ wyłączone</span>'}</div>
+      <div style="color:#8ba3d4">Wypłaty na konto</div><div>${a.payouts_enabled ? '<span class="ok">✓ włączone</span>' : '<span class="bad">✗ wyłączone' + (a.disabled_reason ? ' (' + escapeHtml(a.disabled_reason) + ')' : '') + '</span>'}</div>
+      <div style="color:#8ba3d4">Do uzupełnienia teraz</div><div>${due.length ? '<ul style="margin:0;padding-left:18px" class="warn">' + due.map(k => '<li>' + escapeHtml(reqLabel(k)) + '</li>').join('') + '</ul>' : '<span class="ok">✓ nic — profil kompletny</span>'}</div>
+      ${pending.length ? '<div style="color:#8ba3d4">Stripe weryfikuje</div><div>' + pending.map(k => escapeHtml(reqLabel(k))).join(', ') + '</div>' : ''}
+      ${later.length ? '<div style="color:#8ba3d4">Wymagane później</div><div style="color:#8ba3d4">' + later.map(k => escapeHtml(reqLabel(k))).join(', ') + '</div>' : ''}
+      ${a.current_deadline ? '<div style="color:#8ba3d4">Termin</div><div class="warn">' + fmtDate(new Date(a.current_deadline*1000).toISOString()) + '</div>' : ''}
+    </div>
+    <h3 style="margin:16px 0 8px;font-size:15px">Metody płatności (wg Stripe)</h3>
+    <div style="display:grid;grid-template-columns:160px 1fr;gap:6px 14px;font-size:14px">
+      ${a.methods.map(m => '<div style="color:#8ba3d4">' + escapeHtml(m.label) + '</div><div>' + capBadge(m.status) + '</div>').join('')}
+    </div>
+    <p style="margin:12px 0 0;font-size:13px;color:#8ba3d4">Jeśli metoda jest „nieaktywna” lub Stripe pokazuje „niekwalifikujący się” — uzupełnij pozycje z listy „Do uzupełnienia teraz” w Stripe (Przewodnik konfiguracji, prawy górny róg). Po weryfikacji metoda odblokuje się sama.</p>`);
 }
 async function loadStripe(){
   try { renderStripe(await api('/admin/stripe')); }
-  catch(e){ setHtml('stripeStatus', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`); }
+  catch(e){ setHtml('stripeStatus', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`); return; }
+  try { renderStripeAccount(await api('/admin/stripe/account')); }
+  catch(e){ setHtml('stripeAccount', `<div class="err">Nie udało się pobrać statusu konta: ${escapeHtml(e.message)}</div>`); }
 }
 document.addEventListener('submit', async (e) => {
   if (e.target.id !== 'stripeForm') return;

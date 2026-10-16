@@ -2688,6 +2688,33 @@ async def admin_stripe_status(admin: dict = Depends(require_admin)):
     return _stripe_status_doc(doc, STRIPE_SECRET_KEY)
 
 
+@app.get("/api/admin/stripe/account")
+async def admin_stripe_account(admin: dict = Depends(require_admin)):
+    """Status aktywacji konta Stripe: czego brakuje + które metody płatności są aktywne."""
+    key, _ = await _stripe_cfg()
+    if not key:
+        raise HTTPException(503, "Stripe niepodłączony")
+    try:
+        acct = (await asyncio.to_thread(lambda: stripe.Account.retrieve(api_key=key))).to_dict()
+    except stripe.error.StripeError as e:
+        raise HTTPException(502, f"Stripe error: {str(e)[:200]}")
+    req = acct.get("requirements") or {}
+    caps = acct.get("capabilities") or {}
+    methods = {"card_payments": "Karta", "blik_payments": "BLIK", "p24_payments": "Przelewy24",
+               "paypal_payments": "PayPal", "revolut_pay_payments": "Revolut Pay", "link_payments": "Link"}
+    return {
+        "charges_enabled": acct.get("charges_enabled"),
+        "payouts_enabled": acct.get("payouts_enabled"),
+        "disabled_reason": req.get("disabled_reason"),
+        "currently_due": req.get("currently_due") or [],
+        "past_due": req.get("past_due") or [],
+        "eventually_due": req.get("eventually_due") or [],
+        "pending_verification": req.get("pending_verification") or [],
+        "current_deadline": req.get("current_deadline"),
+        "methods": [{"id": k, "label": v, "status": caps.get(k)} for k, v in methods.items()],
+    }
+
+
 @app.post("/api/admin/stripe")
 async def admin_stripe_save(body: StripeKeyRequest, request: Request, admin: dict = Depends(require_admin)):
     """Zapisuje klucz tajny Stripe i AUTOMATYCZNIE tworzy webhook (signing secret zwracany tylko przy tworzeniu)."""

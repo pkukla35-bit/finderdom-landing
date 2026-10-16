@@ -61,6 +61,24 @@ if not MONGODB_URI or not JWT_SECRET:
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
+# Klucze Stripe mogą być też zapisane w Mongo (settings/_id="stripe") przez panel admina — mają
+# pierwszeństwo przed zmiennymi środowiskowymi Vercel. Cache 60 s (serverless).
+_STRIPE_RT = {"secret": None, "whsec": None, "ts": 0.0}
+
+
+async def _stripe_cfg():
+    import time as _t
+    if _t.time() - _STRIPE_RT["ts"] > 60:
+        try:
+            doc = await database().settings.find_one({"_id": "stripe"})
+        except Exception:
+            doc = None
+        _STRIPE_RT.update(secret=(doc or {}).get("secret_key") or STRIPE_SECRET_KEY,
+                          whsec=(doc or {}).get("webhook_secret") or STRIPE_WEBHOOK_SECRET, ts=_t.time())
+    if _STRIPE_RT["secret"]:
+        stripe.api_key = _STRIPE_RT["secret"]
+    return _STRIPE_RT["secret"], _STRIPE_RT["whsec"]
+
 PLANS = {"individual": 35, "business": 199}  # gross PLN per 30 days
 PLAN_LABELS = {"individual": "Osobisty", "business": "Firmowy"}
 VALUATION_PRICE = 32  # PLN one-time per property valuation PDF
@@ -2247,7 +2265,7 @@ async def me(user: dict = Depends(current_user)):
 # --- Payments ---
 @app.post("/api/payments/checkout")
 async def create_checkout(body: CheckoutRequest, user: dict = Depends(current_user)):
-    if not STRIPE_SECRET_KEY:
+    if not (await _stripe_cfg())[0]:
         raise HTTPException(503, "Płatności są chwilowo niedostępne (Stripe nieskonfigurowany)")
     if body.plan not in PLANS:
         raise HTTPException(400, "Nieznany plan")
@@ -2344,11 +2362,12 @@ async def apply_payment(user_id: str, plan: str, stripe_session_id: str, amount_
 async def stripe_webhook(request: Request):
     raw = await request.body()
     sig = request.headers.get("stripe-signature", "")
-    if not STRIPE_WEBHOOK_SECRET:
+    _, whsec = await _stripe_cfg()
+    if not whsec:
         # Webhook not configured; still accept 200 but do not process
         return {"received": True, "warning": "STRIPE_WEBHOOK_SECRET not set"}
     try:
-        event = stripe.Webhook.construct_event(raw, sig, STRIPE_WEBHOOK_SECRET)
+        event = stripe.Webhook.construct_event(raw, sig, whsec)
     except ValueError:
         raise HTTPException(400, "Invalid payload")
     except stripe.error.SignatureVerificationError:
@@ -2414,7 +2433,7 @@ async def stripe_webhook(request: Request):
 @app.get("/api/payments/verify")
 async def verify_payment(session_id: str, user: dict = Depends(current_user)):
     """Fallback verification: user returns from Stripe, we check server-side."""
-    if not STRIPE_SECRET_KEY:
+    if not (await _stripe_cfg())[0]:
         raise HTTPException(503, "Stripe niedostępny")
     if not session_id:
         raise HTTPException(400, "Brak session_id")
@@ -2644,6 +2663,71 @@ async def update_invoice_data(body: InvoiceDataRequest, user: dict = Depends(cur
     return {"ok": True, **upd}
 
 
+class StripeKeyRequest(BaseModel):
+    secret_key: str = Field(min_length=20, max_length=200)
+
+
+def _stripe_status_doc(doc: Optional[dict], live_env: Optional[str]) -> dict:
+    key = (doc or {}).get("secret_key") or live_env or ""
+    return {
+        "configured": bool(key),
+        "mode": "live" if key.startswith("sk_live_") else ("test" if key.startswith("sk_test_") else None),
+        "key_hint": (key[:8] + "…" + key[-4:]) if key else None,
+        "source": "panel" if (doc or {}).get("secret_key") else ("vercel" if live_env else None),
+        "webhook_configured": bool((doc or {}).get("webhook_secret") or STRIPE_WEBHOOK_SECRET),
+        "webhook_url": (doc or {}).get("webhook_url"),
+        "account_name": (doc or {}).get("account_name"),
+        "updated_at": (doc or {}).get("updated_at"),
+    }
+
+
+@app.get("/api/admin/stripe")
+async def admin_stripe_status(admin: dict = Depends(require_admin)):
+    doc = await database().settings.find_one({"_id": "stripe"})
+    return _stripe_status_doc(doc, STRIPE_SECRET_KEY)
+
+
+@app.post("/api/admin/stripe")
+async def admin_stripe_save(body: StripeKeyRequest, request: Request, admin: dict = Depends(require_admin)):
+    """Zapisuje klucz tajny Stripe i AUTOMATYCZNIE tworzy webhook (signing secret zwracany tylko przy tworzeniu)."""
+    key = body.secret_key.strip()
+    if not key.startswith(("sk_live_", "sk_test_", "rk_live_", "rk_test_")):
+        raise HTTPException(400, "To nie jest klucz tajny Stripe (powinien zaczynać się od sk_live_ lub sk_test_). Klucz pk_… jest publiczny i tu nie pasuje.")
+    webhook_url = f"https://{(request.headers.get('host') or 'www.finderdom.pl').split(':')[0]}/api/payments/webhook"
+
+    def _setup():
+        acct = stripe.Account.retrieve(api_key=key)
+        name = ((acct.get("business_profile") or {}).get("name")) or (acct.get("settings") or {}).get("dashboard", {}).get("display_name") or acct.get("id")
+        # usuń nasze poprzednie endpointy pod tym URL-em, żeby nie dublować zdarzeń
+        try:
+            for ep in stripe.WebhookEndpoint.list(limit=50, api_key=key).auto_paging_iter():
+                if ep.get("url") == webhook_url:
+                    stripe.WebhookEndpoint.delete(ep["id"], api_key=key)
+        except Exception as e:
+            logger.warning("webhook cleanup: %s", e)
+        ep = stripe.WebhookEndpoint.create(
+            url=webhook_url,
+            enabled_events=["checkout.session.completed"],
+            description="FinderDom.pl – płatności (utworzony z panelu admina)",
+            api_key=key,
+        )
+        return name, ep["id"], ep["secret"]
+
+    try:
+        account_name, ep_id, whsec = await asyncio.to_thread(_setup)
+    except stripe.error.AuthenticationError:
+        raise HTTPException(400, "Stripe odrzucił klucz — sprawdź, czy skopiowałeś cały Secret key.")
+    except stripe.error.StripeError as e:
+        raise HTTPException(400, f"Błąd Stripe: {getattr(e, 'user_message', None) or str(e)[:200]}")
+
+    doc = {"_id": "stripe", "secret_key": key, "webhook_secret": whsec, "webhook_endpoint_id": ep_id,
+           "webhook_url": webhook_url, "account_name": account_name,
+           "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": admin.get("email")}
+    await database().settings.replace_one({"_id": "stripe"}, doc, upsert=True)
+    _STRIPE_RT["ts"] = 0.0
+    return _stripe_status_doc(doc, STRIPE_SECRET_KEY)
+
+
 @app.get("/api/admin/invoices/{invoice_id}/pdf")
 async def admin_download_invoice(invoice_id: str, admin: dict = Depends(require_admin)):
     try:
@@ -2699,7 +2783,7 @@ class ValuationCheckoutCustomReq(BaseModel):
 @app.post("/api/valuation/checkout-custom")
 async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
     """Wycena wprowadzona ręcznie przez właściciela (bez listing_id)."""
-    if not STRIPE_SECRET_KEY:
+    if not (await _stripe_cfg())[0]:
         raise HTTPException(503, "Stripe niedostępny")
     email = clean_email(body.email)
     prop = body.property or {}
@@ -2798,7 +2882,7 @@ async def _custom_valuation_property(md: dict) -> dict:
 
 @app.post("/api/valuation/checkout")
 async def valuation_checkout(body: ValuationCheckoutReq):
-    if not STRIPE_SECRET_KEY:
+    if not (await _stripe_cfg())[0]:
         raise HTTPException(503, "Stripe niedostępny")
     email = clean_email(body.email)
     listing_id = str(body.listing_id).strip()
@@ -3046,7 +3130,7 @@ async def _geocode_address(address: str, city: str, district: str = "") -> Optio
 @app.get("/api/valuation/download")
 async def valuation_download(session_id: str):
     """Verify Stripe payment and stream PDF."""
-    if not STRIPE_SECRET_KEY:
+    if not (await _stripe_cfg())[0]:
         raise HTTPException(503, "Stripe niedostępny")
 
     def retrieve():

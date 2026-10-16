@@ -50,6 +50,8 @@
   .tag-trial{background:rgba(74,222,128,0.15);color:#4ade80}
   .tag-agent{background:rgba(251,113,133,0.15);color:#fb7185}
   .empty{text-align:center;color:#8ba3d4;padding:40px 20px;font-style:italic}
+  .stripe-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:22px;max-width:820px}
+  .stripe-card .ok{color:#4ade80}.stripe-card .warn{color:#fbbf24}.stripe-card .bad{color:#f87171}
   .btn-sm{padding:6px 12px;background:rgba(255,184,0,0.12);border:1px solid rgba(255,184,0,0.35);color:#FFB800;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;min-height:32px}
   .btn-sm:hover{background:rgba(255,184,0,0.2)}
   .loader{text-align:center;color:#8ba3d4;padding:40px 20px}
@@ -110,6 +112,7 @@
     <button class="tab" data-tab="payments">💳 Płatności</button>
     <button class="tab" data-tab="leads">📩 Leady</button>
     <button class="tab" data-tab="scrapers">🕷️ Scrapery</button>
+    <button class="tab" data-tab="stripe">💰 Płatności Stripe</button>
   </div>
 
   <!-- OVERVIEW -->
@@ -184,6 +187,22 @@
     </div>
     <div id="scrapersTable" class="loader">Ładuję…</div>
   </section>
+
+  <section data-panel="stripe">
+    <div class="stripe-card">
+      <h2 style="margin:0 0 6px;font-size:18px">Podłączenie Stripe (prawdziwe płatności)</h2>
+      <p style="color:#8ba3d4;font-size:13px;margin:0 0 14px;line-height:1.5">
+        Wystarczy <b>jeden klucz</b>. W Stripe: dolny pasek <b>Developers → API keys → Secret key → Reveal</b> (zaczyna się od <span class="mono">sk_live_</span>).
+        Wklej go poniżej — webhook, faktury i aktywację planów skonfiguruję automatycznie. Klucz <span class="mono">pk_live_</span> (publiczny) tu nie pasuje.
+      </p>
+      <div id="stripeStatus" class="loader">Ładuję…</div>
+      <form id="stripeForm" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+        <input type="password" id="stripeKey" placeholder="sk_live_…" autocomplete="off" style="flex:1;min-width:280px;padding:12px 14px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-family:monospace;font-size:14px;min-height:44px">
+        <button type="submit" class="refresh-btn" id="stripeSaveBtn" style="min-height:44px">💾 Zapisz i skonfiguruj</button>
+      </form>
+      <div id="stripeMsg" style="margin-top:10px;font-size:13px"></div>
+    </div>
+  </section>
 </main>
 </template>
 
@@ -256,6 +275,7 @@ function initTabs(){
       if (t.dataset.tab === 'payments' && !window._loadedPayments) { window._loadedPayments = true; loadPayments(); }
       if (t.dataset.tab === 'leads' && !window._loadedLeads) { window._loadedLeads = true; loadLeads(); }
       if (t.dataset.tab === 'scrapers' && !window._loadedScrapers) { window._loadedScrapers = true; loadScrapers(); }
+      if (t.dataset.tab === 'stripe') loadStripe();
     });
   });
 }
@@ -572,6 +592,38 @@ async function loadLeads(){
     setHtml('leadsTable', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`);
   }
 }
+
+function renderStripe(d){
+  const mode = d.mode === 'live' ? '<span class="ok">LIVE — prawdziwe płatności</span>' : d.mode === 'test' ? '<span class="warn">TEST — tylko karty testowe, klienci nie zapłacą</span>' : '<span class="bad">brak klucza</span>';
+  setHtml('stripeStatus', `
+    <div style="display:grid;grid-template-columns:160px 1fr;gap:6px 14px;font-size:14px">
+      <div style="color:#8ba3d4">Status</div><div>${d.configured ? mode : '<span class="bad">Niepodłączone</span>'}</div>
+      <div style="color:#8ba3d4">Konto Stripe</div><div>${escapeHtml(d.account_name || '—')}</div>
+      <div style="color:#8ba3d4">Klucz</div><div class="mono">${escapeHtml(d.key_hint || '—')} ${d.source ? '(' + (d.source === 'panel' ? 'z panelu' : 'z Vercel') + ')' : ''}</div>
+      <div style="color:#8ba3d4">Webhook</div><div>${d.webhook_configured ? '<span class="ok">✓ skonfigurowany</span>' : '<span class="bad">✗ brak — płatności nie aktywują planów/faktur</span>'} ${d.webhook_url ? '<span class="mono" style="font-size:12px">' + escapeHtml(d.webhook_url) + '</span>' : ''}</div>
+      <div style="color:#8ba3d4">Ostatnia zmiana</div><div>${d.updated_at ? fmtDate(d.updated_at) : '—'}</div>
+    </div>`);
+}
+async function loadStripe(){
+  try { renderStripe(await api('/admin/stripe')); }
+  catch(e){ setHtml('stripeStatus', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`); }
+}
+document.addEventListener('submit', async (e) => {
+  if (e.target.id !== 'stripeForm') return;
+  e.preventDefault();
+  const key = document.getElementById('stripeKey').value.trim();
+  const msg = document.getElementById('stripeMsg'); const btn = document.getElementById('stripeSaveBtn');
+  if (!key) { msg.innerHTML = '<span class="bad">Wklej klucz.</span>'; return; }
+  btn.disabled = true; msg.innerHTML = '⏳ Sprawdzam klucz w Stripe i tworzę webhook…';
+  try {
+    const r = await fetch(API_BASE + '/admin/stripe', { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }, body: JSON.stringify({ secret_key: key }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+    renderStripe(d); document.getElementById('stripeKey').value = '';
+    msg.innerHTML = '<span class="ok">✅ Gotowe — Stripe podłączony, webhook utworzony. Zrób testową płatność na stronie wyceny.</span>';
+  } catch(err) { msg.innerHTML = `<span class="bad">❌ ${escapeHtml(err.message)}</span>`; }
+  finally { btn.disabled = false; }
+});
 
 async function loadScrapers(){
   try {

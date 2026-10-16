@@ -18,7 +18,7 @@ gtag('set', 'url_passthrough', false);
 <meta name="google-adsense-account" content="ca-pub-9328001602201523">
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9328001602201523" crossorigin="anonymous"></script>
 <title>FinderDom.pl — Wyszukiwarka ogłoszeń nieruchomości ze wszystkich portali</title>
-<meta name="description" content="FinderDom.pl — nowa wyszukiwarka ogłoszeń nieruchomości. Wszystkie dostępne portale w jednym miejscu — Otodom, OLX, Morizon, Gratka i inne. AI analiza cen, powiadomienia o nowych ofertach. Zapisz się na start!">
+<meta name="description" content="FinderDom.pl — wyszukiwarka ogłoszeń nieruchomości. Wszystkie dostępne portale w jednym miejscu — Otodom, OLX, Morizon, Gratka i inne. AI analiza cen, powiadomienia o nowych ofertach.">
 <meta name="keywords" content="mieszkania, domy, nieruchomości, wyszukiwarka, otodom, olx, morizon, gratka, analiza cen">
 <meta name="author" content="FinderDom.pl">
 <meta name="robots" content="index, follow">
@@ -28,14 +28,14 @@ gtag('set', 'url_passthrough', false);
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.finderdom.pl/">
 <meta property="og:title" content="FinderDom.pl — Wyszukiwarka ogłoszeń nieruchomości">
-<meta property="og:description" content="Wszystkie portale nieruchomości w jednym miejscu. AI analiza cen. Podobne oferty w okolicy. Powiadomienia. Wkrótce startujemy!">
+<meta property="og:description" content="Wszystkie portale nieruchomości w jednym miejscu. AI analiza cen. Podobne oferty w okolicy. Powiadomienia o nowych ofertach.">
 <meta property="og:image" content="https://www.finderdom.pl/og-image.png">
 <meta property="og:locale" content="pl_PL">
 
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="FinderDom.pl — Wyszukiwarka ogłoszeń nieruchomości">
-<meta name="twitter:description" content="Wszystkie portale nieruchomości w jednym miejscu. AI analiza cen. Wkrótce startujemy!">
+<meta name="twitter:description" content="Wszystkie portale nieruchomości w jednym miejscu. AI analiza cen. Wycena nieruchomości PDF.">
 
 <!-- Favicon -->
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -272,12 +272,12 @@ gtag('set', 'url_passthrough', false);
 
   <!-- Hero -->
   <div class="hero">
-    <div class="badge"><span class="dot"></span>WKRÓTCE STARTUJEMY</div>
+    <div class="badge"><span class="dot"></span>JUŻ DZIAŁAMY — OFERTY AKTUALIZOWANE 24/7</div>
     <h1>Wszystkie ogłoszenia<br><span class="highlight">nieruchomości</span><br>w jednym miejscu</h1>
     <p class="subtitle">Otodom, OLX, Morizon, Gratka i wszystkie pozostałe portale w Polsce — jedno wyszukiwanie. AI analiza cen sprawdzi czy oferta to okazja czy zawyżka.</p>
 
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:40px">
-      <a href="/szukaj" style="background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:16px 32px;border-radius:14px;text-decoration:none;font-size:14px;text-transform:uppercase;letter-spacing:0.5px;box-shadow:0 8px 24px rgba(255,184,0,0.35);transition:transform 0.15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">🔍 Otwórz wyszukiwarkę (demo)</a>
+      <a href="/szukaj" style="background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:16px 32px;border-radius:14px;text-decoration:none;font-size:14px;text-transform:uppercase;letter-spacing:0.5px;box-shadow:0 8px 24px rgba(255,184,0,0.35);transition:transform 0.15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">🔍 Otwórz wyszukiwarkę</a>
       <a href="/oferta" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.2);color:#fff;font-weight:700;padding:16px 32px;border-radius:14px;text-decoration:none;font-size:14px">Zobacz przykład oferty</a>
     </div>
 
@@ -361,8 +361,8 @@ gtag('set', 'url_passthrough', false);
     </div>
 
     <div class="val-cta">
-      <button class="val-btn" onclick="alert('Ta usługa startuje razem z pełną aplikacją. Zapisz się na newsletter aby dostać powiadomienie i 30% rabatu!')">Zamów wycenę</button>
-      <div class="val-note"><strong>29 zł</strong> dla subskrybentów · <strong>PDF w 60 sek</strong> · Bez podpisywania umów</div>
+      <a class="val-btn" href="/wycena" style="text-decoration:none;display:inline-block">Zamów wycenę</a>
+      <div class="val-note"><strong>32 zł</strong> · <strong>PDF do pobrania od razu</strong> · Bez podpisywania umów</div>
     </div>
   </div>
 
@@ -731,7 +731,7 @@ gtag('set', 'url_passthrough', false);
 
       if (res.ok) {
         msg.className = 'msg success';
-        msg.textContent = '✅ Dziękujemy! Powiadomimy Cię jak tylko startujemy.';
+        msg.textContent = '✅ Dziękujemy! Jesteś na liście.';
         form.reset();
         // Track successful signup in GA4
         if (window.gtag) {

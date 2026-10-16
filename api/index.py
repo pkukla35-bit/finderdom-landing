@@ -2831,17 +2831,17 @@ def _mail_layout(title: str, intro: str, bullets: List[str], cta_text: str, cta_
 # Każdy szablon: audience (personal/business), day (ile dni po rejestracji), subject, builder
 MAIL_TEMPLATES: Dict[str, dict] = {
     "p1": {
-        "audience": "personal", "day": 0, "auto": True, "name": "Po rejestracji — Witaj: jak korzystać z konta",
-        "subject": "Witaj w FinderDom — 3 rzeczy, które warto zrobić na start",
-        "title": "Wszystkie ogłoszenia w jednym miejscu. Zacznij od tych 3 rzeczy",
-        "intro": "Dzięki za założenie konta! FinderDom zbiera oferty z Otodom, OLX, Morizon, Gratki i pozostałych portali, żebyś nie musiał przeglądać pięciu stron naraz. Oto jak wycisnąć z niego najwięcej:",
+        "audience": "personal", "day": 0, "auto": True, "name": "Po rejestracji — Witaj: wyszukiwarka + subskrypcja",
+        "subject": "Witaj w FinderDom — wszystkie ogłoszenia w jednym miejscu (i jak odblokować pełny dostęp)",
+        "title": "Twoje konto jest gotowe. Oto, co masz do dyspozycji",
+        "intro": "Dzięki za założenie konta! FinderDom zbiera ogłoszenia z Otodom, OLX, Morizon, Gratki i pozostałych portali z całej Polski w jednej wyszukiwarce. Bez planu widzisz podgląd pierwszych 5 ofert — pełny dostęp odblokowuje subskrypcja:",
         "bullets": [
-            "<b>Wyszukaj</b> mieszkanie, dom lub działkę w swoim mieście — jedna wyszukiwarka, cała Polska.",
-            "<b>Włącz filtr „tylko od właściciela”</b> — oferty bez pośrednika, czyli bez prowizji 2–3%.",
-            "<b>Zobacz analizę AI</b> przy ofercie: okazja, cena typowa czy zawyżona.",
+            "<b>Wyszukiwarka wszystkich portali</b> — mieszkania, domy, działki i lokale, cała Polska, filtr „tylko od właściciela” (bez prowizji pośrednika).",
+            "<b>Plan Osobisty — 45 zł za 30 dni</b>: wszystkie oferty, linki do ogłoszeń i numery kontaktowe, analiza AI (okazja / w normie / zawyżona), podobne oferty w okolicy, ulubione i alerty cenowe. Bez umowy, anulujesz kiedy chcesz.",
+            "<b>Wycena PDF — 35 zł</b> (bez planu): realna wartość nieruchomości na podstawie aktów notarialnych z Rejestru Cen Nieruchomości, w 2 minuty.",
         ],
-        "cta": "🔍 Otwórz wyszukiwarkę", "url": "/szukaj",
-        "ps": "Bez planu widzisz podgląd pierwszych 5 ofert. Pełny dostęp (wszystkie oferty, linki do ogłoszeń, analiza AI) aktywujesz w zakładce „Moje konto” — Plan Osobisty 45 zł za 30 dni. Wycena PDF (35 zł) działa bez planu.",
+        "cta": "💎 Odblokuj pełną wyszukiwarkę — 45 zł/mies", "url": "/konto",
+        "ps": "Subskrypcję aktywujesz w zakładce „Moje konto” — płatność BLIK, kartą, Apple/Google Pay. Jedna dobrze wynegocjowana oferta zwraca ją wielokrotnie.",
     },
     "p2": {
         "audience": "personal", "day": 4, "auto": False, "name": "Marketing — Wycena PDF za 35 zł",

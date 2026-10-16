@@ -15,6 +15,7 @@ window.FD_GADS = {
   if (!cfg.id) return;
   window.dataLayer = window.dataLayer || [];
   window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+  if (document.querySelector('script[src*="gtag/js?id=' + cfg.id + '"]')) return; // tag już wstawiony statycznie w <head>
   const s = document.createElement('script');
   s.async = true;
   s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(cfg.id);

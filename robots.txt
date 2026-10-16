@@ -3,3 +3,4 @@ Allow: /
 Disallow: /api/
 
 Sitemap: https://www.finderdom.pl/sitemap.xml
+Disallow: /szablony/

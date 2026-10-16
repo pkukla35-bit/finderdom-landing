@@ -195,6 +195,32 @@ def detect_purpose(text: str) -> str | None:
     return None
 
 
+_PRIMARY_STRONG = re.compile(
+    r"rynek\s+pierwotn|(?:bezpo[sś]rednio\s+)?od\s+dewelopera|w\s+budowie|termin\s+oddania|oddanie\s+(?:w\s+)?(?:20\d\d|[IVX]+\s*kw)|"
+    r"przedsprzeda[żz]|nowa\s+inwestycj|inwestycja\s+deweloperska|nowe\s+budownictwo", re.I)
+_PRIMARY_WEAK = re.compile(r"stan\s+deweloperski|dewelopersk", re.I)
+
+
+def infer_market_type(portal_market: str | None, title: str, description: str, build_year) -> str | None:
+    """Portale (zwłaszcza dla lokali/domów) prawie zawsze oznaczają SECONDARY — dociągamy rynek pierwotny
+    z roku budowy i treści. Nie zmieniamy PRIMARY nadanego przez portal."""
+    if portal_market == "pierwotny":
+        return "pierwotny"
+    year_now = datetime.now(timezone.utc).year
+    try:
+        by = int(build_year) if build_year else 0
+    except (TypeError, ValueError):
+        by = 0
+    text = f"{title or ''} {description or ''}"
+    if by >= year_now:
+        return "pierwotny"
+    if _PRIMARY_STRONG.search(text):
+        return "pierwotny"
+    if _PRIMARY_WEAK.search(text) and by >= year_now - 3:
+        return "pierwotny"
+    return portal_market
+
+
 def to_iso(d) -> str | None:
     if not d: return None
     try:
@@ -322,7 +348,8 @@ def normalize(item: dict, prop_type_hint: str = None) -> dict | None:
         "images": images,
         "transaction_type": "sprzedaz",
         "seller_type": seller_type,
-        "market_type": item.get("marketType"),
+        "market_type": infer_market_type(item.get("marketType"), item.get("title") or "",
+                                         item.get("descriptionText") or "", item.get("buildYear")),
         "agency": item.get("agency"),
         "phone": item.get("phone"),
         "description": (item.get("descriptionText") or "")[:2000],

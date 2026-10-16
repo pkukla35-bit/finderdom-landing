@@ -1,0 +1,33 @@
+name: Backfill – rynek pierwotny (market_type)
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Zapisać zmiany? (false = dry-run)'
+        required: false
+        type: boolean
+        default: false
+      type:
+        description: 'Typ (lokal/dom/mieszkanie), puste = wszystkie'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install pymongo requests
+      - env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+        run: |
+          ARGS=""
+          [ "${{ inputs.apply }}" = "true" ] && ARGS="$ARGS --apply"
+          [ -n "${{ inputs.type }}" ] && ARGS="$ARGS --type ${{ inputs.type }}"
+          python scripts/backfill_market_type.py $ARGS

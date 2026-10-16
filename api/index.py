@@ -3138,7 +3138,11 @@ async def valuation_download(session_id: str):
         market=listing.get("market_type"),
     )
 
-    pdf_data = await asyncio.to_thread(build_valuation_pdf, listing, all_listings, md.get("email", ""), rcn_stats)
+    rcn_houses = None
+    if (listing.get("type") or "") == "dom":
+        rcn_houses = await get_rcn_house_comps(listing.get("city") or "", listing.get("lat"), listing.get("lon"))
+
+    pdf_data = await asyncio.to_thread(build_valuation_pdf, listing, all_listings, md.get("email", ""), rcn_stats, rcn_houses)
     fname = f"wycena-{listing.get('id','custom')}.pdf".replace("/", "-")
     return StreamingResponse(
         io.BytesIO(pdf_data),
@@ -3326,6 +3330,67 @@ def _haversine_km(lat1, lon1, lat2, lon2):
 # ─────────────────────────────────────────────────────────────
 # RCN (Rejestr Cen Nieruchomości) — official government data
 # ─────────────────────────────────────────────────────────────
+async def get_rcn_house_comps(city: str, lat: Optional[float], lon: Optional[float], min_sample: int = 5) -> Optional[dict]:
+    """Domy z RCN (warstwa budynki): realne akty — cena całkowita + pow. działki + adres. RCN nie podaje
+    pow. użytkowej domu, więc zwracamy statystyki CENY CAŁKOWITEJ, nie zł/m²."""
+    try:
+        coll = database().rcn_transactions
+    except Exception:
+        return None
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    since = (now - timedelta(days=1096)).strftime("%Y-%m-%d")
+    proj = {"_id": 0, "cena_brutto": 1, "powierzchnia_dzialki": 1, "powierzchnia": 1, "data_zawarcia": 1,
+            "ulica": 1, "rodzaj_rynku": 1, "lat": 1, "lng": 1, "city": 1}
+    base = {"rodzaj_nieruchomosci": "dom", "cena_brutto": {"$gt": 0}, "data_zawarcia": {"$gte": since, "$lte": today}}
+    docs, scope, radius_used = [], "", None
+    center_mode = False
+    if (lat is None or lon is None) and city:
+        cc = CITY_COORDS.get(_normalize_city_name(city))
+        if cc:
+            lat, lon = cc
+            center_mode = True
+    if lat is not None and lon is not None:
+        for km in ([6.0, 12.0, 20.0] if center_mode else [2.0, 4.0, 8.0, 15.0]):
+            dlat = km / 111.0
+            dlon = km / (111.0 * max(math.cos(math.radians(lat)), 0.1))
+            q = dict(base, lat={"$gte": lat - dlat, "$lte": lat + dlat}, lng={"$gte": lon - dlon, "$lte": lon + dlon})
+            try:
+                cand = await coll.find(q, proj).sort("data_zawarcia", -1).limit(600).to_list(length=600)
+            except Exception:
+                cand = []
+            cand = [d for d in cand if d.get("lat") is not None and _haversine_km(lat, lon, d["lat"], d["lng"]) <= km]
+            if len(cand) >= min_sample:
+                docs, radius_used = cand, (None if center_mode else km)
+                scope = f"w mieście {city.strip()} (do {km:g} km od centrum)" if center_mode else f"w promieniu {km:g} km"
+                break
+    if not docs and city:
+        q = dict(base, city={"$regex": "^" + _build_diacritic_regex(city.strip()) + "$"})
+        try:
+            docs = await coll.find(q, proj).sort("data_zawarcia", -1).limit(600).to_list(length=600)
+        except Exception:
+            docs = []
+        scope = f"w mieście {city.strip()}"
+    if len(docs) < min_sample:
+        return None
+    prices = sorted(float(d["cena_brutto"]) for d in docs)
+    n = len(prices)
+    pct = lambda p: prices[min(n - 1, max(0, int(n * p)))]
+    plots = sorted(float(d["powierzchnia_dzialki"]) for d in docs if d.get("powierzchnia_dzialki"))
+    dates = sorted(d.get("data_zawarcia") for d in docs if d.get("data_zawarcia"))
+    recent = []
+    for d in sorted(docs, key=lambda x: x.get("data_zawarcia") or "", reverse=True)[:12]:
+        recent.append({"data": d.get("data_zawarcia"), "cena": d.get("cena_brutto"), "dzialka": d.get("powierzchnia_dzialki"),
+                       "ulica": d.get("ulica"), "rynek": d.get("rodzaj_rynku"), "city": d.get("city"),
+                       "lat": d.get("lat"), "lon": d.get("lng"),
+                       "dist_km": round(_haversine_km(lat, lon, d["lat"], d["lng"]), 1)
+                       if lat is not None and d.get("lat") is not None else None})
+    return {"n": n, "median_price": int(prices[n // 2]), "p25_price": int(pct(0.25)), "p75_price": int(pct(0.75)),
+            "median_plot": int(plots[len(plots) // 2]) if plots else None, "scope": scope, "radius_km": radius_used,
+            "first_date": dates[0] if dates else None, "last_date": dates[-1] if dates else None, "recent": recent,
+            "source": "RCN (akty notarialne, GUGiK)"}
+
+
 async def get_rcn_stats(city: str, prop_type: str, area_m2: Optional[float] = None,
                         min_sample: int = 5, lat: Optional[float] = None, lon: Optional[float] = None,
                         market: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -4121,7 +4186,7 @@ def _make_distribution_chart(values, highlight_val, kind="price", face="Helvetic
     return d
 
 
-def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
+def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None, rcn_houses=None):
     """
     Wycena nieruchomości w stylu propertly.io - profesjonalny raport 4-stronicowy.
     Kolorystyka: głęboki indygo/purpura, białe karty na jasnym tle.
@@ -4808,6 +4873,20 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
             else:
                 ai_lines.append(f"Ceny transakcyjne w okolicy są <b>stabilne</b> ({_pct_txt(_tr)} przez 6 mies.) — wycena nie powinna się istotnie zmienić w najbliższych miesiącach.")
 
+        # 4b) Domy: realne akty RCN (cena całkowita) jako punkt odniesienia
+        if rcn_houses and rcn_houses.get("n"):
+            _rh = rcn_houses
+            _rel = ""
+            if _rh.get("median_price"):
+                _r = (value_mid - _rh["median_price"]) / _rh["median_price"] * 100.0
+                _rel = (f" Twoja wycena jest o {abs(_r):.0f}% {'powyżej' if _r > 0 else 'poniżej'} tej mediany"
+                        + (" — typowe dla domu o większym metrażu/działce." if _r > 0 else " — typowe dla domu do remontu lub o mniejszej działce.") if abs(_r) >= 5 else " Twoja wycena jest zgodna z tą medianą.")
+            ai_lines.append(
+                f"<b>Realne transakcje domów (RCN):</b> {_rh['n']} aktów notarialnych {_rh.get('scope') or 'z okolicy'}, "
+                f"mediana ceny <b>{fmt_pln(_rh['median_price'])}</b> (kwartyle {fmt_pln(_rh['p25_price'])} – {fmt_pln(_rh['p75_price'])})"
+                + (f", mediana działki {_rh['median_plot']} m²" if _rh.get("median_plot") else "") + f".{_rel}"
+            )
+
         # 5) Pozycja dzielnicy na tle miasta
         _ud = (l.get("district") or "").strip()
         if _ud and len(city_offers) >= 20:
@@ -5156,6 +5235,7 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
     _p3_subtitle = (
         f"Realne ceny transakcyjne z Rejestru Cen Nieruchomości (RCN) — {rcn_stats['n']} aktów notarialnych z okolicy."
         if rcn_source_label and rcn_stats else
+        "" if (rcn_houses and rcn_houses.get("recent")) else
         f"Szacowane ceny transakcyjne (94% cen ofertowych) — realne kwoty za jakie sprzedały się podobne nieruchomości."
     )
     story.append(Paragraph(
@@ -5163,7 +5243,49 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None):
         ParagraphStyle("p3s", fontName=face, fontSize=8, leading=11, textColor=TEXT_MUTED, spaceAfter=6)))
 
     _rcn_recent = (rcn_stats or {}).get("recent") if rcn_source_label else None
-    if _rcn_recent:
+    if not _rcn_recent and rcn_houses and rcn_houses.get("recent"):
+        # ── DOMY: realne akty notarialne z RCN (cena całkowita + działka; RCN nie podaje pow. użytkowej domu) ──
+        _rh = rcn_houses
+        story.append(Paragraph(
+            f"Realne transakcje domów z Rejestru Cen Nieruchomości — {_rh['n']} aktów notarialnych {_rh.get('scope') or 'z okolicy'}. "
+            f"RCN nie rejestruje powierzchni użytkowej domów, dlatego podajemy cenę całkowitą i powierzchnię działki.",
+            ParagraphStyle("p3h", fontName=face, fontSize=8, leading=11, textColor=TEXT_MUTED, spaceAfter=6)))
+        cell_style = ParagraphStyle("cellh", fontName=face, fontSize=7.5, leading=10, textColor=TEXT_DARK, alignment=TA_LEFT)
+        cell_center = ParagraphStyle("cellhc", fontName=face, fontSize=7.5, leading=10, textColor=TEXT_DARK, alignment=TA_CENTER)
+        tbl_data = [["Adres", "Data\ntransakcji", "Działka", "Rynek", "Cena"]]
+        for t in _rh["recent"][:12]:
+            addr = ", ".join((x.title() if x.isupper() else x) for x in [t.get("ulica"), t.get("city")] if x) or "—"
+            if t.get("dist_km") is not None:
+                addr += f" ({t['dist_km']} km)"
+            dd = t.get("data") or ""
+            tbl_data.append([Paragraph(addr, cell_style),
+                             Paragraph(f"{dd[8:10]}.{dd[5:7]}.{dd[:4]}" if len(dd) >= 10 else "—", cell_center),
+                             Paragraph(f"{int(t['dzialka'])} m²" if t.get("dzialka") else "—", cell_center),
+                             Paragraph(str(t.get("rynek") or "—"), cell_center),
+                             Paragraph(fmt_pln(int(t.get("cena") or 0)), cell_center)])
+        tbl = Table(tbl_data, colWidths=[70*mm, 26*mm, 24*mm, 24*mm, 36*mm])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,0), PRIMARY), ("TEXTCOLOR", (0,0),(-1,0), colors.white),
+            ("FONTNAME", (0,0),(-1,0), face_bold), ("FONTSIZE", (0,0),(-1,0), 8),
+            ("FONTNAME", (0,1),(-1,-1), face), ("FONTSIZE", (0,1),(-1,-1), 8),
+            ("ROWBACKGROUNDS", (0,1),(-1,-1), [colors.white, BG_LIGHT]),
+            ("BOX", (0,0),(-1,-1), 0.3, BORDER), ("LINEBELOW", (0,0),(-1,0), 0.5, PRIMARY_DARK),
+            ("INNERGRID", (0,1),(-1,-1), 0.2, BORDER), ("ALIGN", (1,0),(-1,-1), "CENTER"),
+            ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
+            ("TOPPADDING", (0,0),(-1,-1), 5), ("BOTTOMPADDING", (0,0),(-1,-1), 5), ("LEFTPADDING", (0,0),(-1,-1), 6),
+        ]))
+        story.append(tbl)
+        story.append(Spacer(1, 3*mm))
+        story.append(Paragraph(
+            f"Statystyka RCN ({_rh['n']} transakcji domów{', ' + _rh['scope'] if _rh.get('scope') else ''}): mediana ceny <b>{fmt_pln(_rh['median_price'])}</b>, "
+            f"kwartyle {fmt_pln(_rh['p25_price'])} – {fmt_pln(_rh['p75_price'])}"
+            + (f", mediana działki {_rh['median_plot']} m²" if _rh.get("median_plot") else "") +
+            f". Okres: {(_rh.get('first_date') or '')[:7]} – {(_rh.get('last_date') or '')[:7]}. "
+            "Źródło: Rejestr Cen Nieruchomości, GUGiK (geoportal.gov.pl); dane trafiają do rejestru z opóźnieniem 1–3 miesięcy. "
+            "Wycena w zł/m² (strona 1) opiera się na podobnych ofertach, bo RCN nie podaje metrażu domów.",
+            ParagraphStyle("rcnsumh", fontName=face, fontSize=7.5, leading=10.5, textColor=TEXT_MUTED)))
+        _rcn_recent = _rh["recent"]  # pomija poniżej syntetyczną tabelę/mapę
+    elif _rcn_recent:
         # ── Realne transakcje z RCN: mapa + tabela (bez syntetycznych dat i mnożnika 0.94) ──
         if map_lat is not None and map_lon is not None:
             tx_pts = [{"lat": t["lat"], "lon": t["lon"], "price_pm2": t.get("cena_m2"), "id": f"rcn-{i}"}

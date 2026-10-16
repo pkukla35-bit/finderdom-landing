@@ -4,7 +4,7 @@
 window.FD_GADS = {
   id: 'AW-963425765',
   labels: {
-    valuation: '',        // zakup wyceny PDF (35 zł)
+    valuation: 'szHaCP-Enp8dEOXrsssD',        // zakup wyceny PDF (35 zł)
     plan: '',             // zakup planu Osobisty 45 zł / Firmowy 199 zł
     signup_business: '',  // rejestracja konta firmowego (lead)
     signup: '',           // rejestracja konta prywatnego

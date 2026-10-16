@@ -2696,13 +2696,14 @@ async def admin_stripe_save(body: StripeKeyRequest, request: Request, admin: dic
     webhook_url = f"https://{(request.headers.get('host') or 'www.finderdom.pl').split(':')[0]}/api/payments/webhook"
 
     def _setup():
-        acct = stripe.Account.retrieve(api_key=key)
-        name = ((acct.get("business_profile") or {}).get("name")) or (acct.get("settings") or {}).get("dashboard", {}).get("display_name") or acct.get("id")
+        acct = stripe.Account.retrieve(api_key=key).to_dict()
+        name = ((acct.get("business_profile") or {}).get("name")) or ((acct.get("settings") or {}).get("dashboard") or {}).get("display_name") or acct.get("id")
         # usuń nasze poprzednie endpointy pod tym URL-em, żeby nie dublować zdarzeń
         try:
             for ep in stripe.WebhookEndpoint.list(limit=50, api_key=key).auto_paging_iter():
-                if ep.get("url") == webhook_url:
-                    stripe.WebhookEndpoint.delete(ep["id"], api_key=key)
+                epd = ep.to_dict()
+                if epd.get("url") == webhook_url:
+                    stripe.WebhookEndpoint.delete(epd["id"], api_key=key)
         except Exception as e:
             logger.warning("webhook cleanup: %s", e)
         ep = stripe.WebhookEndpoint.create(
@@ -2710,7 +2711,7 @@ async def admin_stripe_save(body: StripeKeyRequest, request: Request, admin: dic
             enabled_events=["checkout.session.completed"],
             description="FinderDom.pl – płatności (utworzony z panelu admina)",
             api_key=key,
-        )
+        ).to_dict()
         return name, ep["id"], ep["secret"]
 
     try:

@@ -188,6 +188,7 @@ gtag('set', 'url_passthrough', false);
   // Team invite flow: ?invite=xxx → agent joining company
   // ─────────────────────────────────────────────────────────────────
   const urlParams = new URLSearchParams(location.search);
+  if (urlParams.get('typ') === 'firma') { const bt = document.querySelector('.tab[data-type="business"]'); if (bt) bt.click(); }
   const inviteToken = urlParams.get('invite');
   if (inviteToken) {
     inviteTokenInput.value = inviteToken;

@@ -129,6 +129,12 @@ gtag('set', 'url_passthrough', false);
   .feat h3{font-size:15px;font-weight:900;margin-bottom:8px;color:#fff;letter-spacing:0.3px}
   .feat p{font-size:13px;color:#a3b3d1;line-height:1.6}
 
+  .hero-pills{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:-30px auto 30px;max-width:900px;padding:0 20px}
+  .hero-pill{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 24px;background:linear-gradient(135deg,rgba(255,184,0,0.15),rgba(255,184,0,0.05));border:1px solid rgba(255,184,0,0.4);border-radius:20px;color:#FFB800;text-decoration:none;text-align:center;transition:transform 0.15s,border-color 0.15s;min-height:44px}
+  .hero-pill:hover{transform:translateY(-2px);border-color:rgba(255,184,0,0.8)}
+  .hero-pill-who{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#c5d0e6;font-weight:700}
+  .hero-pill-what{font-size:14px;font-weight:800}
+  @media(max-width:600px){.hero-pills{flex-direction:column;align-items:stretch}.hero-pill{width:100%}}
   /* Newsletter card */
   .newsletter{background:linear-gradient(135deg,rgba(255,184,0,0.12) 0%,rgba(255,184,0,0.04) 100%);border:1px solid rgba(255,184,0,0.25);padding:40px 32px;border-radius:28px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);animation:fadeIn 1s ease 0.6s both}
   .newsletter .gift{font-size:44px;margin-bottom:16px;display:inline-block;animation:bounce 2s ease-in-out infinite}
@@ -263,10 +269,15 @@ gtag('set', 'url_passthrough', false);
     <div class="header-auth" id="headerAuth"></div>
   </div>
 
-  <!-- Hero CTA - Wyceń swoje mieszkanie -->
-  <div style="text-align:center;margin:-30px auto 30px;max-width:600px;padding:0 20px">
-    <a href="/wycena" style="display:inline-flex;align-items:center;gap:10px;padding:14px 28px;background:linear-gradient(135deg,rgba(255,184,0,0.15),rgba(255,184,0,0.05));border:1px solid rgba(255,184,0,0.4);border-radius:100px;color:#FFB800;text-decoration:none;font-weight:800;font-size:14px;transition:all 0.2s ease">
-      💎 Wyceń swoje mieszkanie w 2 minuty za 32 zł →
+  <!-- Hero CTA - dwie grupy odbiorców -->
+  <div class="hero-pills">
+    <a href="/wycena" class="hero-pill">
+      <span class="hero-pill-who">🏠 Dla osób prywatnych</span>
+      <span class="hero-pill-what">Wyceń mieszkanie lub dom w 2 minuty za 32 zł →</span>
+    </a>
+    <a href="/rejestracja?typ=firma" class="hero-pill">
+      <span class="hero-pill-who">🏢 Dla biur i pośredników</span>
+      <span class="hero-pill-what">CRM, leady i wyceny z Twoim logo — 7 dni za darmo →</span>
     </a>
   </div>
 

@@ -207,10 +207,10 @@
 
   <section data-panel="mailing">
     <div class="stripe-card" style="max-width:1100px">
-      <h2 style="margin:0 0 6px;font-size:18px">Automatyczny mailing do niezdecydowanych</h2>
+      <h2 style="margin:0 0 6px;font-size:18px">✉️ Mailing</h2>
       <p style="color:#8ba3d4;font-size:13px;margin:0 0 14px;line-height:1.5">
-        Codziennie rano (ok. 10:00) system sam wysyła sekwencję maili do zarejestrowanych użytkowników, którzy <b>nie wykupili planu</b> (konto free, trial lub wygasły plan).
-        Osoby prywatne dostają 3 maile (dzień 1 / 4 / 10), biura — 3 maile (dzień 1 / 5 / 12). Każdy mail wysyłany jest tylko raz, z linkiem „Wypisz się”. Kto zapłaci lub się wypisze — wypada z sekwencji.
+        <b>Automat</b> wysyła z systemu tylko wiadomości dotyczące konta użytkownika (powitanie po rejestracji z instrukcją, powiadomienie o końcu okresu próbnego) — codziennie rano, każdą raz, z linkiem „Wypisz się”.
+        <b>Szablony marketingowe</b> (wycena, plan, „wróć do nas”) są gotowe do pobrania jako HTML — wysyłasz je ze swojego narzędzia do newsletterów (Mailchimp, FreshMail, MailerLite) do osób, które wyraziły zgodę marketingową. Skrzynka systemowa służy do powiadomień, nie do kampanii.
       </p>
       <div id="mailingStatus" class="loader">Ładuję…</div>
       <div id="mailingTemplates" style="margin-top:18px"></div>
@@ -677,28 +677,29 @@ function renderMailing(d){
   const s = d.settings || {};
   setHtml('mailingStatus', `
     <div style="display:grid;grid-template-columns:200px 1fr;gap:6px 14px;font-size:14px">
-      <div style="color:#8ba3d4">Skrzynka nadawcza</div><div>${d.email_configured ? '<span class="ok">✓ skonfigurowana</span>' : '<span class="bad">✗ brak klucza e-mail — maile nie wyjdą</span>'}</div>
+      <div style="color:#8ba3d4">Skrzynka nadawcza</div><div>${d.email_configured ? '<span class="ok">✓ skonfigurowana</span>' : '<span class="bad">✗ brak klucza e-mail — maile nie wyjdą</span>'}${d.last_error && d.last_error.error ? ' <span class="bad" style="font-size:12px">· ostatni błąd (' + fmtDate(d.last_error.at) + '): ' + escapeHtml(d.last_error.error) + '</span>' : ''}</div>
       <div style="color:#8ba3d4">Automat</div><div>${s.auto_enabled ? '<span class="ok">● WŁĄCZONY</span>' : '<span class="warn">○ wyłączony</span>'}
         <button class="refresh-btn" style="margin-left:10px" onclick="toggleMailing(${s.auto_enabled ? 'false' : 'true'})">${s.auto_enabled ? 'Wyłącz' : 'Włącz'}</button>
         <button class="refresh-btn" style="margin-left:6px" onclick="runMailingNow()">▶ Uruchom teraz</button></div>
       <div style="color:#8ba3d4">Niezdecydowani teraz</div><div>👤 prywatni: <b>${d.undecided.personal}</b> &nbsp;·&nbsp; 🏢 biura: <b>${d.undecided.business}</b> &nbsp;·&nbsp; wypisanych: ${d.opt_out}</div>
     </div>
     <div id="mailingMsg" style="margin-top:10px;font-size:13px"></div>`);
-  setHtml('mailingTemplates', `
-    <h3 style="margin:0 0 8px;font-size:15px">Szablony sekwencji</h3>
-    <table style="width:100%;font-size:13px">
-      <thead><tr><th>Dla</th><th>Kiedy</th><th>Szablon</th><th>Temat</th><th>Wysłano</th><th></th></tr></thead>
-      <tbody>${d.templates.map(t => `<tr>
+  const row = t => `<tr>
         <td>${t.audience === 'business' ? '🏢 biura' : '👤 prywatni'}</td>
-        <td>dzień ${t.day}</td>
+        <td>${t.auto ? 'dzień ' + t.day : '—'}</td>
         <td>${escapeHtml(t.name)}</td>
         <td style="color:#c5d0e6">${escapeHtml(t.subject)}</td>
         <td>${t.sent}</td>
         <td style="white-space:nowrap">
-          <button class="refresh-btn" onclick="previewMailing('${t.id}')">👁 Podgląd</button>
+          <button class="refresh-btn" onclick="previewMailing('${t.id}')">👁 Podgląd / HTML</button>
           <button class="refresh-btn" onclick="testMailing('${t.id}')">📨 Test do mnie</button>
-        </td></tr>`).join('')}</tbody>
-    </table>`);
+        </td></tr>`;
+  const head = '<thead><tr><th>Dla</th><th>Kiedy</th><th>Szablon</th><th>Temat</th><th>Wysłano</th><th></th></tr></thead>';
+  setHtml('mailingTemplates', `
+    <h3 style="margin:0 0 8px;font-size:15px">🤖 Automat — powiadomienia o koncie (wysyła system)</h3>
+    <table style="width:100%;font-size:13px">${head}<tbody>${d.templates.filter(t => t.auto).map(row).join('')}</tbody></table>
+    <h3 style="margin:18px 0 8px;font-size:15px">📣 Szablony marketingowe — do pobrania (wysyłasz ze swojego narzędzia)</h3>
+    <table style="width:100%;font-size:13px">${head}<tbody>${d.templates.filter(t => !t.auto).map(row).join('')}</tbody></table>`);
   setHtml('mailingLog', `
     <h3 style="margin:0 0 8px;font-size:15px">Ostatnie wysyłki</h3>
     ${d.log.length ? `<table style="width:100%;font-size:13px"><thead><tr><th>Data</th><th>E-mail</th><th>Szablon</th><th>Tryb</th><th>Status</th></tr></thead>
@@ -711,7 +712,7 @@ async function loadMailing(){
 }
 function mailingMsg(html){ const m = document.getElementById('mailingMsg'); if (m) m.innerHTML = html; }
 async function toggleMailing(on){
-  try { await apiPost('/admin/mailing/settings', { auto_enabled: on }); await loadMailing(); mailingMsg(on ? '<span class="ok">✅ Automat włączony — pierwsze maile wyjdą jutro rano.</span>' : '<span class="warn">Automat wyłączony.</span>'); }
+  try { await apiPost('/admin/mailing/settings', { auto_enabled: on }); await loadMailing(); mailingMsg(on ? '<span class="ok">✅ Automat włączony — powiadomienia wyjdą jutro rano.</span>' : '<span class="warn">Automat wyłączony.</span>'); }
   catch(e){ mailingMsg(`<span class="bad">Błąd: ${escapeHtml(e.message)}</span>`); }
 }
 async function runMailingNow(){

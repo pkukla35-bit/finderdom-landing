@@ -513,10 +513,29 @@ def _assert_safe_email(subject: str, html: str) -> None:
                 raise ValueError(f"Anchor text {m.group(1)!r} != host {real!r} (G3)")
 
 
+_EMAIL_RT: Dict[str, Any] = {"key": None, "ts": 0.0}
+LAST_EMAIL_ERROR: Dict[str, Any] = {"at": None, "error": None}
+
+
+async def _email_key() -> str:
+    """Klucz skrzynki: runtime z Mongo (settings._id='email', ustawiany z panelu) ma pierwszeństwo przed env."""
+    import time as _t
+    if _t.time() - _EMAIL_RT["ts"] > 60:
+        try:
+            doc = await database().settings.find_one({"_id": "email"})
+            _EMAIL_RT["key"] = (doc or {}).get("key") or None
+        except Exception:
+            pass
+        _EMAIL_RT["ts"] = _t.time()
+    return _EMAIL_RT["key"] or EMAIL_KEY
+
+
 async def send_email(*, to: str, subject: str, html: str) -> Optional[str]:
     """Send a transactional email via Emergent Resend. Returns provider id or None on failure."""
-    if not EMAIL_KEY:
+    key = await _email_key()
+    if not key:
         logger.warning("EMERGENT_EMAIL_KEY not configured; skipping email to %s", to)
+        LAST_EMAIL_ERROR.update(at=datetime.now(timezone.utc).isoformat(), error="Brak klucza skrzynki (EMERGENT_EMAIL_KEY)")
         return None
     _assert_safe_email(subject, html)
     payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
@@ -526,13 +545,19 @@ async def send_email(*, to: str, subject: str, html: str) -> Optional[str]:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 f"{EMAIL_BASE_URL}/api/v1/email/send",
-                headers={"X-Email-Key": EMAIL_KEY},
+                headers={"X-Email-Key": key},
                 json=payload,
             )
         resp.raise_for_status()
         return resp.json().get("id")
+    except httpx.HTTPStatusError as e:
+        err = f"HTTP {e.response.status_code}: {e.response.text[:200]}"
+        logger.error("Email send failed to %s: %s", to, err)
+        LAST_EMAIL_ERROR.update(at=datetime.now(timezone.utc).isoformat(), error=err)
+        return None
     except Exception as e:
         logger.error("Email send failed to %s: %s", to, str(e)[:200])
+        LAST_EMAIL_ERROR.update(at=datetime.now(timezone.utc).isoformat(), error=str(e)[:200])
         return None
 
 
@@ -2806,7 +2831,7 @@ def _mail_layout(title: str, intro: str, bullets: List[str], cta_text: str, cta_
 # Każdy szablon: audience (personal/business), day (ile dni po rejestracji), subject, builder
 MAIL_TEMPLATES: Dict[str, dict] = {
     "p1": {
-        "audience": "personal", "day": 1, "name": "Dzień 1 — Witaj: 3 rzeczy na start",
+        "audience": "personal", "day": 0, "auto": True, "name": "Po rejestracji — Witaj: jak korzystać z konta",
         "subject": "Witaj w FinderDom — 3 rzeczy, które warto zrobić na start",
         "title": "Wszystkie ogłoszenia w jednym miejscu. Zacznij od tych 3 rzeczy",
         "intro": "Dzięki za założenie konta! FinderDom zbiera oferty z Otodom, OLX, Morizon, Gratki i pozostałych portali, żebyś nie musiał przeglądać pięciu stron naraz. Oto jak wycisnąć z niego najwięcej:",
@@ -2816,10 +2841,10 @@ MAIL_TEMPLATES: Dict[str, dict] = {
             "<b>Zobacz analizę AI</b> przy ofercie: okazja, cena typowa czy zawyżona.",
         ],
         "cta": "🔍 Otwórz wyszukiwarkę", "url": "/szukaj",
-        "ps": "PS. Gdy znajdziesz coś ciekawego, sprawdź realną wartość raportem PDF z aktami notarialnymi — kosztuje 35 zł i masz go w 2 minuty.",
+        "ps": "Bez planu widzisz podgląd pierwszych 5 ofert. Pełny dostęp (wszystkie oferty, linki do ogłoszeń, analiza AI) aktywujesz w zakładce „Moje konto” — Plan Osobisty 45 zł za 30 dni. Wycena PDF (35 zł) działa bez planu.",
     },
     "p2": {
-        "audience": "personal", "day": 4, "name": "Dzień 4 — Wycena PDF za 35 zł",
+        "audience": "personal", "day": 4, "auto": False, "name": "Marketing — Wycena PDF za 35 zł",
         "subject": "Czy ta cena jest uczciwa? Sprawdź w 2 minuty za 35 zł",
         "title": "Zawyżenie o 3% przy mieszkaniu za 600 000 zł to 18 000 zł",
         "intro": "Zanim zdecydujesz się na zakup (albo wystawisz swoją nieruchomość), sprawdź, ile jest naprawdę warta. Nasz raport PDF opiera się nie na cenach ofertowych, ale na prawdziwych transakcjach z Rejestru Cen Nieruchomości.",
@@ -2833,7 +2858,7 @@ MAIL_TEMPLATES: Dict[str, dict] = {
         "ps": "Działa dla mieszkań, domów, działek i lokali. Raport możesz pokazać sprzedającemu podczas negocjacji.",
     },
     "p3": {
-        "audience": "personal", "day": 10, "name": "Dzień 10 — Plan Osobisty 45 zł",
+        "audience": "personal", "day": 10, "auto": False, "name": "Marketing — Plan Osobisty 45 zł",
         "subject": "Analiza AI, alerty cenowe i podobne oferty — 45 zł/mies, anulujesz kiedy chcesz",
         "title": "Szukasz dalej? Odblokuj pełną analizę za 45 zł miesięcznie",
         "intro": "Darmowe konto pokazuje oferty. Plan Osobisty pokazuje, które z nich są naprawdę warte uwagi — i pilnuje za Ciebie zmian cen.",
@@ -2847,7 +2872,7 @@ MAIL_TEMPLATES: Dict[str, dict] = {
         "ps": "45 zł za 30 dni, bez umowy. Jedna dobrze wynegocjowana oferta zwraca to kilkaset razy.",
     },
     "b1": {
-        "audience": "business", "day": 1, "name": "Dzień 1 — Trial: dodaj agentów",
+        "audience": "business", "day": 0, "auto": True, "name": "Po rejestracji — Konto firmowe: jak zacząć",
         "subject": "Twoje 7 dni Premium Firmowy trwa — dodaj agentów i odbierz pierwsze leady",
         "title": "Masz 7 dni pełnego dostępu. Oto jak wykorzystać je w 100%",
         "intro": "Dziękujemy za rejestrację konta firmowego. Przez 7 dni masz wszystko, co daje Plan Firmowy — bez karty i bez zobowiązań. Trzy rzeczy, które warto zrobić dziś:",
@@ -2860,7 +2885,7 @@ MAIL_TEMPLATES: Dict[str, dict] = {
         "ps": "Leady od właścicieli zamawiających wycenę trafiają do wspólnej puli Twojego zespołu — kto pierwszy, ten lepszy.",
     },
     "b2": {
-        "audience": "business", "day": 5, "name": "Dzień 5 — Trial kończy się za 2 dni",
+        "audience": "business", "day": 5, "auto": True, "name": "Dzień 5 — Powiadomienie: trial kończy się za 2 dni",
         "subject": "Za 2 dni kończy się Twój okres próbny — 199 zł za całe biuro",
         "title": "Wszystkie województwa, 4 loginy dla agentów, wyceny w cenie — 199 zł/mies",
         "intro": "Twoje 7 dni Premium Firmowy dobiega końca. Jeśli FinderDom pomógł Ci choć przy jednej ofercie, policz: jeden pozyskany klient to 2 000–5 000 zł prowizji, a plan kosztuje 6,50 zł dziennie za całe biuro.",
@@ -2874,7 +2899,7 @@ MAIL_TEMPLATES: Dict[str, dict] = {
         "ps": "Płatność BLIK, kartą, Apple/Google Pay. Abonament na 30 dni, bez umowy — anulujesz kiedy chcesz.",
     },
     "b3": {
-        "audience": "business", "day": 12, "name": "Dzień 12 — Po trialu: wróć do nas",
+        "audience": "business", "day": 12, "auto": False, "name": "Marketing — Po trialu: wróć do nas",
         "subject": "Konkurencja już widzi oferty bezpośrednie z ostatnich 24h. A Ty?",
         "title": "Wróć do FinderDom — oferta dla biur jest wciąż otwarta",
         "intro": "Twój okres próbny się skończył, ale konto i dane zostały. Przypominamy, co dostaje biuro w Planie Firmowym za 199 zł miesięcznie:",
@@ -2957,7 +2982,7 @@ async def _mailing_auto_run(limit: int = 60) -> dict:
         aud = _mail_audience(u)
         email = u["email"].lower()
         for tpl_id, t in sorted(MAIL_TEMPLATES.items(), key=lambda kv: kv[1]["day"]):
-            if t["audience"] == aud and days >= t["day"] and (email, tpl_id) not in sent_pairs:
+            if t.get("auto") and t["audience"] == aud and days >= t["day"] and (email, tpl_id) not in sent_pairs:
                 candidates.append((email, tpl_id))
                 break
         if len(candidates) >= limit:
@@ -3015,7 +3040,7 @@ async def admin_mailing_auto_run(request: Request, limit: int = 60):
     settings = await _mailing_settings()
     if not settings["auto_enabled"]:
         return {"skipped": True, "reason": "auto_disabled"}
-    if not EMAIL_KEY:
+    if not await _email_key():
         return {"skipped": True, "reason": "email_not_configured"}
     return await _mailing_auto_run(limit=max(1, min(200, limit)))
 
@@ -3039,10 +3064,11 @@ async def admin_mailing_overview(admin: dict = Depends(require_admin)):
         log.append({"email": row.get("email"), "template": row.get("template"), "trigger": row.get("trigger"),
                     "ok": row.get("ok"), "sent_at": row["sent_at"].isoformat() if isinstance(row.get("sent_at"), datetime) else row.get("sent_at")})
     return {
-        "email_configured": bool(EMAIL_KEY),
+        "email_configured": bool(await _email_key()),
+        "last_error": LAST_EMAIL_ERROR,
         "settings": await _mailing_settings(),
         "undecided": counts, "opt_out": opt_out,
-        "templates": [{"id": k, **{f: v[f] for f in ("audience", "day", "name", "subject")}, "sent": sent_by_tpl.get(k, 0)}
+        "templates": [{"id": k, **{f: v[f] for f in ("audience", "day", "name", "subject")}, "auto": bool(v.get("auto")), "sent": sent_by_tpl.get(k, 0)}
                       for k, v in sorted(MAIL_TEMPLATES.items(), key=lambda kv: (kv[1]["audience"], kv[1]["day"]))],
         "log": log,
     }
@@ -3071,20 +3097,34 @@ async def admin_mailing_settings(body: MailingSettingsReq, admin: dict = Depends
 
 class MailingTestReq(BaseModel):
     template: str
-    to: Optional[str] = None
 
 
 @app.post("/api/admin/mailing/test")
 async def admin_mailing_test(body: MailingTestReq, admin: dict = Depends(require_admin)):
     if body.template not in MAIL_TEMPLATES:
         raise HTTPException(404, "Nieznany szablon")
-    if not EMAIL_KEY:
-        raise HTTPException(503, "Wysyłka e-mail nie jest skonfigurowana (brak EMERGENT_EMAIL_KEY)")
-    to = clean_email(body.to) if body.to else admin.get("email")
+    if not await _email_key():
+        raise HTTPException(503, "Wysyłka e-mail nie jest skonfigurowana (brak klucza skrzynki)")
+    to = admin.get("email")  # test zawsze na adres zalogowanego admina
     ok = await _mail_send_logged(to, body.template, "test")
     if not ok:
-        raise HTTPException(502, "Dostawca e-mail odrzucił wiadomość — sprawdź logi")
+        raise HTTPException(502, f"Dostawca e-mail odrzucił wiadomość: {LAST_EMAIL_ERROR.get('error') or 'nieznany błąd'}")
     return {"ok": True, "to": to}
+
+
+class EmailKeyReq(BaseModel):
+    key: str = Field(min_length=8, max_length=200)
+
+
+@app.post("/api/admin/mailing/email-key")
+async def admin_mailing_email_key(body: EmailKeyReq, admin: dict = Depends(require_admin)):
+    """Zapisuje klucz skrzynki nadawczej (Emergent) w Mongo — ma pierwszeństwo przed zmienną środowiskową."""
+    key = body.key.strip()
+    if not key.startswith("ek_"):
+        raise HTTPException(400, "Klucz skrzynki zaczyna się od ek_")
+    await database().settings.update_one({"_id": "email"}, {"$set": {"key": key, "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": admin.get("email")}}, upsert=True)
+    _EMAIL_RT["ts"] = 0.0
+    return {"ok": True}
 
 
 @app.post("/api/admin/stripe")

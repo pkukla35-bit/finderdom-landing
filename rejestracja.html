@@ -75,6 +75,7 @@ gtag('set', 'url_passthrough', false);
     h1{font-size:24px}
   }
 </style>
+<script src="/scripts/gads.js"></script>
 </head>
 <body>
 <div class="bg-orbs">
@@ -267,7 +268,8 @@ gtag('set', 'url_passthrough', false);
       localStorage.setItem('finderdom_token', data.token);
       localStorage.setItem('finderdom_user', JSON.stringify(data.user));
       showAlert('Konto utworzone! Przekierowuję...', 'success');
-      setTimeout(() => { window.location.href = '/konto'; }, 800);
+      if (window.fdConversion) fdConversion(data.user && data.user.account_type === 'business' ? 'signup_business' : 'signup', 0, 'reg-' + (data.user && data.user.id));
+      setTimeout(() => { window.location.href = '/konto'; }, 1200);
     } catch (err) {
       showAlert(err.message || 'Nie udało się utworzyć konta.', 'error');
       submitBtn.disabled = false;

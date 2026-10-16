@@ -2290,6 +2290,7 @@ async def create_checkout(body: CheckoutRequest, user: dict = Depends(current_us
             success_url=f"{DOMAIN}/platnosc-sukces?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{DOMAIN}/platnosc-anulowana",
             locale="pl",
+            adaptive_pricing={"enabled": False},
         )
 
     try:
@@ -2859,6 +2860,7 @@ async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
             success_url=f"{DOMAIN}/wycena-sukces?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{DOMAIN}/wycena",
             locale="pl",
+            adaptive_pricing={"enabled": False},
         )
 
     try:
@@ -2909,6 +2911,7 @@ async def valuation_checkout(body: ValuationCheckoutReq):
             success_url=f"{DOMAIN}/wycena-sukces?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{DOMAIN}/oferta.html?id={listing_id}",
             locale="pl",
+            adaptive_pricing={"enabled": False},
         )
 
     try:

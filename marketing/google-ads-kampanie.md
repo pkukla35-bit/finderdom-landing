@@ -53,8 +53,8 @@ Wyceń Teraz — FinderDom.pl
 
 Opisy (max 90 znaków — wpisz wszystkie 4):
 ```
-Realna wartość mieszkania, domu lub działki na podstawie prawdziwych cen z aktów notarialnych.
-Raport PDF w 2 minuty za 35 zł: zakres ceny, podobne oferty, transakcje w okolicy i opinia AI.
+Realna wartość mieszkania, domu lub działki wg prawdziwych cen z aktów notarialnych.
+Raport PDF w 2 minuty za 35 zł: zakres ceny, podobne oferty, transakcje i opinia AI.
 Bez rejestracji i abonamentu. Płacisz BLIK-iem lub kartą i od razu pobierasz wycenę PDF.
 Sprzedajesz lub kupujesz? Sprawdź, czy cena jest uczciwa, zanim podpiszesz umowę.
 ```
@@ -94,18 +94,18 @@ Analiza AI: Okazja czy Zawyżka
 Oferty Bez Pośrednika
 Alerty o Nowych Ofertach
 Monitoring Ogłoszeń 24/7
-Cała Polska, Jedno Wyszukiwanie
+Cała Polska w 1 Wyszukiwaniu
 Ceny z Aktów Notarialnych
 Plan Osobisty 45 zł/mies
-Bez Umowy, Anulujesz Kiedy Chcesz
+Bez Umowy, Anuluj Kiedy Chcesz
 Nie Przegap Okazji
 Porównaj Ceny Między Portalami
 FinderDom.pl — Sprawdź Teraz
 ```
 Opisy:
 ```
-Ogłoszenia z Otodom, OLX, Morizon, Gratki i innych portali w jednej wyszukiwarce. Cała Polska.
-AI podpowie, czy cena to okazja, norma czy zawyżka. Filtr „tylko od właściciela” — bez prowizji.
+Ogłoszenia z Otodom, OLX, Morizon, Gratki i innych portali w jednym miejscu. Cała Polska.
+AI podpowie, czy cena to okazja czy zawyżka. Filtr „tylko od właściciela” — bez prowizji.
 Alerty o nowych ofertach i zmianach cen. Plan Osobisty 45 zł/30 dni, bez umowy.
 Zobacz tę samą ofertę na kilku portalach w różnych cenach i negocjuj z raportem w ręku.
 ```
@@ -155,10 +155,10 @@ FinderDom.pl dla Pośredników
 ```
 Opisy:
 ```
-Ogłoszenia ze wszystkich portali, cała Polska, 4 loginy dla agentów i wyceny PDF bez limitu — 199 zł/mies.
-Oferty bezpośrednie od właścicieli z filtrem „ostatnie 24h” — dzwoń, zanim zrobi to konkurencja.
-Wyceny z realnymi transakcjami z Rejestru Cen Nieruchomości — argument nie do podważenia u właściciela.
-7 dni za darmo dla firm z NIP, bez karty i umowy. Faktura VAT automatycznie po każdej płatności.
+Wszystkie portale, cała Polska, 4 loginy dla agentów i wyceny PDF bez limitu — 199 zł/mies.
+Oferty bezpośrednie od właścicieli z filtrem „ostatnie 24h” — dzwoń przed konkurencją.
+Wyceny z realnymi transakcjami z Rejestru Cen Nieruchomości — mocny argument u właściciela.
+7 dni za darmo dla firm z NIP, bez karty i umowy. Faktura VAT automatycznie po płatności.
 ```
 Ścieżka wyświetlana: `finderdom.pl/Dla-Biur/199zl`
 

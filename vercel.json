@@ -16,9 +16,17 @@
     {
       "path": "/api/admin/cleanup-stale?limit=500&concurrency=25",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/admin/mailing/auto-run?limit=60",
+      "schedule": "0 8 * * *"
     }
   ],
   "rewrites": [
+    {
+      "source": "/api/mailing/:path*",
+      "destination": "/api/index"
+    },
     {
       "source": "/api/auth/:path*",
       "destination": "/api/index"

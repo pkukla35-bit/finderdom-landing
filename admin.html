@@ -113,6 +113,7 @@
     <button class="tab" data-tab="leads">📩 Leady</button>
     <button class="tab" data-tab="scrapers">🕷️ Scrapery</button>
     <button class="tab" data-tab="stripe">💰 Płatności Stripe</button>
+    <button class="tab" data-tab="mailing">✉️ Mailing</button>
   </div>
 
   <!-- OVERVIEW -->
@@ -203,6 +204,20 @@
       <div id="stripeMsg" style="margin-top:10px;font-size:13px"></div>
     </div>
   </section>
+
+  <section data-panel="mailing">
+    <div class="stripe-card" style="max-width:1100px">
+      <h2 style="margin:0 0 6px;font-size:18px">Automatyczny mailing do niezdecydowanych</h2>
+      <p style="color:#8ba3d4;font-size:13px;margin:0 0 14px;line-height:1.5">
+        Codziennie rano (ok. 10:00) system sam wysyła sekwencję maili do zarejestrowanych użytkowników, którzy <b>nie wykupili planu</b> (konto free, trial lub wygasły plan).
+        Osoby prywatne dostają 3 maile (dzień 1 / 4 / 10), biura — 3 maile (dzień 1 / 5 / 12). Każdy mail wysyłany jest tylko raz, z linkiem „Wypisz się”. Kto zapłaci lub się wypisze — wypada z sekwencji.
+      </p>
+      <div id="mailingStatus" class="loader">Ładuję…</div>
+      <div id="mailingTemplates" style="margin-top:18px"></div>
+      <div id="mailingPreview" style="margin-top:18px"></div>
+      <div id="mailingLog" style="margin-top:18px"></div>
+    </div>
+  </section>
 </main>
 </template>
 
@@ -276,6 +291,7 @@ function initTabs(){
       if (t.dataset.tab === 'leads' && !window._loadedLeads) { window._loadedLeads = true; loadLeads(); }
       if (t.dataset.tab === 'scrapers' && !window._loadedScrapers) { window._loadedScrapers = true; loadScrapers(); }
       if (t.dataset.tab === 'stripe') loadStripe();
+      if (t.dataset.tab === 'mailing') loadMailing();
     });
   });
 }
@@ -647,6 +663,90 @@ async function loadStripe(){
   try { renderStripeAccount(await api('/admin/stripe/account')); }
   catch(e){ setHtml('stripeAccount', `<div class="err">Nie udało się pobrać statusu konta: ${escapeHtml(e.message)}</div>`); }
 }
+
+// ───────────── MAILING ─────────────
+async function apiPost(path, body){
+  const r = await fetch(API_BASE + path, { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+  return d;
+}
+let _mailingData = null;
+function renderMailing(d){
+  _mailingData = d;
+  const s = d.settings || {};
+  setHtml('mailingStatus', `
+    <div style="display:grid;grid-template-columns:200px 1fr;gap:6px 14px;font-size:14px">
+      <div style="color:#8ba3d4">Skrzynka nadawcza</div><div>${d.email_configured ? '<span class="ok">✓ skonfigurowana</span>' : '<span class="bad">✗ brak klucza e-mail — maile nie wyjdą</span>'}</div>
+      <div style="color:#8ba3d4">Automat</div><div>${s.auto_enabled ? '<span class="ok">● WŁĄCZONY</span>' : '<span class="warn">○ wyłączony</span>'}
+        <button class="refresh-btn" style="margin-left:10px" onclick="toggleMailing(${s.auto_enabled ? 'false' : 'true'})">${s.auto_enabled ? 'Wyłącz' : 'Włącz'}</button>
+        <button class="refresh-btn" style="margin-left:6px" onclick="runMailingNow()">▶ Uruchom teraz</button></div>
+      <div style="color:#8ba3d4">Niezdecydowani teraz</div><div>👤 prywatni: <b>${d.undecided.personal}</b> &nbsp;·&nbsp; 🏢 biura: <b>${d.undecided.business}</b> &nbsp;·&nbsp; wypisanych: ${d.opt_out}</div>
+    </div>
+    <div id="mailingMsg" style="margin-top:10px;font-size:13px"></div>`);
+  setHtml('mailingTemplates', `
+    <h3 style="margin:0 0 8px;font-size:15px">Szablony sekwencji</h3>
+    <table style="width:100%;font-size:13px">
+      <thead><tr><th>Dla</th><th>Kiedy</th><th>Szablon</th><th>Temat</th><th>Wysłano</th><th></th></tr></thead>
+      <tbody>${d.templates.map(t => `<tr>
+        <td>${t.audience === 'business' ? '🏢 biura' : '👤 prywatni'}</td>
+        <td>dzień ${t.day}</td>
+        <td>${escapeHtml(t.name)}</td>
+        <td style="color:#c5d0e6">${escapeHtml(t.subject)}</td>
+        <td>${t.sent}</td>
+        <td style="white-space:nowrap">
+          <button class="refresh-btn" onclick="previewMailing('${t.id}')">👁 Podgląd</button>
+          <button class="refresh-btn" onclick="testMailing('${t.id}')">📨 Test do mnie</button>
+        </td></tr>`).join('')}</tbody>
+    </table>`);
+  setHtml('mailingLog', `
+    <h3 style="margin:0 0 8px;font-size:15px">Ostatnie wysyłki</h3>
+    ${d.log.length ? `<table style="width:100%;font-size:13px"><thead><tr><th>Data</th><th>E-mail</th><th>Szablon</th><th>Tryb</th><th>Status</th></tr></thead>
+      <tbody>${d.log.map(l => `<tr><td>${fmtDate(l.sent_at)}</td><td>${escapeHtml(l.email || '')}</td><td>${escapeHtml(l.template)}</td><td>${l.trigger === 'auto' ? 'automat' : 'test'}</td><td>${l.ok ? '<span class="ok">✓</span>' : '<span class="bad">✗ błąd</span>'}</td></tr>`).join('')}</tbody></table>`
+      : '<div style="color:#8ba3d4;font-size:13px">Jeszcze nic nie wysłano.</div>'}`);
+}
+async function loadMailing(){
+  try { renderMailing(await api('/admin/mailing')); }
+  catch(e){ setHtml('mailingStatus', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`); }
+}
+function mailingMsg(html){ const m = document.getElementById('mailingMsg'); if (m) m.innerHTML = html; }
+async function toggleMailing(on){
+  try { await apiPost('/admin/mailing/settings', { auto_enabled: on }); await loadMailing(); mailingMsg(on ? '<span class="ok">✅ Automat włączony — pierwsze maile wyjdą jutro rano.</span>' : '<span class="warn">Automat wyłączony.</span>'); }
+  catch(e){ mailingMsg(`<span class="bad">Błąd: ${escapeHtml(e.message)}</span>`); }
+}
+async function runMailingNow(){
+  mailingMsg('⏳ Wysyłam należne maile…');
+  try { const r = await apiPost('/admin/mailing/auto-run?limit=60', {}); await loadMailing();
+    mailingMsg(r.skipped ? `<span class="warn">Pominięto: ${escapeHtml(r.reason)}</span>` : `<span class="ok">✅ Kandydatów: ${r.candidates}, wysłano: ${r.sent}, błędów: ${r.failed}</span>`); }
+  catch(e){ mailingMsg(`<span class="bad">Błąd: ${escapeHtml(e.message)}</span>`); }
+}
+async function previewMailing(id){
+  setHtml('mailingPreview', '<div class="loader">Ładuję podgląd…</div>');
+  try {
+    const d = await api('/admin/mailing/preview/' + id);
+    window._mailPreviewHtml = d.html;
+    setHtml('mailingPreview', `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <div><b>Temat:</b> ${escapeHtml(d.subject)}</div>
+        <div><button class="refresh-btn" onclick="copyMailHtml()">📋 Kopiuj HTML (do Gmaila/Mailchimpa)</button>
+             <button class="refresh-btn" onclick="downloadMailHtml('${id}')">⬇ Pobierz .html</button></div>
+      </div>
+      <iframe id="mailFrame" style="width:100%;height:720px;border:1px solid rgba(255,255,255,0.15);border-radius:12px;background:#fff"></iframe>`);
+    document.getElementById('mailFrame').srcdoc = d.html;
+    document.getElementById('mailingPreview').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch(e){ setHtml('mailingPreview', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`); }
+}
+async function copyMailHtml(){ try { await navigator.clipboard.writeText(window._mailPreviewHtml || ''); mailingMsg('<span class="ok">✅ HTML skopiowany do schowka.</span>'); } catch(e){ mailingMsg('<span class="bad">Nie udało się skopiować — użyj „Pobierz .html”.</span>'); } }
+function downloadMailHtml(id){
+  const blob = new Blob([window._mailPreviewHtml || ''], { type: 'text/html' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'finderdom-mail-' + id + '.html'; a.click();
+}
+async function testMailing(id){
+  mailingMsg('⏳ Wysyłam test na Twój adres…');
+  try { const r = await apiPost('/admin/mailing/test', { template: id }); await loadMailing(); mailingMsg(`<span class="ok">✅ Wysłano test na ${escapeHtml(r.to)} — sprawdź skrzynkę (także spam).</span>`); }
+  catch(e){ mailingMsg(`<span class="bad">Błąd: ${escapeHtml(e.message)}</span>`); }
+}
+
 document.addEventListener('submit', async (e) => {
   if (e.target.id !== 'stripeForm') return;
   e.preventDefault();

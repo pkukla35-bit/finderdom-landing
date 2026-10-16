@@ -2715,6 +2715,332 @@ async def admin_stripe_account(admin: dict = Depends(require_admin)):
     }
 
 
+# ======================================================================
+# MAILING — automatyczna sekwencja do niezdecydowanych (free / trial)
+# ======================================================================
+import hmac as _hmac, hashlib as _hashlib, base64 as _b64
+
+MAIL_PUBLIC_DOMAIN = "https://www.finderdom.pl"
+
+
+def _mail_token(email: str) -> str:
+    return _hmac.new(JWT_SECRET.encode(), email.lower().encode(), _hashlib.sha256).hexdigest()[:32]
+
+
+def _mail_unsub_url(email: str) -> str:
+    e = _b64.urlsafe_b64encode(email.lower().encode()).decode().rstrip("=")
+    return f"{MAIL_PUBLIC_DOMAIN}/api/mailing/unsubscribe?e={e}&t={_mail_token(email)}"
+
+
+def _mail_layout(title: str, intro: str, bullets: List[str], cta_text: str, cta_url: str, ps: str, unsub_url: str) -> str:
+    items = "".join(
+        f'<tr><td style="padding:6px 0;font-size:15px;line-height:1.55;color:#1f2937"><span style="color:#d97706;font-weight:700">✓</span>&nbsp; {b}</td></tr>'
+        for b in bullets
+    )
+    return f"""<!doctype html><html lang="pl"><body style="margin:0;padding:0;background:#f3f4f6;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;padding:24px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden">
+  <tr><td style="background:#0B1836;padding:22px 28px;color:#ffffff;font-size:20px;font-weight:900">🏠 Finder<span style="color:#FFB800">Dom</span>.pl</td></tr>
+  <tr><td style="padding:28px 28px 8px">
+    <h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;color:#0B1836">{title}</h1>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#374151">{intro}</p>
+    <table role="presentation" cellspacing="0" cellpadding="0" style="margin:4px 0 20px">{items}</table>
+    <table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="background:#FFB800;border-radius:12px">
+      <a href="{cta_url}" style="display:inline-block;padding:14px 28px;color:#0B1836;font-weight:900;font-size:15px;text-decoration:none">{cta_text}</a>
+    </td></tr></table>
+    <p style="margin:22px 0 0;font-size:13px;line-height:1.6;color:#6b7280">{ps}</p>
+  </td></tr>
+  <tr><td style="padding:18px 28px 24px;font-size:12px;line-height:1.6;color:#9ca3af;border-top:1px solid #e5e7eb">
+    Otrzymujesz tę wiadomość, bo masz konto w serwisie FinderDom.pl. Finder Paweł Kukla, Kraków · <a href="mailto:kontakt@finderdom.pl" style="color:#9ca3af">kontakt@finderdom.pl</a><br>
+    Nie chcesz więcej takich wiadomości? <a href="{unsub_url}" style="color:#9ca3af">Wypisz się jednym kliknięciem</a>.
+  </td></tr>
+</table></td></tr></table></body></html>"""
+
+
+# Każdy szablon: audience (personal/business), day (ile dni po rejestracji), subject, builder
+MAIL_TEMPLATES: Dict[str, dict] = {
+    "p1": {
+        "audience": "personal", "day": 1, "name": "Dzień 1 — Witaj: 3 rzeczy na start",
+        "subject": "Witaj w FinderDom — 3 rzeczy, które warto zrobić na start",
+        "title": "Wszystkie ogłoszenia w jednym miejscu. Zacznij od tych 3 rzeczy",
+        "intro": "Dzięki za założenie konta! FinderDom zbiera oferty z Otodom, OLX, Morizon, Gratki i pozostałych portali, żebyś nie musiał przeglądać pięciu stron naraz. Oto jak wycisnąć z niego najwięcej:",
+        "bullets": [
+            "<b>Wyszukaj</b> mieszkanie, dom lub działkę w swoim mieście — jedna wyszukiwarka, cała Polska.",
+            "<b>Włącz filtr „tylko od właściciela”</b> — oferty bez pośrednika, czyli bez prowizji 2–3%.",
+            "<b>Zobacz analizę AI</b> przy ofercie: okazja, cena typowa czy zawyżona.",
+        ],
+        "cta": "🔍 Otwórz wyszukiwarkę", "url": "/szukaj",
+        "ps": "PS. Gdy znajdziesz coś ciekawego, sprawdź realną wartość raportem PDF z aktami notarialnymi — kosztuje 32 zł i masz go w 2 minuty.",
+    },
+    "p2": {
+        "audience": "personal", "day": 4, "name": "Dzień 4 — Wycena PDF za 32 zł",
+        "subject": "Czy ta cena jest uczciwa? Sprawdź w 2 minuty za 32 zł",
+        "title": "Zawyżenie o 3% przy mieszkaniu za 600 000 zł to 18 000 zł",
+        "intro": "Zanim zdecydujesz się na zakup (albo wystawisz swoją nieruchomość), sprawdź, ile jest naprawdę warta. Nasz raport PDF opiera się nie na cenach ofertowych, ale na prawdziwych transakcjach z Rejestru Cen Nieruchomości.",
+        "bullets": [
+            "<b>Realna wartość rynkowa</b> i zakres min–max dla Twojej nieruchomości.",
+            "<b>Porównanie z aktami notarialnymi</b> z okolicy — ceny, za które faktycznie sprzedano podobne mieszkania i domy.",
+            "<b>Podobne oferty</b> w promieniu kilku kilometrów i <b>opinia AI o cenie</b>.",
+            "<b>Bez abonamentu</b> — płacisz 32 zł BLIK-iem lub kartą i od razu pobierasz PDF.",
+        ],
+        "cta": "💎 Wyceń nieruchomość za 32 zł", "url": "/wycena",
+        "ps": "Działa dla mieszkań, domów, działek i lokali. Raport możesz pokazać sprzedającemu podczas negocjacji.",
+    },
+    "p3": {
+        "audience": "personal", "day": 10, "name": "Dzień 10 — Plan Osobisty 35 zł",
+        "subject": "Analiza AI, alerty cenowe i podobne oferty — 35 zł/mies, anulujesz kiedy chcesz",
+        "title": "Szukasz dalej? Odblokuj pełną analizę za 35 zł miesięcznie",
+        "intro": "Darmowe konto pokazuje oferty. Plan Osobisty pokazuje, które z nich są naprawdę warte uwagi — i pilnuje za Ciebie zmian cen.",
+        "bullets": [
+            "<b>Analiza AI</b> przy każdej ofercie: okazja / w normie / zawyżona.",
+            "<b>Klikalna lista podobnych ofert</b> w promieniu 5–8 km.",
+            "<b>Ulubione i alerty cenowe</b> — dowiesz się, gdy cena spadnie albo pojawi się nowa oferta.",
+            "<b>Zaawansowane filtry</b>: rok budowy, standard, komunikacja. Bez reklam.",
+        ],
+        "cta": "👤 Zobacz plan Osobisty", "url": "/konto",
+        "ps": "35 zł za 30 dni, bez umowy. Jedna dobrze wynegocjowana oferta zwraca to kilkaset razy.",
+    },
+    "b1": {
+        "audience": "business", "day": 1, "name": "Dzień 1 — Trial: dodaj agentów",
+        "subject": "Twoje 7 dni Premium Firmowy trwa — dodaj agentów i odbierz pierwsze leady",
+        "title": "Masz 7 dni pełnego dostępu. Oto jak wykorzystać je w 100%",
+        "intro": "Dziękujemy za rejestrację konta firmowego. Przez 7 dni masz wszystko, co daje Plan Firmowy — bez karty i bez zobowiązań. Trzy rzeczy, które warto zrobić dziś:",
+        "bullets": [
+            "<b>Dodaj agentów</b> — w cenie planu masz aż 4 loginy dla zespołu (zakładka „Zespół”).",
+            "<b>Zamów wycenę PDF</b> z aktami notarialnymi RCN — 20 raportów miesięcznie w cenie, idealne na spotkanie z właścicielem.",
+            "<b>Ustaw statusy w CRM</b> przy ofertach (był kontakt, umówione, bez pośrednika) — cały zespół widzi to samo.",
+        ],
+        "cta": "👥 Dodaj agentów do zespołu", "url": "/zespol",
+        "ps": "Leady od właścicieli zamawiających wycenę trafiają do wspólnej puli Twojego zespołu — kto pierwszy, ten lepszy.",
+    },
+    "b2": {
+        "audience": "business", "day": 5, "name": "Dzień 5 — Trial kończy się za 2 dni",
+        "subject": "Za 2 dni kończy się Twój okres próbny — 199 zł za całe biuro",
+        "title": "Wszystkie województwa, 4 loginy dla agentów, wyceny w cenie — 199 zł/mies",
+        "intro": "Twoje 7 dni Premium Firmowy dobiega końca. Jeśli FinderDom pomógł Ci choć przy jednej ofercie, policz: jeden pozyskany klient to 2 000–5 000 zł prowizji, a plan kosztuje 6,50 zł dziennie za całe biuro.",
+        "bullets": [
+            "<b>Wszystkie województwa</b> — bez pakietów regionalnych i dopłat za kolejne miasto.",
+            "<b>Aż 4 loginy dla agentów</b> w cenie, każdy kolejny tylko 55 zł/mies.",
+            "<b>20 wycen PDF miesięcznie</b> w cenie abonamentu (wartość 640 zł).",
+            "<b>Leady od właścicieli + CRM</b> dla całego zespołu. Faktura VAT automatycznie.",
+        ],
+        "cta": "💳 Przedłuż dostęp za 199 zł", "url": "/konto",
+        "ps": "Płatność BLIK, kartą, Apple/Google Pay. Abonament na 30 dni, bez umowy — anulujesz kiedy chcesz.",
+    },
+    "b3": {
+        "audience": "business", "day": 12, "name": "Dzień 12 — Po trialu: wróć do nas",
+        "subject": "Konkurencja już widzi oferty bezpośrednie z ostatnich 24h. A Ty?",
+        "title": "Wróć do FinderDom — oferta dla biur jest wciąż otwarta",
+        "intro": "Twój okres próbny się skończył, ale konto i dane zostały. Przypominamy, co dostaje biuro w Planie Firmowym za 199 zł miesięcznie:",
+        "bullets": [
+            "<b>Oferty bezpośrednie od właścicieli</b> z filtrem „ostatnie 24h” — zanim zadzwoni konkurencja.",
+            "<b>Cała Polska i 4 loginy dla agentów</b> w jednej cenie.",
+            "<b>Wyceny PDF z aktów notarialnych</b> — 20 szt./mies w cenie, argument nie do podważenia na spotkaniu.",
+        ],
+        "cta": "🏢 Zobacz ofertę dla biur", "url": "/dla-biur",
+        "ps": "Masz pytania albo potrzebujesz więcej loginów? Odpisz na tego maila — firmom odpowiadamy w ciągu 4h.",
+    },
+}
+
+
+def _mail_render(tpl_id: str, email: str) -> Tuple[str, str]:
+    t = MAIL_TEMPLATES[tpl_id]
+    html = _mail_layout(t["title"], t["intro"], t["bullets"], t["cta"], MAIL_PUBLIC_DOMAIN + t["url"], t["ps"], _mail_unsub_url(email))
+    return t["subject"], html
+
+
+def _as_dt(v) -> Optional[datetime]:
+    if isinstance(v, datetime):
+        return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+    if isinstance(v, str):
+        try:
+            d = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+def _mail_is_undecided(u: dict, now: datetime) -> bool:
+    """Niezdecydowany = aktywne konto, bez opłaconego planu (free albo trial / wygasły), nie agent, nie wypisany."""
+    if not u.get("email") or u.get("active") is False or u.get("master_id") or u.get("marketing_opt_out"):
+        return False
+    if (u.get("email") or "").lower() in ADMIN_EMAILS:
+        return False
+    tier = u.get("tier", "free")
+    exp = _as_dt(u.get("expires_at"))
+    paid_active = tier != "free" and exp and exp > now and not u.get("is_trial")
+    return not paid_active
+
+
+def _mail_audience(u: dict) -> str:
+    return "business" if u.get("account_type") == "business" else "personal"
+
+
+async def _mailing_settings() -> dict:
+    doc = await database().settings.find_one({"_id": "mailing"}) or {}
+    return {"auto_enabled": bool(doc.get("auto_enabled", True)), "updated_at": doc.get("updated_at")}
+
+
+async def _mail_send_logged(email: str, tpl_id: str, trigger: str) -> bool:
+    subject, html = _mail_render(tpl_id, email)
+    pid = await send_email(to=email, subject=subject, html=html)
+    await database().mail_log.insert_one({
+        "email": email.lower(), "template": tpl_id, "trigger": trigger, "ok": bool(pid),
+        "provider_id": pid, "sent_at": datetime.now(timezone.utc),
+    })
+    return bool(pid)
+
+
+async def _mailing_auto_run(limit: int = 60) -> dict:
+    """Jeden przebieg: każdemu niezdecydowanemu wysyła najwcześniejszy należny, jeszcze niewysłany krok sekwencji."""
+    db = database()
+    now = datetime.now(timezone.utc)
+    sent_pairs = set()
+    async for row in db.mail_log.find({"ok": True}, {"email": 1, "template": 1}):
+        sent_pairs.add((row["email"], row["template"]))
+    candidates: List[Tuple[str, str]] = []
+    async for u in db.users.find({}, {"email": 1, "account_type": 1, "tier": 1, "expires_at": 1, "is_trial": 1,
+                                       "created_at": 1, "active": 1, "master_id": 1, "marketing_opt_out": 1}):
+        if not _mail_is_undecided(u, now):
+            continue
+        created = _as_dt(u.get("created_at"))
+        if not created:
+            continue
+        days = (now - created).days
+        aud = _mail_audience(u)
+        email = u["email"].lower()
+        for tpl_id, t in sorted(MAIL_TEMPLATES.items(), key=lambda kv: kv[1]["day"]):
+            if t["audience"] == aud and days >= t["day"] and (email, tpl_id) not in sent_pairs:
+                candidates.append((email, tpl_id))
+                break
+        if len(candidates) >= limit:
+            break
+    sem = asyncio.Semaphore(8)
+
+    async def _one(pair):
+        async with sem:
+            return await _mail_send_logged(pair[0], pair[1], "auto")
+
+    results = await asyncio.gather(*[_one(p) for p in candidates]) if candidates else []
+    return {"candidates": len(candidates), "sent": sum(1 for r in results if r), "failed": sum(1 for r in results if not r)}
+
+
+@app.get("/api/mailing/unsubscribe")
+async def mailing_unsubscribe(e: str = "", t: str = ""):
+    try:
+        email = _b64.urlsafe_b64decode(e + "=" * (-len(e) % 4)).decode().lower()
+    except Exception:
+        raise HTTPException(400, "Nieprawidłowy link")
+    if not _hmac.compare_digest(_mail_token(email), t or ""):
+        raise HTTPException(400, "Nieprawidłowy link")
+    await (await users_collection()).update_one({"email": email}, {"$set": {"marketing_opt_out": True, "marketing_opt_out_at": datetime.now(timezone.utc)}})
+    page = f"""<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wypisano · FinderDom.pl</title></head>
+<body style="margin:0;background:#0B1836;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px">
+<div><div style="font-size:48px">✅</div><h1 style="font-size:24px;margin:12px 0">Wypisano z wiadomości marketingowych</h1>
+<p style="color:#c5d0e6;max-width:420px">Adres <b>{escape(email)}</b> nie będzie już otrzymywał od nas maili z ofertami. Nadal dostaniesz wiadomości dotyczące Twojego konta i płatności.</p>
+<a href="{MAIL_PUBLIC_DOMAIN}/" style="color:#FFB800">← Wróć na FinderDom.pl</a></div></body></html>"""
+    return Response(content=page, media_type="text/html; charset=utf-8")
+
+
+async def _authorize_cron_or_admin(request: Request) -> None:
+    cron_secret_env = os.getenv("CRON_SECRET") or ""
+    x_cron_secret = request.headers.get("x-cron-secret") or ""
+    if request.headers.get("x-vercel-cron") == "1" or (cron_secret_env and x_cron_secret == cron_secret_env):
+        return
+    auth_header = (request.headers.get("authorization") or "").replace("Bearer ", "").strip()
+    if not auth_header:
+        raise HTTPException(401, "unauthorized")
+    try:
+        user = await current_user(HTTPAuthorizationCredentials(scheme="Bearer", credentials=auth_header))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(401, "invalid token")
+    if (user.get("email") or "").lower() not in ADMIN_EMAILS:
+        raise HTTPException(403, "admin only")
+
+
+@app.get("/api/admin/mailing/auto-run")
+@app.post("/api/admin/mailing/auto-run")
+async def admin_mailing_auto_run(request: Request, limit: int = 60):
+    """Codzienny cron (Vercel) — wysyła należne kroki sekwencji do niezdecydowanych."""
+    await _authorize_cron_or_admin(request)
+    settings = await _mailing_settings()
+    if not settings["auto_enabled"]:
+        return {"skipped": True, "reason": "auto_disabled"}
+    if not EMAIL_KEY:
+        return {"skipped": True, "reason": "email_not_configured"}
+    return await _mailing_auto_run(limit=max(1, min(200, limit)))
+
+
+@app.get("/api/admin/mailing")
+async def admin_mailing_overview(admin: dict = Depends(require_admin)):
+    db = database()
+    now = datetime.now(timezone.utc)
+    counts = {"personal": 0, "business": 0}
+    opt_out = 0
+    async for u in db.users.find({}, {"email": 1, "account_type": 1, "tier": 1, "expires_at": 1, "is_trial": 1, "active": 1, "master_id": 1, "marketing_opt_out": 1}):
+        if u.get("marketing_opt_out"):
+            opt_out += 1
+        if _mail_is_undecided(u, now):
+            counts[_mail_audience(u)] += 1
+    sent_by_tpl: Dict[str, int] = {}
+    async for row in db.mail_log.aggregate([{"$match": {"ok": True, "trigger": "auto"}}, {"$group": {"_id": "$template", "n": {"$sum": 1}}}]):
+        sent_by_tpl[row["_id"]] = row["n"]
+    log = []
+    async for row in db.mail_log.find({}).sort("sent_at", -1).limit(40):
+        log.append({"email": row.get("email"), "template": row.get("template"), "trigger": row.get("trigger"),
+                    "ok": row.get("ok"), "sent_at": row["sent_at"].isoformat() if isinstance(row.get("sent_at"), datetime) else row.get("sent_at")})
+    return {
+        "email_configured": bool(EMAIL_KEY),
+        "settings": await _mailing_settings(),
+        "undecided": counts, "opt_out": opt_out,
+        "templates": [{"id": k, **{f: v[f] for f in ("audience", "day", "name", "subject")}, "sent": sent_by_tpl.get(k, 0)}
+                      for k, v in sorted(MAIL_TEMPLATES.items(), key=lambda kv: (kv[1]["audience"], kv[1]["day"]))],
+        "log": log,
+    }
+
+
+@app.get("/api/admin/mailing/preview/{tpl_id}")
+async def admin_mailing_preview(tpl_id: str, admin: dict = Depends(require_admin)):
+    if tpl_id not in MAIL_TEMPLATES:
+        raise HTTPException(404, "Nieznany szablon")
+    subject, html = _mail_render(tpl_id, admin.get("email") or "test@finderdom.pl")
+    return {"subject": subject, "html": html}
+
+
+class MailingSettingsReq(BaseModel):
+    auto_enabled: bool
+
+
+@app.post("/api/admin/mailing/settings")
+async def admin_mailing_settings(body: MailingSettingsReq, admin: dict = Depends(require_admin)):
+    await database().settings.update_one(
+        {"_id": "mailing"},
+        {"$set": {"auto_enabled": body.auto_enabled, "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": admin.get("email")}},
+        upsert=True)
+    return await _mailing_settings()
+
+
+class MailingTestReq(BaseModel):
+    template: str
+    to: Optional[str] = None
+
+
+@app.post("/api/admin/mailing/test")
+async def admin_mailing_test(body: MailingTestReq, admin: dict = Depends(require_admin)):
+    if body.template not in MAIL_TEMPLATES:
+        raise HTTPException(404, "Nieznany szablon")
+    if not EMAIL_KEY:
+        raise HTTPException(503, "Wysyłka e-mail nie jest skonfigurowana (brak EMERGENT_EMAIL_KEY)")
+    to = clean_email(body.to) if body.to else admin.get("email")
+    ok = await _mail_send_logged(to, body.template, "test")
+    if not ok:
+        raise HTTPException(502, "Dostawca e-mail odrzucił wiadomość — sprawdź logi")
+    return {"ok": True, "to": to}
+
+
 @app.post("/api/admin/stripe")
 async def admin_stripe_save(body: StripeKeyRequest, request: Request, admin: dict = Depends(require_admin)):
     """Zapisuje klucz tajny Stripe i AUTOMATYCZNIE tworzy webhook (signing secret zwracany tylko przy tworzeniu)."""

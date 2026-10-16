@@ -2370,8 +2370,7 @@ async def stripe_webhook(request: Request):
         # Handle valuation_custom: save phone lead for agent callback
         if md.get("type") == "valuation_custom":
             try:
-                import json as _json
-                prop = _json.loads(md.get("property_json") or "{}")
+                prop = await _custom_valuation_property(md)
                 phone = (prop.get("phone") or "").strip()
                 if phone:
                     claim_token = secrets.token_urlsafe(24)
@@ -2746,9 +2745,15 @@ async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
         safe_prop["price_pm2"] = int(safe_prop["price"] / safe_prop["area_m2"])
 
     import json as _json
+    # Stripe metadata ma limit 500 znaków na wartość — pełne dane (zwłaszcza domy/działki z wieloma polami)
+    # trzymamy w Mongo, a w metadata tylko identyfikator.
+    req_doc = {"property": safe_prop, "email": email, "created_at": datetime.now(timezone.utc)}
+    ins = await database().valuation_requests.insert_one(req_doc)
+    req_id = str(ins.inserted_id)
     prop_json = _json.dumps(safe_prop, ensure_ascii=False)
-    if len(prop_json) > 490:
-        raise HTTPException(400, "Za dużo danych - skróć adres/lokalizację")
+    md = {"type": "valuation_custom", "req_id": req_id, "email": email}
+    if len(prop_json) <= 490:
+        md["property_json"] = prop_json  # kompatybilność wstecz (webhook/download czytają też z Mongo)
 
     def create():
         return stripe.checkout.Session.create(
@@ -2765,7 +2770,7 @@ async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
                 "quantity": 1,
             }],
             customer_email=email,
-            metadata={"type": "valuation_custom", "property_json": prop_json, "email": email},
+            metadata=md,
             success_url=f"{DOMAIN}/wycena-sukces?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{DOMAIN}/wycena",
             locale="pl",
@@ -2776,6 +2781,19 @@ async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
     except stripe.error.StripeError as e:
         raise HTTPException(502, f"Stripe error: {str(e)[:200]}")
     return {"url": session.url}
+
+
+async def _custom_valuation_property(md: dict) -> dict:
+    """Dane nieruchomości z Mongo (req_id) albo — dla starszych sesji — z metadata.property_json."""
+    import json as _json
+    if md.get("req_id"):
+        try:
+            doc = await database().valuation_requests.find_one({"_id": ObjectId(md["req_id"])})
+            if doc and doc.get("property"):
+                return dict(doc["property"])
+        except Exception:
+            pass
+    return _json.loads(md.get("property_json") or "{}")
 
 
 @app.post("/api/valuation/checkout")
@@ -3004,19 +3022,24 @@ async def _load_listing_for_valuation(listing_id: str) -> Optional[dict]:
 async def _geocode_address(address: str, city: str, district: str = "") -> Optional[tuple]:
     """Nominatim (OSM) — adres → (lat, lon); zwraca None gdy brak trafienia w mieście."""
     import urllib.parse, urllib.request, json as _json
-    q = ", ".join(x for x in [address, district, city, "Polska"] if x)
-    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({"q": q, "format": "json", "limit": 1, "countrycodes": "pl"})
+    # Nominatim nie lubi prefiksów „ul./al./os.” — usuwamy; próbujemy z dzielnicą, potem bez
+    addr = re.sub(r"^\s*(ul\.|ulica|al\.|aleja|os\.|osiedle|pl\.|plac)\s+", "", address or "", flags=re.I).strip()
+    variants = [", ".join(x for x in [addr, district, city, "Polska"] if x)]
+    if district:
+        variants.append(", ".join(x for x in [addr, city, "Polska"] if x))
 
-    def _fetch():
+    def _fetch(q):
+        url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({"q": q, "format": "json", "limit": 1, "countrycodes": "pl"})
         req = urllib.request.Request(url, headers={"User-Agent": "FinderDom.pl valuation (kontakt@finderdom.pl)"})
         with urllib.request.urlopen(req, timeout=8) as r:
             return _json.loads(r.read().decode())
-    try:
-        res = await asyncio.to_thread(_fetch)
-        if res:
-            return float(res[0]["lat"]), float(res[0]["lon"])
-    except Exception as e:
-        logger.info("geocode failed for %s: %s", q, e)
+    for q in variants:
+        try:
+            res = await asyncio.to_thread(_fetch, q)
+            if res:
+                return float(res[0]["lat"]), float(res[0]["lon"])
+        except Exception as e:
+            logger.info("geocode failed for %s: %s", q, e)
     return None
 
 
@@ -3055,12 +3078,15 @@ async def valuation_download(session_id: str):
             all_listings.append(listing)
     else:
         # Custom valuation - property is in metadata
-        listing = _json.loads(md.get("property_json") or "{}")
+        listing = await _custom_valuation_property(md)
+        if not listing:
+            raise HTTPException(404, "Brak danych wyceny dla tej sesji")
         listing["id"] = f"custom-{session_id[-8:]}"
         all_listings = await _load_valuation_pool(listing.get("city") or "", listing.get("type") or "")
         # Adres → GPS (Nominatim), żeby RCN i oferty liczyły się w promieniu od faktycznej lokalizacji
-        if listing.get("address"):
-            geo = await _geocode_address(listing.get("address"), listing.get("city") or "", listing.get("district") or "")
+        _addr = (listing.get("location") or listing.get("address") or "").strip()
+        if _addr:
+            geo = await _geocode_address(_addr, listing.get("city") or "", listing.get("district") or "")
             if geo:
                 listing["lat"], listing["lon"] = geo
 

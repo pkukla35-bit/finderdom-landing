@@ -213,6 +213,19 @@
         <b>Szablony marketingowe</b> (wycena, plan, „wróć do nas”) są gotowe do pobrania jako HTML — wysyłasz je ze swojego narzędzia do newsletterów (Mailchimp, FreshMail, MailerLite) do osób, które wyraziły zgodę marketingową. Skrzynka systemowa służy do powiadomień, nie do kampanii.
       </p>
       <div id="mailingStatus" class="loader">Ładuję…</div>
+      <details id="smtpBox" style="margin-top:14px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 16px">
+        <summary style="cursor:pointer;font-weight:800;font-size:14px">📮 Własna skrzynka nadawcza (SMTP, np. home.pl)</summary>
+        <p style="color:#8ba3d4;font-size:13px;margin:10px 0;line-height:1.5">Dane znajdziesz w panelu home.pl → Poczta → Twoja skrzynka → <b>Serwery pocztowe</b>. Login to pełny adres e-mail. Port <b>587</b> (STARTTLS) lub 465 (SSL). Po zapisaniu system od razu sprawdzi logowanie.</p>
+        <form id="smtpForm" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
+          <input id="smtpHost" placeholder="serwer123456.home.pl" required style="padding:11px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
+          <input id="smtpPort" type="number" value="587" placeholder="587" required style="padding:11px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
+          <input id="smtpUser" type="email" placeholder="kontakt@finderdom.pl (login)" required autocomplete="off" style="padding:11px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
+          <input id="smtpPass" type="password" placeholder="hasło do skrzynki" required autocomplete="new-password" style="padding:11px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
+          <button type="submit" class="refresh-btn" id="smtpSaveBtn" style="min-height:44px">💾 Zapisz i sprawdź połączenie</button>
+          <button type="button" class="refresh-btn" id="smtpDelBtn" style="min-height:44px;display:none" onclick="deleteSmtp()">🗑 Usuń skrzynkę</button>
+        </form>
+        <div id="smtpMsg" style="margin-top:8px;font-size:13px"></div>
+      </details>
       <div id="mailingTemplates" style="margin-top:18px"></div>
       <div id="mailingPreview" style="margin-top:18px"></div>
       <div id="mailingLog" style="margin-top:18px"></div>
@@ -677,7 +690,7 @@ function renderMailing(d){
   const s = d.settings || {};
   setHtml('mailingStatus', `
     <div style="display:grid;grid-template-columns:200px 1fr;gap:6px 14px;font-size:14px">
-      <div style="color:#8ba3d4">Skrzynka nadawcza</div><div>${d.email_configured ? '<span class="ok">✓ skonfigurowana</span>' : '<span class="bad">✗ brak klucza e-mail — maile nie wyjdą</span>'}${d.last_error && d.last_error.error ? ' <span class="bad" style="font-size:12px">· ostatni błąd (' + fmtDate(d.last_error.at) + '): ' + escapeHtml(d.last_error.error) + '</span>' : ''}</div>
+      <div style="color:#8ba3d4">Skrzynka nadawcza</div><div>${d.smtp ? '<span class="ok">✓ SMTP ' + escapeHtml(d.smtp.host) + ' (' + escapeHtml(d.smtp.user) + ')</span>' : d.email_configured ? '<span class="warn">systemowa — nie działa z tego serwera, podaj własną skrzynkę SMTP poniżej</span>' : '<span class="bad">✗ brak skrzynki — podaj dane SMTP poniżej</span>'}${d.last_error && d.last_error.error ? ' <span class="bad" style="font-size:12px">· ostatni błąd (' + fmtDate(d.last_error.at) + '): ' + escapeHtml(d.last_error.error) + '</span>' : ''}</div>
       <div style="color:#8ba3d4">Automat</div><div>${s.auto_enabled ? '<span class="ok">● WŁĄCZONY</span>' : '<span class="warn">○ wyłączony</span>'}
         <button class="refresh-btn" style="margin-left:10px" onclick="toggleMailing(${s.auto_enabled ? 'false' : 'true'})">${s.auto_enabled ? 'Wyłącz' : 'Włącz'}</button>
         <button class="refresh-btn" style="margin-left:6px" onclick="runMailingNow()">▶ Uruchom teraz</button></div>
@@ -707,7 +720,7 @@ function renderMailing(d){
       : '<div style="color:#8ba3d4;font-size:13px">Jeszcze nic nie wysłano.</div>'}`);
 }
 async function loadMailing(){
-  try { renderMailing(await api('/admin/mailing')); }
+  try { const d = await api('/admin/mailing'); renderMailing(d); const del = document.getElementById('smtpDelBtn'); if (del) del.style.display = d.smtp ? '' : 'none'; if (d.smtp) { document.getElementById('smtpHost').value = d.smtp.host || ''; document.getElementById('smtpPort').value = d.smtp.port || 587; document.getElementById('smtpUser').value = d.smtp.user || ''; } }
   catch(e){ setHtml('mailingStatus', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`); }
 }
 function mailingMsg(html){ const m = document.getElementById('mailingMsg'); if (m) m.innerHTML = html; }
@@ -740,6 +753,26 @@ async function previewMailing(id){
     document.getElementById('mailingPreview').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch(e){ setHtml('mailingPreview', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`); }
 }
+
+document.addEventListener('submit', async (e) => {
+  if (e.target.id !== 'smtpForm') return;
+  e.preventDefault();
+  const msg = document.getElementById('smtpMsg'); const btn = document.getElementById('smtpSaveBtn');
+  btn.disabled = true; msg.innerHTML = '⏳ Łączę ze skrzynką…';
+  try {
+    const r = await apiPost('/admin/mailing/smtp', { host: document.getElementById('smtpHost').value.trim(), port: Number(document.getElementById('smtpPort').value) || 587, user: document.getElementById('smtpUser').value.trim(), password: document.getElementById('smtpPass').value });
+    document.getElementById('smtpPass').value = '';
+    msg.innerHTML = `<span class="ok">✅ Skrzynka ${escapeHtml(r.user)} podłączona. Kliknij „Test do mnie” przy szablonie, żeby sprawdzić dostarczanie.</span>`;
+    await loadMailing();
+  } catch(err){ msg.innerHTML = `<span class="bad">❌ ${escapeHtml(err.message)}</span>`; }
+  finally { btn.disabled = false; }
+});
+async function deleteSmtp(){
+  if (!confirm('Usunąć dane skrzynki SMTP?')) return;
+  await fetch(API_BASE + '/admin/mailing/smtp', { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getToken() } });
+  await loadMailing();
+}
+
 async function copyMailText(){ try { await navigator.clipboard.writeText(window._mailPreviewText || ''); mailingMsg('<span class="ok">✅ Tekst skopiowany do schowka.</span>'); } catch(e){ const t = document.getElementById('mailText'); if (t) { t.select(); document.execCommand('copy'); } } }
 async function copyMailHtml(){ try { await navigator.clipboard.writeText(window._mailPreviewHtml || ''); mailingMsg('<span class="ok">✅ HTML skopiowany do schowka.</span>'); } catch(e){ mailingMsg('<span class="bad">Nie udało się skopiować — użyj „Pobierz .html”.</span>'); } }
 function downloadMailHtml(id){

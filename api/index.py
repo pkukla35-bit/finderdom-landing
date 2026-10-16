@@ -24,6 +24,7 @@ import ipaddress
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from html import escape
+from html import unescape as _html_unescape
 from html.parser import HTMLParser
 from typing import Optional, Dict, Any, List, Tuple
 from urllib.parse import urlparse
@@ -530,14 +531,63 @@ async def _email_key() -> str:
     return _EMAIL_RT["key"] or EMAIL_KEY
 
 
+async def _smtp_cfg() -> Optional[dict]:
+    """Konfiguracja własnej skrzynki SMTP (np. home.pl) zapisana z panelu admina (settings._id='email')."""
+    import time as _t
+    if _t.time() - _EMAIL_RT.get("smtp_ts", 0.0) > 60:
+        try:
+            doc = await database().settings.find_one({"_id": "email"}) or {}
+            smtp = doc.get("smtp") or {}
+            _EMAIL_RT["smtp"] = smtp if smtp.get("host") and smtp.get("user") and smtp.get("password") else None
+        except Exception:
+            pass
+        _EMAIL_RT["smtp_ts"] = _t.time()
+    return _EMAIL_RT.get("smtp")
+
+
+def _html_to_text(html: str) -> str:
+    t = re.sub(r"<(br|/p|/tr|/h\d|/li)[^>]*>", "\n", html, flags=re.I)
+    t = re.sub(r"<[^>]+>", "", t)
+    return re.sub(r"\n{3,}", "\n\n", _html_unescape(t)).strip()
+
+
+async def _send_email_smtp(cfg: dict, *, to: str, subject: str, html: str) -> Optional[str]:
+    import aiosmtplib
+    from email.message import EmailMessage
+    from email.utils import make_msgid
+    msg = EmailMessage()
+    from_addr = cfg.get("from_email") or cfg["user"]
+    msg["From"] = f'{EMAIL_FROM_NAME} <{from_addr}>'
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg["Message-ID"] = make_msgid(domain=from_addr.split("@")[-1])
+    if EMAIL_REPLY_TO:
+        msg["Reply-To"] = EMAIL_REPLY_TO
+    msg.set_content(_html_to_text(html))
+    msg.add_alternative(html, subtype="html")
+    port = int(cfg.get("port") or 587)
+    await aiosmtplib.send(msg, hostname=cfg["host"], port=port, username=cfg["user"], password=cfg["password"],
+                          start_tls=(port != 465), use_tls=(port == 465), validate_certs=True, timeout=20)
+    return msg["Message-ID"]
+
+
 async def send_email(*, to: str, subject: str, html: str) -> Optional[str]:
-    """Send a transactional email via Emergent Resend. Returns provider id or None on failure."""
+    """Wysyłka e-mail: własna skrzynka SMTP (jeśli skonfigurowana w panelu) → fallback Emergent Resend. Zwraca id lub None."""
+    _assert_safe_email(subject, html)
+    smtp = await _smtp_cfg()
+    if smtp:
+        try:
+            return await _send_email_smtp(smtp, to=to, subject=subject, html=html)
+        except Exception as e:
+            err = f"SMTP {smtp.get('host')}: {str(e)[:200]}"
+            logger.error("Email send failed to %s: %s", to, err)
+            LAST_EMAIL_ERROR.update(at=datetime.now(timezone.utc).isoformat(), error=err)
+            return None
     key = await _email_key()
     if not key:
         logger.warning("EMERGENT_EMAIL_KEY not configured; skipping email to %s", to)
         LAST_EMAIL_ERROR.update(at=datetime.now(timezone.utc).isoformat(), error="Brak klucza skrzynki (EMERGENT_EMAIL_KEY)")
         return None
-    _assert_safe_email(subject, html)
     payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
     if EMAIL_REPLY_TO:
         payload["contact_email"] = EMAIL_REPLY_TO
@@ -2803,7 +2853,7 @@ def _mail_unsub_url(email: str) -> str:
     return f"{MAIL_PUBLIC_DOMAIN}/api/mailing/unsubscribe?e={e}&t={_mail_token(email)}"
 
 
-def _mail_layout(title: str, intro: str, bullets: List[str], cta_text: str, cta_url: str, ps: str, unsub_url: str) -> str:
+def _mail_layout(title: str, intro: str, bullets: List[str], cta_text: str, cta_url: str, ps: str, unsub_url: str, auto: bool = True) -> str:
     items = "".join(
         f'<tr><td style="padding:6px 0;font-size:15px;line-height:1.55;color:#1f2937"><span style="color:#d97706;font-weight:700">✓</span>&nbsp; {b}</td></tr>'
         for b in bullets
@@ -2822,7 +2872,7 @@ def _mail_layout(title: str, intro: str, bullets: List[str], cta_text: str, cta_
     <p style="margin:22px 0 0;font-size:13px;line-height:1.6;color:#6b7280">{ps}</p>
   </td></tr>
   <tr><td style="padding:18px 28px 24px;font-size:12px;line-height:1.6;color:#9ca3af;border-top:1px solid #e5e7eb">
-    Otrzymujesz tę wiadomość, bo masz konto w serwisie FinderDom.pl. Finder Paweł Kukla, Kraków · <a href="mailto:kontakt@finderdom.pl" style="color:#9ca3af">kontakt@finderdom.pl</a><br>
+    {"Otrzymujesz tę wiadomość, bo masz konto w serwisie FinderDom.pl." if auto else "Wiadomość wysłana przez FinderDom.pl — wyszukiwarkę ogłoszeń nieruchomości ze wszystkich portali."} Finder Paweł Kukla, Kraków · <a href="mailto:kontakt@finderdom.pl" style="color:#9ca3af">kontakt@finderdom.pl</a><br>
     Nie chcesz więcej takich wiadomości? <a href="{unsub_url}" style="color:#9ca3af">Wypisz się jednym kliknięciem</a>.
   </td></tr>
 </table></td></tr></table></body></html>"""
@@ -2901,7 +2951,7 @@ MAIL_TEMPLATES: Dict[str, dict] = {
     "bcold": {
         "audience": "business", "day": 0, "auto": False, "name": "Marketing — Oferta dla biura nieruchomości (do wysyłki ręcznej)",
         "subject": "Wszystkie portale, 4 loginy dla agentów i wyceny z aktów notarialnych — 199 zł/mies za całe biuro",
-        "title": "Jedna wyszukiwarka zamiast pięciu portali — dla całego Twojego biura",
+        "title": "Jedna wyszukiwarka zamiast wszystkich portali osobno — dla całego Twojego biura",
         "intro": "Dzień dobry, piszę z FinderDom.pl — polskiego agregatora ogłoszeń nieruchomości. Zbieramy oferty z Otodom, OLX, Morizon, Gratki i pozostałych portali z całej Polski w jednym miejscu i dodajemy narzędzia, których biura używają na co dzień. Pozwalam sobie przesłać krótką informację o ofercie dla biur:",
         "bullets": [
             "<b>Wszystkie województwa w cenie</b> — bez pakietów regionalnych i dopłat za kolejne miasto.",
@@ -2951,7 +3001,7 @@ FinderDom.pl · kontakt@finderdom.pl""",
 
 def _mail_render(tpl_id: str, email: str) -> Tuple[str, str]:
     t = MAIL_TEMPLATES[tpl_id]
-    html = _mail_layout(t["title"], t["intro"], t["bullets"], t["cta"], MAIL_PUBLIC_DOMAIN + t["url"], t["ps"], _mail_unsub_url(email))
+    html = _mail_layout(t["title"], t["intro"], t["bullets"], t["cta"], MAIL_PUBLIC_DOMAIN + t["url"], t["ps"], _mail_unsub_url(email), auto=bool(t.get("auto")))
     return t["subject"], html
 
 
@@ -3075,7 +3125,7 @@ async def admin_mailing_auto_run(request: Request, limit: int = 60):
     settings = await _mailing_settings()
     if not settings["auto_enabled"]:
         return {"skipped": True, "reason": "auto_disabled"}
-    if not await _email_key():
+    if not (await _smtp_cfg() or await _email_key()):
         return {"skipped": True, "reason": "email_not_configured"}
     return await _mailing_auto_run(limit=max(1, min(200, limit)))
 
@@ -3099,7 +3149,8 @@ async def admin_mailing_overview(admin: dict = Depends(require_admin)):
         log.append({"email": row.get("email"), "template": row.get("template"), "trigger": row.get("trigger"),
                     "ok": row.get("ok"), "sent_at": row["sent_at"].isoformat() if isinstance(row.get("sent_at"), datetime) else row.get("sent_at")})
     return {
-        "email_configured": bool(await _email_key()),
+        "email_configured": bool(await _smtp_cfg()) or bool(await _email_key()),
+        "smtp": ({k: (await _smtp_cfg())[k] for k in ("host", "port", "user", "from_email") if k in (await _smtp_cfg())} if await _smtp_cfg() else None),
         "last_error": LAST_EMAIL_ERROR,
         "settings": await _mailing_settings(),
         "undecided": counts, "opt_out": opt_out,
@@ -3138,13 +3189,47 @@ class MailingTestReq(BaseModel):
 async def admin_mailing_test(body: MailingTestReq, admin: dict = Depends(require_admin)):
     if body.template not in MAIL_TEMPLATES:
         raise HTTPException(404, "Nieznany szablon")
-    if not await _email_key():
-        raise HTTPException(503, "Wysyłka e-mail nie jest skonfigurowana (brak klucza skrzynki)")
+    if not (await _smtp_cfg() or await _email_key()):
+        raise HTTPException(503, "Wysyłka e-mail nie jest skonfigurowana — podaj dane skrzynki SMTP")
     to = admin.get("email")  # test zawsze na adres zalogowanego admina
     ok = await _mail_send_logged(to, body.template, "test")
     if not ok:
         raise HTTPException(502, f"Dostawca e-mail odrzucił wiadomość: {LAST_EMAIL_ERROR.get('error') or 'nieznany błąd'}")
     return {"ok": True, "to": to}
+
+
+class SmtpReq(BaseModel):
+    host: str = Field(min_length=3, max_length=200)
+    port: int = Field(default=587, ge=1, le=65535)
+    user: str = Field(min_length=3, max_length=200)
+    password: str = Field(min_length=1, max_length=200)
+    from_email: Optional[str] = None
+
+
+@app.post("/api/admin/mailing/smtp")
+async def admin_mailing_smtp(body: SmtpReq, admin: dict = Depends(require_admin)):
+    """Zapisuje dane własnej skrzynki SMTP (np. home.pl) i od razu testuje połączenie/logowanie."""
+    import aiosmtplib
+    cfg = {"host": body.host.strip(), "port": body.port, "user": body.user.strip(), "password": body.password,
+           "from_email": clean_email(body.from_email) if body.from_email else body.user.strip()}
+    try:
+        client = aiosmtplib.SMTP(hostname=cfg["host"], port=cfg["port"], start_tls=(cfg["port"] != 465), use_tls=(cfg["port"] == 465), timeout=20)
+        await client.connect()
+        await client.login(cfg["user"], cfg["password"])
+        await client.quit()
+    except Exception as e:
+        raise HTTPException(400, f"Nie udało się zalogować do skrzynki: {str(e)[:200]}")
+    await database().settings.update_one({"_id": "email"}, {"$set": {"smtp": cfg, "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": admin.get("email")}}, upsert=True)
+    _EMAIL_RT["smtp_ts"] = 0.0
+    LAST_EMAIL_ERROR.update(at=None, error=None)
+    return {"ok": True, "host": cfg["host"], "user": cfg["user"]}
+
+
+@app.delete("/api/admin/mailing/smtp")
+async def admin_mailing_smtp_delete(admin: dict = Depends(require_admin)):
+    await database().settings.update_one({"_id": "email"}, {"$unset": {"smtp": ""}})
+    _EMAIL_RT["smtp_ts"] = 0.0
+    return {"ok": True}
 
 
 class EmailKeyReq(BaseModel):

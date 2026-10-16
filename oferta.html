@@ -655,6 +655,23 @@ async function loadOffer() {
   }
   window.__isPremium = isPremiumUser();
 
+  // 🏢 Plan Firmowy: wycena w cenie abonamentu — PDF generowany od razu, bez Stripe
+  function isBusinessUser(){
+    try { const u = JSON.parse(localStorage.getItem('finderdom_user') || 'null'); return !!(u && u.tier === 'business'); } catch(e){ return false; }
+  }
+  async function downloadBusinessValuation(payload){
+    const r = await fetch('/api/valuation/business', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('finderdom_token') || '') },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || 'Nie udało się wygenerować wyceny'); }
+    const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="([^"]+)"/);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = m ? m[1] : 'wycena.pdf'; a.click();
+  }
+
   // Jeśli user zalogowany - pobierz świeży status z API (może plan się skończył)
   const token = localStorage.getItem('finderdom_token');
   if (token) {
@@ -1922,6 +1939,12 @@ loadOffer();
 
     const orig = btn.innerHTML;
     btn.disabled = true;
+    if (isBusinessUser()) {
+      btn.innerHTML = 'Generuję wycenę PDF (w cenie planu)...';
+      try { await downloadBusinessValuation({ listing_id: listingId }); btn.innerHTML = '✅ Pobrano PDF'; btn.disabled = false; }
+      catch(e){ errBox.textContent = '⚠️ ' + e.message; errBox.className = 'val-err show'; btn.disabled = false; btn.innerHTML = orig; }
+      return;
+    }
     btn.innerHTML = 'Przekierowuję do płatności...';
 
     try {

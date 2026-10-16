@@ -2928,7 +2928,7 @@ MAIL_TEMPLATES: Dict[str, dict] = {
         "intro": "Dziękujemy za rejestrację konta firmowego. Przez 7 dni masz wszystko, co daje Plan Firmowy — bez karty i bez zobowiązań. Trzy rzeczy, które warto zrobić dziś:",
         "bullets": [
             "<b>Dodaj agentów</b> — w cenie planu masz aż 4 loginy dla zespołu (zakładka „Zespół”).",
-            "<b>Zamów wycenę PDF</b> z aktami notarialnymi RCN — 20 raportów miesięcznie w cenie, idealne na spotkanie z właścicielem.",
+            "<b>Zamów wycenę PDF</b> z aktami notarialnymi RCN — w opłaconym planie bez limitu (w okresie próbnym 3 wyceny), idealne na spotkanie z właścicielem.",
             "<b>Ustaw statusy w CRM</b> przy ofertach (był kontakt, umówione, bez pośrednika) — cały zespół widzi to samo.",
         ],
         "cta": "👥 Dodaj agentów do zespołu", "url": "/zespol",
@@ -2942,7 +2942,7 @@ MAIL_TEMPLATES: Dict[str, dict] = {
         "bullets": [
             "<b>Wszystkie województwa</b> — bez pakietów regionalnych i dopłat za kolejne miasto.",
             "<b>Aż 4 loginy dla agentów</b> w cenie, każdy kolejny tylko 55 zł/mies.",
-            "<b>20 wycen PDF miesięcznie</b> w cenie abonamentu (wartość 640 zł).",
+            "<b>Wyceny PDF bez limitu</b> w cenie abonamentu — każda warta 35 zł.",
             "<b>Leady od właścicieli + CRM</b> dla całego zespołu. Faktura VAT automatycznie.",
         ],
         "cta": "💳 Przedłuż dostęp za 199 zł", "url": "/konto",
@@ -2957,7 +2957,7 @@ MAIL_TEMPLATES: Dict[str, dict] = {
             "<b>Wszystkie województwa w cenie</b> — bez pakietów regionalnych i dopłat za kolejne miasto.",
             "<b>Aż 4 loginy dla agentów</b> w jednym abonamencie (każdy kolejny 55 zł/mies), wspólna baza i CRM statusów ofert.",
             "<b>Oferty bezpośrednie od właścicieli</b> z filtrem „ostatnie 24h” — zanim zadzwoni konkurencja.",
-            "<b>20 wycen PDF miesięcznie w cenie</b> — z realnymi transakcjami z Rejestru Cen Nieruchomości, argument nie do podważenia na spotkaniu z właścicielem.",
+            "<b>Wyceny PDF bez limitu w cenie</b> — z realnymi transakcjami z Rejestru Cen Nieruchomości, argument nie do podważenia na spotkaniu z właścicielem.",
             "<b>Leady od właścicieli</b>, którzy zamawiają wycenę i proszą o kontakt agenta z okolicy.",
             "<b>199 zł/mies za całe biuro</b> — 7 dni za darmo dla firm z NIP, bez karty i bez umowy. Faktura VAT automatycznie.",
         ],
@@ -2971,7 +2971,7 @@ Oferta dla biur nieruchomości — Plan Firmowy 199 zł/mies za całe biuro:
 • Wszystkie województwa w cenie — bez pakietów regionalnych.
 • Aż 4 loginy dla agentów w jednym abonamencie (każdy kolejny 55 zł/mies), wspólna baza i CRM statusów ofert.
 • Oferty bezpośrednie od właścicieli z filtrem „ostatnie 24h”.
-• 20 wycen PDF miesięcznie w cenie — z realnymi transakcjami z Rejestru Cen Nieruchomości.
+• Wyceny PDF bez limitu w cenie — z realnymi transakcjami z Rejestru Cen Nieruchomości.
 • Leady od właścicieli, którzy zamawiają wycenę i proszą o kontakt agenta.
 • 7 dni za darmo dla firm z NIP, bez karty i bez umowy. Faktura VAT automatycznie.
 
@@ -2991,7 +2991,7 @@ FinderDom.pl · kontakt@finderdom.pl""",
         "bullets": [
             "<b>Oferty bezpośrednie od właścicieli</b> z filtrem „ostatnie 24h” — zanim zadzwoni konkurencja.",
             "<b>Cała Polska i 4 loginy dla agentów</b> w jednej cenie.",
-            "<b>Wyceny PDF z aktów notarialnych</b> — 20 szt./mies w cenie, argument nie do podważenia na spotkaniu.",
+            "<b>Wyceny PDF z aktów notarialnych</b> — bez limitu w cenie, argument nie do podważenia na spotkaniu.",
         ],
         "cta": "🏢 Zobacz ofertę dla biur", "url": "/dla-biur",
         "ps": "Masz pytania albo potrzebujesz więcej loginów? Odpisz na tego maila — firmom odpowiadamy w ciągu 4h.",
@@ -3341,23 +3341,8 @@ class ValuationCheckoutCustomReq(BaseModel):
     email: str
 
 
-@app.post("/api/valuation/checkout-custom")
-async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
-    """Wycena wprowadzona ręcznie przez właściciela (bez listing_id)."""
-    if not (await _stripe_cfg())[0]:
-        raise HTTPException(503, "Stripe niedostępny")
-    email = clean_email(body.email)
-    prop = body.property or {}
-
-    # Walidacja
-    if not prop.get("city"):
-        raise HTTPException(400, "Podaj miasto")
-    if not prop.get("area_m2"):
-        raise HTTPException(400, "Podaj metraż")
-    if not prop.get("type"):
-        raise HTTPException(400, "Wybierz typ nieruchomości")
-
-    # Sanityzacja i skrócenie
+def _sanitize_valuation_property(prop: dict) -> dict:
+    """Sanityzacja i skrócenie danych nieruchomości z formularza wyceny."""
     safe_prop = {
         "type": str(prop.get("type", ""))[:20],
         "transaction": "sprzedaz",
@@ -3388,6 +3373,26 @@ async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
     }
     if safe_prop["price"] and safe_prop["area_m2"]:
         safe_prop["price_pm2"] = int(safe_prop["price"] / safe_prop["area_m2"])
+    return safe_prop
+
+
+@app.post("/api/valuation/checkout-custom")
+async def valuation_checkout_custom(body: ValuationCheckoutCustomReq):
+    """Wycena wprowadzona ręcznie przez właściciela (bez listing_id)."""
+    if not (await _stripe_cfg())[0]:
+        raise HTTPException(503, "Stripe niedostępny")
+    email = clean_email(body.email)
+    prop = body.property or {}
+
+    # Walidacja
+    if not prop.get("city"):
+        raise HTTPException(400, "Podaj miasto")
+    if not prop.get("area_m2"):
+        raise HTTPException(400, "Podaj metraż")
+    if not prop.get("type"):
+        raise HTTPException(400, "Wybierz typ nieruchomości")
+
+    safe_prop = _sanitize_valuation_property(prop)
 
     import json as _json
     # Stripe metadata ma limit 500 znaków na wartość — pełne dane (zwłaszcza domy/działki z wieloma polami)
@@ -3712,6 +3717,16 @@ async def valuation_download(session_id: str):
     if val_type not in ("valuation", "valuation_custom"):
         raise HTTPException(400, "Sesja nie jest wyceną")
 
+    pdf_data, fname = await _render_valuation_pdf(val_type, md, session_id)
+    return StreamingResponse(
+        io.BytesIO(pdf_data),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+async def _render_valuation_pdf(val_type: str, md: dict, session_id: str) -> Tuple[bytes, str]:
+    """Buduje PDF wyceny: val_type 'valuation' (listing_id w md) lub 'valuation_custom' (req_id/property_json w md)."""
     # Pula porównawcza z MongoDB (dawniej statyczny /data/listings.json — już nie istnieje → 404 i brak PDF po zapłacie)
     import json as _json
     if val_type == "valuation":
@@ -3791,11 +3806,44 @@ async def valuation_download(session_id: str):
 
     pdf_data = await asyncio.to_thread(build_valuation_pdf, listing, all_listings, md.get("email", ""), rcn_stats, rcn_houses)
     fname = f"wycena-{listing.get('id','custom')}.pdf".replace("/", "-")
-    return StreamingResponse(
-        io.BytesIO(pdf_data),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
-    )
+    return pdf_data, fname
+
+
+BUSINESS_TRIAL_VALUATIONS = 3  # w okresie próbnym; opłacony Plan Firmowy = bez limitu
+
+
+class BusinessValuationReq(BaseModel):
+    property: Optional[dict] = None
+    listing_id: Optional[str] = None
+
+
+@app.post("/api/valuation/business")
+async def valuation_business(body: BusinessValuationReq, user: dict = Depends(current_user)):
+    """Wycena PDF w cenie Planu Firmowego (bez Stripe). Trial: limit BUSINESS_TRIAL_VALUATIONS, opłacony plan: bez limitu."""
+    tier = await effective_tier_async(user)
+    if tier != "business" and (user.get("email") or "").lower() not in ADMIN_EMAILS:
+        raise HTTPException(402, "Wyceny w cenie abonamentu są dostępne w Planie Firmowym")
+    db = database()
+    owner_id = str(user.get("master_id") or user["_id"])
+    if user.get("is_trial"):
+        used = await db.valuation_log.count_documents({"owner_id": owner_id, "source": "business"})
+        if used >= BUSINESS_TRIAL_VALUATIONS:
+            raise HTTPException(402, f"W okresie próbnym masz {BUSINESS_TRIAL_VALUATIONS} wyceny. Opłać Plan Firmowy (199 zł) — wyceny bez limitu.")
+    email = user.get("email") or ""
+    if body.listing_id:
+        val_type, md = "valuation", {"type": "valuation", "listing_id": body.listing_id, "email": email}
+    else:
+        prop = body.property or {}
+        if not prop.get("city") or not prop.get("area_m2") or not prop.get("type"):
+            raise HTTPException(400, "Podaj miasto, metraż i typ nieruchomości")
+        safe_prop = _sanitize_valuation_property(prop)
+        ins = await db.valuation_requests.insert_one({"property": safe_prop, "email": email, "user_id": str(user["_id"]), "source": "business", "created_at": datetime.now(timezone.utc)})
+        val_type, md = "valuation_custom", {"type": "valuation_custom", "req_id": str(ins.inserted_id), "email": email}
+    pdf_data, fname = await _render_valuation_pdf(val_type, md, f"biz{int(datetime.now(timezone.utc).timestamp())}")
+    await db.valuation_log.insert_one({"owner_id": owner_id, "user_id": str(user["_id"]), "email": email, "source": "business",
+                                       "listing_id": body.listing_id, "created_at": datetime.now(timezone.utc)})
+    return StreamingResponse(io.BytesIO(pdf_data), media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 def _make_bar_chart_drawing(data, categories, highlight_idx, title="", width=170, height=80, y_label="%", face="Helvetica"):

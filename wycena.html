@@ -471,6 +471,12 @@ gtag('set', 'url_passthrough', false);
 
     const orig = btn.innerHTML;
     btn.disabled = true;
+    if (isBusinessUser()) {
+      btn.innerHTML = '<span class="spinner"></span> Generuję wycenę PDF (w cenie planu)...';
+      try { await downloadBusinessValuation({ property }); btn.innerHTML = '✅ Pobrano PDF — zrób kolejną'; btn.disabled = false; }
+      catch(err){ errBox.textContent = '⚠️ ' + err.message; errBox.className = 'val-err show'; btn.disabled = false; btn.innerHTML = orig; }
+      return false;
+    }
     btn.innerHTML = '<span class="spinner"></span> Przekierowuję do płatności...';
 
     try {
@@ -491,8 +497,27 @@ gtag('set', 'url_passthrough', false);
     return false;
   }
 
+
+  // 🏢 Plan Firmowy: wycena w cenie abonamentu — PDF generowany od razu, bez Stripe
+  function isBusinessUser(){
+    try { const u = JSON.parse(localStorage.getItem('finderdom_user') || 'null'); return !!(u && u.tier === 'business'); } catch(e){ return false; }
+  }
+  async function downloadBusinessValuation(payload){
+    const r = await fetch('/api/valuation/business', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('finderdom_token') || '') },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || 'Nie udało się wygenerować wyceny'); }
+    const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="([^"]+)"/);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = m ? m[1] : 'wycena.pdf'; a.click();
+  }
+
   // Show consent checkbox only when user starts typing phone
   document.addEventListener('DOMContentLoaded', function() {
+    if (isBusinessUser()) { const b = document.getElementById('vSubmit'); if (b) b.innerHTML = '🏢 Generuj wycenę PDF — w cenie Planu Firmowego →'; }
     const phoneEl = document.getElementById('vPhone');
     const consentWrap = document.getElementById('vPhoneConsentWrap');
     if (phoneEl && consentWrap) {

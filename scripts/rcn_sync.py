@@ -5,8 +5,8 @@ RCN (Rejestr Cen Nieruchomości, GUGiK) → MongoDB `rcn_transactions`.
 Źródło: publiczny WFS 2.0  https://mapy.geoportal.gov.pl/wss/service/rcn  (bezpłatny od 13.02.2026)
 Warstwy:  ms:lokale  (mieszkania — pełne dane: cena, m², izby, kondygnacja, adres)
           ms:dzialki (działki niezabudowane — cena nieruchomości + pow. ewidencyjna)
-Uwaga:    ms:budynki prawie nie ma BUD_POW_UZYT (pow. użytkowa domu), więc dla domów nie da się
-          policzyć zł/m² — domy pomijamy (wycena domów zostaje na danych ofertowych).
+          ms:budynki (domy = nieruchomość gruntowa zabudowana + budynek mieszkalny; brak pow. użytkowej,
+          więc zapisujemy cenę całkowitą + pow. działki — służą jako realne porównywalne transakcje)
 
 Sprawdzone empirycznie (10.2026):
   • BBOX w FES musi być w EPSG:2180 w kolejności (northing, easting); w 4326 zwraca 0 wyników,
@@ -129,9 +129,18 @@ def date_of(f: str):
 
 def pos_of(f: str):
     m = re.search(r"<gml:pos>([-\d.]+) ([-\d.]+)</gml:pos>", f)
-    if not m:
-        return None, None
-    northing, easting = float(m.group(1)), float(m.group(2))
+    if m:
+        northing, easting = float(m.group(1)), float(m.group(2))
+    else:
+        # budynki: poligon (posList) → centroid wierzchołków
+        pl = re.search(r"<gml:posList[^>]*>([^<]+)</gml:posList>", f)
+        if not pl:
+            return None, None
+        nums = [float(x) for x in pl.group(1).split()]
+        if len(nums) < 4:
+            return None, None
+        ns, es = nums[0::2], nums[1::2]
+        northing, easting = sum(ns) / len(ns), sum(es) / len(es)
     lon, lat = TO_4326.transform(easting, northing)
     return round(lat, 6), round(lon, 6)
 
@@ -214,6 +223,41 @@ def parse_dzialka(f: str, fallback_city: str):
     }
 
 
+def parse_budynek(f: str, fallback_city: str):
+    """Domy: nieruchomość gruntowa ZABUDOWANA z budynkiem mieszkalnym. RCN nie podaje pow. użytkowej domu
+    (BUD_POW_UZYT puste), więc zapisujemy cenę całkowitą + pow. działki; cena_m2 = zł/m² GRUNTU (orientacyjnie)."""
+    if val(f, "NIER_RODZAJ") != "nieruchomoscGruntowaZabudowana":
+        return None
+    if val(f, "BUD_RODZAJ") != "mieszkalny":
+        return None
+    udz = val(f, "NIER_UDZIAL")
+    if udz and udz != "1/1":
+        return None
+    price = num(f, "NIER_CENA_BRUTTO") or num(f, "TRAN_CENA_BRUTTO")
+    plot_ha = num(f, "NIER_POW_GRUNTU")
+    plot = plot_ha * 10000 if plot_ha else None
+    if not price or price < 150000 or price > 15_000_000:
+        return None
+    if plot and (plot < 50 or plot > 50000):
+        return None
+    dz = date_of(f)
+    if not dz:
+        return None
+    lat, lng = pos_of(f)
+    city, street = addr_parts(val(f, "BUD_ADRES"))
+    pow_uzyt = num(f, "BUD_POW_UZYT")
+    # jeden rekord na transakcję (kilka budynków na działce → ten sam akt)
+    tid = val(f, "TRAN_OZNACZENIE_TRANS") or val(f, "gid")
+    return {
+        "gid": f"dom-{tid}", "rodzaj_nieruchomosci": "dom", "city": city or fallback_city,
+        "ulica": street, "cena_brutto": round(price), "powierzchnia": round(pow_uzyt, 1) if pow_uzyt else None,
+        "powierzchnia_dzialki": round(plot) if plot else None,
+        "cena_m2": round(price / pow_uzyt, 2) if pow_uzyt and pow_uzyt >= 30 else None,
+        "data_zawarcia": dz, "rodzaj_rynku": market_of(f),
+        "teryt": val(f, "TERYT"), "lat": lat, "lng": lng, "rodzaj_trans": val(f, "TRAN_RODZAJ_TRANS"),
+    }
+
+
 def pretty_city(key: str) -> str:
     return key.replace("-", " ").title()
 
@@ -223,7 +267,7 @@ def main():
     ap.add_argument("--since", default="2025-01-01")
     ap.add_argument("--city", default="", help="klucz z city-coords.js, np. krakow (lub nazwa, np. Kraków)")
     ap.add_argument("--limit-cities", type=int, default=0)
-    ap.add_argument("--layers", default="lokale,dzialki")
+    ap.add_argument("--layers", default="lokale,dzialki,budynki")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -257,7 +301,7 @@ def main():
 
     t0 = time.time()
     total_up = 0
-    parsers = {"lokale": parse_lokal, "dzialki": parse_dzialka}
+    parsers = {"lokale": parse_lokal, "dzialki": parse_dzialka, "budynki": parse_budynek}
     for i, (key, (lat, lon)) in enumerate(items, 1):
         km = BIG.get(key, DEFAULT_RADIUS_KM)
         bbox = bbox_2180(lat, lon, km)
@@ -266,8 +310,15 @@ def main():
             layer = layer.strip()
             if layer not in parsers:
                 continue
-            extra = ('<fes:PropertyIsEqualTo><fes:ValueReference>LOK_FUNKCJA</fes:ValueReference>'
-                     '<fes:Literal>mieszkalna</fes:Literal></fes:PropertyIsEqualTo>') if layer == "lokale" else ""
+            extra = ""
+            if layer == "lokale":
+                extra = ('<fes:PropertyIsEqualTo><fes:ValueReference>LOK_FUNKCJA</fes:ValueReference>'
+                         '<fes:Literal>mieszkalna</fes:Literal></fes:PropertyIsEqualTo>')
+            elif layer == "budynki":
+                extra = ('<fes:PropertyIsEqualTo><fes:ValueReference>NIER_RODZAJ</fes:ValueReference>'
+                         '<fes:Literal>nieruchomoscGruntowaZabudowana</fes:Literal></fes:PropertyIsEqualTo>'
+                         '<fes:PropertyIsEqualTo><fes:ValueReference>BUD_RODZAJ</fes:ValueReference>'
+                         '<fes:Literal>mieszkalny</fes:Literal></fes:PropertyIsEqualTo>')
             docs, raw_n = {}, 0
             for f in fetch_layer(layer, fes_filter(bbox, args.since, extra)):
                 raw_n += 1

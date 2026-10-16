@@ -17,7 +17,7 @@ on:
         description: 'Warstwy: lokale,dzialki'
         required: false
         type: string
-        default: 'lokale,dzialki'
+        default: 'lokale,dzialki,budynki'
       limit_cities:
         description: 'Ogranicz do N pierwszych miast (0 = wszystkie)'
         required: false
@@ -44,7 +44,7 @@ jobs:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
         run: |
-          ARGS="--since ${{ inputs.since || '2025-01-01' }} --layers ${{ inputs.layers || 'lokale,dzialki' }}"
+          ARGS="--since ${{ inputs.since || '2025-01-01' }} --layers ${{ inputs.layers || 'lokale,dzialki,budynki' }}"
           if [ -n "${{ inputs.city }}" ]; then ARGS="$ARGS --city '${{ inputs.city }}'"; fi
           if [ "${{ inputs.limit_cities || '0' }}" != "0" ]; then ARGS="$ARGS --limit-cities ${{ inputs.limit_cities }}"; fi
           echo "python scripts/rcn_sync.py $ARGS"

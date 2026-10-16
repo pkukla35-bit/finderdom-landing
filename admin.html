@@ -749,7 +749,8 @@ async function previewMailing(id){
         <textarea id="mailText" readonly style="width:100%;min-height:260px;padding:12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#e6e9f2;font-family:inherit;font-size:13px;line-height:1.5"></textarea></div>` : ''}
       <iframe id="mailFrame" style="width:100%;height:720px;border:1px solid rgba(255,255,255,0.15);border-radius:12px;background:#fff"></iframe>`);
     if (d.text) { window._mailPreviewText = d.text; document.getElementById('mailText').value = d.text; }
-    document.getElementById('mailFrame').srcdoc = d.html;
+    // Firefox stosuje X-Frame-Options strony-rodzica do iframe srcdoc → używamy blob: URL
+    document.getElementById('mailFrame').src = URL.createObjectURL(new Blob([d.html], { type: 'text/html' }));
     document.getElementById('mailingPreview').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch(e){ setHtml('mailingPreview', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`); }
 }

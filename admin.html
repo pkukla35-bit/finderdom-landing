@@ -50,6 +50,8 @@
   .tag-trial{background:rgba(74,222,128,0.15);color:#4ade80}
   .tag-agent{background:rgba(251,113,133,0.15);color:#fb7185}
   .empty{text-align:center;color:#8ba3d4;padding:40px 20px;font-style:italic}
+  .btn-sm{padding:6px 12px;background:rgba(255,184,0,0.12);border:1px solid rgba(255,184,0,0.35);color:#FFB800;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;min-height:32px}
+  .btn-sm:hover{background:rgba(255,184,0,0.2)}
   .loader{text-align:center;color:#8ba3d4;padding:40px 20px}
   .loader::before{content:'⟳';display:inline-block;font-size:32px;color:#FFB800;animation:spin 1s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -512,16 +514,28 @@ async function loadPayments(){
         <td style="color:#4ade80;font-weight:800">${fmtMoney(p.amount_pln)}</td>
         <td class="mono">${escapeHtml((p.stripe_session_id || '—').slice(0,20))}…</td>
         <td>${fmtDate(p.created_at)}</td>
+        <td><button class="btn-sm inv-pdf" data-id="${escapeHtml(p.id)}" data-num="${escapeHtml(p.invoice_number || 'faktura')}">📥 PDF</button></td>
       </tr>
     `).join('');
     setHtml('paymentsTable', `
       <table>
         <thead><tr>
-          <th>Numer FV</th><th>Email</th><th>Plan</th><th>Kwota</th><th>Stripe Session</th><th>Data</th>
+          <th>Numer FV</th><th>Email</th><th>Plan</th><th>Kwota</th><th>Stripe Session</th><th>Data</th><th>Faktura</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
     `);
+    document.querySelectorAll('.inv-pdf').forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true; const t = b.textContent; b.textContent = '⏳';
+      try {
+        const r = await fetch(API_BASE + `/admin/invoices/${b.dataset.id}/pdf`, { headers: { 'Authorization': 'Bearer ' + getToken() } });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const url = URL.createObjectURL(await r.blob());
+        const a = document.createElement('a'); a.href = url; a.download = b.dataset.num.replace(/\//g, '-') + '.pdf'; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      } catch (err) { alert('Nie udało się pobrać faktury: ' + err.message); }
+      finally { b.disabled = false; b.textContent = t; }
+    }));
   } catch(e){
     setHtml('paymentsTable', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`);
   }

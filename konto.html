@@ -91,6 +91,11 @@ gtag('set', 'url_passthrough', false);
   .pay-error{margin-top:12px;padding:12px 14px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#fca5a5;border-radius:10px;font-size:13px;display:none}
   .pay-error.show{display:block}
 
+  .inv-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .inv-grid label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:#8ba3d4}
+  .inv-grid input{padding:11px 12px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:14px;font-family:inherit;min-height:44px}
+  .inv-grid input:focus{outline:none;border-color:#FFB800}
+  @media(max-width:640px){.inv-grid{grid-template-columns:1fr}}
   .invoice-item{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:12px;margin-bottom:10px;gap:12px}
   .invoice-item .inv-info .num{font-weight:900;font-size:14px;margin-bottom:2px}
   .invoice-item .inv-info .meta{font-size:12px;color:#8ba3d4}
@@ -221,6 +226,22 @@ gtag('set', 'url_passthrough', false);
 
     <!-- Faktury -->
     <div class="panel" id="panel-invoices">
+      <div class="card" style="margin-bottom:16px">
+        <h2>Dane do faktury</h2>
+        <p style="color:#a3b3d1;font-size:13px;margin-bottom:14px">Uzupełnij raz — pojawią się na każdej fakturze (także już wystawionych).</p>
+        <form id="invDataForm" class="inv-form">
+          <div class="inv-grid">
+            <label>Imię i nazwisko<input type="text" id="invName" maxlength="120" placeholder="Jan Kowalski"></label>
+            <label>Firma (opcjonalnie)<input type="text" id="invCompany" maxlength="160" placeholder="Nazwa firmy"></label>
+            <label>NIP (opcjonalnie)<input type="text" id="invNip" maxlength="13" inputmode="numeric" placeholder="0000000000"></label>
+            <label>Adres<input type="text" id="invAddress" maxlength="200" placeholder="ul. Przykładowa 1/2, 00-001 Warszawa"></label>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+            <button type="submit" class="btn-outline" id="invSaveBtn">💾 Zapisz dane</button>
+            <span id="invDataMsg" style="font-size:13px;color:#8ba3d4"></span>
+          </div>
+        </form>
+      </div>
       <div class="card">
         <h2>Twoje faktury</h2>
         <div id="invoicesList">
@@ -295,6 +316,11 @@ gtag('set', 'url_passthrough', false);
       document.getElementById('loading').style.display = 'none';
       document.getElementById('content').style.display = 'block';
 
+      document.getElementById('invName').value = u.invoice_name || '';
+      document.getElementById('invCompany').value = u.company_name || '';
+      document.getElementById('invNip').value = u.nip || '';
+      document.getElementById('invAddress').value = u.invoice_address || '';
+
       const displayName = u.account_type === 'business' ? (u.company_name || u.email) : u.email.split('@')[0];
       document.getElementById('greetName').textContent = displayName;
       document.getElementById('emailLine').textContent = u.email;
@@ -351,6 +377,34 @@ gtag('set', 'url_passthrough', false);
       document.getElementById('loading').textContent = 'Błąd ładowania konta. Odśwież stronę.';
     }
   }
+
+  document.getElementById('invDataForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('invSaveBtn');
+    const msg = document.getElementById('invDataMsg');
+    btn.disabled = true; msg.textContent = 'Zapisuję…';
+    try {
+      const r = await fetch('/api/auth/invoice-data', {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_name: document.getElementById('invName').value,
+          company_name: document.getElementById('invCompany').value,
+          nip: document.getElementById('invNip').value,
+          invoice_address: document.getElementById('invAddress').value,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || 'Błąd zapisu');
+      msg.textContent = '✅ Zapisano — dane pojawią się na fakturach.';
+      msg.style.color = '#4ade80';
+    } catch (err) {
+      msg.textContent = '❌ ' + err.message;
+      msg.style.color = '#f87171';
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   async function loadInvoices(){
     const list = document.getElementById('invoicesList');

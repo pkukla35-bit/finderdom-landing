@@ -48,9 +48,9 @@ JWT_SECRET = os.environ.get("JWT_SECRET")
 DB_NAME = os.environ.get("MONGODB_DB", "finderdom")
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-COMPANY_NAME = os.environ.get("COMPANY_NAME", "FinderDom.pl")
-COMPANY_NIP = os.environ.get("COMPANY_NIP", "")
-COMPANY_ADDRESS = os.environ.get("COMPANY_ADDRESS", "")
+COMPANY_NAME = os.environ.get("COMPANY_NAME", "FinderDom Paweł Kukla")
+COMPANY_NIP = os.environ.get("COMPANY_NIP", "9441419164")
+COMPANY_ADDRESS = os.environ.get("COMPANY_ADDRESS", "ul. Tymotkowa 16, 30-382 Kraków")
 DOMAIN = os.environ.get("DOMAIN", "https://finderdom.pl")
 JWT_ALGORITHM = "HS256"
 JWT_DAYS = 7
@@ -338,6 +338,8 @@ def public_user(user: dict) -> dict:
         "account_type": user["account_type"],
         "nip": user.get("nip"),
         "company_name": user.get("company_name"),
+        "invoice_name": user.get("invoice_name"),
+        "invoice_address": user.get("invoice_address"),
         "tier": tier_now,
         "expires_at": expires_at.isoformat() if isinstance(expires_at, datetime) else expires_at,
         "is_trial": is_trial,
@@ -2323,6 +2325,8 @@ async def apply_payment(user_id: str, plan: str, stripe_session_id: str, amount_
         "vat": str(vat),
         "buyer_email": user["email"],
         "buyer_company": user.get("company_name"),
+        "buyer_name": user.get("invoice_name"),
+        "buyer_address": user.get("invoice_address"),
         "buyer_nip": user.get("nip"),
         "buyer_account_type": user.get("account_type", "personal"),
         "created_at": now,
@@ -2511,11 +2515,13 @@ def build_invoice_pdf(inv: dict) -> bytes:
         seller_lines.append(COMPANY_ADDRESS)
     seller_html = "<br/>".join(seller_lines)
 
-    buyer_name = inv.get("buyer_company") or inv.get("buyer_email", "")
+    buyer_name = inv.get("buyer_company") or inv.get("buyer_name") or inv.get("buyer_email", "")
     buyer_lines = [buyer_name]
+    if inv.get("buyer_address"):
+        buyer_lines.append(inv["buyer_address"])
     if inv.get("buyer_nip"):
         buyer_lines.append(f"NIP: {inv['buyer_nip']}")
-    if inv.get("buyer_email") and inv.get("buyer_company"):
+    if inv.get("buyer_email") and buyer_name != inv.get("buyer_email"):
         buyer_lines.append(f"Email: {inv['buyer_email']}")
     buyer_html = "<br/>".join(buyer_lines)
 
@@ -2603,6 +2609,61 @@ def build_invoice_pdf(inv: dict) -> bytes:
     return out.getvalue()
 
 
+def _fill_buyer_from_user(inv: dict, user: dict) -> None:
+    """Starsze faktury nie mają adresu/nazwy nabywcy — dopisz z aktualnych danych profilu (nie zapisujemy)."""
+    if not inv.get("buyer_address") and user.get("invoice_address"):
+        inv["buyer_address"] = user["invoice_address"]
+    if not inv.get("buyer_name") and user.get("invoice_name"):
+        inv["buyer_name"] = user["invoice_name"]
+    if not inv.get("buyer_company") and user.get("company_name"):
+        inv["buyer_company"] = user["company_name"]
+    if not inv.get("buyer_nip") and user.get("nip"):
+        inv["buyer_nip"] = user["nip"]
+
+
+class InvoiceDataRequest(BaseModel):
+    invoice_name: Optional[str] = Field(default=None, max_length=120)
+    company_name: Optional[str] = Field(default=None, max_length=160)
+    nip: Optional[str] = Field(default=None, max_length=20)
+    invoice_address: Optional[str] = Field(default=None, max_length=200)
+
+
+@app.put("/api/auth/invoice-data")
+async def update_invoice_data(body: InvoiceDataRequest, user: dict = Depends(current_user)):
+    """Dane do faktury (imię i nazwisko / firma, NIP, adres) zapisywane na koncie użytkownika."""
+    nip = re.sub(r"[^0-9]", "", body.nip or "")
+    if nip and len(nip) != 10:
+        raise HTTPException(400, "NIP musi mieć 10 cyfr")
+    upd = {
+        "invoice_name": (body.invoice_name or "").strip() or None,
+        "company_name": (body.company_name or "").strip() or None,
+        "nip": nip or None,
+        "invoice_address": (body.invoice_address or "").strip() or None,
+    }
+    await database().users.update_one({"_id": user["_id"]}, {"$set": upd})
+    return {"ok": True, **upd}
+
+
+@app.get("/api/admin/invoices/{invoice_id}/pdf")
+async def admin_download_invoice(invoice_id: str, admin: dict = Depends(require_admin)):
+    try:
+        oid = ObjectId(invoice_id)
+    except Exception:
+        raise HTTPException(400, "Nieprawidłowe ID faktury")
+    inv = await database().invoices.find_one({"_id": oid})
+    if not inv:
+        raise HTTPException(404, "Faktura nie znaleziona")
+    owner = await database().users.find_one({"_id": inv.get("user_id")}) if inv.get("user_id") else None
+    if owner:
+        _fill_buyer_from_user(inv, owner)
+        inv.setdefault("buyer_email", owner.get("email"))
+    data = await asyncio.to_thread(build_invoice_pdf, inv)
+    return Response(
+        content=data, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{inv["invoice_number"].replace("/", "-")}.pdf"'},
+    )
+
+
 @app.get("/api/invoices/{invoice_id}/pdf")
 async def download_invoice(invoice_id: str, user: dict = Depends(current_user)):
     try:
@@ -2612,6 +2673,7 @@ async def download_invoice(invoice_id: str, user: dict = Depends(current_user)):
     inv = await database().invoices.find_one({"_id": oid, "user_id": user["_id"]})
     if not inv:
         raise HTTPException(404, "Faktura nie znaleziona")
+    _fill_buyer_from_user(inv, user)
     data = await asyncio.to_thread(build_invoice_pdf, inv)
     return StreamingResponse(
         io.BytesIO(data),

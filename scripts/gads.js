@@ -2,7 +2,7 @@
  * Uzupełnij FD_GADS.id (AW-XXXXXXXXX) i etykiety z Google Ads → Cele → Konwersje → „Konfiguracja tagu”.
  * Puste wartości = nic się nie wysyła. Zgody (Consent Mode) obsługuje Clickio CMP w <head>. */
 window.FD_GADS = {
-  id: '',
+  id: 'AW-963425765',
   labels: {
     valuation: '',        // zakup wyceny PDF (35 zł)
     plan: '',             // zakup planu Osobisty 45 zł / Firmowy 199 zł

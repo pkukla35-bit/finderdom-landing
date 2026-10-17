@@ -721,6 +721,8 @@ async function loadOffer() {
               currentListing = normalized;
               window.__offer = normalized;
               renderOffer(normalized);
+              // CRM firmy (statusy + notatka) — także na szybkiej ścieżce ładowania oferty
+              initCrmBar(normalized.id);
               // W tle doładuj oferty z tego samego miasta/typu dla porównywarki AI (5km) i "Podobnych ofert"
               // (filtr city+type zamiast całej bazy: ~10x mniejszy payload i trafniejsze porównania)
               setTimeout(() => {
@@ -1494,7 +1496,7 @@ async function renderOffer(l, all) {
       if (l.lat != null && l.lon != null) { params.set('lat', String(l.lat)); params.set('lon', String(l.lon)); }
       const exId = String(l.external_id || l.id || '').replace(/^otodom-/, '');
       if (exId) params.set('exclude_id', exId);
-      const resp = await fetch('/api/similar-offers?' + params.toString());
+      const resp = await fetch('/api/similar-offers?' + params.toString(), (localStorage.getItem('finderdom_token') ? { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('finderdom_token') } } : {}));
       if (aiSeq !== window.__aiSeq) return;  // w międzyczasie wystartował nowszy render (pełna lista) — nie nadpisuj
       if (resp.ok) {
         const data = await resp.json();
@@ -1780,7 +1782,7 @@ async function renderOffer(l, all) {
       if (l.market_type) params.set('market_type', l.market_type);
       if (l.external_id || l.id) params.set('exclude_id', l.external_id || l.id);
       params.set('limit', '20');
-      const resp = await fetch('/api/similar-offers?' + params.toString());
+      const resp = await fetch('/api/similar-offers?' + params.toString(), (localStorage.getItem('finderdom_token') ? { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('finderdom_token') } } : {}));
       if (resp.ok) {
         const data = await resp.json();
         if (Array.isArray(data.offers) && data.offers.length) {

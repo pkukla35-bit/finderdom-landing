@@ -1282,16 +1282,15 @@ async function loadCrmStatuses() {
   try {
     const token = localStorage.getItem('finderdom_token');
     if (!token) return;
-    const userStr = localStorage.getItem('finderdom_user');
-    const user = userStr ? JSON.parse(userStr) : null;
-    if (!user || user.tier !== 'business') return;
+    // Backend decyduje (plan Firmowy właściciela lub agenta) — nie polegamy na starym obiekcie użytkownika w localStorage
     const r = await fetch('/api/offer-status', { headers: { 'Authorization': `Bearer ${token}` }});
     if (!r.ok) return;
     const data = await r.json();
+    if (!data.crm) return;
     window.CRM_STATUSES = data.statuses || {};
     // Show CRM filter chips
     const bar = document.getElementById('crmFilters');
-    if (bar) bar.style.display = 'flex';
+    if (bar) bar.style.display = 'block';
   } catch (e) { console.error('CRM load:', e); }
 }
 

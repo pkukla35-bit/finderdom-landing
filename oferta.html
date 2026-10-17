@@ -1084,15 +1084,27 @@ async function initCrmBar(offerId) {
     const token = localStorage.getItem('finderdom_token');
     if (!token) return;
     const userStr = localStorage.getItem('finderdom_user');
-    const user = userStr ? JSON.parse(userStr) : null;
-    if (!user || user.tier !== 'business') return;
+    const user = (userStr ? JSON.parse(userStr) : null) || {};
+    // Backend decyduje o dostępie do CRM (plan Firmowy właściciela lub agenta) — i od razu zwraca bieżący status
+    let cur = null;
+    try {
+      const r0 = await fetch(`/api/offer-status?ids=${encodeURIComponent(offerId)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!r0.ok) { console.warn('[CRM] status fetch failed:', r0.status); return; }
+      const data0 = await r0.json();
+      if (!data0.crm) return;
+      cur = (data0.statuses || {})[offerId] || null;
+    } catch (e) { console.warn('[CRM] status fetch error:', e); return; }
     // Show bar
     const bar = el('crmBar');
     if (!bar) return;
     bar.style.display = 'block';
 
-    // Wire buttons FIRST (so they work even if status fetch fails)
-    let currentStatus = null;
+    let currentStatus = cur ? cur.status : null;
+    updateCrmBadge(cur);
+    const noteEl0 = el('crmNote');
+    if (noteEl0) noteEl0.value = (cur && cur.note) ? cur.note : '';
 
     async function saveCrm(status, note) {
       const res = await fetch('/api/offer-status', {
@@ -1136,27 +1148,6 @@ async function initCrmBar(offerId) {
           setTimeout(() => { saveNoteBtn.textContent = '💾 Zapisz notatkę'; }, 1500);
         }
       });
-    }
-
-    // Fetch current status (non-blocking for button wiring)
-    try {
-      const r = await fetch(`/api/offer-status?ids=${encodeURIComponent(offerId)}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (r.ok) {
-        const data = await r.json();
-        const cur = (data.statuses || {})[offerId];
-        updateCrmBadge(cur);
-        currentStatus = cur ? cur.status : null;
-        const noteEl = el('crmNote');
-        if (noteEl) noteEl.value = (cur && cur.note) ? cur.note : '';
-      } else {
-        console.warn('[CRM] status fetch failed:', r.status);
-        updateCrmBadge(null);
-      }
-    } catch (e) {
-      console.warn('[CRM] status fetch error:', e);
-      updateCrmBadge(null);
     }
   } catch (e) { console.error('CRM init:', e); }
 }

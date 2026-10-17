@@ -396,6 +396,22 @@ def public_user(user: dict) -> dict:
     }
 
 
+async def public_user_async(user: dict) -> dict:
+    """public_user + dla agenta tier/wygaśnięcie dziedziczone z konta właściciela firmy (master)."""
+    out = public_user(user)
+    if user.get("role") == "agent" and user.get("master_id"):
+        try:
+            master = await (await users_collection()).find_one({"_id": ObjectId(user["master_id"])})
+        except Exception:
+            master = None
+        if master:
+            out["tier"] = effective_tier(master)
+            exp = master.get("expires_at")
+            out["expires_at"] = exp.isoformat() if isinstance(exp, datetime) else exp
+            out["company_name"] = master.get("company_name") or out.get("company_name")
+    return out
+
+
 def token_for(user: dict) -> str:
     now = datetime.now(timezone.utc)
     return jwt.encode(
@@ -419,6 +435,8 @@ async def current_user(credentials: HTTPAuthorizationCredentials = Depends(secur
     user = await (await users_collection()).find_one({"_id": oid})
     if not user:
         raise HTTPException(401, "Użytkownik nie istnieje")
+    if user.get("active") is False:
+        raise HTTPException(403, "Dostęp do tego konta został wyłączony przez właściciela firmy")
     return user
 
 
@@ -784,8 +802,83 @@ async def claim_lead(token: str, user: dict = Depends(current_user)):
 
 # --- Team Management (Firmowy multi-agent) ---
 
+AGENT_LIMIT_INCLUDED = 4   # Plan Firmowy 199 zł/mies zawiera do 4 agentów w cenie
+EXTRA_AGENT_PRICE = 55     # 5. i każdy kolejny agent = 55 zł/mies
+
+
+async def _check_agent_limit(user: dict) -> None:
+    """Rzuca 402, gdy dodanie kolejnego agenta przekroczy limit planu (aktywni + oczekujące zaproszenia)."""
+    now = datetime.now(timezone.utc)
+    users_col = await users_collection()
+    active_agents = await users_col.count_documents({"master_id": str(user["_id"]), "active": True})
+    pending_invites = await database().team_invites.count_documents({
+        "master_id": str(user["_id"]), "used": False, "expires_at": {"$gt": now},
+    })
+    extra_paid = int(user.get("extra_agents_paid") or 0)
+    if active_agents + pending_invites + 1 > AGENT_LIMIT_INCLUDED + extra_paid:
+        raise HTTPException(
+            402,
+            f"Osiągnięto limit agentów w planie Firmowy ({AGENT_LIMIT_INCLUDED} w cenie 199 zł). "
+            f"Aktualnie: {active_agents} agentów + {pending_invites} zaproszeń oczekujących. "
+            f"Aby dodać więcej, opłać {EXTRA_AGENT_PRICE} zł/mies za każdego dodatkowego agenta. "
+            f"Kontakt: kontakt@finderdom.pl"
+        )
+
+
+async def _require_business_master(user: dict) -> None:
+    if await effective_tier_async(user) != "business":
+        raise HTTPException(403, "Tylko konto Firmowy może dodawać agentów")
+    if user.get("role") == "agent":
+        raise HTTPException(403, "Tylko właściciel firmy może dodawać agentów")
+    if not user.get("role"):
+        await (await users_collection()).update_one({"_id": user["_id"]}, {"$set": {"role": "master"}})
+
+
 class InviteAgentRequest(BaseModel):
     email: str
+
+
+class CreateAgentRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=8, max_length=72)
+
+
+@app.post("/api/team/agent")
+async def create_agent_direct(req: CreateAgentRequest, user: dict = Depends(current_user)):
+    """Master zakłada konto agenta od razu (email + hasło startowe) — bez e-maila z zaproszeniem."""
+    await _require_business_master(user)
+    email = clean_email(req.email)
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise HTTPException(400, "Nieprawidłowy adres e-mail")
+    users_col = await users_collection()
+    if await users_col.find_one({"email": email}, {"_id": 1}):
+        raise HTTPException(400, "Ten email jest już zarejestrowany w FinderDom")
+    await _check_agent_limit(user)
+    now = datetime.now(timezone.utc)
+    agent = {
+        "email": email,
+        "password_hash": bcrypt.hashpw(req.password.encode("utf-8"), bcrypt.gensalt()).decode(),
+        "account_type": "personal",
+        "nip": None, "company_name": None,
+        "tier": "free", "expires_at": None, "is_trial": False,
+        "trial_started_at": None, "trial_ends_at": None,
+        "subscription_status": "active", "payment_customer_id": None,
+        "created_at": now, "updated_at": now,
+        "role": "agent", "master_id": str(user["_id"]), "active": True,
+        "created_by_master": True,
+    }
+    try:
+        res = await users_col.insert_one(agent)
+    except Exception as exc:
+        if "duplicate key" in str(exc).lower():
+            raise HTTPException(400, "Ten email jest już zarejestrowany w FinderDom")
+        raise
+    # Sprzątamy ewentualne oczekujące zaproszenie na ten e-mail
+    await database().team_invites.update_many(
+        {"email": email, "master_id": str(user["_id"]), "used": False},
+        {"$set": {"used": True, "used_at": now, "used_by": str(res.inserted_id)}},
+    )
+    return {"success": True, "id": str(res.inserted_id), "email": email, "login_url": f"{DOMAIN}/logowanie"}
 
 
 @app.post("/api/team/invite")
@@ -813,28 +906,7 @@ async def invite_agent(req: InviteAgentRequest, user: dict = Depends(current_use
     if pending and as_dt(pending.get("expires_at")) and as_dt(pending["expires_at"]) > datetime.now(timezone.utc):
         raise HTTPException(400, "Zaproszenie dla tego emaila już wysłane (wygaśnie za kilka dni)")
 
-    # === LIMIT AGENTÓW ===
-    # Plan Firmowy 199 zł/mies zawiera do 4 agentów w cenie. 5. i każdy kolejny = 55 zł/mies extra.
-    AGENT_LIMIT_INCLUDED = 4
-    EXTRA_AGENT_PRICE = 55
-    _now_check = datetime.now(timezone.utc)
-    users_col = await users_collection()
-    active_agents = await users_col.count_documents({"master_id": str(user["_id"]), "active": True})
-    pending_invites = await inv_col.count_documents({
-        "master_id": str(user["_id"]),
-        "used": False,
-        "expires_at": {"$gt": _now_check}
-    })
-    total_after_invite = active_agents + pending_invites + 1
-    extra_paid = int(user.get("extra_agents_paid") or 0)
-    if total_after_invite > AGENT_LIMIT_INCLUDED + extra_paid:
-        raise HTTPException(
-            402,
-            f"Osiągnięto limit agentów w planie Firmowy ({AGENT_LIMIT_INCLUDED} w cenie 199 zł). "
-            f"Aktualnie: {active_agents} agentów + {pending_invites} zaproszeń oczekujących. "
-            f"Aby dodać więcej, opłać {EXTRA_AGENT_PRICE} zł/mies za każdego dodatkowego agenta. "
-            f"Kontakt: kontakt@finderdom.pl"
-        )
+    await _check_agent_limit(user)
 
     token = secrets.token_urlsafe(24)
     now = datetime.now(timezone.utc)
@@ -869,11 +941,13 @@ async def invite_agent(req: InviteAgentRequest, user: dict = Depends(current_use
       </div>
     </div>
     """
+    email_sent = False
     try:
-        await send_email(to=email, subject=subject, html=html)
+        email_sent = bool(await send_email(to=email, subject=subject, html=html))
     except Exception as e:
         logger.error("Team invite email failed: %s", str(e)[:120])
-    return {"success": True, "email": email, "expires_at": expires.isoformat()}
+    return {"success": True, "email": email, "expires_at": expires.isoformat(),
+            "signup_url": signup_url, "email_sent": email_sent}
 
 
 @app.get("/api/team/invite/{token}")
@@ -914,8 +988,11 @@ async def list_team_agents(user: dict = Depends(current_user)):
     async for i in database().team_invites.find({"master_id": str(user["_id"]), "used": False}).sort("created_at", -1):
         if as_dt(i.get("expires_at")) and as_dt(i["expires_at"]) < datetime.now(timezone.utc):
             continue
-        invites.append({"email": i["email"], "expires_at": i["expires_at"].isoformat() if isinstance(i["expires_at"], datetime) else i["expires_at"]})
-    return {"agents": agents, "pending_invites": invites}
+        invites.append({"email": i["email"],
+                        "signup_url": f"{DOMAIN}/rejestracja?invite={i['token']}",
+                        "expires_at": i["expires_at"].isoformat() if isinstance(i["expires_at"], datetime) else i["expires_at"]})
+    return {"agents": agents, "pending_invites": invites,
+            "limit_included": AGENT_LIMIT_INCLUDED, "extra_paid": int(user.get("extra_agents_paid") or 0)}
 
 
 @app.post("/api/team/agent/{agent_id}/deactivate")
@@ -984,7 +1061,7 @@ async def get_offer_statuses(ids: str = "", user: dict = Depends(current_user)):
     """Bulk fetch statuses for a list of offer IDs (Firmowy only). Empty ids = ALL for company."""
     tier = await effective_tier_async(user)
     if tier != "business":
-        return {"statuses": {}}
+        return {"statuses": {}, "crm": False}
     company_id = _company_scope(user)
     id_list = [i.strip() for i in ids.split(",") if i.strip()][:500]
     query = {"company_id": company_id}
@@ -998,7 +1075,7 @@ async def get_offer_statuses(ids: str = "", user: dict = Depends(current_user)):
             "marked_by": s.get("marked_by", ""),
             "updated_at": s["updated_at"].isoformat() if isinstance(s.get("updated_at"), datetime) else s.get("updated_at"),
         }
-    return {"statuses": out}
+    return {"statuses": out, "crm": True}
 
 
 # --- Auth endpoints ---
@@ -2373,12 +2450,14 @@ async def login(body: LoginRequest):
     )
     if not valid:
         raise HTTPException(401, "Nieprawidłowy email lub hasło")
-    return {"token": token_for(user), "user": public_user(user)}
+    if user.get("active") is False:
+        raise HTTPException(403, "Dostęp do tego konta został wyłączony przez właściciela firmy")
+    return {"token": token_for(user), "user": await public_user_async(user)}
 
 
 @app.get("/api/auth/me")
 async def me(user: dict = Depends(current_user)):
-    return {"user": public_user(user)}
+    return {"user": await public_user_async(user)}
 
 
 # --- Payments ---

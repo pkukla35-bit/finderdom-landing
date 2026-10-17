@@ -53,7 +53,11 @@ gtag('set', 'url_passthrough', false);
 
   /* Invite form */
   .invite-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:stretch}
-  @media(max-width:520px){.invite-row{grid-template-columns:1fr}}
+  @media(max-width:520px){.invite-row,.invite-row[style]{grid-template-columns:1fr !important}}
+  .link-box{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .link-box input{flex:1;min-width:200px;padding:10px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#c5d0e6;font-size:12px;font-family:inherit}
+  .btn-copy{padding:10px 14px;background:rgba(255,184,0,0.15);border:1px solid rgba(255,184,0,0.4);color:#FFB800;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;min-height:40px}
+  .btn-copy:hover{background:rgba(255,184,0,0.3)}
   .input{padding:14px 16px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:#fff;font-size:15px;font-family:inherit;transition:border 0.2s}
   .input:focus{outline:none;border-color:#FFB800;background:rgba(0,0,0,0.35)}
   .input::placeholder{color:#5e6d8e}
@@ -148,11 +152,22 @@ gtag('set', 'url_passthrough', false);
     <div class="lead">Zapraszaj agentów swojej firmy. Będą mieli własne loginy, ale wspólny dostęp do leadów i CRM ofert. <strong>W cenie planu 199 zł/mies: do 4 agentów</strong>. Każdy dodatkowy: 55 zł/mies (skontaktuj się z nami).</div>
 
     <div class="card">
-      <h2>✉️ Zaproś agenta</h2>
-      <p>Wprowadź email agenta — otrzyma na niego link do rejestracji. Po założeniu konta automatycznie dołączy do Twojej firmy.</p>
+      <h2>➕ Dodaj agenta od razu (login + hasło)</h2>
+      <p>Najszybszy sposób: wpisz e-mail agenta i hasło startowe. Konto jest tworzone natychmiast — agent loguje się na <b>finderdom.pl/logowanie</b> i od razu ma dostęp do wyszukiwarki, CRM i leadów Twojej firmy. Hasło przekaż mu sam (np. SMS-em).</p>
+      <form id="createForm" class="invite-row" style="grid-template-columns:1fr 1fr auto">
+        <input type="email" class="input" id="createEmail" placeholder="e-mail agenta" required autocomplete="off">
+        <input type="text" class="input" id="createPassword" placeholder="hasło startowe (min. 8 znaków)" required minlength="8" autocomplete="off">
+        <button type="submit" class="btn-primary" id="createBtn">Utwórz konto agenta</button>
+      </form>
+      <div id="createAlert" class="alert"></div>
+    </div>
+
+    <div class="card">
+      <h2>✉️ Lub wyślij zaproszenie</h2>
+      <p>Wpisz e-mail agenta — wygenerujemy link rejestracyjny. Link zawsze zobaczysz tutaj i możesz go skopiować i wysłać agentowi samodzielnie (SMS, Messenger, własna poczta). Po rejestracji z linku agent automatycznie dołączy do Twojej firmy.</p>
       <form id="inviteForm" class="invite-row">
         <input type="email" class="input" id="inviteEmail" placeholder="np. anna@abc-nieruchomosci.pl" required autocomplete="email">
-        <button type="submit" class="btn-primary" id="inviteBtn">Wyślij zaproszenie</button>
+        <button type="submit" class="btn-primary" id="inviteBtn">Generuj zaproszenie</button>
       </form>
       <div id="inviteAlert" class="alert"></div>
     </div>
@@ -285,18 +300,63 @@ async function loadTeam() {
       const days = daysUntil(inv.expires_at);
       const daysLabel = days === null ? '' : (days > 0 ? `wygasa za ${days} ${days === 1 ? 'dzień' : 'dni'}` : 'wygasa dziś');
       return `
-        <div class="member">
-          <div class="avatar" style="background:rgba(255,184,0,0.2);color:#FFB800">${initial(inv.email)}</div>
-          <div class="info">
-            <div class="em">${inv.email}</div>
-            <div class="meta">📮 ${daysLabel}</div>
+        <div class="member" style="flex-direction:column;align-items:stretch">
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <div class="avatar" style="background:rgba(255,184,0,0.2);color:#FFB800">${initial(inv.email)}</div>
+            <div class="info">
+              <div class="em">${inv.email}</div>
+              <div class="meta">📮 ${daysLabel} · agent rejestruje się z linku poniżej (na ten sam e-mail)</div>
+            </div>
+            <div class="status pending">● Oczekuje</div>
           </div>
-          <div class="status pending">● Oczekuje</div>
+          ${inv.signup_url ? `<div class="link-box"><input type="text" readonly value="${inv.signup_url}" onclick="this.select()"><button type="button" class="btn-copy" data-copy="${inv.signup_url}">📋 Kopiuj link</button></div>` : ''}
         </div>
       `;
     }).join('');
+    wireCopyButtons(inviteList);
   }
 }
+
+function wireCopyButtons(root) {
+  root.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(btn.dataset.copy);
+        btn.textContent = '✓ Skopiowano';
+      } catch (e) {
+        const inp = btn.parentElement.querySelector('input');
+        if (inp) { inp.select(); document.execCommand('copy'); btn.textContent = '✓ Skopiowano'; }
+      }
+      setTimeout(() => { btn.textContent = '📋 Kopiuj link'; }, 1800);
+    });
+  });
+}
+
+// Direct create (login + hasło)
+$('createForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const alertBox = $('createAlert');
+  alertBox.className = 'alert';
+  const email = $('createEmail').value.trim();
+  const password = $('createPassword').value;
+  if (!email || password.length < 8) { alertBox.textContent = '⚠️ Hasło musi mieć min. 8 znaków.'; alertBox.className = 'alert show error'; return; }
+  const btn = $('createBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Tworzę…';
+  try {
+    const d = await api('/api/team/agent', { method: 'POST', body: JSON.stringify({ email, password }) });
+    alertBox.innerHTML = `✓ Konto agenta <b>${d.email}</b> utworzone i aktywne. Przekaż agentowi dane logowania:<br>` +
+      `<b>Login:</b> ${d.email} &nbsp; <b>Hasło:</b> ${password.replace(/</g,'&lt;')} &nbsp; <b>Strona:</b> ${d.login_url}`;
+    alertBox.className = 'alert show success';
+    $('createEmail').value = ''; $('createPassword').value = '';
+    await loadTeam();
+  } catch(err) {
+    alertBox.textContent = '⚠️ ' + err.message;
+    alertBox.className = 'alert show error';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Utwórz konto agenta';
+});
 
 // Invite form
 $('inviteForm').addEventListener('submit', async (e) => {
@@ -307,11 +367,16 @@ $('inviteForm').addEventListener('submit', async (e) => {
   if (!email) return;
   const btn = $('inviteBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Wysyłam…';
+  btn.innerHTML = '<span class="spinner"></span>Generuję…';
   try {
-    await api('/api/team/invite', { method: 'POST', body: JSON.stringify({ email }) });
-    alertBox.textContent = `✓ Zaproszenie wysłane na ${email}. Link jest ważny 7 dni.`;
+    const d = await api('/api/team/invite', { method: 'POST', body: JSON.stringify({ email }) });
+    const mailInfo = d.email_sent
+      ? `E-mail z linkiem został wysłany na ${email}.`
+      : `<b>E-mail nie został wysłany automatycznie</b> — skopiuj link poniżej i prześlij go agentowi samodzielnie.`;
+    alertBox.innerHTML = `✓ Zaproszenie dla <b>${email}</b> gotowe (ważne 7 dni). ${mailInfo}` +
+      `<div class="link-box"><input type="text" readonly value="${d.signup_url}" onclick="this.select()"><button type="button" class="btn-copy" data-copy="${d.signup_url}">📋 Kopiuj link</button></div>`;
     alertBox.className = 'alert show success';
+    wireCopyButtons(alertBox);
     $('inviteEmail').value = '';
     await loadTeam();
   } catch(err) {
@@ -319,7 +384,7 @@ $('inviteForm').addEventListener('submit', async (e) => {
     alertBox.className = 'alert show error';
   }
   btn.disabled = false;
-  btn.textContent = 'Wyślij zaproszenie';
+  btn.textContent = 'Generuj zaproszenie';
 });
 
 // Logout

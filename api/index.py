@@ -316,6 +316,9 @@ def effective_tier(user: dict) -> str:
         # Fallback to own tier for sync callers
         pass
     tier = user.get("tier", "free")
+    # Admin (ADMIN_EMAILS) = pełny dostęp Firmowy wszędzie (CRM, Zespół, wyceny), nie tylko w widoku konta
+    if (user.get("email") or "").lower() in ADMIN_EMAILS:
+        return "business"
     if tier == "free":
         return "free"
     exp = as_dt(user.get("expires_at"))

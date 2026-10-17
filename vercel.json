@@ -60,6 +60,14 @@
       "destination": "/api/index"
     },
     {
+      "source": "/api/alerts",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/alerts/:path*",
+      "destination": "/api/index"
+    },
+    {
       "source": "/api/offer-status/:path*",
       "destination": "/api/index"
     },

@@ -161,6 +161,7 @@ gtag('set', 'url_passthrough', false);
       <button type="button" class="tab biz-only-tab" data-tab="leads" style="display:none">📞 Leady</button>
       <a href="/zespol" class="tab biz-only-tab" id="teamTabLink" style="display:none;text-decoration:none">👥 Zespół</a>
       <button type="button" class="tab" data-tab="favorites">❤️ Ulubione</button>
+      <button type="button" class="tab" data-tab="alerts">🔔 Alerty</button>
     </div>
 
     <!-- Profil -->
@@ -283,6 +284,17 @@ gtag('set', 'url_passthrough', false);
           <div class="emoji">❤️</div>
           <h3>Brak zapisanych ofert</h3>
           <p>Kliknij serduszko przy ofercie na stronie wyszukiwarki,<br>aby dodać ją do ulubionych.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerty ofertowe -->
+    <div class="panel" id="panel-alerts">
+      <div class="card">
+        <h2>🔔 Twoje alerty ofertowe</h2>
+        <p style="color:#a3b3d1;font-size:13px;margin-bottom:16px">Codziennie rano sprawdzamy nowe ogłoszenia ze wszystkich portali i wysyłamy e-mail tylko wtedy, gdy pojawi się coś pasującego. Alert ustawisz na stronie dowolnej oferty (przycisk „Ustaw alert”).</p>
+        <div id="alertsList">
+          <div class="placeholder-box"><div class="emoji">🔔</div><h3>Ładowanie...</h3></div>
         </div>
       </div>
     </div>
@@ -498,7 +510,7 @@ gtag('set', 'url_passthrough', false);
   }
 
   // Tabs
-  document.querySelectorAll('.tab').forEach(tab => {
+  document.querySelectorAll('.tab[data-tab]').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -506,8 +518,42 @@ gtag('set', 'url_passthrough', false);
       document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
       if (tab.dataset.tab === 'invoices') loadInvoices();
       if (tab.dataset.tab === 'leads') loadLeads();
+      if (tab.dataset.tab === 'alerts') loadAlerts();
     });
   });
+  if (location.hash === '#alerty') { const t = document.querySelector('.tab[data-tab="alerts"]'); if (t) t.click(); }
+
+  async function loadAlerts(){
+    const list = document.getElementById('alertsList');
+    try {
+      const r = await fetch('/api/alerts', { headers: { 'Authorization': 'Bearer ' + token }});
+      const d = await r.json();
+      const items = d.alerts || [];
+      if (!items.length){
+        list.innerHTML = '<div class="placeholder-box"><div class="emoji">🔔</div><h3>Brak aktywnych alertów</h3><p>Wejdź w dowolną ofertę w <a href="/szukaj" style="color:#FFB800">wyszukiwarce</a> i kliknij „Ustaw alert”.</p></div>';
+        return;
+      }
+      list.innerHTML = items.map(a => `
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:12px;margin-bottom:10px">
+          <div style="flex:1;min-width:200px">
+            <div style="font-weight:800;font-size:14px">🔔 ${a.label}</div>
+            <div style="font-size:12px;color:#8ba3d4;margin-top:2px">na ${a.email} · utworzony ${fmtDate(a.created_at)} · wysłano ${a.sent_count} ${a.sent_count === 1 ? 'mail' : 'maili'}${a.last_sent_at ? ' · ostatni ' + fmtDate(a.last_sent_at) : ''}</div>
+          </div>
+          <a href="/szukaj?q=${encodeURIComponent(a.city)}&type=${a.type}&trans=${a.transaction}" style="color:#FFB800;font-size:13px;font-weight:700;text-decoration:none">Zobacz oferty →</a>
+          <button type="button" data-del-alert="${a.id}" style="padding:8px 14px;background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;min-height:40px">Wyłącz</button>
+        </div>`).join('');
+      list.querySelectorAll('[data-del-alert]').forEach(b => b.addEventListener('click', async () => {
+        b.disabled = true; b.textContent = '…';
+        try {
+          const rr = await fetch('/api/alerts/' + encodeURIComponent(b.dataset.delAlert), { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token }});
+          if (!rr.ok) throw new Error();
+          loadAlerts();
+        } catch(e){ b.disabled = false; b.textContent = 'Wyłącz'; alert('Nie udało się wyłączyć alertu'); }
+      }));
+    } catch(e){
+      list.innerHTML = '<div class="placeholder-box"><div class="emoji">⚠️</div><h3>Nie udało się pobrać alertów</h3></div>';
+    }
+  }
 
   async function loadLeads(){
     const list = document.getElementById('leadsList');

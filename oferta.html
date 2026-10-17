@@ -460,10 +460,11 @@ gtag('set', 'url_passthrough', false);
     <div id="kredytBox" style="margin-bottom:16px"></div>
 
     <div class="alert-card">
-      <h4>🔔 Powiadomienie o podobnych ofertach</h4>
-      <p id="alertDesc">Ustaw alert i dostaniesz email gdy pojawi się podobna oferta.</p>
-      <input type="email" class="alert-input" placeholder="twoj@email.pl" id="alertEmail">
+      <h4>🔔 Alert: nowe podobne oferty</h4>
+      <p id="alertDesc">Codziennie rano sprawdzamy nowe ogłoszenia ze wszystkich portali i wysyłamy te, które pasują.</p>
+      <input type="email" class="alert-input" placeholder="twoj@email.pl" id="alertEmail" autocomplete="email">
       <button class="alert-btn" id="alertBtn">Ustaw alert</button>
+      <div id="alertMsg" style="display:none;margin-top:10px;font-size:13px;line-height:1.5"></div>
     </div>
   </aside>
 
@@ -1703,7 +1704,7 @@ async function renderOffer(l, all) {
     `Cena: ${l.price_display} (${l.price_pm2_display}).`;
 
   // Alert desc
-  el('alertDesc').textContent = `Ustaw alert i dostaniesz email gdy pojawi się podobna oferta (${TYPE_LABEL[l.type]}, ${l.city}, do ${fmt(Math.round(l.price * 1.1))} zł).`;
+  el('alertDesc').textContent = `Codziennie rano sprawdzamy nowe ogłoszenia ze wszystkich portali. Kryteria: ${TYPE_LABEL[l.type]}, ${l.city}, do ${fmt(Math.round(l.price * 1.1))} zł.`;
 
   // Similar offers — priorytet: promień lokalny (5km mieszkania / 8km domy+działki) → miasto → cena
   // 🔒 Pomiń dla free-userów (widzą lockSim CTA zamiast)
@@ -1844,19 +1845,38 @@ async function renderOffer(l, all) {
   } // <-- end of "if (!window.__skipSimilar)" for Similar offers section
 }
 
-// Alert button — simple newsletter subscription
+// Alert button — zapis realnego alertu (kryteria z tej oferty) → /api/alerts, codzienny mail z nowymi ofertami
+(function(){
+  const emailEl = el('alertEmail');
+  try { const u = JSON.parse(localStorage.getItem('finderdom_user') || 'null'); if (u && u.email && emailEl && !emailEl.value) emailEl.value = u.email; } catch(e){}
+})();
 el('alertBtn')?.addEventListener('click', async () => {
   const email = el('alertEmail').value.trim();
-  if (!email || !email.includes('@')) { alert('Podaj poprawny email 📧'); return; }
+  const msg = el('alertMsg');
+  const show = (t, ok) => { msg.style.display = 'block'; msg.style.color = ok ? '#86efac' : '#fca5a5'; msg.innerHTML = t; };
+  if (!email || !email.includes('@')) { show('⚠️ Podaj poprawny adres e-mail.', false); return; }
+  const l = window.__offer || currentListing || {};
+  if (!l.city || !l.type) { show('⚠️ Nie udało się odczytać kryteriów z tej oferty.', false); return; }
+  const btn = el('alertBtn');
+  btn.disabled = true; btn.textContent = 'Zapisuję…';
   try {
-    await fetch('/api/subscribe', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ email, source: 'oferta-alert' })
+    const token = localStorage.getItem('finderdom_token');
+    const r = await fetch('/api/alerts', {
+      method:'POST',
+      headers: Object.assign({'Content-Type':'application/json'}, token ? {'Authorization': 'Bearer ' + token} : {}),
+      body: JSON.stringify({
+        email, type: l.type, city: l.city, transaction: l.transaction || 'sprzedaz',
+        price_to: l.price ? Math.round(l.price * 1.1) : null,
+        source_offer_id: l.id || null,
+      })
     });
-    alert('✓ Zapisano! Powiadomienia będą wysyłane gdy startujemy z alertami.');
-    el('alertEmail').value = '';
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || ('Błąd ' + r.status));
+    show(`✓ Alert aktywny: <b>${d.label}</b>.<br>Gdy pojawią się nowe pasujące ogłoszenia, dostaniesz je rano na ${email}.` + (token ? ' Listę alertów znajdziesz w <a href="/konto#alerty" style="color:#FFB800">Moje konto</a>.' : ''), true);
+    btn.textContent = '✓ Alert ustawiony';
   } catch (e) {
-    alert('Coś poszło nie tak, spróbuj ponownie.');
+    show('⚠️ ' + (e.message || 'Coś poszło nie tak, spróbuj ponownie.'), false);
+    btn.disabled = false; btn.textContent = 'Ustaw alert';
   }
 });
 

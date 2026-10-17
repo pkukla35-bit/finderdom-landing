@@ -3181,6 +3181,251 @@ async def mailing_unsubscribe(e: str = "", t: str = ""):
     return Response(content=page, media_type="text/html; charset=utf-8")
 
 
+# ============================================================================
+# ALERTY OFERT — zapisane kryteria + codzienny e-mail z nowymi pasującymi ofertami
+# ============================================================================
+
+class AlertCreate(BaseModel):
+    email: str
+    type: str = Field(min_length=2, max_length=20)          # mieszkanie | dom | dzialka | lokal
+    city: str = Field(min_length=2, max_length=80)
+    transaction: str = "sprzedaz"
+    price_to: Optional[float] = None
+    area_from: Optional[float] = None
+    rooms_from: Optional[int] = None
+    source_offer_id: Optional[str] = None
+
+
+def _alert_token(alert_id: str) -> str:
+    return _hmac.new(JWT_SECRET.encode(), f"alert:{alert_id}".encode(), _hashlib.sha256).hexdigest()[:24]
+
+
+def _alert_off_url(alert_id: str) -> str:
+    return f"{MAIL_PUBLIC_DOMAIN}/api/alerts/off?id={alert_id}&t={_alert_token(alert_id)}"
+
+
+def _alert_label(a: dict) -> str:
+    labels = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "działki", "lokal": "lokale", "pokoj": "pokoje"}
+    s = f"{labels.get(a.get('type'), a.get('type'))} · {a.get('city')} · {'wynajem' if a.get('transaction') == 'wynajem' else 'sprzedaż'}"
+    if a.get("price_to"):
+        s += f" · do {int(a['price_to']):,} zł".replace(",", " ")
+    if a.get("area_from"):
+        s += f" · od {int(a['area_from'])} m²"
+    if a.get("rooms_from"):
+        s += f" · od {int(a['rooms_from'])} pok."
+    return s
+
+
+def _alert_query(a: dict, since_iso: Optional[str]) -> dict:
+    q = {"is_stale": {"$ne": True}, "price": {"$gt": 1000},
+         "type": {"$regex": f"^{re.escape(a['type'])}", "$options": "i"},
+         "transaction_type": a.get("transaction") or "sprzedaz"}
+    city_re = {"$regex": _build_diacritic_regex(a["city"].strip())}
+    q["$or"] = [{"city": city_re}, {"district": city_re}]
+    if a.get("price_to"):
+        q["price"]["$lte"] = float(a["price_to"])
+    if a.get("area_from"):
+        q["area_m2"] = {"$gte": float(a["area_from"])}
+    if a.get("rooms_from"):
+        q["rooms"] = {"$gte": int(a["rooms_from"])}
+    if since_iso:
+        q["added_at"] = {"$gt": since_iso}
+    return q
+
+
+async def _alert_user_id(request: Request) -> Optional[str]:
+    auth = request.headers.get("authorization") or ""
+    if not auth.lower().startswith("bearer "):
+        return None
+    try:
+        payload = jwt.decode(auth[7:].strip(), JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload.get("sub")
+    except Exception:
+        return None
+
+
+@app.post("/api/alerts", status_code=201)
+async def create_alert(body: AlertCreate, request: Request):
+    """Zapisuje alert ofertowy. Działa bez konta (po e-mailu); zalogowany użytkownik widzi alerty w /konto."""
+    email = clean_email(body.email)
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise HTTPException(400, "Podaj poprawny adres e-mail")
+    a_type = body.type.strip().lower()
+    if a_type not in ("mieszkanie", "dom", "dzialka", "lokal", "pokoj"):
+        raise HTTPException(400, "Nieprawidłowy typ nieruchomości")
+    col = database().alerts
+    if await col.count_documents({"email": email, "active": True}) >= 20:
+        raise HTTPException(400, "Limit 20 aktywnych alertów dla jednego adresu e-mail")
+    now = datetime.now(timezone.utc)
+    doc = {
+        "email": email, "user_id": await _alert_user_id(request),
+        "type": a_type, "city": body.city.strip()[:80],
+        "transaction": "wynajem" if (body.transaction or "").lower() == "wynajem" else "sprzedaz",
+        "price_to": float(body.price_to) if body.price_to and body.price_to > 0 else None,
+        "area_from": float(body.area_from) if body.area_from and body.area_from > 0 else None,
+        "rooms_from": int(body.rooms_from) if body.rooms_from and body.rooms_from > 0 else None,
+        "source_offer_id": (body.source_offer_id or "")[:200] or None,
+        "active": True, "created_at": now, "last_checked_iso": now.isoformat(), "last_sent_at": None, "sent_count": 0,
+    }
+    dup = await col.find_one({"email": email, "active": True, "type": doc["type"], "city": doc["city"],
+                              "transaction": doc["transaction"], "price_to": doc["price_to"]})
+    if dup:
+        return {"ok": True, "id": str(dup["_id"]), "label": _alert_label(dup), "duplicate": True}
+    res = await col.insert_one(doc)
+    alert_id = str(res.inserted_id)
+    # Potwierdzenie (best-effort — jeśli poczta nie jest skonfigurowana, alert i tak działa od następnego cronu)
+    try:
+        html = _mail_layout(
+            "Alert ofertowy aktywny ✅",
+            f"Od teraz codziennie rano sprawdzamy nowe ogłoszenia ze wszystkich portali i wyślemy Ci te, które pasują do kryteriów: <b>{escape(_alert_label(doc))}</b>.",
+            ["Mail przychodzi tylko wtedy, gdy pojawi się coś nowego — bez pustych wiadomości.",
+             "Pokazujemy maks. 10 najnowszych ofert naraz, z linkiem do każdej.",
+             "Alert wyłączysz jednym kliknięciem w stopce każdej wiadomości."],
+            "🔍 Zobacz aktualne oferty", f"{MAIL_PUBLIC_DOMAIN}/szukaj?q={_urlp.quote(doc['city'])}&type={doc['type']}&trans={doc['transaction']}",
+            "Nie zakładałeś/aś tego alertu? Kliknij „Wyłącz alert” poniżej, nic więcej nie wyślemy.",
+            _alert_off_url(alert_id), auto=False,
+        ).replace("Wypisz się jednym kliknięciem", "Wyłącz alert")
+        await send_email(to=email, subject=f"Alert ofertowy aktywny: {_alert_label(doc)}", html=html)
+    except Exception as e:
+        logger.warning("alert confirm mail failed: %s", str(e)[:120])
+    return {"ok": True, "id": alert_id, "label": _alert_label(doc)}
+
+
+@app.get("/api/alerts")
+async def list_alerts(user: dict = Depends(current_user)):
+    out = []
+    async for a in database().alerts.find({"active": True, "$or": [{"user_id": str(user["_id"])}, {"email": user["email"]}]}).sort("created_at", -1):
+        out.append({"id": str(a["_id"]), "label": _alert_label(a), "email": a["email"], "type": a["type"], "city": a["city"],
+                    "transaction": a["transaction"], "price_to": a.get("price_to"),
+                    "created_at": a["created_at"].isoformat() if isinstance(a.get("created_at"), datetime) else a.get("created_at"),
+                    "last_sent_at": a["last_sent_at"].isoformat() if isinstance(a.get("last_sent_at"), datetime) else a.get("last_sent_at"),
+                    "sent_count": a.get("sent_count", 0)})
+    return {"alerts": out}
+
+
+@app.delete("/api/alerts/{alert_id}")
+async def delete_alert(alert_id: str, user: dict = Depends(current_user)):
+    try:
+        oid = ObjectId(alert_id)
+    except Exception:
+        raise HTTPException(400, "Nieprawidłowe id")
+    r = await database().alerts.update_one(
+        {"_id": oid, "$or": [{"user_id": str(user["_id"])}, {"email": user["email"]}]},
+        {"$set": {"active": False, "disabled_at": datetime.now(timezone.utc)}})
+    if not r.matched_count:
+        raise HTTPException(404, "Alert nie istnieje")
+    return {"ok": True}
+
+
+@app.get("/api/alerts/off")
+async def alert_off(id: str = "", t: str = ""):
+    """Wyłączenie alertu z linku w mailu (bez logowania)."""
+    try:
+        oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(400, "Nieprawidłowy link")
+    if not _hmac.compare_digest(_alert_token(id), t or ""):
+        raise HTTPException(400, "Nieprawidłowy link")
+    a = await database().alerts.find_one({"_id": oid})
+    if not a:
+        raise HTTPException(404, "Alert nie istnieje")
+    await database().alerts.update_one({"_id": oid}, {"$set": {"active": False, "disabled_at": datetime.now(timezone.utc)}})
+    page = f"""<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Alert wyłączony · FinderDom.pl</title></head>
+<body style="margin:0;background:#0B1836;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px">
+<div><div style="font-size:48px">🔕</div><h1 style="font-size:24px;margin:12px 0">Alert wyłączony</h1>
+<p style="color:#c5d0e6;max-width:420px">Nie wyślemy już ofert dla: <b>{escape(_alert_label(a))}</b>.</p>
+<a href="{MAIL_PUBLIC_DOMAIN}/szukaj" style="color:#FFB800">← Wróć do wyszukiwarki</a></div></body></html>"""
+    return Response(content=page, media_type="text/html; charset=utf-8")
+
+
+def _alert_offer_rows(offers: List[dict]) -> str:
+    rows = []
+    for o in offers:
+        oid = f"otodom-{o.get('external_id')}"
+        url = f"{MAIL_PUBLIC_DOMAIN}/oferta?id={_urlp.quote(oid)}"
+        price = int(o.get("price") or 0)
+        area = o.get("area_m2")
+        ppm2 = int(o.get("price_pm2") or (price / area if area else 0))
+        meta = " · ".join(x for x in [f"{int(area)} m²" if area else "", f"{o.get('rooms')} pok." if o.get("rooms") else "",
+                                      f"{ppm2:,} zł/m²".replace(",", " ") if ppm2 else ""] if x)
+        loc = escape(str(o.get("location") or o.get("city") or ""))
+        title = escape(str(o.get("title") or "Oferta"))[:90]
+        price_txt = f"{price:,} zł".replace(",", " ")
+        rows.append(
+            f'<tr><td style="padding:10px 0;border-bottom:1px solid #e5e7eb">'
+            f'<a href="{url}" style="color:#0B1836;font-weight:700;font-size:15px;text-decoration:none">{title}</a>'
+            f'<div style="color:#6b7280;font-size:13px;margin-top:2px">📍 {loc}</div>'
+            f'<div style="margin-top:4px"><b style="color:#b45309;font-size:16px">{price_txt}</b>'
+            f'<span style="color:#6b7280;font-size:13px"> &nbsp;{meta}</span></div></td></tr>'
+        )
+    return "".join(rows)
+
+
+async def _alerts_run(limit_alerts: int = 100) -> dict:
+    db = database()
+    now = datetime.now(timezone.utc)
+    checked = sent = skipped = 0
+    cursor = db.alerts.find({"active": True}).sort("last_checked_iso", 1).limit(limit_alerts)
+    async for a in cursor:
+        checked += 1
+        since = a.get("last_checked_iso") or (a["created_at"].isoformat() if isinstance(a.get("created_at"), datetime) else None)
+        try:
+            offers = await db.listings.find(_alert_query(a, since), {"external_id": 1, "title": 1, "price": 1, "area_m2": 1, "rooms": 1,
+                                                                   "price_pm2": 1, "city": 1, "location": 1}).sort("added_at", -1).limit(10).to_list(10)
+        except Exception as e:
+            logger.error("alert query failed %s: %s", a.get("_id"), str(e)[:120])
+            continue
+        await db.alerts.update_one({"_id": a["_id"]}, {"$set": {"last_checked_iso": now.isoformat()}})
+        if not offers:
+            skipped += 1
+            continue
+        label = _alert_label(a)
+        n = len(offers)
+        search_url = f"{MAIL_PUBLIC_DOMAIN}/szukaj?q={_urlp.quote(a['city'])}&type={a['type']}&trans={a.get('transaction') or 'sprzedaz'}&date=3d"
+        html = _mail_layout(
+            f"{n} {'nowa oferta' if n == 1 else ('nowe oferty' if n < 5 else 'nowych ofert')} dla Twojego alertu",
+            f"Kryteria: <b>{escape(label)}</b>. Oto najnowsze ogłoszenia ze wszystkich portali, które pojawiły się od ostatniego sprawdzenia:",
+            [], "🔍 Zobacz wszystkie w wyszukiwarce", search_url,
+            "Codziennie rano sprawdzamy nowe ogłoszenia — mail dostajesz tylko, gdy coś się pojawi.",
+            _alert_off_url(str(a["_id"])), auto=False,
+        ).replace('<table role="presentation" cellspacing="0" cellpadding="0" style="margin:4px 0 20px"></table>',
+                  f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:4px 0 20px">{_alert_offer_rows(offers)}</table>'
+                  ).replace("Wypisz się jednym kliknięciem", "Wyłącz ten alert")
+        mid = await send_email(to=a["email"], subject=f"🏠 {n} {'nowa oferta' if n == 1 else 'nowe oferty'}: {label}", html=html)
+        if mid:
+            sent += 1
+            await db.alerts.update_one({"_id": a["_id"]}, {"$set": {"last_sent_at": now}, "$inc": {"sent_count": 1}})
+        await db.alert_log.insert_one({"alert_id": a["_id"], "email": a["email"], "offers": n, "ok": bool(mid), "sent_at": now,
+                                       "error": None if mid else (LAST_EMAIL_ERROR.get("error") or "")[:200]})
+    return {"checked": checked, "sent": sent, "no_new": skipped}
+
+
+@app.get("/api/admin/alerts/run")
+@app.post("/api/admin/alerts/run")
+async def admin_alerts_run(request: Request, limit: int = 100):
+    """Codzienny cron (Vercel) — wysyła nowe oferty do aktywnych alertów."""
+    await _authorize_cron_or_admin(request)
+    if not (await _smtp_cfg() or await _email_key()):
+        return {"skipped": True, "reason": "email_not_configured"}
+    return await _alerts_run(limit_alerts=max(1, min(500, limit)))
+
+
+@app.get("/api/admin/alerts")
+async def admin_alerts_overview(admin: dict = Depends(require_admin)):
+    db = database()
+    active = await db.alerts.count_documents({"active": True})
+    total = await db.alerts.count_documents({})
+    log = []
+    async for l in db.alert_log.find({}).sort("sent_at", -1).limit(30):
+        log.append({"email": l["email"], "offers": l["offers"], "ok": l["ok"], "error": l.get("error"),
+                    "sent_at": l["sent_at"].isoformat() if isinstance(l.get("sent_at"), datetime) else l.get("sent_at")})
+    recent = []
+    async for a in db.alerts.find({"active": True}).sort("created_at", -1).limit(30):
+        recent.append({"email": a["email"], "label": _alert_label(a), "sent_count": a.get("sent_count", 0),
+                       "created_at": a["created_at"].isoformat() if isinstance(a.get("created_at"), datetime) else a.get("created_at")})
+    return {"active": active, "total": total, "recent": recent, "log": log}
+
+
 async def _authorize_cron_or_admin(request: Request) -> None:
     cron_secret_env = os.getenv("CRON_SECRET") or ""
     x_cron_secret = request.headers.get("x-cron-secret") or ""

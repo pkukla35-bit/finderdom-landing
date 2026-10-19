@@ -6,7 +6,7 @@ name: Apify CRON - HOT cities (co 1h)
 on:
   schedule:
     # Co 3 godziny (zamiast co 1h — oszczędzamy Apify budget)
-    - cron: '15 */3 * * *'
+    - cron: '15 */3 * * 1-5'   # pon–pt co 3h (weekendy wyłączone)
   workflow_dispatch:
     inputs:
       max_items:

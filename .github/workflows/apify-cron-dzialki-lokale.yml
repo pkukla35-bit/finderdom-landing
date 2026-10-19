@@ -6,7 +6,7 @@ name: Apify CRON - dzialki + lokale (1x dziennie hot cities)
 
 on:
   schedule:
-    - cron: '0 4 * * *'  # 04:00 UTC = 06:00 Warsaw
+    - cron: '0 4 * * 1-5'  # pon–pt 04:00 UTC = 06:00 Warsaw (weekendy wyłączone)
   workflow_dispatch:
     inputs:
       max_items:

@@ -90,7 +90,7 @@ jobs:
           RUN_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['data']['id'])" 2>/dev/null || echo "")
           DATASET_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['data']['defaultDatasetId'])" 2>/dev/null || echo "")
           if [ -z "$RUN_ID" ]; then
-            echo "❌ Actor start failed"
+            echo "❌ Actor start failed — odpowiedź Apify:"; echo "$RESP" | head -c 800
             exit 1
           fi
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT

@@ -4,7 +4,7 @@
 window.FD_GADS = {
   id: 'AW-18518225811',
   labels: {
-    valuation: '',        // zakup wyceny PDF (35 zł) — etykieta z nowego konta Ads 485-628-9752 (Cele → Konwersje → Zakup wyceny PDF → Konfiguracja tagu)
+    valuation: '0wptCKau5KAdEJPnlv5E',        // zakup wyceny PDF (35 zł) — konto Ads 485-628-9752
     plan: '',             // zakup planu Osobisty 45 zł / Firmowy 199 zł
     signup_business: '',  // rejestracja konta firmowego (lead)
     signup: '',           // rejestracja konta prywatnego

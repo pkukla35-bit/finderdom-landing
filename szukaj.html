@@ -1448,6 +1448,14 @@ function renderPage() {
   if (!window.__cardImgFallback) {
     window.__cardImgFallback = function(img) {
       try {
+        // Bezpośredni CDN (np. OLX) zablokowany u klienta (adblock / ochrona przed śledzeniem)? → spróbuj przez nasz serwer
+        const cur = img.getAttribute('src') || '';
+        if (/^https?:\/\//.test(cur) && !cur.includes('/api/img?') && !cur.includes('wsrv.nl') && !img.dataset.proxied) {
+          img.dataset.proxied = '1';
+          img.src = '/api/img?u=' + encodeURIComponent(cur);
+          return;
+        }
+        img.dataset.proxied = '';
         const imgs = JSON.parse(img.dataset.imgs || '[]');
         let idx = parseInt(img.dataset.idx || '0', 10);
         const nextIdx = idx + 1;

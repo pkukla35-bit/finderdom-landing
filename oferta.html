@@ -1232,6 +1232,13 @@ async function renderOffer(l, all) {
     galEmoji.style.display = 'none';
     window.__failedImgs = 0;
     galPhoto.onerror = () => {
+      // Bezpośredni CDN (np. OLX) zablokowany u klienta? → ten sam obraz przez nasz serwer, zanim uznamy go za zepsuty
+      const curSrc = galPhoto.getAttribute('src') || '';
+      if (/^https?:\/\//.test(curSrc) && !curSrc.includes('/api/img?') && !curSrc.includes('wsrv.nl') && galPhoto.dataset.proxied !== curSrc) {
+        galPhoto.dataset.proxied = curSrc;
+        galPhoto.src = '/api/img?u=' + encodeURIComponent(curSrc);
+        return;
+      }
       // If image fails, try next; if all fail — fallback emoji + info note
       const imgs = window.__galImgs || [];
       window.__failedImgs = (window.__failedImgs || 0) + 1;
@@ -1269,7 +1276,7 @@ async function renderOffer(l, all) {
     galDots.style.display = 'flex';
     // Render thumbnails
     galThumbs.innerHTML = galleryImgs.map((src, i) =>
-      `<button class="thumb${i===0?' active':''}" type="button" data-thumb-idx="${i}" aria-label="Zdjęcie ${i+1}"><img src="${src}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'"></button>`
+      `<button class="thumb${i===0?' active':''}" type="button" data-thumb-idx="${i}" aria-label="Zdjęcie ${i+1}"><img src="${src}" alt="" loading="lazy" onerror="if(/^https?:/.test(this.getAttribute('src'))&&!this.dataset.p){this.dataset.p='1';this.src='/api/img?u='+encodeURIComponent(this.getAttribute('src'));}else{this.parentElement.style.display='none';}"></button>`
     ).join('');
     galThumbs.style.display = 'grid';
   } else {

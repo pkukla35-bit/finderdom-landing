@@ -1729,6 +1729,26 @@ async def report_stale(request: Request, id: str = "", reason: str = "broken_ima
     _report_stale_ratelimit[id] = now_ts
     try:
         coll = database().listings
+        doc = await coll.find_one({"external_id": id, "is_stale": {"$ne": True}}, {"images": 1, "url": 1})
+        if not doc:
+            return {"ok": True, "marked": 0}
+        # Weryfikacja po stronie serwera: jeśli pierwsze zdjęcie jest osiągalne, to problem jest u klienta
+        # (adblock / ochrona przed śledzeniem blokująca CDN portalu) — NIE oznaczamy oferty jako nieaktualnej.
+        first_img = next((x for x in (doc.get("images") or []) if isinstance(x, str) and x.startswith("http")), None)
+        if first_img:
+            try:
+                host = (urlparse(first_img).hostname or "").lower()
+                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36",
+                           "Accept": "image/webp,image/*,*/*;q=0.8"}
+                ref = _referer_for_host(host)
+                if ref:
+                    headers["Referer"] = ref
+                async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+                    r = await client.get(first_img, headers=headers)
+                if r.status_code < 400 and r.headers.get("content-type", "").lower().startswith("image/"):
+                    return {"ok": True, "marked": 0, "server_image_ok": True}
+            except Exception:
+                pass  # serwer też nie dał rady → traktujemy zgłoszenie jako wiarygodne
         r = await coll.update_one(
             {"external_id": id, "is_stale": {"$ne": True}},
             {"$set": {"is_stale": True, "stale_since": datetime.now(timezone.utc), "stale_reason": reason[:50]}},

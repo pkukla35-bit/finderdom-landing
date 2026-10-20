@@ -1542,15 +1542,19 @@ async def admin_timeseries(days: int = 30, admin: dict = Depends(require_admin))
 
 # --- Automatyczne czyszczenie nieaktualnych ofert (HEAD-check URL) ---
 async def _olx_first_image_dead(images: list, ua: str) -> bool:
-    """True, gdy pierwsze zdjęcie OLX zwraca 404 (OLX kasuje pliki po zakończeniu ogłoszenia).
+    """True, gdy WSZYSTKIE zapisane zdjęcia OLX (max 2 sprawdzane) zwracają 404 — OLX kasuje pliki po zakończeniu
+    ogłoszenia. Wymóg 2 zdjęć chroni przed fałszywym trafieniem, gdy sprzedający podmienił tylko pierwsze zdjęcie.
     Brak zdjęć / timeout / inne kody → False (nie oznaczamy w ciemno)."""
-    img = next((x for x in images if isinstance(x, str) and "olxcdn" in x), None)
-    if not img:
+    imgs = [x for x in images if isinstance(x, str) and "olxcdn" in x][:2]
+    if not imgs:
         return False
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
-            r = await client.head(img, headers={"User-Agent": ua, "Referer": "https://www.olx.pl/"})
-            return r.status_code == 404
+            for img in imgs:
+                r = await client.head(img, headers={"User-Agent": ua, "Referer": "https://www.olx.pl/"})
+                if r.status_code != 404:
+                    return False
+            return True
     except Exception:
         return False
 

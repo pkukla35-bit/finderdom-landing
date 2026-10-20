@@ -1711,6 +1711,46 @@ async def admin_cleanup_stale(
 # --- Zgloszenie nieaktualnej oferty (frontend gdy wszystkie zdjecia zawiodly) ---
 _report_stale_ratelimit: "dict[str, float]" = {}  # id → last_seen_ts
 
+
+@app.post("/api/admin/restore-stale-images")
+async def admin_restore_stale_images(days: int = 7, limit: int = 400, admin: dict = Depends(require_admin)):
+    """Przywraca oferty błędnie oznaczone jako nieaktualne przez przeglądarki blokujące CDN zdjęć
+    (stale_reason=broken_images): jeśli serwer widzi pierwsze zdjęcie → zdejmuje is_stale."""
+    coll = database().listings
+    since = datetime.now(timezone.utc) - timedelta(days=max(1, min(60, days)))
+    cur = coll.find({"is_stale": True, "stale_reason": "broken_images", "stale_since": {"$gte": since}},
+                    {"external_id": 1, "images": 1}).limit(max(1, min(2000, limit)))
+    docs = await cur.to_list(length=2000)
+    sem = asyncio.Semaphore(12)
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36",
+               "Accept": "image/webp,image/*,*/*;q=0.8"}
+
+    async def check(doc):
+        img = next((x for x in (doc.get("images") or []) if isinstance(x, str) and x.startswith("http")), None)
+        if not img:
+            return doc["_id"], False
+        h = dict(headers)
+        ref = _referer_for_host((urlparse(img).hostname or "").lower())
+        if ref:
+            h["Referer"] = ref
+        async with sem:
+            try:
+                async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+                    r = await client.get(img, headers=h)
+                return doc["_id"], (r.status_code < 400 and r.headers.get("content-type", "").lower().startswith("image/"))
+            except Exception:
+                return doc["_id"], False
+
+    results = await asyncio.gather(*(check(d) for d in docs))
+    ok_ids = [i for i, ok in results if ok]
+    restored = 0
+    if ok_ids:
+        r = await coll.update_many({"_id": {"$in": ok_ids}},
+                                   {"$unset": {"is_stale": "", "stale_since": "", "stale_reason": ""},
+                                    "$set": {"restored_at": datetime.now(timezone.utc)}})
+        restored = r.modified_count
+    return {"checked": len(docs), "restored": restored, "still_stale": len(docs) - len(ok_ids)}
+
 @app.post("/api/report-stale")
 async def report_stale(request: Request, id: str = "", reason: str = "broken_images"):
     """

@@ -24,10 +24,6 @@
     {
       "path": "/api/admin/alerts/run?limit=300",
       "schedule": "30 6 * * *"
-    },
-    {
-      "path": "/api/admin/olx-image-sweep?limit=1500&concurrency=30",
-      "schedule": "0 4 * * *"
     }
   ],
   "rewrites": [

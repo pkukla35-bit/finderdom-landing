@@ -184,6 +184,14 @@
       "destination": "/zespol.html"
     },
     {
+      "source": "/raporty",
+      "destination": "/raporty.html"
+    },
+    {
+      "source": "/raporty/:slug",
+      "destination": "/raporty/:slug.html"
+    },
+    {
       "source": "/blog",
       "destination": "/blog.html"
     },

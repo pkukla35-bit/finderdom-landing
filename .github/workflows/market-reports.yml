@@ -1,0 +1,46 @@
+name: Raporty rynkowe (tygodniowe, z własnych danych)
+
+on:
+  schedule:
+    - cron: '30 7 * * 1'   # poniedziałek 07:30 UTC = 09:30 Warsaw, po porannym scrapingu
+  workflow_dispatch:
+    inputs:
+      cities:
+        description: 'Liczba miast (TOP wg liczby ofert)'
+        required: false
+        default: '20'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: market-reports
+  cancel-in-progress: false
+
+jobs:
+  reports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pymongo==4.8.0
+      - name: Generuj raporty
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+        run: python scripts/market_reports.py --cities "${{ github.event.inputs.cities || '20' }}"
+      - name: Commit & push
+        run: |
+          git config user.name  "FinderDom Bot"
+          git config user.email "bot@finderdom.pl"
+          git add raporty raporty.html data/reports sitemap.xml
+          if git diff --cached --quiet; then echo "Brak zmian"; exit 0; fi
+          git commit -m "chore(raporty): tygodniowe raporty rynkowe $(date -u +%Y-%m-%d) [skip ci]"
+          for i in 1 2 3 4 5; do
+            if git push; then exit 0; fi
+            git pull --rebase && sleep 5
+          done
+          exit 1

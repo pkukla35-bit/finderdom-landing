@@ -713,6 +713,7 @@ gtag('set', 'url_passthrough', false);
   <div class="footer">
     <div>© 2026 FinderDom.pl</div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
+      <a href="/raporty">📊 Raporty</a>
       <a href="/blog">📝 Blog</a>
       <a href="/pomoc">💬 Pomoc</a>
       <a href="/o-nas">O nas</a>
@@ -782,7 +783,7 @@ gtag('set', 'url_passthrough', false);
     const el = document.getElementById('headerAuth');
     if (!el) return;
     const token = localStorage.getItem('finderdom_token');
-    const pomocLink = '<a href="/blog" class="a-nav" title="Blog i porady">📝 Blog</a><a href="/pomoc" class="a-nav" title="Centrum pomocy">💬 Pomoc</a>';
+    const pomocLink = '<a href="/raporty" class="a-nav" title="Tygodniowe raporty cen">📊 Raporty</a><a href="/blog" class="a-nav" title="Blog i porady">📝 Blog</a><a href="/pomoc" class="a-nav" title="Centrum pomocy">💬 Pomoc</a>';
     if (token) {
       el.innerHTML = pomocLink + '<a href="/konto" class="a-cta">👤 Moje konto</a>';
     } else {

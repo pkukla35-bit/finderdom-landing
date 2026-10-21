@@ -32,6 +32,10 @@ MONTHS = ["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca",
 PL = str.maketrans("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ", "acelnoszzACELNOSZZ")
 
 
+def display_city(c: str) -> str:
+    return " ".join(w[:1].upper() + w[1:] for w in c.split())
+
+
 def slugify(s: str) -> str:
     s = s.translate(PL).lower()
     s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
@@ -90,8 +94,8 @@ def top_cities(db, n: int):
 
 
 def load_active(db, city: str, ptype: str):
-    q = {"city": city, "type": {"$regex": f"^{ptype}", "$options": "i"}, "transaction_type": "sprzedaz",
-         "is_stale": {"$ne": True}, "price": {"$gt": 50000}, "area_m2": {"$gt": 10}}
+    q = {"city": {"$regex": f"^{re.escape(city)}$", "$options": "i"}, "type": {"$regex": f"^{ptype}", "$options": "i"},
+         "transaction_type": "sprzedaz", "is_stale": {"$ne": True}, "price": {"$gt": 50000}, "area_m2": {"$gt": 10}}
     proj = {"price": 1, "area_m2": 1, "rooms": 1, "district": 1, "seller_type": 1, "market_type": 1,
             "added_at": 1, "portals": 1, "sources": 1, "external_id": 1, "title": 1, "price_pm2": 1, "build_year": 1}
     docs = list(db.listings.find(q, proj))
@@ -128,9 +132,10 @@ def compute(db, city: str, ptype: str, week_start: datetime, hist: list):
     if len(docs) < 40:
         return None
     ws = week_start.isoformat()
+    we = (week_start + timedelta(days=7)).isoformat()
     prev_ws = (week_start - timedelta(days=7)).isoformat()
     pp = [d["ppm2"] for d in docs]
-    new_week = [d for d in docs if (d.get("added_at") or "") >= ws]
+    new_week = [d for d in docs if ws <= (d.get("added_at") or "") < we]
     new_prev = [d for d in docs if prev_ws <= (d.get("added_at") or "") < ws]
 
     def bucket_rooms(r):
@@ -211,7 +216,7 @@ def commentary(city, ptype, s, week_no):
             out.append(f"Względem poprzedniego tygodnia mediana <strong>{kier} o {fmt_pct(abs(s['wow']), signed=False)}</strong>.")
     if s["mom"] is not None:
         out.append(f"W horyzoncie 4 tygodni zmiana wynosi {fmt_pct(s['mom'])}.")
-    if s["new_prev"]:
+    if s["new_prev"] >= 50 and s["new_week"] >= 50:
         d = (s["new_week"] - s["new_prev"]) / s["new_prev"] * 100
         out.append(f"Nowych ogłoszeń pojawiło się <strong>{fmt_int(s['new_week'])}</strong> (tydzień wcześniej {fmt_int(s['new_prev'])}, "
                    f"zmiana {fmt_pct(d)}) — {'podaż rośnie' if d > 10 else ('podaż maleje' if d < -10 else 'podaż bez większych zmian')}.")
@@ -296,9 +301,9 @@ def sparkline(values):
             f'<text x="{w-5}" y="12" fill="#8ba3d4" font-size="11" text-anchor="end">{fmt_int(hi)} zł/m²</text></svg>')
 
 
-def delta_html(x, invert=False):
+def delta_html(x, none_label="pierwszy pomiar"):
     if x is None:
-        return '<div class="d flat">pierwszy pomiar</div>'
+        return f'<div class="d flat">{none_label}</div>'
     cls = "flat" if abs(x) < 0.3 else ("up" if x > 0 else "down")
     return f'<div class="d {cls}">{fmt_pct(x)} t/t</div>'
 
@@ -328,8 +333,8 @@ def render_report(city, ptype, s, week_no, year, week_start, hist, slug_prev):
     h.append(f'<div class="kpi"><div class="v">{fmt_int(s["median_ppm2"])} zł</div><div class="l">mediana ceny za m²</div>{delta_html(s["wow"])}</div>')
     h.append(f'<div class="kpi"><div class="v">{fmt_int(s["median_price"])} zł</div><div class="l">mediana ceny oferty</div><div class="d flat">mediana metrażu {fmt_int(s["median_area"])} m²</div></div>')
     h.append(f'<div class="kpi"><div class="v">{fmt_int(s["n"])}</div><div class="l">aktywnych ofert sprzedaży</div><div class="d flat">{fmt_pct(s["multi_pct"], signed=False)} na ≥2 portalach</div></div>')
-    nw_d = ((s["new_week"] - s["new_prev"]) / s["new_prev"] * 100) if s["new_prev"] else None
-    h.append(f'<div class="kpi"><div class="v">{fmt_int(s["new_week"])}</div><div class="l">nowych ogłoszeń w tym tygodniu</div>{delta_html(nw_d)}</div>')
+    nw_d = ((s["new_week"] - s["new_prev"]) / s["new_prev"] * 100) if (s["new_prev"] >= 50 and s["new_week"] >= 50) else None
+    h.append(f'<div class="kpi"><div class="v">{fmt_int(s["new_week"])}</div><div class="l">nowych ogłoszeń w tym tygodniu</div>{delta_html(nw_d, "vs poprzedni tydzień: brak pełnych danych")}</div>')
     if s["rcn"]:
         h.append(f'<div class="kpi"><div class="v">{fmt_int(s["rcn"]["median_ppm2"])} zł</div><div class="l">mediana cen transakcyjnych (RCN, 12 mies.)</div>'
                  f'<div class="d {"up" if s["gap"] and s["gap"] > 0 else "down"}">oferty {fmt_pct(s["gap"])} vs transakcje</div></div>')
@@ -476,7 +481,7 @@ def main():
     OUT_DIR.mkdir(exist_ok=True)
     HIST_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    cities = top_cities(db, args.cities)
+    cities = [display_city(c) for c in top_cities(db, args.cities)]
     print(f"Tydzień {week_key} ({week_start.date()} – {(week_start + timedelta(days=6)).date()}), miasta: {cities}")
     entries, new_urls = [], []
     for city in cities:

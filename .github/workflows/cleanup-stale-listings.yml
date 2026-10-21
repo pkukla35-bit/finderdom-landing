@@ -67,6 +67,16 @@ jobs:
           done
 
           echo ""
+          echo "--- OLX: zakończone ogłoszenia (404 na zdjęciach) ---"
+          for i in 1 2 3; do
+            R=$(curl -sS -X POST "${API_BASE}/api/admin/olx-image-sweep?limit=1200&concurrency=30&dry_run=${DRY}" \
+              -H "X-Cron-Secret: ${CRON_SECRET}" --max-time 120 || echo '{}')
+            echo "OLX sweep $i: $R"
+            REM=$(echo "$R" | python3 -c "import sys,json;print(json.load(sys.stdin).get('remaining',0))" 2>/dev/null || echo 0)
+            [ "$REM" = "0" ] && break
+          done
+
+          echo ""
           echo "======================================"
           echo "  PODSUMOWANIE (dry_run=$DRY_RUN)"
           echo "  Sprawdzono:   $TOTAL_CHECKED ofert"

@@ -210,6 +210,21 @@ gtag('set', 'url_passthrough', false);
   .card-price .p{font-size:18px;font-weight:900;color:#fff}
   .card-price .pm2{font-size:11px;color:#8ba3d4}
   .card-rata{font-size:11px;color:#FFB800;margin-top:4px;font-weight:700;opacity:.9}
+  /* CRM firmy na karcie (plan Firmowy) */
+  .card-crm{margin-top:12px;padding-top:10px;border-top:1px dashed rgba(255,184,0,0.25)}
+  .card-crm.busy{opacity:.55;pointer-events:none}
+  .card-crm .crm-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:10px;color:#8ba3d4;margin-bottom:7px}
+  .card-crm .crm-head b{color:#FFB800;font-weight:800}
+  .card-crm .crm-head span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card-crm .crm-btns{display:flex;flex-wrap:wrap;gap:5px}
+  .card-crm .crm-btn{font-size:10px;font-weight:800;padding:6px 9px;border-radius:100px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:#cbd5e1;cursor:pointer;line-height:1;user-select:none;min-height:24px;display:inline-flex;align-items:center}
+  .card-crm .crm-btn:hover{border-color:rgba(255,184,0,0.6);color:#fff}
+  .card-crm .crm-btn.c{border-color:#FFB800;background:rgba(255,184,0,0.18);color:#FFD166}
+  .card-crm .crm-btn.s{border-color:#4ade80;background:rgba(74,222,128,0.18);color:#86efac}
+  .card-crm .crm-btn.d{border-color:#60a5fa;background:rgba(96,165,250,0.18);color:#93c5fd}
+  .card-crm .crm-btn.o{border-color:#f87171;background:rgba(248,113,113,0.18);color:#fca5a5}
+  .card-crm .crm-btn.x{opacity:.6}
+  .card-crm .crm-note{margin-top:7px;font-size:11px;color:#a3b3d1;background:rgba(255,255,255,0.04);border-radius:8px;padding:6px 8px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 
   /* Load more */
   .load-more{text-align:center;margin-top:32px;padding-bottom:40px}
@@ -1311,10 +1326,92 @@ async function loadCrmStatuses() {
     const data = await r.json();
     if (!data.crm) return;
     window.CRM_STATUSES = data.statuses || {};
+    window.CRM_ENABLED = true;
     // Show CRM filter chips
     const bar = document.getElementById('crmFilters');
     if (bar) bar.style.display = 'block';
   } catch (e) { console.error('CRM load:', e); }
+}
+
+// --- CRM na karcie (plan Firmowy: właściciel + agenci) — oznaczanie bez otwierania oferty ---
+const CRM_MAP = {
+  contacted: {bg:'rgba(255,184,0,0.95)', t:'#0b1220', cls:'c', lbl:'☎️ Był kontakt'},
+  scheduled: {bg:'rgba(74,222,128,0.95)', t:'#052e16', cls:'s', lbl:'📅 Umówione'},
+  direct:    {bg:'rgba(96,165,250,0.95)', t:'#0c1e3e', cls:'d', lbl:'🚷 Bez pośrednika'},
+  outdated:  {bg:'rgba(248,113,113,0.95)', t:'#3f1010', cls:'o', lbl:'🚫 Nieaktualna'},
+};
+function escCrm(s) { return String(s || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+function crmPillHtml(st) {
+  const s = st && CRM_MAP[st.status]; if (!s) return '';
+  return `<div style="position:absolute;top:34px;right:10px;background:${s.bg};color:${s.t};padding:5px 12px;border-radius:100px;font-size:11px;font-weight:900;box-shadow:0 3px 10px rgba(0,0,0,0.35);z-index:5">${s.lbl}</div>`;
+}
+function crmWhen(iso) {
+  if (!iso) return '';
+  const d = new Date(iso); if (isNaN(d)) return '';
+  const now = new Date(); const sameDay = d.toDateString() === now.toDateString();
+  const yest = new Date(now); yest.setDate(now.getDate() - 1);
+  const hm = d.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'});
+  if (sameDay) return `dziś ${hm}`;
+  if (d.toDateString() === yest.toDateString()) return `wczoraj ${hm}`;
+  return d.toLocaleDateString('pl-PL', {day:'2-digit', month:'2-digit'}) + ' ' + hm;
+}
+function crmBarInnerHtml(id) {
+  const st = (window.CRM_STATUSES || {})[id];
+  const who = st && st.marked_by ? escCrm(st.marked_by.split('@')[0]) : '';
+  const meta = st && st.status
+    ? `<span title="${escCrm(st.marked_by || '')}">${who}${who ? ' · ' : ''}${crmWhen(st.updated_at)}</span>`
+    : `<span style="color:#64748b">Nieoznaczona — kliknij status</span>`;
+  const btns = Object.keys(CRM_MAP).map(k => {
+    const s = CRM_MAP[k]; const on = st && st.status === k;
+    return `<span role="button" tabindex="0" class="crm-btn${on ? ' ' + s.cls : ''}" data-crm-set="${on ? '' : k}" data-crm-id="${id}" title="${on ? 'Kliknij, żeby zdjąć status' : 'Oznacz: ' + s.lbl}">${s.lbl}</span>`;
+  }).join('');
+  const rm = st && st.status ? `<span role="button" tabindex="0" class="crm-btn x" data-crm-set="" data-crm-id="${id}" title="Usuń oznaczenie">✕</span>` : '';
+  const note = st && st.note ? `<div class="crm-note" title="Notatkę zmienisz na otwartej ofercie">📝 ${escCrm(st.note)}</div>` : '';
+  return `<div class="crm-head"><span>🏢 <b>CRM firmy</b></span>${meta}</div><div class="crm-btns">${btns}${rm}</div>${note}`;
+}
+async function crmSetFromCard(id, status, el) {
+  const token = localStorage.getItem('finderdom_token');
+  if (!token) { window.location.href = '/logowanie'; return; }
+  const bar = document.querySelector(`[data-crm-bar="${CSS.escape(id)}"]`);
+  if (bar) bar.classList.add('busy');
+  try {
+    const prev = (window.CRM_STATUSES || {})[id] || {};
+    const r = await fetch('/api/offer-status', {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+      body: JSON.stringify({offer_id: id, status: status || null, note: prev.note || ''}),
+    });
+    if (r.status === 401) { window.location.href = '/logowanie'; return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (status) {
+      let me = '';
+      try { me = (JSON.parse(localStorage.getItem('finderdom_user') || '{}').email) || ''; } catch {}
+      window.CRM_STATUSES[id] = {status, note: prev.note || '', marked_by: me || prev.marked_by || '', updated_at: new Date().toISOString()};
+    } else {
+      delete window.CRM_STATUSES[id];
+    }
+    document.querySelectorAll(`[data-crm-bar="${CSS.escape(id)}"]`).forEach(b => { b.innerHTML = crmBarInnerHtml(id); });
+    document.querySelectorAll(`[data-crm-pill="${CSS.escape(id)}"]`).forEach(p => { p.innerHTML = crmPillHtml(window.CRM_STATUSES[id]); });
+  } catch (e) {
+    console.error('CRM set:', e);
+    if (el) { const t = el.textContent; el.textContent = '❌ błąd'; setTimeout(() => { el.textContent = t; }, 1500); }
+  } finally {
+    if (bar) bar.classList.remove('busy');
+  }
+}
+function bindCrmCardClicks(grid) {
+  if (grid.dataset.crmBound) return;
+  grid.dataset.crmBound = '1';
+  const handler = (e) => {
+    const btn = e.target.closest('[data-crm-set]');
+    if (!btn) return;
+    e.preventDefault(); e.stopPropagation();
+    if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+    crmSetFromCard(btn.dataset.crmId, btn.dataset.crmSet, btn);
+  };
+  grid.addEventListener('click', handler, true);
+  grid.addEventListener('keydown', handler, true);
+  // Nie pozwól, by pointerdown/touch na przycisku CRM uruchomił karuzelę lub otwarcie oferty
+  grid.addEventListener('pointerdown', (e) => { if (e.target.closest('[data-crm-set]')) e.stopPropagation(); }, true);
 }
 
 function renderListings(list) {
@@ -1425,16 +1522,8 @@ function renderPage() {
       </div>`;
     // CRM status badge (Firmowy only)
     const crmSt = (window.CRM_STATUSES || {})[l.id];
-    const crmBadgeHtml = crmSt ? (() => {
-      const map = {
-        contacted:  {c:'#FFB800',bg:'rgba(255,184,0,0.95)',t:'#0b1220',lbl:'☎️ Był kontakt'},
-        scheduled:  {c:'#4ade80',bg:'rgba(74,222,128,0.95)',t:'#052e16',lbl:'📅 Umówione'},
-        direct:     {c:'#60a5fa',bg:'rgba(96,165,250,0.95)',t:'#0c1e3e',lbl:'🚷 Bez pośrednika'},
-        outdated:   {c:'#f87171',bg:'rgba(248,113,113,0.95)',t:'#3f1010',lbl:'🚫 Nieaktualna'},
-      };
-      const s = map[crmSt.status]; if (!s) return '';
-      return `<div style="position:absolute;top:10px;right:10px;background:${s.bg};color:${s.t};padding:5px 12px;border-radius:100px;font-size:11px;font-weight:900;box-shadow:0 3px 10px rgba(0,0,0,0.35);z-index:5">${s.lbl}</div>`;
-    })() : '';
+    const crmBadgeHtml = `<div data-crm-pill="${l.id}">${crmPillHtml(crmSt)}</div>`;
+    const crmBarHtml = window.CRM_ENABLED ? `<div class="card-crm" data-crm-bar="${l.id}">${crmBarInnerHtml(l.id)}</div>` : '';
     const cardHtml = `
       <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="card">
         <div class="card-img ${l.img_class}${hasPhoto ? ' has-photo' : ''}">
@@ -1457,6 +1546,7 @@ function renderPage() {
             <span class="pm2">${l.price_pm2_display}</span>
           </div>
           ${(l.transaction !== 'wynajem' && window.FD_rataOd && FD_rataOd(l.price)) ? `<div class="card-rata">💳 rata od ~${Math.round(FD_rataOd(l.price)).toLocaleString('pl-PL')} zł/mies.</div>` : ''}
+          ${crmBarHtml}
         </div>
       </a>
     `;
@@ -1468,6 +1558,7 @@ function renderPage() {
   }).join('');
   grid.innerHTML = cardsHtml;
   if (window.__locked) grid.insertAdjacentHTML('beforeend', paywallCardHtml());
+  if (window.CRM_ENABLED) bindCrmCardClicks(grid);
 
   // Fallback dla zdjęć karty: próbuje kolejnego z listy imgs, potem og-image (data-og), a jak wszystkie zawiodą — pokazuje placeholder emoji
   if (!window.__cardImgFallback) {

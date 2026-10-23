@@ -1910,7 +1910,8 @@ function updateSubType(type){
     const isMainType = g.querySelector('#propertyType');
     const isSubType = g.id === 'subTypeGroup';
     const isRadiusSidebar = g.id === 'radiusSidebarGroup'; // trzymany ukryty (dane dla filtra z hero)
-    if (isMainType || isSubType || isRadiusSidebar) return; // handled separately
+    const isCrm = g.id === 'crmFilters'; // widoczny tylko dla planu Firmowego (steruje loadCrmStatuses)
+    if (isMainType || isSubType || isRadiusSidebar || isCrm) return; // handled separately
     const titleText = title.textContent;
     const isHidden = hiddenTitles.some(h => titleText.includes(h));
     g.style.display = isHidden ? 'none' : 'block';

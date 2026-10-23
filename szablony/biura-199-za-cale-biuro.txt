@@ -2,7 +2,7 @@ Temat: Całe biuro na wszystkich portalach i we wszystkich województwach — 19
 
 Dzień dobry,
 
-ile Państwa biuro płaci dziś za dostęp do ofert? Zwykle wygląda to tak: osobny abonament na każdy portal, osobny pakiet na każde województwo i osobny login dla każdego agenta. Zbudowaliśmy FinderDom.pl, żeby to uprościć — i policzyć inaczej.
+ile Państwa biuro płaci dziś za dostęp do ofert? Zwykle wygląda to tak: osobny pakiet na każde województwo i osobny login dla każdego agenta. Zbudowaliśmy FinderDom.pl, żeby to uprościć — i policzyć inaczej.
 
 PLAN FIRMOWY FINDERDOM — 199 zł/mies ZA CAŁE BIURO:
 

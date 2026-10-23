@@ -213,8 +213,14 @@ gtag('set', 'url_passthrough', false);
 
   /* Load more */
   .load-more{text-align:center;margin-top:32px;padding-bottom:40px}
-  .load-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:14px 32px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.15s}
-  .load-btn:hover{background:rgba(255,184,0,0.1);border-color:#FFB800;color:#FFB800}
+  .pager{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;margin:8px 0 4px}
+  .pg-btn{min-width:44px;height:44px;padding:0 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s}
+  .pg-btn:hover:not([disabled]){border-color:rgba(255,184,0,0.6);background:rgba(255,184,0,0.12)}
+  .pg-btn.active{background:#FFB800;border-color:#FFB800;color:#0B1836;cursor:default}
+  .pg-btn[disabled]{opacity:.35;cursor:default}
+  .pg-arrow{font-size:20px;line-height:1}
+  .pg-dots{color:#8ba3d4;padding:0 4px;font-weight:800}
+  .pg-info{flex-basis:100%;text-align:center;font-size:12px;color:#8ba3d4;margin-top:6px}
 
   /* Empty state */
   .empty{text-align:center;padding:60px 20px;color:#8ba3d4}
@@ -495,7 +501,7 @@ gtag('set', 'url_passthrough', false);
     <div class="fd-ad-slot" data-slot="listing-bottom" data-format="horizontal"></div>
 
     <div class="load-more">
-      <button id="loadMoreBtn" class="load-btn" style="display:none">Załaduj więcej ofert ↓</button>
+      <nav id="pager" class="pager" aria-label="Strony wyników"></nav>
     </div>
   </main>
 
@@ -505,7 +511,7 @@ gtag('set', 'url_passthrough', false);
 // Real listings loaded from /data/listings.json (updated daily by scrapers)
 let LISTINGS = [];
 let CURRENT_FILTERED = [];
-const PAGE_SIZE = 60;
+const PAGE_SIZE = 40;
 let currentPage = 1;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1366,13 +1372,15 @@ function paywallCardHtml() {
 
 function renderPage() {
   const grid = document.getElementById('grid');
-  const btn = document.getElementById('loadMoreBtn');
+  const pager = document.getElementById('pager');
   if (CURRENT_FILTERED.length === 0) {
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Brak wyników</div>Zmień filtry aby zobaczyć więcej ofert</div>';
-    if (btn) btn.style.display = 'none';
+    if (pager) pager.innerHTML = '';
     return;
   }
-  const slice = CURRENT_FILTERED.slice(0, currentPage * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(CURRENT_FILTERED.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const slice = CURRENT_FILTERED.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const cardsHtml = slice.map((l, idx) => {
     const areaTxt = (l.area_m2 && l.area_m2 > 0) ? `${l.area_m2} m²` : '— m²';
     let specs = `📐 ${areaTxt}`;
@@ -1612,25 +1620,36 @@ function renderPage() {
     const med = prices.length ? prices[Math.floor(prices.length / 2)] : 600000;
     window.FD_renderKredyt(document.getElementById('kredytBox'), heroP || med, { source: 'szukaj' });
   }
-  // Load more button
-  const remaining = CURRENT_FILTERED.length - slice.length;
-  if (btn) {
-    if (remaining > 0 && !window.__locked) {
-      btn.style.display = 'inline-block';
-      btn.textContent = `Załaduj więcej ofert ↓ (${remaining.toLocaleString('pl-PL')} pozostało)`;
-    } else {
-      btn.style.display = 'none';
-    }
-  }
+  // Numerowana paginacja na dole (1 2 3 … N)
+  renderPager(totalPages);
 }
 
-// Load more button click
-document.getElementById('loadMoreBtn')?.addEventListener('click', () => {
-  currentPage++;
-  renderPage();
-  // scroll do nowych ofert
-  window.scrollBy({top: 400, behavior: 'smooth'});
-});
+function renderPager(totalPages) {
+  const pager = document.getElementById('pager');
+  if (!pager) return;
+  if (totalPages <= 1 || window.__locked) { pager.innerHTML = ''; return; }
+  const c = currentPage, pages = new Set([1, totalPages]);
+  for (let i = c - 2; i <= c + 2; i++) if (i >= 1 && i <= totalPages) pages.add(i);
+  const sorted = [...pages].sort((a, b) => a - b);
+  let html = `<button type="button" class="pg-btn pg-arrow" data-page="${c - 1}" ${c === 1 ? 'disabled' : ''} aria-label="Poprzednia strona">‹</button>`;
+  let prev = 0;
+  for (const n of sorted) {
+    if (n - prev > 1) html += '<span class="pg-dots">…</span>';
+    html += `<button type="button" class="pg-btn${n === c ? ' active' : ''}" data-page="${n}" ${n === c ? 'aria-current="page"' : ''}>${n}</button>`;
+    prev = n;
+  }
+  html += `<button type="button" class="pg-btn pg-arrow" data-page="${c + 1}" ${c === totalPages ? 'disabled' : ''} aria-label="Następna strona">›</button>`;
+  html += `<span class="pg-info">Strona ${c} z ${totalPages} · ${CURRENT_FILTERED.length.toLocaleString('pl-PL')} ofert</span>`;
+  pager.innerHTML = html;
+  pager.querySelectorAll('.pg-btn:not([disabled])').forEach(b => b.addEventListener('click', () => {
+    const n = parseInt(b.dataset.page, 10);
+    if (!n || n === currentPage) return;
+    currentPage = n;
+    renderPage();
+    const top = (document.getElementById('resultsHead') || document.getElementById('grid')).getBoundingClientRect().top + window.scrollY - 90;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }));
+}
 
 // Load on start
 loadListings();

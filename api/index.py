@@ -1032,11 +1032,20 @@ def _company_scope(user: dict) -> str:
     return str(user["_id"])
 
 
+async def _crm_allowed(user: dict) -> bool:
+    """CRM firmy: tylko konto firmowe (account_type=business) z aktywnym planem Firmowym lub agent takiego biura.
+    Osoba fizyczna (account_type=personal/individual) nie widzi CRM — nawet z planem."""
+    if user.get("role") == "agent" and user.get("master_id"):
+        return await effective_tier_async(user) == "business"
+    if user.get("account_type") != "business":
+        return False
+    return await effective_tier_async(user) == "business"
+
+
 @app.post("/api/offer-status")
 async def set_offer_status(body: OfferStatusUpdate, user: dict = Depends(current_user)):
     """Set or update status for an offer (Firmowy plan only). Company-wide visibility."""
-    tier = await effective_tier_async(user)
-    if tier != "business":
+    if not await _crm_allowed(user):
         raise HTTPException(403, "Funkcja dostępna tylko dla planu Firmowy")
     company_id = _company_scope(user)
     offer_id = body.offer_id.strip()[:200]
@@ -1062,8 +1071,7 @@ async def set_offer_status(body: OfferStatusUpdate, user: dict = Depends(current
 @app.get("/api/offer-status")
 async def get_offer_statuses(ids: str = "", user: dict = Depends(current_user)):
     """Bulk fetch statuses for a list of offer IDs (Firmowy only). Empty ids = ALL for company."""
-    tier = await effective_tier_async(user)
-    if tier != "business":
+    if not await _crm_allowed(user):
         return {"statuses": {}, "crm": False}
     company_id = _company_scope(user)
     id_list = [i.strip() for i in ids.split(",") if i.strip()][:500]

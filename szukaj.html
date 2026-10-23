@@ -211,6 +211,7 @@ gtag('set', 'url_passthrough', false);
   .card-price .pm2{font-size:11px;color:#8ba3d4}
   .card-rata{font-size:11px;color:#FFB800;margin-top:4px;font-weight:700;opacity:.9}
   /* CRM firmy na karcie (plan Firmowy) */
+  .card-img .crm-pill-wrap{position:absolute;top:34px;right:10px;z-index:5;pointer-events:none}
   .card-crm{margin-top:12px;padding-top:10px;border-top:1px dashed rgba(255,184,0,0.25)}
   .card-crm.busy{opacity:.55;pointer-events:none}
   .card-crm .crm-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:10px;color:#8ba3d4;margin-bottom:7px}
@@ -1343,7 +1344,7 @@ const CRM_MAP = {
 function escCrm(s) { return String(s || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 function crmPillHtml(st) {
   const s = st && CRM_MAP[st.status]; if (!s) return '';
-  return `<div style="position:absolute;top:34px;right:10px;background:${s.bg};color:${s.t};padding:5px 12px;border-radius:100px;font-size:11px;font-weight:900;box-shadow:0 3px 10px rgba(0,0,0,0.35);z-index:5">${s.lbl}</div>`;
+  return `<div style="background:${s.bg};color:${s.t};padding:5px 12px;border-radius:100px;font-size:11px;font-weight:900;box-shadow:0 3px 10px rgba(0,0,0,0.35)">${s.lbl}</div>`;
 }
 function crmWhen(iso) {
   if (!iso) return '';
@@ -1522,7 +1523,7 @@ function renderPage() {
       </div>`;
     // CRM status badge (Firmowy only)
     const crmSt = (window.CRM_STATUSES || {})[l.id];
-    const crmBadgeHtml = `<div data-crm-pill="${l.id}">${crmPillHtml(crmSt)}</div>`;
+    const crmBadgeHtml = `<div class="crm-pill-wrap" data-crm-pill="${l.id}">${crmPillHtml(crmSt)}</div>`;
     const crmBarHtml = window.CRM_ENABLED ? `<div class="card-crm" data-crm-bar="${l.id}">${crmBarInnerHtml(l.id)}</div>` : '';
     const cardHtml = `
       <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="card">

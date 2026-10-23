@@ -3677,6 +3677,112 @@ class EmailKeyReq(BaseModel):
     key: str = Field(min_length=8, max_length=200)
 
 
+# --- Ręczna wysyłka ofert do biur / firm z panelu admina (szablony statyczne z /szablony) ---
+from pathlib import Path as _Path
+_MANUAL_TPL_DIR = _Path(__file__).resolve().parent.parent / "szablony"
+
+
+def _manual_templates() -> List[dict]:
+    out = []
+    for p in sorted(_MANUAL_TPL_DIR.glob("*.html")):
+        if p.stem == "index":
+            continue
+        txt = p.with_suffix(".txt")
+        subject = ""
+        if txt.exists():
+            lines = txt.read_text(encoding="utf-8").strip().splitlines()
+            if lines and lines[0].lower().startswith("temat:"):
+                subject = lines[0].split(":", 1)[1].strip()
+        html = p.read_text(encoding="utf-8")
+        m = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.S)
+        title = re.sub(r"<[^>]+>", "", m.group(1)).strip() if m else p.stem
+        out.append({"key": p.stem, "title": title[:120], "subject": subject or title[:120]})
+    return out
+
+
+@app.get("/api/admin/mailing/manual-templates")
+async def admin_manual_templates(admin: dict = Depends(require_admin)):
+    return {"templates": _manual_templates()}
+
+
+class ManualSendReq(BaseModel):
+    template: str
+    subject: str = Field(min_length=3, max_length=200)
+    emails: str = Field(min_length=3, max_length=5000)
+    force: bool = False
+
+
+@app.post("/api/admin/mailing/send-manual")
+async def admin_send_manual(body: ManualSendReq, admin: dict = Depends(require_admin)):
+    """Wysyła wybrany szablon z /szablony na podane adresy (max 20 na raz) przez skonfigurowaną skrzynkę.
+    Pomija: odbiorców z marketing_opt_out, adresy z listy 'nie' (manual_mail_optout) i tych, którzy dostali ten szablon w ciągu 30 dni."""
+    key = re.sub(r"[^a-z0-9-]", "", body.template.lower())
+    path = _MANUAL_TPL_DIR / f"{key}.html"
+    if not path.exists() or key == "index":
+        raise HTTPException(404, "Nie ma takiego szablonu")
+    if not (await _smtp_cfg() or await _email_key()):
+        raise HTTPException(400, "Najpierw skonfiguruj skrzynkę nadawczą (SMTP) w tej zakładce")
+    html = path.read_text(encoding="utf-8")
+    emails, seen = [], set()
+    for e in re.split(r"[\s,;]+", body.emails):
+        e = clean_email(e)
+        if e and re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", e) and e not in seen:
+            seen.add(e)
+            emails.append(e)
+    if not emails:
+        raise HTTPException(400, "Nie znalazłem poprawnych adresów e-mail")
+    if len(emails) > 20:
+        raise HTTPException(400, f"Maksymalnie 20 adresów na jedną wysyłkę (podano {len(emails)}) — wyślij w kilku partiach")
+    db = database()
+    now = datetime.now(timezone.utc)
+    month_ago = now - timedelta(days=30)
+    results = []
+    for e in emails:
+        u = await db.users.find_one({"email": e}, {"marketing_opt_out": 1})
+        if u and u.get("marketing_opt_out"):
+            results.append({"email": e, "status": "pominięto — wypisany z mailingu"}); continue
+        if await db.manual_mail_optout.find_one({"email": e}):
+            results.append({"email": e, "status": "pominięto — na liście „nie”"}); continue
+        if not body.force and await db.manual_mail_log.find_one({"email": e, "template": key, "ok": True, "sent_at": {"$gte": month_ago}}):
+            results.append({"email": e, "status": "pominięto — ten szablon wysłany w ciągu 30 dni"}); continue
+        mid = None
+        try:
+            mid = await send_email(to=e, subject=body.subject.strip(), html=html)
+        except Exception as exc:
+            logger.warning("manual mail failed %s: %s", e, str(exc)[:120])
+        await db.manual_mail_log.insert_one({"email": e, "template": key, "subject": body.subject.strip(), "ok": bool(mid),
+                                             "sent_at": now, "by": admin.get("email"),
+                                             "error": None if mid else (LAST_EMAIL_ERROR.get("error") or "")[:200]})
+        results.append({"email": e, "status": "✅ wysłano" if mid else f"❌ błąd: {(LAST_EMAIL_ERROR.get('error') or 'nieznany')[:120]}"})
+    sent = sum(1 for r in results if r["status"].startswith("✅"))
+    return {"sent": sent, "total": len(emails), "results": results}
+
+
+class ManualOptoutReq(BaseModel):
+    email: str
+
+
+@app.post("/api/admin/mailing/manual-optout")
+async def admin_manual_optout(body: ManualOptoutReq, admin: dict = Depends(require_admin)):
+    """Ktoś odpisał „nie” → na stałe na listę wykluczeń ręcznego mailingu."""
+    e = clean_email(body.email)
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", e):
+        raise HTTPException(400, "Nieprawidłowy e-mail")
+    await database().manual_mail_optout.update_one({"email": e}, {"$set": {"email": e, "at": datetime.now(timezone.utc), "by": admin.get("email")}}, upsert=True)
+    return {"ok": True, "email": e}
+
+
+@app.get("/api/admin/mailing/manual-log")
+async def admin_manual_log(admin: dict = Depends(require_admin), limit: int = 50):
+    db = database()
+    log = []
+    async for l in db.manual_mail_log.find({}).sort("sent_at", -1).limit(max(1, min(200, limit))):
+        log.append({"email": l["email"], "template": l["template"], "ok": l["ok"], "error": l.get("error"),
+                    "sent_at": l["sent_at"].isoformat() if isinstance(l.get("sent_at"), datetime) else l.get("sent_at")})
+    optout = [d["email"] async for d in db.manual_mail_optout.find({}, {"email": 1}).sort("at", -1).limit(200)]
+    return {"log": log, "optout": optout, "sent_total": await db.manual_mail_log.count_documents({"ok": True})}
+
+
 @app.post("/api/admin/mailing/email-key")
 async def admin_mailing_email_key(body: EmailKeyReq, admin: dict = Depends(require_admin)):
     """Zapisuje klucz skrzynki nadawczej (Emergent) w Mongo — ma pierwszeństwo przed zmienną środowiskową."""

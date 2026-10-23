@@ -6,7 +6,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 30,
-      "includeFiles": "api/fonts/**"
+      "includeFiles": "{api/fonts/**,szablony/*.html,szablony/*.txt}"
     },
     "api/subscribe.js": {
       "maxDuration": 10

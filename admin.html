@@ -226,6 +226,28 @@
         </form>
         <div id="smtpMsg" style="margin-top:8px;font-size:13px"></div>
       </details>
+      <div id="manualMailBox" style="margin-top:14px;background:rgba(255,184,0,0.06);border:1px solid rgba(255,184,0,0.35);border-radius:12px;padding:16px">
+        <h3 style="margin:0 0 6px;font-size:15px">📨 Wyślij ofertę do biur / firm (ręcznie, z Twojej skrzynki)</h3>
+        <p style="color:#8ba3d4;font-size:12px;margin:0 0 12px;line-height:1.5">Wklej adresy e-mail biur (po przecinku, spacji lub każdy w nowej linii, max 20 na raz), wybierz szablon i kliknij Wyślij. System pomija osoby wypisane, adresy z listy „nie” i tych, którzy dostali ten szablon w ciągu 30 dni. Wysyłaj w małych partiach — kto odpisze „nie”, dodaj go poniżej do listy wykluczeń.</p>
+        <form id="manualMailForm" style="display:grid;gap:10px">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">
+            <select id="mmTemplate" style="padding:11px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px"></select>
+            <input id="mmSubject" placeholder="Temat wiadomości" required style="padding:11px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
+          </div>
+          <textarea id="mmEmails" rows="4" placeholder="biuro1@example.pl, biuro2@example.pl&#10;biuro3@example.pl" required style="padding:11px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-family:inherit;font-size:13px"></textarea>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <button type="submit" id="mmSendBtn" class="refresh-btn" style="min-height:44px">📨 Wyślij</button>
+            <a id="mmPreview" href="#" target="_blank" style="color:#FFB800;font-size:13px;font-weight:700">👁 Podgląd szablonu</a>
+            <span id="mmMsg" style="font-size:13px"></span>
+          </div>
+        </form>
+        <div id="mmResults" style="margin-top:10px;font-size:13px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
+          <input id="mmOptout" placeholder="ktoś odpisał „nie”? wpisz jego e-mail" style="flex:1;min-width:220px;padding:10px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
+          <button type="button" id="mmOptoutBtn" class="refresh-btn" style="min-height:44px">🚫 Dodaj do listy „nie”</button>
+        </div>
+        <div id="mmLog" style="margin-top:12px;font-size:12px;color:#8ba3d4"></div>
+      </div>
       <div id="mailingTemplates" style="margin-top:18px"></div>
       <div id="mailingPreview" style="margin-top:18px"></div>
       <div id="mailingLog" style="margin-top:18px"></div>
@@ -720,6 +742,7 @@ function renderMailing(d){
       : '<div style="color:#8ba3d4;font-size:13px">Jeszcze nic nie wysłano.</div>'}`);
 }
 async function loadMailing(){
+  loadManualMail();
   try { const d = await api('/admin/mailing'); renderMailing(d); const del = document.getElementById('smtpDelBtn'); if (del) del.style.display = d.smtp ? '' : 'none'; if (d.smtp) { document.getElementById('smtpHost').value = d.smtp.host || ''; document.getElementById('smtpPort').value = d.smtp.port || 587; document.getElementById('smtpUser').value = d.smtp.user || ''; } }
   catch(e){ setHtml('mailingStatus', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`); }
 }
@@ -768,6 +791,42 @@ document.addEventListener('submit', async (e) => {
   } catch(err){ msg.innerHTML = `<span class="bad">❌ ${escapeHtml(err.message)}</span>`; }
   finally { btn.disabled = false; }
 });
+
+// --- Ręczna wysyłka do biur ---
+let _mmTemplates = [];
+async function loadManualMail(){
+  try {
+    const d = await api('/admin/mailing/manual-templates'); _mmTemplates = d.templates || [];
+    const sel = document.getElementById('mmTemplate'); if (!sel) return;
+    sel.innerHTML = _mmTemplates.map(t => `<option value="${escapeHtml(t.key)}">${escapeHtml(t.title)}</option>`).join('');
+    const pick = () => { const t = _mmTemplates.find(x => x.key === sel.value); if (t) { document.getElementById('mmSubject').value = t.subject; document.getElementById('mmPreview').href = '/szablony/' + t.key; } };
+    sel.onchange = pick; pick();
+    const lg = await api('/admin/mailing/manual-log?limit=30');
+    const rows = (lg.log || []).map(l => `<div>${escapeHtml((l.sent_at || '').slice(0,16).replace('T',' '))} · ${escapeHtml(l.email)} · ${escapeHtml(l.template)} · ${l.ok ? '<span class="ok">✅</span>' : '<span class="bad">❌ ' + escapeHtml(l.error || '') + '</span>'}</div>`).join('');
+    document.getElementById('mmLog').innerHTML = `<b style="color:#c5d0e6">Wysłane łącznie: ${lg.sent_total || 0}</b>` + (lg.optout && lg.optout.length ? ` · lista „nie”: ${lg.optout.length}` : '') + (rows ? `<div style="margin-top:6px;max-height:160px;overflow:auto">${rows}</div>` : '');
+  } catch(e) { console.warn('manual mail:', e); }
+}
+document.addEventListener('submit', async (e) => {
+  if (e.target.id !== 'manualMailForm') return;
+  e.preventDefault();
+  const btn = document.getElementById('mmSendBtn'), msg = document.getElementById('mmMsg'), res = document.getElementById('mmResults');
+  btn.disabled = true; msg.innerHTML = '⏳ Wysyłam…'; res.innerHTML = '';
+  try {
+    const r = await apiPost('/admin/mailing/send-manual', { template: document.getElementById('mmTemplate').value, subject: document.getElementById('mmSubject').value.trim(), emails: document.getElementById('mmEmails').value });
+    msg.innerHTML = `<span class="ok">✅ Wysłano ${r.sent} z ${r.total}</span>`;
+    res.innerHTML = r.results.map(x => `<div>${escapeHtml(x.email)} — ${escapeHtml(x.status)}</div>`).join('');
+    if (r.sent > 0) document.getElementById('mmEmails').value = '';
+    loadManualMail();
+  } catch(err) { msg.innerHTML = `<span class="bad">❌ ${escapeHtml(err.message)}</span>`; }
+  finally { btn.disabled = false; }
+});
+document.addEventListener('click', async (e) => {
+  if (e.target.id !== 'mmOptoutBtn') return;
+  const inp = document.getElementById('mmOptout'); const v = inp.value.trim(); if (!v) return;
+  try { const r = await apiPost('/admin/mailing/manual-optout', { email: v }); inp.value = ''; document.getElementById('mmMsg').innerHTML = `<span class="ok">🚫 ${escapeHtml(r.email)} nie dostanie już maili</span>`; loadManualMail(); }
+  catch(err) { document.getElementById('mmMsg').innerHTML = `<span class="bad">❌ ${escapeHtml(err.message)}</span>`; }
+});
+
 async function deleteSmtp(){
   if (!confirm('Usunąć dane skrzynki SMTP?')) return;
   await fetch(API_BASE + '/admin/mailing/smtp', { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getToken() } });

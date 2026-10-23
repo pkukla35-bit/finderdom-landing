@@ -516,6 +516,22 @@ const TYPE_EMOJI = { mieszkanie: '🏢', dom: '🏡', dzialka: '🌳', lokal: '�
 const IMG_CLASSES = ['i1','i2','i3','i4','i5','i6','i7','i8'];
 
 // Image proxy: /api/img (własne proxy z Referer per portal, bezpieczne, cache 30d browser + 1y Vercel Edge)
+
+// „Dziś” = ostatnia doba, ale w weekend (brak pobierania ogłoszeń w sob./niedz.) obejmuje piątek, sobotę i niedzielę
+function todayFromMs(){
+  const now = new Date(), dow = now.getDay(); // 0=nd, 6=sob
+  if (dow === 6 || dow === 0) {
+    const fri = new Date(now); fri.setDate(now.getDate() - (dow === 6 ? 1 : 2)); fri.setHours(0,0,0,0);
+    return fri.getTime();
+  }
+  return Date.now() - 24*3600*1000;
+}
+(function(){
+  const dow = new Date().getDay();
+  const chip = document.querySelector('.date-chip[data-date="today"]');
+  if (chip && (dow === 6 || dow === 0)) { chip.textContent = 'Dziś (od piątku)'; chip.title = 'W weekend nie pobieramy nowych ogłoszeń — pokazujemy oferty od piątku'; }
+})();
+
 function proxyImg(url) {
   if (!url || typeof url !== 'string') return url || '';
   let u = url.trim();
@@ -1030,7 +1046,7 @@ async function loadListings() {
     (function(){
       const mode = document.querySelector('.date-chip.active')?.dataset.date || 'all';
       const day = 24*3600*1000; let fromMs = 0, toMs = 0;
-      if (mode === 'today') fromMs = Date.now() - day;
+      if (mode === 'today') fromMs = todayFromMs();
       else if (mode === '3d') fromMs = Date.now() - 3*day;
       else if (mode === '7d') fromMs = Date.now() - 7*day;
       else if (mode === '30d') fromMs = Date.now() - 30*day;
@@ -1883,7 +1899,7 @@ function collectFilterState() {
   const dateTo   = document.getElementById('dateTo')?.value || '';
   // Compute cutoff timestamp (ms)
   let dateFromMs = 0, dateToMs = 0;
-  if (dateMode === 'today')      dateFromMs = Date.now() - 24*3600*1000;
+  if (dateMode === 'today')      dateFromMs = todayFromMs();
   else if (dateMode === '3d')    dateFromMs = Date.now() - 3*24*3600*1000;
   else if (dateMode === '7d')    dateFromMs = Date.now() - 7*24*3600*1000;
   else if (dateMode === '30d')   dateFromMs = Date.now() - 30*24*3600*1000;

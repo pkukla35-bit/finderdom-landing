@@ -3724,8 +3724,8 @@ async def admin_send_manual(body: ManualSendReq, admin: dict = Depends(require_a
         raise HTTPException(400, "Najpierw skonfiguruj skrzynkę nadawczą (SMTP) w tej zakładce")
     html = path.read_text(encoding="utf-8")
     emails, seen = [], set()
-    for e in re.split(r"[\s,;]+", body.emails):
-        e = clean_email(e)
+    for e in re.split(r"[\s,;<>\"']+", body.emails):
+        e = (e or "").strip().lower()
         if e and re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", e) and e not in seen:
             seen.add(e)
             emails.append(e)

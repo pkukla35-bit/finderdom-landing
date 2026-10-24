@@ -1,29 +1,32 @@
-Temat: Całe biuro na wszystkich portalach i we wszystkich województwach — 199 zł/mies (niecałe 50 zł na agenta)
+Temat: Wszystkie portale i województwa — 90 zł/mies dla pośrednika, 199 zł za całe biuro (4 loginy)
 
 Dzień dobry,
 
-ile Państwa biuro płaci dziś za dostęp do ofert? Zwykle wygląda to tak: osobny pakiet na każde województwo i osobny login dla każdego agenta. Zbudowaliśmy FinderDom.pl, żeby to uprościć — i policzyć inaczej.
+ile Państwa biuro płaci dziś za dostęp do ofert? Zwykle wygląda to tak: osobny pakiet na każde województwo i osobny login dla każdego agenta. Zbudowaliśmy FinderDom.pl, żeby to uprościć — i policzyć inaczej: jeden abonament na całą Polskę, w dwóch wariantach.
 
-PLAN FIRMOWY FINDERDOM — 199 zł/mies ZA CAŁE BIURO:
+  BIURO JEDNOOSOBOWE — 90 zł/mies: 1 login · CRM · leady · wyceny PDF bez limitu
+  PLAN FIRMOWY — 199 zł/mies: konto główne + 4 loginy dla agentów (niecałe 50 zł na pośrednika), kolejny agent 55 zł
+
+CO JEST W ŚRODKU (w obu planach):
 
 • WSZYSTKIE WOJEWÓDZTWA W JEDNYM ABONAMENCIE
   Otodom, OLX, Morizon, Gratka i pozostałe portale z całej Polski w jednej wyszukiwarce. Bez pakietów regionalnych, bez dopłat za kolejne miasto.
 
-• 4 LOGINY DLA AGENTÓW W CENIE
-  199 zł : 4 = niecałe 50 zł miesięcznie na pośrednika. Każdy agent ma własne konto, a biuro wspólną bazę. Piąty i kolejny agent: 55 zł/mies.
+• DWA WARIANTY, TE SAME FUNKCJE
+  Pośrednik pracujący samodzielnie: Biuro jednoosobowe 90 zł/mies (1 login). Biuro z zespołem: Plan Firmowy 199 zł/mies — konto główne + 4 loginy dla agentów (199 : 4 = niecałe 50 zł na pośrednika), piąty i kolejny agent 55 zł/mies. Z planu 90 zł można w każdej chwili przejść na 199 zł.
 
 • WYCENY PDF BEZ LIMITU
-  Raport wyceny z realnymi cenami transakcyjnymi z Rejestru Cen Nieruchomości (akty notarialne) — dla klientów sprzedających, do pozyskiwania ofert. Dla osób prywatnych kosztuje 35 zł; w Planie Firmowym bez limitu w cenie.
+  Raport wyceny z realnymi cenami transakcyjnymi z Rejestru Cen Nieruchomości (akty notarialne) — dla klientów sprzedających, do pozyskiwania ofert. Dla osób prywatnych kosztuje 35 zł; w obu planach dla pośredników bez limitu w cenie.
   Przykładowy raport: https://www.finderdom.pl/przykladowa-wycena.pdf
 
 • OFERTY BEZPOŚREDNIE OD WŁAŚCICIELI
   Filtr „bez pośrednika” + „ostatnie 24 h” — dzwonią Państwo do właściciela, zanim zrobi to konkurencja.
 
-• CRM DLA BIURA
-  Statusy ofert (był kontakt / umówione / nieaktualna) i notatki widoczne dla całego zespołu — koniec dzwonienia dwa razy do tego samego właściciela.
+• CRM NA LIŚCIE OFERT
+  Statusy (był kontakt / umówione / bez pośrednika / nieaktualna) i notatki oznaczane jednym kliknięciem, w Planie Firmowym widoczne dla całego zespołu — koniec dzwonienia dwa razy do tego samego właściciela.
 
 • LEADY OD SPRZEDAJĄCYCH
-  Właściciele, którzy zamawiają u nas wycenę i proszą o kontakt agenta, trafiają do biur z Planem Firmowym.
+  Właściciele, którzy zamawiają u nas wycenę i proszą o kontakt agenta, trafiają do pośredników i biur z aktywnym planem.
 
 • ANALIZA AI KAŻDEJ OFERTY
   Okazja / cena rynkowa / zawyżona — na podstawie podobnych ofert i transakcji w okolicy.
@@ -31,11 +34,10 @@ PLAN FIRMOWY FINDERDOM — 199 zł/mies ZA CAŁE BIURO:
 • TYGODNIOWE RAPORTY RYNKOWE
   Mediany zł/m², dzielnice, ceny ofertowe vs transakcyjne dla 20 miast: https://www.finderdom.pl/raporty
 
-7 DNI ZA DARMO dla firm z NIP — bez karty, bez umowy, faktura VAT automatycznie.
-PRACUJĄ PAŃSTWO SAMODZIELNIE? Plan Biuro jednoosobowe — 90 zł/mies: te same funkcje (CRM, leady, wyceny PDF bez limitu) na 1 login. Gdy dołączy zespół, przechodzą Państwo na Plan Firmowy.
+7 DNI ZA DARMO dla firm z NIP — bez karty, bez umowy, pełny dostęp. Po okresie próbnym wybierają Państwo 90 zł (1 login) lub 199 zł (zespół). Faktura VAT automatycznie.
 Rejestracja: https://www.finderdom.pl/dla-biur
 
-Chętnie pokażę to na 15-minutowej prezentacji online albo założę konto testowe dla Państwa zespołu — wystarczy odpowiedzieć na tę wiadomość.
+Chętnie pokażę to na 15-minutowej prezentacji online albo założę konto testowe dla Państwa (lub całego zespołu) — wystarczy odpowiedzieć na tę wiadomość.
 
 Jeśli ta wiadomość trafiła do Państwa przez pomyłkę lub nie życzą sobie Państwo kolejnych informacji, wystarczy odpowiedzieć „nie” — więcej nie napiszę.
 

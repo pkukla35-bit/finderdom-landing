@@ -1977,6 +1977,25 @@ async def listing_single(listing_id: str, request: Request, response: Response):
         return {"error": str(e)[:200]}
 
 
+@app.get("/api/admin/olx-probe")
+async def admin_olx_probe(id: str, admin: dict = Depends(require_admin)):
+    """Diagnostyka: czy z Vercel da się odpytać publiczne API OLX o ofertę (status + świeże zdjęcia)."""
+    oid = re.sub(r"\D", "", id)[:12]
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as client:
+            r = await client.get(f"https://www.olx.pl/api/v1/offers/{oid}/", headers={"User-Agent": ua, "Accept": "application/json", "Accept-Language": "pl-PL,pl;q=0.9"})
+        out = {"status_code": r.status_code, "content_type": r.headers.get("content-type", "")}
+        if "json" in out["content_type"]:
+            d = (r.json() or {}).get("data") or {}
+            out.update({"offer_status": d.get("status"), "title": d.get("title"), "photos": [p.get("link") for p in (d.get("photos") or [])][:3]})
+        else:
+            out["body"] = r.text[:300]
+        return out
+    except Exception as exc:
+        return {"error": str(exc)[:200]}
+
+
 @app.get("/api/geo/city")
 async def geo_city_center(name: str):
     """Środek miejscowości dla filtra promienia, gdy nie ma jej w CITY_COORDS (TOP 195 miast):

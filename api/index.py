@@ -3944,7 +3944,7 @@ async def admin_manual_mark(body: ManualMarkReq, admin: dict = Depends(require_a
         await db.manual_mail_log.update_many({"email": e}, {"$set": {"replied_at": now, "reply_source": "manual", "reply_optout": True, "reply_snippet": body.note.strip() or "nie"}})
         await db.manual_mail_optout.update_one({"email": e}, {"$set": {"email": e, "at": now, "by": admin.get("email")}}, upsert=True)
     else:
-        await db.manual_mail_log.update_many({"email": e}, {"$unset": {"replied_at": "", "reply_source": "", "reply_snippet": "", "reply_optout": "", "reply_subject": ""}})
+        await db.manual_mail_log.update_many({"email": e}, {"$unset": {"replied_at": "", "reply_source": "", "reply_snippet": "", "reply_optout": "", "reply_subject": "", "first_click_at": "", "last_click_at": ""}, "$set": {"clicks": 0}})
         await db.manual_mail_optout.delete_one({"email": e})
     return {"ok": True, "email": e, "mark": body.mark}
 

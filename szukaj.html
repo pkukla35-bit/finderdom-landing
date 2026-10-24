@@ -504,6 +504,7 @@ gtag('set', 'url_passthrough', false);
       </select>
     </div>
     <!-- Info bar: aktywny promień geo-search -->
+    <div id="dateInfo" style="display:none;background:rgba(255,184,0,0.08);border:1px solid rgba(255,184,0,0.35);color:#c5d0e6;border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:14px;display:none"></div>
     <div id="radiusInfo" style="display:none;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#c5d0e6;border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:14px"></div>
 
     <!-- AdSense: Nad wynikami -->
@@ -1116,6 +1117,17 @@ async function loadListings() {
       }
     }
     const scrapedUrl = '/api/listings-scraped' + (apiParams.toString() ? '?' + apiParams.toString() : '');
+    // Filtr daty aktywny → policz równolegle, ile ofert byłoby BEZ filtra daty (żeby user widział, że to data, nie promień, ogranicza wyniki)
+    window.__noDateTotal = null;
+    if (apiParams.has('added_from') || apiParams.has('added_to')) {
+      const nd = new URLSearchParams(apiParams); nd.delete('added_from'); nd.delete('added_to'); nd.set('limit', '1');
+      const ndSeq = (window.__loadSeq || 0) + 1;
+      fetchJson('/api/listings-scraped?' + nd.toString()).then(d => {
+        if (ndSeq !== window.__loadSeq) return;
+        window.__noDateTotal = (d && typeof d.total_count === 'number') ? d.total_count : null;
+        renderDateInfo();
+      }).catch(() => {});
+    }
     // ── DWUFAZOWE ŁADOWANIE ──
     //   Faza 1: szybki request z limit=PAGE_SIZE (~5x mniejszy payload) → pierwszy ekran kart w ~0.5s
     //   Faza 2: pełny batch (1000) startuje równolegle → po dotarciu podmienia LISTINGS (AI mediany, filtry client-side)
@@ -2093,6 +2105,30 @@ function collectFilterState() {
            dateFromMs, dateToMs, sortMode };
 }
 
+// Pasek pod wynikami, gdy aktywny filtr daty: „pokazuję tylko oferty od piątku — bez filtra daty byłoby N” + przycisk Pokaż wszystkie.
+// Powstał, bo przy aktywnym „Dziś” w weekend (brak pobierania ofert sb–nd) zmiana promienia prawie nie zmienia liczby wyników
+// i wygląda to jak zepsuty promień.
+function renderDateInfo() {
+  const el = document.getElementById('dateInfo'); if (!el) return;
+  const chip = document.querySelector('.date-chip.active');
+  const mode = chip?.dataset.date || 'all';
+  if (mode === 'all') { el.style.display = 'none'; return; }
+  const label = (chip?.textContent || '').trim().toLowerCase();
+  const shown = (typeof CURRENT_FILTERED !== 'undefined' && CURRENT_FILTERED) ? CURRENT_FILTERED.length : 0;
+  const nd = window.__noDateTotal;
+  el.innerHTML = `📅 Pokazuję tylko oferty <strong>${label}</strong> (${shown}). ` +
+    (typeof nd === 'number' ? `Bez filtra daty w tym samym obszarze jest <strong>${nd.toLocaleString('pl-PL')}</strong> ofert. ` : '') +
+    `<button type="button" id="dateInfoAll" style="margin-left:6px;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,184,0,0.5);background:rgba(255,184,0,0.15);color:#FFD166;font-weight:800;font-size:12px;cursor:pointer;min-height:28px">Pokaż wszystkie daty</button>`;
+  el.style.display = '';
+  document.getElementById('dateInfoAll')?.addEventListener('click', () => {
+    document.querySelectorAll('.date-chip').forEach(c => c.classList.toggle('active', c.dataset.date === 'all'));
+    const r = document.getElementById('dateCustom'); if (r) r.style.display = 'none';
+    const df = document.getElementById('dateFrom'), dt = document.getElementById('dateTo'); if (df) df.value = ''; if (dt) dt.value = '';
+    window.__noDateTotal = null;
+    loadListings();
+  });
+}
+
 function applyAllFilters() {
   const f = collectFilterState();
 
@@ -2297,6 +2333,7 @@ function applyAllFilters() {
       infoEl.style.display = 'none';
     }
   }
+  renderDateInfo();
   renderPage();
 }
 

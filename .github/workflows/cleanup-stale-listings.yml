@@ -3,7 +3,7 @@ name: Cleanup stale listings (auto-remove 404/410 offers)
 on:
   schedule:
     # Codziennie o 3:00 UTC (5:00 CEST) — mała ruch, tania operacja
-    - cron: '0 3 * * *'
+    - cron: '0 */6 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -79,13 +79,28 @@ jobs:
           done
 
           echo ""
-          echo "--- OLX: zakończone ogłoszenia (404 na zdjęciach) ---"
-          for i in 1 2 3; do
-            R=$(curl -sS -X POST "${API_BASE}/api/admin/olx-image-sweep?limit=1200&concurrency=30&dry_run=${DRY}" \
+          echo "--- OLX: status przez API OLX (aktywne → świeże zdjęcia, zakończone → stale) ---"
+          # Łagodnie: małe partie, niska równoległość, przerwy — OLX blokuje (403) przy kilkuset zapytaniach naraz.
+          for i in 1 2 3 4 5 6; do
+            R=$(curl -sS -X POST "${API_BASE}/api/admin/olx-image-sweep?limit=120&concurrency=3&dry_run=${DRY}" \
               -H "$AUTH_H" --max-time 120 || echo '{}')
             echo "OLX sweep $i: $R"
             REM=$(echo "$R" | python3 -c "import sys,json;print(json.load(sys.stdin).get('remaining',0))" 2>/dev/null || echo 0)
+            ABORT=$(echo "$R" | python3 -c "import sys,json;print(1 if json.load(sys.stdin).get('aborted') else 0)" 2>/dev/null || echo 0)
             [ "$REM" = "0" ] && break
+            [ "$ABORT" = "1" ] && { echo "OLX blokuje — przerywam na dziś"; break; }
+            sleep 20
+          done
+          echo "--- OLX: przywracanie ofert błędnie oznaczonych (olx_image_404), które wciąż są aktywne ---"
+          for i in 1 2 3 4 5 6; do
+            R=$(curl -sS -X POST "${API_BASE}/api/admin/olx-image-sweep?limit=120&concurrency=3&revive=1&dry_run=${DRY}" \
+              -H "$AUTH_H" --max-time 120 || echo '{}')
+            echo "OLX revive $i: $R"
+            REM=$(echo "$R" | python3 -c "import sys,json;print(json.load(sys.stdin).get('remaining',0))" 2>/dev/null || echo 0)
+            ABORT=$(echo "$R" | python3 -c "import sys,json;print(1 if json.load(sys.stdin).get('aborted') else 0)" 2>/dev/null || echo 0)
+            [ "$REM" = "0" ] && break
+            [ "$ABORT" = "1" ] && { echo "OLX blokuje — przerywam na dziś"; break; }
+            sleep 20
           done
 
           echo ""

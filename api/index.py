@@ -1617,11 +1617,12 @@ async def _olx_apply_state(coll, doc: dict, state: str, photos: Optional[list], 
         await coll.update_one({"_id": doc["_id"]}, {"$set": {"is_stale": True, "stale_since": now, "stale_reason": "olx_api_gone",
                                                             "last_checked_at": now, "olx_img_checked_at": now}})
     else:
-        await coll.update_one({"_id": doc["_id"]}, {"$set": {"olx_img_checked_at": now}})
+        # unknown (blokada/timeout): odłóż o 6h zamiast 48h, żeby oferta szybko wróciła do kolejki
+        await coll.update_one({"_id": doc["_id"]}, {"$set": {"olx_img_checked_at": now - timedelta(hours=42)}})
 
 
 @app.post("/api/admin/olx-image-sweep")
-async def admin_olx_image_sweep(request: Request, limit: int = 600, concurrency: int = 10, dry_run: int = 0, revive: int = 0):
+async def admin_olx_image_sweep(request: Request, limit: int = 150, concurrency: int = 3, dry_run: int = 0, revive: int = 0, reset_unknown: int = 0):
     """Przegląd ofert OLX przez API OLX: aktywne → świeże zdjęcia (OLX rotuje ID na CDN), zakończone → is_stale.
     revive=1 → sprawdza oferty wcześniej (błędnie) oznaczone olx_image_404 i przywraca te, które wciąż są aktywne."""
     await _authorize_cron_or_admin(request)
@@ -1633,8 +1634,12 @@ async def admin_olx_image_sweep(request: Request, limit: int = 600, concurrency:
         q = {"url": {"$regex": "olx\\.pl"}, "is_stale": {"$ne": True},
              "$or": [{"olx_img_checked_at": {"$exists": False}}, {"olx_img_checked_at": {"$lt": now - timedelta(hours=48)}}]}
     docs = await coll.find(q, {"_id": 1, "images": 1, "external_id": 1, "is_stale": 1, "stale_reason": 1}).sort("olx_img_checked_at", 1).limit(max(1, min(2000, limit))).to_list(length=2000)
+    if reset_unknown:
+        # Zdejmij flagę „sprawdzone” z ofert, które przy poprzednim przebiegu dostały 'unknown' (blokada OLX) — wrócą do kolejki
+        r = await coll.update_many({"is_stale": True, "stale_reason": "olx_image_404", "olx_revive_checked_at": {"$exists": True}}, {"$unset": {"olx_revive_checked_at": ""}})
+        return {"reset": r.modified_count}
     sem = asyncio.Semaphore(max(1, min(20, concurrency)))
-    stats = {"active": 0, "gone": 0, "unknown": 0, "images_refreshed": 0, "revived": 0}
+    stats = {"active": 0, "gone": 0, "unknown": 0, "images_refreshed": 0, "revived": 0, "aborted": False}
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as client:
         async def one(d):
@@ -1647,11 +1652,17 @@ async def admin_olx_image_sweep(request: Request, limit: int = 600, concurrency:
                     stats["revived"] += 1
                 if not dry_run:
                     await _olx_apply_state(coll, d, state, photos, now)
-                    if revive:
+                    if revive and state != "unknown":
                         await coll.update_one({"_id": d["_id"]}, {"$set": {"olx_revive_checked_at": now}})
-        await asyncio.gather(*(one(d) for d in docs))
+                return state
+        # Partiami po 20: gdy cała partia to 'unknown' (OLX blokuje / 403 / 429) — przerywamy, żeby nie pogłębiać blokady
+        for i in range(0, len(docs), 20):
+            chunk_states = await asyncio.gather(*(one(d) for d in docs[i:i + 20]))
+            if chunk_states and all(s == "unknown" for s in chunk_states):
+                stats["aborted"] = True
+                break
     remaining = await coll.count_documents(q)
-    return {"checked": len(docs), **stats, "remaining": remaining, "dry_run": bool(dry_run), "revive": bool(revive)}
+    return {"checked": sum(v for k, v in stats.items() if k in ("active", "gone", "unknown")), **stats, "remaining": remaining, "dry_run": bool(dry_run), "revive": bool(revive)}
 
 
 class AdminSetTierRequest(BaseModel):

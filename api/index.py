@@ -36,7 +36,7 @@ import stripe
 from bson import ObjectId
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
@@ -3765,13 +3765,14 @@ async def admin_send_manual(body: ManualSendReq, admin: dict = Depends(require_a
             results.append({"email": e, "status": "pominięto — na liście „nie”"}); continue
         if not body.force and await db.manual_mail_log.find_one({"email": e, "template": key, "ok": True, "sent_at": {"$gte": month_ago}}):
             results.append({"email": e, "status": "pominięto — ten szablon wysłany w ciągu 30 dni"}); continue
+        track_id = secrets.token_urlsafe(9)
         mid = None
         try:
-            mid = await send_email(to=e, subject=body.subject.strip(), html=html)
+            mid = await send_email(to=e, subject=body.subject.strip(), html=_track_links(html, track_id))
         except Exception as exc:
             logger.warning("manual mail failed %s: %s", e, str(exc)[:120])
         await db.manual_mail_log.insert_one({"email": e, "template": key, "subject": body.subject.strip(), "ok": bool(mid),
-                                             "sent_at": now, "by": admin.get("email"),
+                                             "sent_at": now, "by": admin.get("email"), "track_id": track_id, "clicks": 0,
                                              "error": None if mid else (LAST_EMAIL_ERROR.get("error") or "")[:200]})
         results.append({"email": e, "status": "✅ wysłano" if mid else f"❌ błąd: {(LAST_EMAIL_ERROR.get('error') or 'nieznany')[:120]}"})
     sent = sum(1 for r in results if r["status"].startswith("✅"))
@@ -3780,6 +3781,172 @@ async def admin_send_manual(body: ManualSendReq, admin: dict = Depends(require_a
 
 class ManualOptoutReq(BaseModel):
     email: str
+
+
+# --- Śledzenie kliknięć i odpowiedzi w ręcznym mailingu B2B ---
+_TRACK_ALLOWED_PREFIXES = ("https://www.finderdom.pl", "https://finderdom.pl")
+
+
+def _track_links(html: str, track_id: str) -> str:
+    """Linki do finderdom.pl w mailu przechodzą przez /api/t/<id>?u=… (zapis kliknięcia + przekierowanie)."""
+    def _rw(m):
+        url = m.group(1)
+        if not url.startswith(_TRACK_ALLOWED_PREFIXES) or "/api/t/" in url:
+            return m.group(0)
+        return f'href="{MAIL_PUBLIC_DOMAIN}/api/t/{track_id}?u={_urlp.quote(url, safe="")}"'
+    return re.sub(r'href="(https?://[^"]+)"', _rw, html)
+
+
+@app.get("/api/t/{track_id}")
+async def manual_mail_click(track_id: str, u: str = ""):
+    """Rejestruje kliknięcie w link z maila B2B i przekierowuje na oryginalny adres (tylko finderdom.pl)."""
+    target = _urlp.unquote(u or "")
+    if not target.startswith(_TRACK_ALLOWED_PREFIXES):
+        target = MAIL_PUBLIC_DOMAIN
+    tid = re.sub(r"[^A-Za-z0-9_-]", "", track_id)[:32]
+    if tid:
+        try:
+            now = datetime.now(timezone.utc)
+            await database().manual_mail_log.update_one(
+                {"track_id": tid},
+                {"$inc": {"clicks": 1}, "$set": {"last_click_at": now}, "$min": {"first_click_at": now}},
+            )
+        except Exception as exc:
+            logger.warning("track click failed: %s", str(exc)[:120])
+    return RedirectResponse(target, status_code=302)
+
+
+_NO_REPLY_RE = re.compile(r"^\W*(nie|no)\b|nie\s+(chc|jeste[sś]my\s+zainteresowan|zainteresowan|pisz|wysy[łl]a)|wypisz|usu[ńn]\s+(mnie|nas|z\s+listy)|prosz[eę]\s+(o\s+)?(nie|usuni|zaprzesta)|rezygnuj", re.I)
+
+
+def _reply_snippet(raw_bytes: bytes) -> str:
+    """Tekst odpowiedzi bez cytatów (linie '>' i wszystko po 'napisał(a):' / '-----Original')."""
+    import email as _email
+    from email import policy as _policy
+    msg = _email.message_from_bytes(raw_bytes, policy=_policy.default)
+    text = ""
+    body = msg.get_body(preferencelist=("plain", "html"))
+    if body is not None:
+        try:
+            text = body.get_content()
+        except Exception:
+            text = ""
+        if body.get_content_type() == "text/html":
+            text = _html_to_text(text)
+    lines = []
+    for ln in (text or "").splitlines():
+        s = ln.strip()
+        if s.startswith(">"):
+            continue
+        if re.search(r"napisa[łl](a)?:\s*$|-----\s*Original|^Od:\s|^From:\s|^W dniu .* pisze:|^Dnia .*", s):
+            break
+        lines.append(s)
+    return re.sub(r"\s+", " ", " ".join(lines)).strip()[:400]
+
+
+def _imap_fetch_replies(cfg: dict, known: set, last_uid: int, days: int = 45) -> tuple[list, int]:
+    """Blocking: łączy się z IMAP (ta sama skrzynka co SMTP), zwraca odpowiedzi od znanych adresów + najwyższy sprawdzony UID."""
+    import imaplib
+    from email import message_from_bytes
+    from email.utils import parseaddr, parsedate_to_datetime
+    host = cfg.get("imap_host") or cfg["host"]
+    M = imaplib.IMAP4_SSL(host, int(cfg.get("imap_port") or 993), timeout=15)
+    try:
+        M.login(cfg["user"], cfg["password"])
+        M.select("INBOX", readonly=True)
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%d-%b-%Y")
+        typ, data = M.uid("search", None, f"(SINCE {since})")
+        uids = [int(x) for x in (data[0].split() if typ == "OK" and data and data[0] else [])]
+        uids = [x for x in uids if x > last_uid][-300:]
+        if not uids:
+            return [], last_uid
+        typ, data = M.uid("fetch", ",".join(str(x) for x in uids), "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+        hits = []
+        if typ == "OK":
+            for part in data:
+                if not isinstance(part, tuple):
+                    continue
+                m_uid = re.search(rb"UID (\d+)", part[0])
+                if not m_uid:
+                    continue
+                hdr = message_from_bytes(part[1])
+                sender = parseaddr(str(hdr.get("From") or ""))[1].strip().lower()
+                if sender and sender in known:
+                    when = None
+                    try:
+                        when = parsedate_to_datetime(str(hdr.get("Date") or ""))
+                    except Exception:
+                        pass
+                    hits.append({"uid": int(m_uid.group(1)), "email": sender, "subject": str(hdr.get("Subject") or "")[:200], "date": when})
+        for h in hits:
+            try:
+                typ, data = M.uid("fetch", str(h["uid"]), "(BODY.PEEK[])")
+                raw = next((p[1] for p in data if isinstance(p, tuple)), b"") if typ == "OK" else b""
+                h["snippet"] = _reply_snippet(raw) if raw else ""
+            except Exception:
+                h["snippet"] = ""
+            h["is_no"] = bool(_NO_REPLY_RE.search(h["snippet"] or "")) or bool(re.fullmatch(r"\W*(re:\s*)*\W*nie\W*", h["subject"] or "", re.I))
+        return hits, max(uids)
+    finally:
+        try:
+            M.logout()
+        except Exception:
+            pass
+
+
+@app.post("/api/admin/mailing/check-replies")
+async def admin_check_replies(admin: dict = Depends(require_admin), rescan: bool = False):
+    """Zagląda do skrzynki (IMAP, te same dane co SMTP) i oznacza, które biura odpisały. Odpowiedź „nie” → automatycznie lista wykluczeń."""
+    cfg = await _smtp_cfg()
+    if not cfg:
+        raise HTTPException(400, "Najpierw skonfiguruj skrzynkę SMTP w tej zakładce — do odczytu odpowiedzi używamy tych samych danych (IMAP)")
+    db = database()
+    known = {d["email"] async for d in db.manual_mail_log.find({"ok": True}, {"email": 1})}
+    if not known:
+        return {"checked": 0, "replies": [], "optout_added": 0, "note": "Brak wysłanych maili do sprawdzenia"}
+    state = await db.settings.find_one({"_id": "manual_mail_imap"}) or {}
+    last_uid = 0 if rescan else int(state.get("last_uid") or 0)
+    try:
+        hits, new_last = await asyncio.wait_for(asyncio.to_thread(_imap_fetch_replies, cfg, known, last_uid), timeout=25)
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "Skrzynka odpowiada zbyt wolno — spróbuj ponownie za chwilę")
+    except Exception as exc:
+        raise HTTPException(502, f"Nie udało się połączyć ze skrzynką (IMAP): {str(exc)[:160]}")
+    now = datetime.now(timezone.utc)
+    optout_added = 0
+    for h in hits:
+        upd = {"replied_at": h["date"] or now, "reply_subject": h["subject"], "reply_snippet": h.get("snippet", ""), "reply_source": "imap"}
+        if h["is_no"]:
+            upd["reply_optout"] = True
+            r = await db.manual_mail_optout.update_one({"email": h["email"]}, {"$set": {"email": h["email"], "at": now, "by": "auto: odpowiedź „nie”"}}, upsert=True)
+            optout_added += 1 if r.upserted_id else 0
+        await db.manual_mail_log.update_many({"email": h["email"]}, {"$set": upd})
+    await db.settings.update_one({"_id": "manual_mail_imap"}, {"$set": {"last_uid": new_last, "checked_at": now, "last_hits": len(hits)}}, upsert=True)
+    return {"checked": True, "new_replies": len(hits), "optout_added": optout_added,
+            "replies": [{"email": h["email"], "subject": h["subject"], "snippet": h.get("snippet", ""), "is_no": h["is_no"]} for h in hits]}
+
+
+class ManualMarkReq(BaseModel):
+    email: str
+    mark: str = Field(pattern="^(replied|optout|clear)$")
+    note: str = Field(default="", max_length=300)
+
+
+@app.post("/api/admin/mailing/manual-mark")
+async def admin_manual_mark(body: ManualMarkReq, admin: dict = Depends(require_admin)):
+    """Ręczne oznaczenie: biuro odpisało / nie chce / wyczyść oznaczenia (gdy odpowiedź przyszła np. telefonicznie)."""
+    e = clean_email(body.email)
+    db = database()
+    now = datetime.now(timezone.utc)
+    if body.mark == "replied":
+        await db.manual_mail_log.update_many({"email": e}, {"$set": {"replied_at": now, "reply_source": "manual", "reply_snippet": body.note.strip(), "reply_optout": False}})
+    elif body.mark == "optout":
+        await db.manual_mail_log.update_many({"email": e}, {"$set": {"replied_at": now, "reply_source": "manual", "reply_optout": True, "reply_snippet": body.note.strip() or "nie"}})
+        await db.manual_mail_optout.update_one({"email": e}, {"$set": {"email": e, "at": now, "by": admin.get("email")}}, upsert=True)
+    else:
+        await db.manual_mail_log.update_many({"email": e}, {"$unset": {"replied_at": "", "reply_source": "", "reply_snippet": "", "reply_optout": "", "reply_subject": ""}})
+        await db.manual_mail_optout.delete_one({"email": e})
+    return {"ok": True, "email": e, "mark": body.mark}
 
 
 @app.post("/api/admin/mailing/manual-optout")
@@ -3795,12 +3962,37 @@ async def admin_manual_optout(body: ManualOptoutReq, admin: dict = Depends(requi
 @app.get("/api/admin/mailing/manual-log")
 async def admin_manual_log(admin: dict = Depends(require_admin), limit: int = 50):
     db = database()
+
+    def _iso(v):
+        return v.isoformat() if isinstance(v, datetime) else v
+
     log = []
     async for l in db.manual_mail_log.find({}).sort("sent_at", -1).limit(max(1, min(200, limit))):
         log.append({"email": l["email"], "template": l["template"], "ok": l["ok"], "error": l.get("error"),
-                    "sent_at": l["sent_at"].isoformat() if isinstance(l.get("sent_at"), datetime) else l.get("sent_at")})
+                    "sent_at": _iso(l.get("sent_at")), "clicks": int(l.get("clicks") or 0), "first_click_at": _iso(l.get("first_click_at")),
+                    "replied_at": _iso(l.get("replied_at")), "reply_optout": bool(l.get("reply_optout")),
+                    "reply_snippet": (l.get("reply_snippet") or "")[:200], "reply_source": l.get("reply_source")})
     optout = [d["email"] async for d in db.manual_mail_optout.find({}, {"email": 1}).sort("at", -1).limit(200)]
-    return {"log": log, "optout": optout, "sent_total": await db.manual_mail_log.count_documents({"ok": True})}
+    optout_set = set(optout)
+    # „Do kogo zadzwonić”: kliknęli link lub odpisali (i nie powiedzieli „nie”) — zgrupowane po adresie
+    to_call = {}
+    async for l in db.manual_mail_log.find({"ok": True, "$or": [{"clicks": {"$gt": 0}}, {"replied_at": {"$ne": None}}]}).sort("sent_at", -1).limit(500):
+        e = l["email"]
+        if e in optout_set or l.get("reply_optout"):
+            continue
+        row = to_call.setdefault(e, {"email": e, "clicks": 0, "last_click_at": None, "replied_at": None, "reply_snippet": "", "templates": []})
+        row["clicks"] += int(l.get("clicks") or 0)
+        lc = _iso(l.get("last_click_at"))
+        if lc and (not row["last_click_at"] or lc > row["last_click_at"]):
+            row["last_click_at"] = lc
+        if l.get("replied_at") and not row["replied_at"]:
+            row["replied_at"] = _iso(l.get("replied_at")); row["reply_snippet"] = (l.get("reply_snippet") or "")[:200]
+        if l["template"] not in row["templates"]:
+            row["templates"].append(l["template"])
+    state = await db.settings.find_one({"_id": "manual_mail_imap"}) or {}
+    return {"log": log, "optout": optout, "sent_total": await db.manual_mail_log.count_documents({"ok": True}),
+            "to_call": sorted(to_call.values(), key=lambda r: (r["replied_at"] or "", r["last_click_at"] or ""), reverse=True),
+            "replies_checked_at": _iso(state.get("checked_at"))}
 
 
 @app.post("/api/admin/mailing/email-key")

@@ -245,7 +245,9 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
           <input id="mmOptout" placeholder="ktoś odpisał „nie”? wpisz jego e-mail" style="flex:1;min-width:220px;padding:10px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
           <button type="button" id="mmOptoutBtn" class="refresh-btn" style="min-height:44px">🚫 Dodaj do listy „nie”</button>
+          <button type="button" id="mmCheckReplies" class="refresh-btn" style="min-height:44px" title="Łączy się z Twoją skrzynką (IMAP, te same dane co SMTP) i sprawdza, kto odpisał. Odpowiedź „nie” trafia automatycznie na listę wykluczeń.">🔎 Sprawdź odpowiedzi w skrzynce</button>
         </div>
+        <div id="mmToCall" style="margin-top:12px"></div>
         <div id="mmLog" style="margin-top:12px;font-size:12px;color:#8ba3d4"></div>
       </div>
       <div id="mailingTemplates" style="margin-top:18px"></div>
@@ -801,9 +803,26 @@ async function loadManualMail(){
     sel.innerHTML = _mmTemplates.map(t => `<option value="${escapeHtml(t.key)}">${escapeHtml(t.title)}</option>`).join('');
     const pick = () => { const t = _mmTemplates.find(x => x.key === sel.value); if (t) { document.getElementById('mmSubject').value = t.subject; document.getElementById('mmPreview').href = '/szablony/' + t.key; } };
     sel.onchange = pick; pick();
-    const lg = await api('/admin/mailing/manual-log?limit=30');
-    const rows = (lg.log || []).map(l => `<div>${escapeHtml((l.sent_at || '').slice(0,16).replace('T',' '))} · ${escapeHtml(l.email)} · ${escapeHtml(l.template)} · ${l.ok ? '<span class="ok">✅</span>' : '<span class="bad">❌ ' + escapeHtml(l.error || '') + '</span>'}</div>`).join('');
-    document.getElementById('mmLog').innerHTML = `<b style="color:#c5d0e6">Wysłane łącznie: ${lg.sent_total || 0}</b>` + (lg.optout && lg.optout.length ? ` · lista „nie”: ${lg.optout.length}` : '') + (rows ? `<div style="margin-top:6px;max-height:160px;overflow:auto">${rows}</div>` : '');
+    const lg = await api('/admin/mailing/manual-log?limit=60');
+    const fmtT = s => escapeHtml((s || '').slice(0,16).replace('T',' '));
+    const btns = e => `<button type="button" class="mm-mark" data-mark="replied" data-email="${escapeHtml(e)}" title="Oznacz: odpisał (np. telefonicznie)" style="padding:3px 8px;font-size:11px;border-radius:8px;border:1px solid rgba(74,222,128,0.4);background:rgba(74,222,128,0.12);color:#86efac;cursor:pointer">📞 Odpisał</button> <button type="button" class="mm-mark" data-mark="optout" data-email="${escapeHtml(e)}" title="Nie chce — na listę wykluczeń" style="padding:3px 8px;font-size:11px;border-radius:8px;border:1px solid rgba(248,113,113,0.4);background:rgba(248,113,113,0.12);color:#fca5a5;cursor:pointer">🚫 Nie</button>`;
+    // 📞 Do kogo zadzwonić — kliknęli link lub odpisali, bez „nie”
+    const tc = lg.to_call || [];
+    document.getElementById('mmToCall').innerHTML = `<div style="background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.3);border-radius:10px;padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px"><b style="font-size:13px;color:#86efac">📞 Do kogo zadzwonić (${tc.length})</b><span style="font-size:11px;color:#8ba3d4">${lg.replies_checked_at ? 'odpowiedzi sprawdzone: ' + fmtT(lg.replies_checked_at) : 'odpowiedzi jeszcze nie sprawdzane — kliknij „Sprawdź odpowiedzi w skrzynce”'}</span></div>
+      ${tc.length ? `<table style="width:100%;font-size:12px;margin-top:8px"><thead><tr><th style="text-align:left">E-mail</th><th>Kliknięcia</th><th>Odpowiedź</th><th></th></tr></thead><tbody>${tc.map(r => `<tr>
+        <td><a href="mailto:${escapeHtml(r.email)}" style="color:#fff;font-weight:700">${escapeHtml(r.email)}</a><div style="color:#8ba3d4;font-size:11px">${escapeHtml(r.templates.join(', '))}</div></td>
+        <td style="text-align:center">${r.clicks ? `<b style="color:#FFB800">${r.clicks}×</b><div style="color:#8ba3d4;font-size:11px">${fmtT(r.last_click_at)}</div>` : '—'}</td>
+        <td style="text-align:center">${r.replied_at ? `<span class="ok">✉️ ${fmtT(r.replied_at)}</span>${r.reply_snippet ? `<div style="color:#c5d0e6;font-size:11px;max-width:260px;margin:2px auto 0">„${escapeHtml(r.reply_snippet.slice(0,120))}${r.reply_snippet.length > 120 ? '…' : ''}”</div>` : ''}` : '—'}</td>
+        <td style="text-align:right;white-space:nowrap">${btns(r.email)}</td></tr>`).join('')}</tbody></table>` : '<div style="color:#8ba3d4;font-size:12px;margin-top:6px">Na razie nikt nie kliknął ani nie odpisał. Linki w wysyłanych mailach są śledzone automatycznie.</div>'}
+    </div>`;
+    const rows = (lg.log || []).map(l => `<tr>
+      <td style="white-space:nowrap">${fmtT(l.sent_at)}</td><td>${escapeHtml(l.email)}</td><td style="color:#8ba3d4">${escapeHtml(l.template)}</td>
+      <td>${l.ok ? '<span class="ok">✅</span>' : '<span class="bad" title="' + escapeHtml(l.error || '') + '">❌</span>'}</td>
+      <td style="text-align:center">${l.clicks ? `<b style="color:#FFB800">${l.clicks}×</b>` : '—'}</td>
+      <td>${l.reply_optout ? '<span class="bad">🚫 nie</span>' : l.replied_at ? `<span class="ok">✉️ ${fmtT(l.replied_at)}</span>${l.reply_source === 'manual' ? ' <span style="color:#8ba3d4">(ręcznie)</span>' : ''}` : '—'}</td>
+      <td style="text-align:right;white-space:nowrap">${l.ok && !l.reply_optout ? btns(l.email) : ''}</td></tr>`).join('');
+    document.getElementById('mmLog').innerHTML = `<b style="color:#c5d0e6">Wysłane łącznie: ${lg.sent_total || 0}</b>` + (lg.optout && lg.optout.length ? ` · lista „nie”: ${lg.optout.length}` : '') + (rows ? `<div style="margin-top:6px;max-height:260px;overflow:auto"><table style="width:100%;font-size:12px"><thead><tr><th style="text-align:left">Data</th><th style="text-align:left">E-mail</th><th style="text-align:left">Szablon</th><th>Wysł.</th><th>Klik</th><th style="text-align:left">Odpowiedź</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '');
   } catch(e) { console.warn('manual mail:', e); }
 }
 document.addEventListener('submit', async (e) => {
@@ -825,6 +844,28 @@ document.addEventListener('click', async (e) => {
   const inp = document.getElementById('mmOptout'); const v = inp.value.trim(); if (!v) return;
   try { const r = await apiPost('/admin/mailing/manual-optout', { email: v }); inp.value = ''; document.getElementById('mmMsg').innerHTML = `<span class="ok">🚫 ${escapeHtml(r.email)} nie dostanie już maili</span>`; loadManualMail(); }
   catch(err) { document.getElementById('mmMsg').innerHTML = `<span class="bad">❌ ${escapeHtml(err.message)}</span>`; }
+});
+// 🔎 Sprawdź odpowiedzi w skrzynce (IMAP)
+document.addEventListener('click', async (e) => {
+  if (e.target.id !== 'mmCheckReplies') return;
+  const btn = e.target, msg = document.getElementById('mmMsg');
+  btn.disabled = true; msg.innerHTML = '⏳ Łączę ze skrzynką…';
+  try {
+    const r = await apiPost('/admin/mailing/check-replies', {});
+    if (r.note) msg.innerHTML = `<span style="color:#8ba3d4">${escapeHtml(r.note)}</span>`;
+    else msg.innerHTML = `<span class="ok">✅ Sprawdzono. Nowe odpowiedzi: ${r.new_replies}${r.optout_added ? ` · „nie” dodane do wykluczeń: ${r.optout_added}` : ''}</span>` + (r.replies && r.replies.length ? `<div style="margin-top:6px">${r.replies.map(x => `<div>${x.is_no ? '🚫' : '✉️'} ${escapeHtml(x.email)}${x.snippet ? ' — „' + escapeHtml(x.snippet.slice(0,100)) + '”' : ''}</div>`).join('')}</div>` : '');
+    loadManualMail();
+  } catch(err) { msg.innerHTML = `<span class="bad">❌ ${escapeHtml(err.message)}</span>`; }
+  finally { btn.disabled = false; }
+});
+// 📞 Odpisał / 🚫 Nie — ręczne oznaczenia przy adresie
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('.mm-mark'); if (!b) return;
+  const email = b.dataset.email, mark = b.dataset.mark;
+  if (mark === 'optout' && !confirm(`Dodać ${email} do listy „nie”? Nie dostanie już żadnego maila z panelu.`)) return;
+  b.disabled = true;
+  try { await apiPost('/admin/mailing/manual-mark', { email, mark }); document.getElementById('mmMsg').innerHTML = `<span class="ok">✅ ${escapeHtml(email)} — ${mark === 'replied' ? 'oznaczony jako „odpisał”' : 'na liście „nie”'}</span>`; loadManualMail(); }
+  catch(err) { document.getElementById('mmMsg').innerHTML = `<span class="bad">❌ ${escapeHtml(err.message)}</span>`; b.disabled = false; }
 });
 
 async function deleteSmtp(){

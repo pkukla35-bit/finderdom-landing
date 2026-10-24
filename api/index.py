@@ -80,8 +80,10 @@ async def _stripe_cfg():
         stripe.api_key = _STRIPE_RT["secret"]
     return _STRIPE_RT["secret"], _STRIPE_RT["whsec"]
 
-PLANS = {"individual": 45, "business": 199}  # gross PLN per 30 days
-PLAN_LABELS = {"individual": "Osobisty", "business": "Firmowy"}
+PLANS = {"individual": 45, "solo": 50, "business": 199}  # gross PLN per 30 days
+PLAN_LABELS = {"individual": "Osobisty", "solo": "Biuro jednoosobowe", "business": "Firmowy"}
+# Plany „biurowe”: pełne funkcje B2B (CRM, leady, wyceny bez limitu). Solo = 1 login (bez agentów), Firmowy = 4 loginy w cenie.
+BUSINESS_TIERS = {"business", "solo"}
 VALUATION_PRICE = 35  # PLN one-time per property valuation PDF
 
 # Email (Emergent managed Resend)
@@ -639,7 +641,7 @@ async def _notify_leads_to_businesses(lead_id: str, lead: dict) -> None:
         db = database()
         now = datetime.now(timezone.utc)
         cursor = db.users.find({
-            "tier": "business",
+            "tier": {"$in": list(BUSINESS_TIERS)},
             "expires_at": {"$gt": now},
         })
         recipients = []
@@ -707,7 +709,7 @@ async def _notify_leads_to_businesses(lead_id: str, lead: dict) -> None:
 async def list_my_leads(user: dict = Depends(current_user)):
     """List leads claimed by user OR by any teammate in the same company."""
     tier = await effective_tier_async(user)
-    if tier != "business":
+    if tier not in BUSINESS_TIERS:
         raise HTTPException(403, "Tylko subskrypcja Firmowa")
 
     # Determine company scope: if agent → include master; if master → include all agents; else self
@@ -754,7 +756,7 @@ async def list_my_leads(user: dict = Depends(current_user)):
 async def claim_lead(token: str, user: dict = Depends(current_user)):
     """Atomically claim a lead. First-come-first-served. Returns phone number if success."""
     tier = await effective_tier_async(user)
-    if tier != "business":
+    if tier not in BUSINESS_TIERS:
         raise HTTPException(403, "Tylko subskrypcja Firmowa może rezerwować leady")
     # Deactivated agents can't claim
     if user.get("active") is False:
@@ -828,8 +830,14 @@ async def _check_agent_limit(user: dict) -> None:
         )
 
 
+SOLO_NO_AGENTS_MSG = "Plan Biuro jednoosobowe (50 zł) to 1 login. Dodawanie agentów wymaga Planu Firmowego (199 zł, 4 loginy w cenie) — zmień plan w Moje konto → Subskrypcja."
+
+
 async def _require_business_master(user: dict) -> None:
-    if await effective_tier_async(user) != "business":
+    tier = await effective_tier_async(user)
+    if tier == "solo":
+        raise HTTPException(403, SOLO_NO_AGENTS_MSG)
+    if tier != "business":
         raise HTTPException(403, "Tylko konto Firmowy może dodawać agentów")
     if user.get("role") == "agent":
         raise HTTPException(403, "Tylko właściciel firmy może dodawać agentów")
@@ -888,6 +896,8 @@ async def create_agent_direct(req: CreateAgentRequest, user: dict = Depends(curr
 async def invite_agent(req: InviteAgentRequest, user: dict = Depends(current_user)):
     """Master invites a new agent by email."""
     tier = await effective_tier_async(user)
+    if tier == "solo":
+        raise HTTPException(403, SOLO_NO_AGENTS_MSG)
     if tier != "business":
         raise HTTPException(403, "Tylko konto Firmowy może zapraszać agentów")
     if user.get("role") == "agent":
@@ -972,6 +982,8 @@ async def list_team_agents(user: dict = Depends(current_user)):
     """Master lists all agents in his company."""
     if user.get("role") == "agent":
         raise HTTPException(403, "Tylko master widzi listę agentów")
+    if await effective_tier_async(user) == "solo":
+        raise HTTPException(403, SOLO_NO_AGENTS_MSG)
     if await effective_tier_async(user) != "business":
         raise HTTPException(403, "Tylko konto Firmowy")
 
@@ -1036,10 +1048,10 @@ async def _crm_allowed(user: dict) -> bool:
     """CRM firmy: tylko konto firmowe (account_type=business) z aktywnym planem Firmowym lub agent takiego biura.
     Osoba fizyczna (account_type=personal/individual) nie widzi CRM — nawet z planem."""
     if user.get("role") == "agent" and user.get("master_id"):
-        return await effective_tier_async(user) == "business"
+        return await effective_tier_async(user) in BUSINESS_TIERS
     if user.get("account_type") != "business":
         return False
-    return await effective_tier_async(user) == "business"
+    return await effective_tier_async(user) in BUSINESS_TIERS
 
 
 @app.post("/api/offer-status")
@@ -1298,7 +1310,7 @@ async def admin_stats(admin: dict = Depends(require_admin)):
 
     # Paid users (tier != free, active)
     paid_active = await users_col.count_documents({
-        "tier": {"$in": ["individual", "business"]},
+        "tier": {"$in": ["individual", "solo", "business"]},
         "expires_at": {"$gte": now}
     })
 
@@ -1598,7 +1610,7 @@ async def admin_olx_image_sweep(request: Request, limit: int = 1500, concurrency
 
 @app.get("/api/admin/cleanup-stale")
 class AdminSetTierRequest(BaseModel):
-    tier: str = Field(pattern="^(free|individual|business)$")
+    tier: str = Field(pattern="^(free|individual|solo|business)$")
     days: Optional[int] = Field(default=None, ge=1, le=3650)  # None = bezterminowo (10 lat)
 
 
@@ -3140,16 +3152,16 @@ MAIL_TEMPLATES: Dict[str, dict] = {
     },
     "b2": {
         "audience": "business", "day": 5, "auto": True, "name": "Dzień 5 — Powiadomienie: trial kończy się za 2 dni",
-        "subject": "Za 2 dni kończy się Twój okres próbny — 199 zł za całe biuro",
-        "title": "Wszystkie województwa, 4 loginy dla agentów, wyceny w cenie — 199 zł/mies",
-        "intro": "Twoje 7 dni Premium Firmowy dobiega końca. Jeśli FinderDom pomógł Ci choć przy jednej ofercie, policz: jeden pozyskany klient to 2 000–5 000 zł prowizji, a plan kosztuje 6,50 zł dziennie za całe biuro.",
+        "subject": "Za 2 dni kończy się Twój okres próbny — od 50 zł/mies",
+        "title": "Wszystkie województwa, CRM, wyceny w cenie — 50 zł (1 login) lub 199 zł (całe biuro)",
+        "intro": "Twoje 7 dni Premium Firmowy dobiega końca. Jeśli FinderDom pomógł Ci choć przy jednej ofercie, policz: jeden pozyskany klient to 2 000–5 000 zł prowizji. Pracujesz sam — Biuro jednoosobowe za 50 zł/mies. Masz zespół — Plan Firmowy za 199 zł, czyli 6,50 zł dziennie za całe biuro.",
         "bullets": [
             "<b>Wszystkie województwa</b> — bez pakietów regionalnych i dopłat za kolejne miasto.",
-            "<b>Aż 4 loginy dla agentów</b> w cenie, każdy kolejny tylko 55 zł/mies.",
-            "<b>Wyceny PDF bez limitu</b> w cenie abonamentu — każda warta 35 zł.",
-            "<b>Leady od właścicieli + CRM</b> dla całego zespołu. Faktura VAT automatycznie.",
+            "<b>Biuro jednoosobowe 50 zł</b> — 1 login z CRM, leadami i wycenami bez limitu. <b>Firmowy 199 zł</b> — aż 4 loginy dla agentów, każdy kolejny 55 zł/mies.",
+            "<b>Wyceny PDF bez limitu</b> w cenie obu planów — każda warta 35 zł.",
+            "<b>Leady od właścicieli + CRM</b>. Faktura VAT automatycznie.",
         ],
-        "cta": "💳 Przedłuż dostęp za 199 zł", "url": "/konto",
+        "cta": "💳 Wybierz plan i przedłuż dostęp", "url": "/konto",
         "ps": "Płatność BLIK, kartą, Apple/Google Pay. Abonament na 30 dni, bez umowy — anulujesz kiedy chcesz.",
     },
     "bcold": {
@@ -4374,16 +4386,16 @@ class BusinessValuationReq(BaseModel):
 
 @app.post("/api/valuation/business")
 async def valuation_business(body: BusinessValuationReq, user: dict = Depends(current_user)):
-    """Wycena PDF w cenie Planu Firmowego (bez Stripe). Trial: limit BUSINESS_TRIAL_VALUATIONS, opłacony plan: bez limitu."""
+    """Wycena PDF w cenie planu biurowego (Firmowy / Biuro jednoosobowe, bez Stripe). Trial: limit BUSINESS_TRIAL_VALUATIONS, opłacony plan: bez limitu."""
     tier = await effective_tier_async(user)
-    if tier != "business" and (user.get("email") or "").lower() not in ADMIN_EMAILS:
-        raise HTTPException(402, "Wyceny w cenie abonamentu są dostępne w Planie Firmowym")
+    if tier not in BUSINESS_TIERS and (user.get("email") or "").lower() not in ADMIN_EMAILS:
+        raise HTTPException(402, "Wyceny w cenie abonamentu są dostępne w planach Biuro jednoosobowe (50 zł) i Firmowy (199 zł)")
     db = database()
     owner_id = str(user.get("master_id") or user["_id"])
     if user.get("is_trial"):
         used = await db.valuation_log.count_documents({"owner_id": owner_id, "source": "business"})
         if used >= BUSINESS_TRIAL_VALUATIONS:
-            raise HTTPException(402, f"W okresie próbnym masz {BUSINESS_TRIAL_VALUATIONS} wyceny. Opłać Plan Firmowy (199 zł) — wyceny bez limitu.")
+            raise HTTPException(402, f"W okresie próbnym masz {BUSINESS_TRIAL_VALUATIONS} wyceny. Opłać plan Biuro jednoosobowe (50 zł) lub Firmowy (199 zł) — wyceny bez limitu.")
     email = user.get("email") or ""
     if body.listing_id:
         val_type, md = "valuation", {"type": "valuation", "listing_id": body.listing_id, "email": email}

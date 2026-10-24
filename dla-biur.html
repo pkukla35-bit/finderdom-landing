@@ -15,10 +15,10 @@ gtag('set', 'url_passthrough', false);
 </script>
 <script async src="//clickiocmp.com/t/consent_250759.js"></script>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FinderDom dla biur nieruchomości — CRM, leady, 4 loginy dla agentów, wyceny PDF · 199 zł/mies</title>
+<title>FinderDom dla biur nieruchomości — CRM, leady, wyceny PDF · od 50 zł/mies (1 login) lub 199 zł (4 loginy)</title>
 <link rel="canonical" href="https://www.finderdom.pl/dla-biur">
-<meta name="description" content="Plan Firmowy FinderDom.pl dla biur i pośredników nieruchomości: wszystkie województwa, aż 4 loginy dla agentów, wyceny PDF bez limitu w cenie, CRM i leady od klientów. 199 zł/mies, 7 dni za darmo.">
-<meta property="og:title" content="FinderDom dla biur nieruchomości — 199 zł/mies, 7 dni za darmo">
+<meta name="description" content="Plany FinderDom.pl dla pośredników i biur nieruchomości: Biuro jednoosobowe 50 zł/mies (1 login) lub Plan Firmowy 199 zł/mies (4 loginy dla agentów). Wszystkie województwa, wyceny PDF bez limitu w cenie, CRM i leady od klientów. 7 dni za darmo.">
+<meta property="og:title" content="FinderDom dla biur nieruchomości — od 50 zł/mies, 7 dni za darmo">
 <meta property="og:description" content="Wszystkie województwa, 4 loginy dla agentów, wyceny PDF w cenie abonamentu, CRM i leady od klientów.">
 <meta property="og:url" content="https://www.finderdom.pl/dla-biur">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -42,8 +42,11 @@ gtag('set', 'url_passthrough', false);
   h1{font-size:clamp(30px,5vw,52px);font-weight:900;line-height:1.1;margin:0 0 16px;letter-spacing:-0.5px}
   h1 span{color:#FFB800}
   .lead{color:#c5d0e6;font-size:18px;line-height:1.6;margin:0 0 28px}
-  .price-box{display:inline-flex;flex-direction:column;align-items:center;background:linear-gradient(135deg,rgba(255,184,0,0.12),rgba(255,255,255,0.03));border:2px solid rgba(255,184,0,0.45);border-radius:24px;padding:24px 36px;margin:0 auto 12px}
-  .price{font-size:56px;font-weight:900;color:#FFB800;line-height:1}
+  .price-row{display:flex;flex-wrap:wrap;justify-content:center;gap:16px;margin:0 auto 12px}
+  .price-box{display:inline-flex;flex-direction:column;align-items:center;background:linear-gradient(135deg,rgba(255,184,0,0.06),rgba(255,255,255,0.03));border:1px solid rgba(255,184,0,0.3);border-radius:24px;padding:22px 30px;min-width:260px}
+  .price-box.featured{border:2px solid rgba(255,184,0,0.55);background:linear-gradient(135deg,rgba(255,184,0,0.14),rgba(255,255,255,0.03))}
+  .price-name{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:#8ba3d4;font-weight:800;margin-bottom:8px}
+  .price{font-size:48px;font-weight:900;color:#FFB800;line-height:1}
   .price small{font-size:18px;color:#8ba3d4;font-weight:700}
   .price-sub{color:#c5d0e6;font-size:14px;margin-top:8px}
   .price-sub b{color:#fff}
@@ -108,10 +111,19 @@ gtag('set', 'url_passthrough', false);
     <div class="eyebrow">🏢 Dla biur nieruchomości i pośredników</div>
     <h1>Całe biuro w jednym abonamencie: <span>wszystkie województwa, 4 loginy dla agentów, wyceny w cenie</span></h1>
     <p class="lead">Wszystkie ogłoszenia z Otodom, OLX, Morizon, Gratki i pozostałych portali w jednej wyszukiwarce. Profesjonalne wyceny PDF z aktami notarialnymi RCN, CRM do pracy z ofertami i leady od właścicieli — bez dopłat za każdego agenta.</p>
-    <div class="price-box">
-      <div class="price">199 zł <small>/ miesiąc</small></div>
-      <div class="price-sub"><b>7 dni za darmo</b> dla firm z NIP · bez karty · anulujesz kiedy chcesz</div>
+    <div class="price-row">
+      <div class="price-box">
+        <div class="price-name">Biuro jednoosobowe</div>
+        <div class="price">50 zł <small>/ miesiąc</small></div>
+        <div class="price-sub">1 login · CRM · leady · <b>wyceny PDF bez limitu</b></div>
+      </div>
+      <div class="price-box featured">
+        <div class="price-name">Plan Firmowy</div>
+        <div class="price">199 zł <small>/ miesiąc</small></div>
+        <div class="price-sub">konto główne + <b>4 loginy dla agentów</b> · kolejny agent 55 zł</div>
+      </div>
     </div>
+    <div class="price-sub" style="margin-bottom:12px"><b>7 dni za darmo</b> dla firm z NIP · bez karty · po okresie próbnym wybierasz plan · anulujesz kiedy chcesz</div>
     <div>
       <a href="/rejestracja?typ=firma" class="cta-btn">🎁 Wypróbuj 7 dni za darmo</a>
       <a href="/przykladowa-wycena.pdf" target="_blank" rel="noopener" class="cta-btn outline">📄 Zobacz przykładową wycenę (PDF)</a>
@@ -130,31 +142,32 @@ gtag('set', 'url_passthrough', false);
 
   <div class="roi">
     <p>Jeden pozyskany klient z Twojego miasta to <b>~2 000–5 000 zł prowizji</b>.</p>
-    <p>Plan Firmowy kosztuje <b>199 zł/mies</b> — czyli <b>6,50 zł dziennie</b> za całe biuro. Zwraca się po pierwszej transakcji.</p>
+    <p>Pracujesz sam? Plan <b>Biuro jednoosobowe to 50 zł/mies</b>. Masz zespół? Plan Firmowy kosztuje <b>199 zł/mies</b> — czyli <b>6,50 zł dziennie</b> za całe biuro. Oba zwracają się po pierwszej transakcji.</p>
   </div>
 
   <h2>Jak zacząć?</h2>
   <div class="steps">
     <div class="step"><div class="n">1</div><h4>Załóż konto firmowe</h4><p>Podaj e-mail, NIP i nazwę biura. 30 sekund.</p></div>
-    <div class="step"><div class="n">2</div><h4>Dodaj agentów</h4><p>Wyślij zaproszenia e-mail — każdy agent dostaje własny login.</p></div>
-    <div class="step"><div class="n">3</div><h4>Pracuj przez 7 dni za darmo</h4><p>Pełny dostęp bez karty. Po okresie próbnym płacisz 199 zł/mies lub rezygnujesz.</p></div>
+    <div class="step"><div class="n">2</div><h4>Dodaj agentów</h4><p>W Planie Firmowym wyślij zaproszenia e-mail — każdy agent dostaje własny login. Pracujesz sam? Pomiń ten krok.</p></div>
+    <div class="step"><div class="n">3</div><h4>Pracuj przez 7 dni za darmo</h4><p>Pełny dostęp bez karty. Po okresie próbnym wybierasz plan: 50 zł (1 login) lub 199 zł (zespół) — albo rezygnujesz.</p></div>
   </div>
 
-  <h2>Plan Firmowy vs bez planu</h2>
+  <h2>Porównanie planów</h2>
   <table>
-    <tr><th>Funkcja</th><th>Bez planu</th><th>Firmowy</th></tr>
-    <tr><td>Wyszukiwarka wszystkich portali, cała Polska</td><td class="no">podgląd 5 ofert</td><td class="yes">✓ wszystkie</td></tr>
-    <tr><td>Linki do ogłoszeń na portalach</td><td class="no">—</td><td class="yes">✓</td></tr>
-    <tr><td>Analiza AI cen i filtr okazji</td><td class="no">ograniczona</td><td class="yes">✓ pełna</td></tr>
-    <tr><td>Loginy dla agentów</td><td class="no">—</td><td class="yes">4 w cenie · +55 zł/agent</td></tr>
-    <tr><td>Wyceny PDF z RCN</td><td class="no">35 zł / szt.</td><td class="yes">bez limitu w cenie</td></tr>
-    <tr><td>Leady od właścicieli (wspólna pula)</td><td class="no">—</td><td class="yes">✓</td></tr>
-    <tr><td>CRM statusów ofert + notatki zespołu</td><td class="no">—</td><td class="yes">✓</td></tr>
-    <tr><td>Faktura VAT</td><td class="no">—</td><td class="yes">✓ automatycznie</td></tr>
+    <tr><th>Funkcja</th><th>Bez planu</th><th>Biuro jednoosobowe · 50 zł</th><th>Firmowy · 199 zł</th></tr>
+    <tr><td>Wyszukiwarka wszystkich portali, cała Polska</td><td class="no">podgląd 5 ofert</td><td class="yes">✓ wszystkie</td><td class="yes">✓ wszystkie</td></tr>
+    <tr><td>Linki do ogłoszeń na portalach</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+    <tr><td>Analiza AI cen i filtr okazji</td><td class="no">ograniczona</td><td class="yes">✓ pełna</td><td class="yes">✓ pełna</td></tr>
+    <tr><td>Loginy dla agentów</td><td class="no">—</td><td class="no">1 login (bez agentów)</td><td class="yes">4 w cenie · +55 zł/agent</td></tr>
+    <tr><td>Wyceny PDF z RCN</td><td class="no">35 zł / szt.</td><td class="yes">bez limitu w cenie</td><td class="yes">bez limitu w cenie</td></tr>
+    <tr><td>Leady od właścicieli</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓ wspólna pula zespołu</td></tr>
+    <tr><td>CRM statusów ofert + notatki</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓ widoczne dla zespołu</td></tr>
+    <tr><td>Faktura VAT</td><td class="no">—</td><td class="yes">✓ automatycznie</td><td class="yes">✓ automatycznie</td></tr>
   </table>
 
   <h2>Najczęstsze pytania</h2>
   <div class="faq">
+    <details><summary>Czym różni się Biuro jednoosobowe (50 zł) od Planu Firmowego (199 zł)?</summary><p>Tylko liczbą loginów. Biuro jednoosobowe to jedno konto dla pośrednika pracującego samodzielnie — z pełnym CRM, leadami i wycenami PDF bez limitu. Plan Firmowy to konto główne + 4 loginy dla agentów ze wspólną bazą leadów i oznaczeń. Z planu 50 zł możesz w każdej chwili przejść na 199 zł, gdy dołączy zespół.</p></details>
     <details><summary>Czy 199 zł to cena za całe biuro, czy za jednego agenta?</summary><p>Za całe biuro. W cenie jest konto główne i 4 loginy dla agentów. Dopiero piąty i każdy kolejny agent kosztuje 55 zł/mies.</p></details>
     <details><summary>Czy muszę podać kartę, żeby skorzystać z 7 dni za darmo?</summary><p>Nie. Rejestrujesz konto firmowe z NIP i od razu masz pełny dostęp na 7 dni. Płacisz dopiero, gdy zdecydujesz się zostać — przez Stripe (BLIK, karta, Apple/Google Pay).</p></details>
     <details><summary>Czy dostanę fakturę VAT?</summary><p>Tak. Faktura generuje się automatycznie po każdej płatności i jest do pobrania w zakładce „Moje konto → Faktury”.</p></details>

@@ -212,15 +212,28 @@ gtag('set', 'url_passthrough', false);
             </ul>
             <button type="button" class="p-btn pay" data-buy="individual">Zapłać 45 zł</button>
           </div>
+          <div class="plan" data-plan="solo">
+            <div class="p-name">Biuro jednoosobowe</div>
+            <div class="p-price">50 zł <span class="m">/30 dni</span></div>
+            <div class="p-desc">Dla pośrednika pracującego samodzielnie — wszystko co w Firmowym, na 1 login.</div>
+            <ul class="p-list">
+              <li>Wszystko z planu Osobistego</li>
+              <li>CRM statusów i notatek na ofertach</li>
+              <li>Wyceny PDF <strong>bez limitu</strong> w cenie</li>
+              <li>Leady od właścicieli</li>
+              <li>1 login (bez agentów) · Faktury VAT</li>
+            </ul>
+            <button type="button" class="p-btn pay" data-buy="solo">Zapłać 50 zł</button>
+          </div>
           <div class="plan" data-plan="business">
             <div class="p-name">Firmowy B2B</div>
             <div class="p-price">199 zł <span class="m">/30 dni</span></div>
-            <div class="p-desc">Dla pośredników, fliperów i biur nieruchomości.</div>
+            <div class="p-desc">Dla biur nieruchomości z zespołem agentów.</div>
             <ul class="p-list">
-              <li>Wszystko z planu Osobistego</li>
+              <li>Wszystko z planu Biuro jednoosobowe</li>
               <li>TeamMode (CRM) — do <strong>4 agentów w cenie</strong></li>
               <li>Każdy dodatkowy agent: <strong>+55 zł/mies</strong></li>
-              <li>Raporty wyceny PDF</li>
+              <li>Wyceny PDF bez limitu</li>
               <li>Faktury VAT</li>
             </ul>
             <button type="button" class="p-btn pay" data-buy="business">Zapłać 199 zł</button>
@@ -305,7 +318,7 @@ gtag('set', 'url_passthrough', false);
   const token = localStorage.getItem('finderdom_token');
   if (!token) window.location.href = '/logowanie';
 
-  const PLAN_LABEL = { free: 'Bez planu', individual: 'Osobisty', business: 'Firmowy' };
+  const PLAN_LABEL = { free: 'Bez planu', individual: 'Osobisty', solo: 'Biuro jednoosobowe', business: 'Firmowy' };
 
   function fmtDate(iso){
     if (!iso) return '—';
@@ -317,6 +330,7 @@ gtag('set', 'url_passthrough', false);
   function tierBadge(tier){
     const el = document.getElementById('tierBadge');
     if (tier === 'individual'){ el.className='badge badge-ind'; el.textContent='Osobisty'; }
+    else if (tier === 'solo'){ el.className='badge badge-biz'; el.textContent='Biuro jednoosobowe'; }
     else if (tier === 'business'){ el.className='badge badge-biz'; el.textContent='Firmowy'; }
     else { el.className='badge badge-free'; el.textContent='Bez planu'; }
   }
@@ -354,9 +368,13 @@ gtag('set', 'url_passthrough', false);
         document.getElementById('pCompany').textContent = u.company_name || '—';
         document.getElementById('pNip').textContent = u.nip || '—';
       }
-      // Show Leady tab only for active Firmowy subscribers
-      if (u.tier === 'business'){
+      // Show Leady tab for active Firmowy / Biuro jednoosobowe subscribers; Zespół only for Firmowy
+      if (u.tier === 'business' || u.tier === 'solo'){
         document.querySelectorAll('.biz-only-tab').forEach(el => el.style.display = '');
+      }
+      if (u.tier === 'solo') {
+        const teamLink = document.getElementById('teamTabLink');
+        if (teamLink) teamLink.style.display = 'none';
       }
       // Hide "Zespół" tab for agents — only master sees the panel
       if (u.role === 'agent') {

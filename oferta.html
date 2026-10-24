@@ -669,7 +669,7 @@ async function loadOffer() {
 
   // 🏢 Plan Firmowy: wycena w cenie abonamentu — PDF generowany od razu, bez Stripe
   function isBusinessUser(){
-    try { const u = JSON.parse(localStorage.getItem('finderdom_user') || 'null'); return !!(u && u.tier === 'business'); } catch(e){ return false; }
+    try { const u = JSON.parse(localStorage.getItem('finderdom_user') || 'null'); return !!(u && (u.tier === 'business' || u.tier === 'solo')); } catch(e){ return false; }
   }
   async function downloadBusinessValuation(payload){
     const r = await fetch('/api/valuation/business', {

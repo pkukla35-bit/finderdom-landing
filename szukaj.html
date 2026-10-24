@@ -1117,6 +1117,10 @@ async function loadListings() {
       }
     }
     const scrapedUrl = '/api/listings-scraped' + (apiParams.toString() ? '?' + apiParams.toString() : '');
+    // 🔒 Zalogowani wysyłają token (opłacony plan = pełna lista); &p=1 rozdziela cache CDN od publicznego podglądu
+    const __tok = localStorage.getItem('finderdom_token');
+    const fetchJson = (u) => fetch(__tok ? u + (u.includes('?') ? '&' : '?') + 'p=1' : u, __tok ? { headers: { 'Authorization': 'Bearer ' + __tok } } : {})
+      .then(r => r.ok ? r.json() : null).catch(() => null);
     // Filtr daty aktywny → policz równolegle, ile ofert byłoby BEZ filtra daty (żeby user widział, że to data, nie promień, ogranicza wyniki)
     window.__noDateTotal = null;
     if (apiParams.has('added_from') || apiParams.has('added_to')) {
@@ -1136,10 +1140,6 @@ async function loadListings() {
     const quickParams = new URLSearchParams(apiParams);
     quickParams.set('limit', String(PAGE_SIZE));
     const quickUrl = '/api/listings-scraped?' + quickParams.toString();
-    // 🔒 Zalogowani wysyłają token (opłacony plan = pełna lista); &p=1 rozdziela cache CDN od publicznego podglądu
-    const __tok = localStorage.getItem('finderdom_token');
-    const fetchJson = (u) => fetch(__tok ? u + (u.includes('?') ? '&' : '?') + 'p=1' : u, __tok ? { headers: { 'Authorization': 'Bearer ' + __tok } } : {})
-      .then(r => r.ok ? r.json() : null).catch(() => null);
     const fullPromise = fetchJson(scrapedUrl);
     let fullApplied = false;
     const quick = await fetchJson(quickUrl);

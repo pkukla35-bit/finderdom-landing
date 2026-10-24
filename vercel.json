@@ -28,6 +28,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/geo/:path*",
+      "destination": "/api/index"
+    },
+    {
       "source": "/api/t/:path*",
       "destination": "/api/index"
     },

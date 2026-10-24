@@ -18,6 +18,7 @@ import io
 import os
 import math
 import re
+import statistics
 import secrets
 import logging
 import ipaddress
@@ -1974,6 +1975,32 @@ async def listing_single(listing_id: str, request: Request, response: Response):
         logger.warning("listing/{%s} error: %s", listing_id, e)
         response.status_code = 500
         return {"error": str(e)[:200]}
+
+
+@app.get("/api/geo/city")
+async def geo_city_center(name: str):
+    """Środek miejscowości dla filtra promienia, gdy nie ma jej w CITY_COORDS (TOP 195 miast):
+    mediana lat/lng ogłoszeń z tym miastem. Wynik cache'owany w geo_cache."""
+    key = _normalize_city_name(name)
+    if not key or len(key) < 2 or len(key) > 60:
+        raise HTTPException(400, "Podaj nazwę miejscowości")
+    db = database()
+    cached = await db.geo_cache.find_one({"_id": key})
+    if cached and cached.get("lat") is not None:
+        return {"city": key, "lat": cached["lat"], "lng": cached["lng"], "n": cached.get("n", 0), "source": "cache"}
+    pattern = "^" + _build_diacritic_regex(name.strip()) + "$"
+    pts = []
+    async for d in db.listings.find({"city": {"$regex": pattern}, "lat": {"$type": "number"}, "lng": {"$type": "number"}},
+                                    {"lat": 1, "lng": 1}).limit(400):
+        la, ln = float(d["lat"]), float(d["lng"])
+        if 48.9 <= la <= 55.0 and 14.0 <= ln <= 24.2:
+            pts.append((la, ln))
+    if len(pts) < 2:
+        raise HTTPException(404, "Nie znam współrzędnych tej miejscowości")
+    lat = statistics.median(p[0] for p in pts)
+    lng = statistics.median(p[1] for p in pts)
+    await db.geo_cache.update_one({"_id": key}, {"$set": {"lat": lat, "lng": lng, "n": len(pts), "at": datetime.now(timezone.utc)}}, upsert=True)
+    return {"city": key, "lat": lat, "lng": lng, "n": len(pts), "source": "listings"}
 
 
 @app.get("/api/listings-scraped")

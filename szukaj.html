@@ -1036,9 +1036,12 @@ async function loadListings() {
     const uiType = document.getElementById('heroType')?.value || '';
     const uiTrans = document.getElementById('heroTrans')?.value || '';
     const uiCity = document.getElementById('q')?.value?.trim() || '';
-    const preCity = (urlParams.get('q') || urlParams.get('city') || uiCity).trim();
-    const preType = (urlParams.get('type') || uiType).trim();
-    const preTrans = (urlParams.get('trans') || urlParams.get('transaction') || uiTrans).trim();
+    // Parametry z URL liczą się TYLKO przy pierwszym wczytaniu (seedują pola). Potem zawsze wygrywa to, co widać w pasku —
+    // inaczej po wejściu z linku ?q=Kraków nie dało się wyczyścić miasta ani zmienić typu.
+    const firstLoad = !window.__fdLoadedOnce; window.__fdLoadedOnce = true;
+    const preCity = (firstLoad ? (urlParams.get('q') || urlParams.get('city') || uiCity) : uiCity).trim();
+    const preType = (firstLoad ? (urlParams.get('type') || uiType) : uiType).trim();
+    const preTrans = (firstLoad ? (urlParams.get('trans') || urlParams.get('transaction') || uiTrans) : uiTrans).trim();
     const apiParams = new URLSearchParams();
     if (preCity) apiParams.set('city', preCity);
     if (preType) apiParams.set('type', preType);
@@ -1096,10 +1099,14 @@ async function loadListings() {
     // Backend zwraca oferty z bounding box, wiec dla Krakow+50km dostaniemy tez Wieliczka, Skawina, Zabierzów
     const uiRadiusKm = parseFloat(document.getElementById('heroRadiusKm')?.value || '0');
     if (uiRadiusKm > 0 && preCity && window.CITY_COORDS) {
-      const cityKey = preCity.toLowerCase().trim()
-        .replace(/ą/g,'a').replace(/ć/g,'c').replace(/ę/g,'e').replace(/ł/g,'l')
-        .replace(/ń/g,'n').replace(/ó/g,'o').replace(/ś/g,'s').replace(/ż/g,'z').replace(/ź/g,'z')
-        .replace(/\s+/g, '-');
+      const cityKey = normalizeCity(preCity);
+      // Miejscowość spoza listy TOP-195 (np. Myślenice, Proszowice)? Pobierz środek z bazy ogłoszeń (mediana lat/lng).
+      if (!window.CITY_COORDS[cityKey]) {
+        try {
+          const g = await fetch('/api/geo/city?name=' + encodeURIComponent(preCity)).then(r => r.ok ? r.json() : null);
+          if (g && typeof g.lat === 'number') window.CITY_COORDS[cityKey] = [g.lat, g.lng];
+        } catch (e) { console.warn('geo/city:', e); }
+      }
       const coords = window.CITY_COORDS[cityKey];
       if (coords) {
         apiParams.delete('city');  // GEO ma priorytet nad city

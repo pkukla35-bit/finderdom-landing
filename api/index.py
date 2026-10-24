@@ -3817,6 +3817,7 @@ async def manual_mail_click(track_id: str, u: str = ""):
 
 
 _NO_REPLY_RE = re.compile(r"^\W*(nie|no)\b|nie\s+(chc|jeste[sś]my\s+zainteresowan|zainteresowan|pisz|wysy[łl]a)|wypisz|usu[ńn]\s+(mnie|nas|z\s+listy)|prosz[eę]\s+(o\s+)?(nie|usuni|zaprzesta)|rezygnuj", re.I)
+_AUTO_REPLY_RE = re.compile(r"automatyczn\w*\s+(odpowied|wiadomo)|autoresponder|auto[- ]?reply|automatic reply|out of office|poza biurem|nieobecn|dzi[eę]kujemy za (wiadomo[śs][ćc]|kontakt)[^.]{0,80}(odpowiemy|skontaktujemy|odezwiemy)|odpowiemy (na ni[aą] )?(najszybciej|w ci[aą]gu|jak najszybciej)|wiadomo[śs][ćc] (zosta[łl]a )?(odebrana|dostarczona|otrzymana)", re.I)
 
 
 def _reply_snippet(raw_bytes: bytes) -> str:
@@ -3848,6 +3849,7 @@ def _imap_fetch_replies(cfg: dict, known: set, last_uid: int, days: int = 45) ->
     """Blocking: łączy się z IMAP (ta sama skrzynka co SMTP), zwraca odpowiedzi od znanych adresów + najwyższy sprawdzony UID."""
     import imaplib
     from email import message_from_bytes
+    from email import policy as _policy
     from email.utils import parseaddr, parsedate_to_datetime
     host = cfg.get("imap_host") or cfg["host"]
     M = imaplib.IMAP4_SSL(host, int(cfg.get("imap_port") or 993), timeout=15)
@@ -3860,7 +3862,7 @@ def _imap_fetch_replies(cfg: dict, known: set, last_uid: int, days: int = 45) ->
         uids = [x for x in uids if x > last_uid][-300:]
         if not uids:
             return [], last_uid
-        typ, data = M.uid("fetch", ",".join(str(x) for x in uids), "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+        typ, data = M.uid("fetch", ",".join(str(x) for x in uids), "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE AUTO-SUBMITTED X-AUTOREPLY X-AUTORESPOND PRECEDENCE)])")
         hits = []
         if typ == "OK":
             for part in data:
@@ -3869,7 +3871,7 @@ def _imap_fetch_replies(cfg: dict, known: set, last_uid: int, days: int = 45) ->
                 m_uid = re.search(rb"UID (\d+)", part[0])
                 if not m_uid:
                     continue
-                hdr = message_from_bytes(part[1])
+                hdr = message_from_bytes(part[1], policy=_policy.default)
                 sender = parseaddr(str(hdr.get("From") or ""))[1].strip().lower()
                 if sender and sender in known:
                     when = None
@@ -3877,7 +3879,12 @@ def _imap_fetch_replies(cfg: dict, known: set, last_uid: int, days: int = 45) ->
                         when = parsedate_to_datetime(str(hdr.get("Date") or ""))
                     except Exception:
                         pass
-                    hits.append({"uid": int(m_uid.group(1)), "email": sender, "subject": str(hdr.get("Subject") or "")[:200], "date": when})
+                    subject = str(hdr.get("Subject") or "")[:200]
+                    auto = bool(hdr.get("X-Autoreply") or hdr.get("X-Autorespond")) \
+                        or "auto" in str(hdr.get("Auto-Submitted") or "").lower() \
+                        or str(hdr.get("Precedence") or "").lower() in ("bulk", "auto_reply", "junk") \
+                        or bool(_AUTO_REPLY_RE.search(subject))
+                    hits.append({"uid": int(m_uid.group(1)), "email": sender, "subject": subject, "date": when, "auto": auto})
         for h in hits:
             try:
                 typ, data = M.uid("fetch", str(h["uid"]), "(BODY.PEEK[])")
@@ -3885,7 +3892,9 @@ def _imap_fetch_replies(cfg: dict, known: set, last_uid: int, days: int = 45) ->
                 h["snippet"] = _reply_snippet(raw) if raw else ""
             except Exception:
                 h["snippet"] = ""
-            h["is_no"] = bool(_NO_REPLY_RE.search(h["snippet"] or "")) or bool(re.fullmatch(r"\W*(re:\s*)*\W*nie\W*", h["subject"] or "", re.I))
+            if not h["auto"] and _AUTO_REPLY_RE.search(h["snippet"] or ""):
+                h["auto"] = True
+            h["is_no"] = (not h["auto"]) and (bool(_NO_REPLY_RE.search(h["snippet"] or "")) or bool(re.fullmatch(r"\W*(re:\s*)*\W*nie\W*", h["subject"] or "", re.I)))
         return hits, max(uids)
     finally:
         try:
@@ -3915,15 +3924,16 @@ async def admin_check_replies(admin: dict = Depends(require_admin), rescan: bool
     now = datetime.now(timezone.utc)
     optout_added = 0
     for h in hits:
-        upd = {"replied_at": h["date"] or now, "reply_subject": h["subject"], "reply_snippet": h.get("snippet", ""), "reply_source": "imap"}
+        upd = {"replied_at": h["date"] or now, "reply_subject": h["subject"], "reply_snippet": h.get("snippet", ""), "reply_source": "imap", "reply_auto": bool(h.get("auto"))}
         if h["is_no"]:
             upd["reply_optout"] = True
             r = await db.manual_mail_optout.update_one({"email": h["email"]}, {"$set": {"email": h["email"], "at": now, "by": "auto: odpowiedź „nie”"}}, upsert=True)
             optout_added += 1 if r.upserted_id else 0
         await db.manual_mail_log.update_many({"email": h["email"]}, {"$set": upd})
     await db.settings.update_one({"_id": "manual_mail_imap"}, {"$set": {"last_uid": new_last, "checked_at": now, "last_hits": len(hits)}}, upsert=True)
-    return {"checked": True, "new_replies": len(hits), "optout_added": optout_added,
-            "replies": [{"email": h["email"], "subject": h["subject"], "snippet": h.get("snippet", ""), "is_no": h["is_no"]} for h in hits]}
+    real = [h for h in hits if not h.get("auto")]
+    return {"checked": True, "new_replies": len(real), "auto_replies": len(hits) - len(real), "optout_added": optout_added,
+            "replies": [{"email": h["email"], "subject": h["subject"], "snippet": h.get("snippet", ""), "is_no": h["is_no"], "auto": bool(h.get("auto"))} for h in hits]}
 
 
 class ManualMarkReq(BaseModel):
@@ -3971,7 +3981,7 @@ async def admin_manual_log(admin: dict = Depends(require_admin), limit: int = 50
         log.append({"email": l["email"], "template": l["template"], "ok": l["ok"], "error": l.get("error"),
                     "sent_at": _iso(l.get("sent_at")), "clicks": int(l.get("clicks") or 0), "first_click_at": _iso(l.get("first_click_at")),
                     "track_id": l.get("track_id"),
-                    "replied_at": _iso(l.get("replied_at")), "reply_optout": bool(l.get("reply_optout")),
+                    "replied_at": _iso(l.get("replied_at")), "reply_optout": bool(l.get("reply_optout")), "reply_auto": bool(l.get("reply_auto")),
                     "reply_snippet": (l.get("reply_snippet") or "")[:200], "reply_source": l.get("reply_source")})
     optout = [d["email"] async for d in db.manual_mail_optout.find({}, {"email": 1}).sort("at", -1).limit(200)]
     optout_set = set(optout)
@@ -3986,10 +3996,12 @@ async def admin_manual_log(admin: dict = Depends(require_admin), limit: int = 50
         lc = _iso(l.get("last_click_at"))
         if lc and (not row["last_click_at"] or lc > row["last_click_at"]):
             row["last_click_at"] = lc
-        if l.get("replied_at") and not row["replied_at"]:
+        if l.get("replied_at") and not l.get("reply_auto") and not row["replied_at"]:
             row["replied_at"] = _iso(l.get("replied_at")); row["reply_snippet"] = (l.get("reply_snippet") or "")[:200]
         if l["template"] not in row["templates"]:
             row["templates"].append(l["template"])
+    # tylko auto-odpowiedź (bez kliknięć) → nie ma do kogo dzwonić
+    to_call = {e: r for e, r in to_call.items() if r["clicks"] or r["replied_at"]}
     state = await db.settings.find_one({"_id": "manual_mail_imap"}) or {}
     return {"log": log, "optout": optout, "sent_total": await db.manual_mail_log.count_documents({"ok": True}),
             "to_call": sorted(to_call.values(), key=lambda r: (r["replied_at"] or "", r["last_click_at"] or ""), reverse=True),

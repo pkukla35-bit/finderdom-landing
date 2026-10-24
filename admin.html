@@ -820,7 +820,7 @@ async function loadManualMail(){
       <td style="white-space:nowrap">${fmtT(l.sent_at)}</td><td>${escapeHtml(l.email)}</td><td style="color:#8ba3d4">${escapeHtml(l.template)}</td>
       <td>${l.ok ? '<span class="ok">✅</span>' : '<span class="bad" title="' + escapeHtml(l.error || '') + '">❌</span>'}</td>
       <td style="text-align:center">${l.clicks ? `<b style="color:#FFB800">${l.clicks}×</b>` : '—'}</td>
-      <td>${l.reply_optout ? '<span class="bad">🚫 nie</span>' : l.replied_at ? `<span class="ok">✉️ ${fmtT(l.replied_at)}</span>${l.reply_source === 'manual' ? ' <span style="color:#8ba3d4">(ręcznie)</span>' : ''}` : '—'}</td>
+      <td>${l.reply_optout ? '<span class="bad">🚫 nie</span>' : l.reply_auto ? `<span style="color:#8ba3d4" title="${escapeHtml(l.reply_snippet || '')}">🤖 auto-odpowiedź</span>` : l.replied_at ? `<span class="ok" title="${escapeHtml(l.reply_snippet || '')}">✉️ ${fmtT(l.replied_at)}</span>${l.reply_source === 'manual' ? ' <span style="color:#8ba3d4">(ręcznie)</span>' : ''}` : '—'}</td>
       <td style="text-align:right;white-space:nowrap">${l.ok && !l.reply_optout ? btns(l.email) : ''}</td></tr>`).join('');
     document.getElementById('mmLog').innerHTML = `<b style="color:#c5d0e6">Wysłane łącznie: ${lg.sent_total || 0}</b>` + (lg.optout && lg.optout.length ? ` · lista „nie”: ${lg.optout.length}` : '') + (rows ? `<div style="margin-top:6px;max-height:260px;overflow:auto"><table style="width:100%;font-size:12px"><thead><tr><th style="text-align:left">Data</th><th style="text-align:left">E-mail</th><th style="text-align:left">Szablon</th><th>Wysł.</th><th>Klik</th><th style="text-align:left">Odpowiedź</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '');
   } catch(e) { console.warn('manual mail:', e); }
@@ -853,7 +853,7 @@ document.addEventListener('click', async (e) => {
   try {
     const r = await apiPost('/admin/mailing/check-replies', {});
     if (r.note) msg.innerHTML = `<span style="color:#8ba3d4">${escapeHtml(r.note)}</span>`;
-    else msg.innerHTML = `<span class="ok">✅ Sprawdzono. Nowe odpowiedzi: ${r.new_replies}${r.optout_added ? ` · „nie” dodane do wykluczeń: ${r.optout_added}` : ''}</span>` + (r.replies && r.replies.length ? `<div style="margin-top:6px">${r.replies.map(x => `<div>${x.is_no ? '🚫' : '✉️'} ${escapeHtml(x.email)}${x.snippet ? ' — „' + escapeHtml(x.snippet.slice(0,100)) + '”' : ''}</div>`).join('')}</div>` : '');
+    else msg.innerHTML = `<span class="ok">✅ Sprawdzono. Nowe odpowiedzi: ${r.new_replies}${r.auto_replies ? ` · auto-odpowiedzi: ${r.auto_replies}` : ''}${r.optout_added ? ` · „nie” dodane do wykluczeń: ${r.optout_added}` : ''}</span>` + (r.replies && r.replies.length ? `<div style="margin-top:6px">${r.replies.map(x => `<div>${x.is_no ? '🚫' : x.auto ? '🤖' : '✉️'} ${escapeHtml(x.email)}${x.snippet ? ' — „' + escapeHtml(x.snippet.slice(0,100)) + '”' : ''}</div>`).join('')}</div>` : '');
     loadManualMail();
   } catch(err) { msg.innerHTML = `<span class="bad">❌ ${escapeHtml(err.message)}</span>`; }
   finally { btn.disabled = false; }

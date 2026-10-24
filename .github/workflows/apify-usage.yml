@@ -1,0 +1,33 @@
+name: Apify — raport zużycia (miesiąc)
+
+# Ręczny podgląd: ile USD zużyły aktory w bieżącym miesiącu i jaki jest limit. Nie zmienia niczego.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  usage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Pobierz zużycie
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, urllib.request
+          tok = os.environ["APIFY_TOKEN"]
+          def get(u):
+              with urllib.request.urlopen(u, timeout=30) as r: return json.loads(r.read())
+          me = get(f"https://api.apify.com/v2/users/me?token={tok}")["data"]
+          print("Plan:", me.get("plan", {}).get("id"), "| tier:", me.get("plan", {}).get("tierId") or me.get("plan", {}).get("name"))
+          lim = get(f"https://api.apify.com/v2/users/me/limits?token={tok}")["data"]
+          print("Limity:", json.dumps({k: lim.get(k) for k in ("limits", "current") if k in lim}, ensure_ascii=False)[:1500])
+          u = get(f"https://api.apify.com/v2/users/me/usage/monthly?token={tok}")["data"]
+          print("Zużycie w tym miesiącu (USD):", u.get("totalUsageCreditsUsd"), "| okres:", u.get("usageCycle"))
+          by = u.get("monthlyUsage") or u.get("usageByActor") or {}
+          print("Klucze:", list(u.keys()))
+          for k in ("monthlyServiceUsage", "monthlyUsageByActor", "usage"):
+              if k in u:
+                  print(k, json.dumps(u[k], ensure_ascii=False)[:3000])
+          EOF

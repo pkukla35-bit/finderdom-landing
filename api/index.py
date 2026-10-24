@@ -3970,6 +3970,7 @@ async def admin_manual_log(admin: dict = Depends(require_admin), limit: int = 50
     async for l in db.manual_mail_log.find({}).sort("sent_at", -1).limit(max(1, min(200, limit))):
         log.append({"email": l["email"], "template": l["template"], "ok": l["ok"], "error": l.get("error"),
                     "sent_at": _iso(l.get("sent_at")), "clicks": int(l.get("clicks") or 0), "first_click_at": _iso(l.get("first_click_at")),
+                    "track_id": l.get("track_id"),
                     "replied_at": _iso(l.get("replied_at")), "reply_optout": bool(l.get("reply_optout")),
                     "reply_snippet": (l.get("reply_snippet") or "")[:200], "reply_source": l.get("reply_source")})
     optout = [d["email"] async for d in db.manual_mail_optout.find({}, {"email": 1}).sort("at", -1).limit(200)]

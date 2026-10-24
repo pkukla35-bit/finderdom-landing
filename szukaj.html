@@ -1565,7 +1565,7 @@ function renderPage() {
           <div class="card-loc">${l.location}</div>
           <div class="card-specs">${specs}</div>
           <div class="card-price">
-            <span class="p">${l.price_display}</span>
+            <span class="p">${l.price_display}${l.transaction === 'wynajem' ? '<span style="font-size:11px;font-weight:700;color:#8ba3d4"> /mies.</span>' : ''}</span>
             <span class="pm2">${l.price_pm2_display}</span>
           </div>
           ${(l.transaction !== 'wynajem' && window.FD_rataOd && FD_rataOd(l.price)) ? `<div class="card-rata">💳 rata od ~${Math.round(FD_rataOd(l.price)).toLocaleString('pl-PL')} zł/mies.</div>` : ''}

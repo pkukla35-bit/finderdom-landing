@@ -1265,9 +1265,12 @@ function applyScrapedData(d) {
     // ── AI ANALYSIS: oblicz verdict_badge dla każdej oferty (mediana ppm² per typ+miasto) ──
     try { computeAiVerdicts(LISTINGS); } catch(e) { console.error('AI verdicts:', e); }
 
-    // ── Aplikuj parametry z URL query string (deep linking) ──
+    // ── Aplikuj parametry z URL query string (deep linking) — TYLKO RAZ, przy pierwszym wczytaniu ──
     // Obsługuje: ?q=Warszawa&type=dom&trans=sprzedaz&date=3d&pmax=800000
-    try {
+    // (wcześniej działo się to po KAŻDYM wczytaniu danych → po wejściu z linku ?q=Kraków pole Miasto wracało do „Kraków”
+    //  przy każdym kolejnym szukaniu i nie dało się wyjść z Krakowa ani zmienić promienia)
+    if (!window.__urlSeeded) try {
+      window.__urlSeeded = true;
       const params = new URLSearchParams(location.search);
       const urlQ = params.get('q') || params.get('city');
       const urlType = params.get('type');

@@ -312,7 +312,7 @@ gtag('set', 'url_passthrough', false);
 <div class="search-hero">
   <div class="search-bar">
     <input type="text" class="search-input" placeholder="🔍 Miasto..." id="q" list="cityList" autocomplete="off" style="flex:1.2;min-width:140px">
-    <input type="number" class="search-input" id="heroRadiusKm" placeholder="+km" min="1" max="200" style="flex:0.5;min-width:70px;max-width:90px" title="Promień od miasta (km)">
+    <input type="number" class="search-input" id="heroRadiusKm" autocomplete="off" placeholder="+km" min="1" max="200" style="flex:0.5;min-width:70px;max-width:90px" title="Promień od miasta (km)">
     <select class="search-input" id="heroType" style="flex:0.9">
       <option value="mieszkanie">🏢 Mieszkanie</option>
       <option value="dom">🏠 Dom</option>
@@ -325,7 +325,7 @@ gtag('set', 'url_passthrough', false);
       <option value="sprzedaz">Sprzedaż</option>
       <option value="wynajem">Wynajem</option>
     </select>
-    <input type="number" class="search-input" id="heroPrice" placeholder="Cena do... (np. 800000)" min="0" step="10000" list="priceHints" style="flex:1;min-width:130px">
+    <input type="number" class="search-input" id="heroPrice" autocomplete="off" placeholder="Cena do... (np. 800000)" min="0" step="10000" list="priceHints" style="flex:1;min-width:130px">
     <datalist id="priceHints">
       <option value="300000">300 000 zł</option>
       <option value="500000">500 000 zł</option>
@@ -350,8 +350,8 @@ gtag('set', 'url_passthrough', false);
     <div class="filter-group" id="radiusSidebarGroup" style="display:none">
       <div class="filter-title" style="color:#FFB800">📍 Miasto + promień (km)</div>
       <div class="radius-row">
-        <input type="text" id="fRadiusCity" placeholder="np. Kraków" list="cityList" style="flex:2">
-        <input type="number" id="fRadiusKm" placeholder="km" min="1" max="200" style="flex:1;max-width:70px">
+        <input type="text" id="fRadiusCity" autocomplete="off" placeholder="np. Kraków" list="cityList" style="flex:2">
+        <input type="number" id="fRadiusKm" autocomplete="off" placeholder="km" min="1" max="200" style="flex:1;max-width:70px">
         <span class="u">km</span>
       </div>
       <datalist id="cityList"></datalist>
@@ -2042,9 +2042,13 @@ function collectFilterState() {
   const activeVerdicts = Array.from(document.querySelectorAll('.chip.active[data-verdict]'))
     .map(c => c.dataset.verdict);
 
-  // Radius filter (km od wybranego miasta) — priorytet: sidebar > hero
-  const radiusCityRaw = (document.getElementById('fRadiusCity')?.value?.trim() || document.getElementById('q')?.value?.trim() || '');
-  const explicitKm = parseFloat(document.getElementById('fRadiusKm')?.value || document.getElementById('heroRadiusKm')?.value || '0');
+  // Radius filter (km od wybranego miasta) — JEDYNYM źródłem miasta i km jest widoczny pasek u góry (#q, #heroRadiusKm).
+  // Ukryte pola sidebara (fRadiusCity/fRadiusKm) są tylko lustrem — wcześniej miały priorytet i „trzymały” stare miasto
+  // (np. Kraków) nawet po wyczyszczeniu pola Miasto, przez co użytkownik nie mógł wyjść z promienia.
+  const radiusCityRaw = (document.getElementById('q')?.value?.trim() || '');
+  const explicitKm = parseFloat(document.getElementById('heroRadiusKm')?.value || '0');
+  { const sc = document.getElementById('fRadiusCity'); if (sc) sc.value = radiusCityRaw;
+    const sk = document.getElementById('fRadiusKm'); if (sk) sk.value = explicitKm > 0 ? String(explicitKm) : ''; }
   // AUTO-RADIUS: jeśli user wpisał miasto ale nie km, i miasto jest znane w CITY_COORDS → automatycznie użyj 15 km
   //   (dzięki temu "Kraków" pokazuje 1099 domów z aglomeracji, a nie tylko 364 z city==Kraków)
   let radiusKm = explicitKm;

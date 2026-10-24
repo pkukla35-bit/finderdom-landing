@@ -80,7 +80,7 @@ async def _stripe_cfg():
         stripe.api_key = _STRIPE_RT["secret"]
     return _STRIPE_RT["secret"], _STRIPE_RT["whsec"]
 
-PLANS = {"individual": 45, "solo": 50, "business": 199}  # gross PLN per 30 days
+PLANS = {"individual": 45, "solo": 90, "business": 199}  # gross PLN per 30 days
 PLAN_LABELS = {"individual": "Osobisty", "solo": "Biuro jednoosobowe", "business": "Firmowy"}
 # Plany „biurowe”: pełne funkcje B2B (CRM, leady, wyceny bez limitu). Solo = 1 login (bez agentów), Firmowy = 4 loginy w cenie.
 BUSINESS_TIERS = {"business", "solo"}
@@ -830,7 +830,7 @@ async def _check_agent_limit(user: dict) -> None:
         )
 
 
-SOLO_NO_AGENTS_MSG = "Plan Biuro jednoosobowe (50 zł) to 1 login. Dodawanie agentów wymaga Planu Firmowego (199 zł, 4 loginy w cenie) — zmień plan w Moje konto → Subskrypcja."
+SOLO_NO_AGENTS_MSG = "Plan Biuro jednoosobowe (90 zł) to 1 login. Dodawanie agentów wymaga Planu Firmowego (199 zł, 4 loginy w cenie) — zmień plan w Moje konto → Subskrypcja."
 
 
 async def _require_business_master(user: dict) -> None:
@@ -3152,12 +3152,12 @@ MAIL_TEMPLATES: Dict[str, dict] = {
     },
     "b2": {
         "audience": "business", "day": 5, "auto": True, "name": "Dzień 5 — Powiadomienie: trial kończy się za 2 dni",
-        "subject": "Za 2 dni kończy się Twój okres próbny — od 50 zł/mies",
-        "title": "Wszystkie województwa, CRM, wyceny w cenie — 50 zł (1 login) lub 199 zł (całe biuro)",
-        "intro": "Twoje 7 dni Premium Firmowy dobiega końca. Jeśli FinderDom pomógł Ci choć przy jednej ofercie, policz: jeden pozyskany klient to 2 000–5 000 zł prowizji. Pracujesz sam — Biuro jednoosobowe za 50 zł/mies. Masz zespół — Plan Firmowy za 199 zł, czyli 6,50 zł dziennie za całe biuro.",
+        "subject": "Za 2 dni kończy się Twój okres próbny — od 90 zł/mies",
+        "title": "Wszystkie województwa, CRM, wyceny w cenie — 90 zł (1 login) lub 199 zł (całe biuro)",
+        "intro": "Twoje 7 dni Premium Firmowy dobiega końca. Jeśli FinderDom pomógł Ci choć przy jednej ofercie, policz: jeden pozyskany klient to 2 000–5 000 zł prowizji. Pracujesz sam — Biuro jednoosobowe za 90 zł/mies. Masz zespół — Plan Firmowy za 199 zł, czyli 6,50 zł dziennie za całe biuro.",
         "bullets": [
             "<b>Wszystkie województwa</b> — bez pakietów regionalnych i dopłat za kolejne miasto.",
-            "<b>Biuro jednoosobowe 50 zł</b> — 1 login z CRM, leadami i wycenami bez limitu. <b>Firmowy 199 zł</b> — aż 4 loginy dla agentów, każdy kolejny 55 zł/mies.",
+            "<b>Biuro jednoosobowe 90 zł</b> — 1 login z CRM, leadami i wycenami bez limitu. <b>Firmowy 199 zł</b> — aż 4 loginy dla agentów, każdy kolejny 55 zł/mies.",
             "<b>Wyceny PDF bez limitu</b> w cenie obu planów — każda warta 35 zł.",
             "<b>Leady od właścicieli + CRM</b>. Faktura VAT automatycznie.",
         ],
@@ -4389,13 +4389,13 @@ async def valuation_business(body: BusinessValuationReq, user: dict = Depends(cu
     """Wycena PDF w cenie planu biurowego (Firmowy / Biuro jednoosobowe, bez Stripe). Trial: limit BUSINESS_TRIAL_VALUATIONS, opłacony plan: bez limitu."""
     tier = await effective_tier_async(user)
     if tier not in BUSINESS_TIERS and (user.get("email") or "").lower() not in ADMIN_EMAILS:
-        raise HTTPException(402, "Wyceny w cenie abonamentu są dostępne w planach Biuro jednoosobowe (50 zł) i Firmowy (199 zł)")
+        raise HTTPException(402, "Wyceny w cenie abonamentu są dostępne w planach Biuro jednoosobowe (90 zł) i Firmowy (199 zł)")
     db = database()
     owner_id = str(user.get("master_id") or user["_id"])
     if user.get("is_trial"):
         used = await db.valuation_log.count_documents({"owner_id": owner_id, "source": "business"})
         if used >= BUSINESS_TRIAL_VALUATIONS:
-            raise HTTPException(402, f"W okresie próbnym masz {BUSINESS_TRIAL_VALUATIONS} wyceny. Opłać plan Biuro jednoosobowe (50 zł) lub Firmowy (199 zł) — wyceny bez limitu.")
+            raise HTTPException(402, f"W okresie próbnym masz {BUSINESS_TRIAL_VALUATIONS} wyceny. Opłać plan Biuro jednoosobowe (90 zł) lub Firmowy (199 zł) — wyceny bez limitu.")
     email = user.get("email") or ""
     if body.listing_id:
         val_type, md = "valuation", {"type": "valuation", "listing_id": body.listing_id, "email": email}

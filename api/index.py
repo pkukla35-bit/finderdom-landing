@@ -1562,54 +1562,98 @@ async def admin_timeseries(days: int = 30, admin: dict = Depends(require_admin))
 
 
 # --- Automatyczne czyszczenie nieaktualnych ofert (HEAD-check URL) ---
-async def _olx_first_image_dead(images: list, ua: str) -> bool:
-    """True, gdy WSZYSTKIE zapisane zdjęcia OLX (max 2 sprawdzane) zwracają 404 — OLX kasuje pliki po zakończeniu
-    ogłoszenia. Wymóg 2 zdjęć chroni przed fałszywym trafieniem, gdy sprzedający podmienił tylko pierwsze zdjęcie.
-    Brak zdjęć / timeout / inne kody → False (nie oznaczamy w ciemno)."""
-    imgs = [x for x in images if isinstance(x, str) and "olxcdn" in x][:2]
-    if not imgs:
-        return False
+_OLX_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+
+
+def _olx_offer_id(doc: dict) -> str:
+    """Numeryczne ID ogłoszenia OLX (external_id z Apify). Pusty string, gdy brak."""
+    ext = str(doc.get("external_id") or "")
+    return ext if ext.isdigit() else ""
+
+
+async def _olx_offer_state(doc: dict, client: httpx.AsyncClient) -> tuple[str, Optional[list]]:
+    """Stan ogłoszenia OLX wg publicznego API (www.olx.pl/api/v1/offers/<id>/):
+    ("active", świeże_zdjęcia) | ("gone", None) — 404 lub status inny niż active | ("unknown", None) — brak ID / blokada / timeout.
+    UWAGA: OLX ROTUJE ID zdjęć na CDN — stare linki zwracają 404 mimo że ogłoszenie żyje. Dlatego NIE wnioskujemy
+    o zakończeniu oferty z martwego zdjęcia (tak było wcześniej → aktywne oferty znikały / miały puste zdjęcia)."""
+    oid = _olx_offer_id(doc)
+    if not oid:
+        return "unknown", None
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
-            for img in imgs:
-                r = await client.head(img, headers={"User-Agent": ua, "Referer": "https://www.olx.pl/"})
-                if r.status_code != 404:
-                    return False
-            return True
+        r = await client.get(f"https://www.olx.pl/api/v1/offers/{oid}/",
+                             headers={"User-Agent": _OLX_UA, "Accept": "application/json", "Accept-Language": "pl-PL,pl;q=0.9"})
     except Exception:
-        return False
+        return "unknown", None
+    if r.status_code == 404:
+        return "gone", None
+    if r.status_code != 200 or "json" not in (r.headers.get("content-type") or ""):
+        return "unknown", None
+    try:
+        data = (r.json() or {}).get("data") or {}
+    except Exception:
+        return "unknown", None
+    if (data.get("status") or "").lower() != "active":
+        return "gone", None
+    photos = []
+    for p in data.get("photos") or []:
+        link = (p or {}).get("link") or ""
+        if link:
+            photos.append(link.replace("{width}x{height}", "1080x720"))
+    return "active", photos
+
+
+async def _olx_apply_state(coll, doc: dict, state: str, photos: Optional[list], now: datetime) -> None:
+    """Zapis wyniku sprawdzenia OLX: active → odśwież zdjęcia i zdejmij ewentualne is_stale (olx_image_404); gone → is_stale."""
+    if state == "active":
+        upd = {"$set": {"olx_img_checked_at": now, "last_checked_at": now}}
+        if photos and photos != (doc.get("images") or []):
+            upd["$set"]["images"] = photos
+            upd["$set"]["olx_images_refreshed_at"] = now
+        if doc.get("is_stale") and doc.get("stale_reason") in ("olx_image_404", "olx_api_gone"):
+            upd["$set"]["is_stale"] = False
+            upd["$unset"] = {"stale_since": "", "stale_reason": ""}
+        await coll.update_one({"_id": doc["_id"]}, upd)
+    elif state == "gone":
+        await coll.update_one({"_id": doc["_id"]}, {"$set": {"is_stale": True, "stale_since": now, "stale_reason": "olx_api_gone",
+                                                            "last_checked_at": now, "olx_img_checked_at": now}})
+    else:
+        await coll.update_one({"_id": doc["_id"]}, {"$set": {"olx_img_checked_at": now}})
 
 
 @app.post("/api/admin/olx-image-sweep")
-async def admin_olx_image_sweep(request: Request, limit: int = 1500, concurrency: int = 25, dry_run: int = 0):
-    """Jednorazowy/okresowy przegląd ofert OLX: pierwsze zdjęcie 404 → is_stale (stale_reason=olx_image_404)."""
+async def admin_olx_image_sweep(request: Request, limit: int = 600, concurrency: int = 10, dry_run: int = 0, revive: int = 0):
+    """Przegląd ofert OLX przez API OLX: aktywne → świeże zdjęcia (OLX rotuje ID na CDN), zakończone → is_stale.
+    revive=1 → sprawdza oferty wcześniej (błędnie) oznaczone olx_image_404 i przywraca te, które wciąż są aktywne."""
     await _authorize_cron_or_admin(request)
     coll = database().listings
     now = datetime.now(timezone.utc)
-    q = {"url": {"$regex": "olx\\.pl"}, "is_stale": {"$ne": True}, "images.0": {"$exists": True},
-         "$or": [{"olx_img_checked_at": {"$exists": False}}, {"olx_img_checked_at": {"$lt": now - timedelta(hours=20)}}]}
-    docs = await coll.find(q, {"_id": 1, "images": 1}).sort("olx_img_checked_at", 1).limit(max(1, min(3000, limit))).to_list(length=3000)
-    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-    sem = asyncio.Semaphore(max(1, min(50, concurrency)))
+    if revive:
+        q = {"is_stale": True, "stale_reason": "olx_image_404", "olx_revive_checked_at": {"$exists": False}}
+    else:
+        q = {"url": {"$regex": "olx\\.pl"}, "is_stale": {"$ne": True},
+             "$or": [{"olx_img_checked_at": {"$exists": False}}, {"olx_img_checked_at": {"$lt": now - timedelta(hours=48)}}]}
+    docs = await coll.find(q, {"_id": 1, "images": 1, "external_id": 1, "is_stale": 1, "stale_reason": 1}).sort("olx_img_checked_at", 1).limit(max(1, min(2000, limit))).to_list(length=2000)
+    sem = asyncio.Semaphore(max(1, min(20, concurrency)))
+    stats = {"active": 0, "gone": 0, "unknown": 0, "images_refreshed": 0, "revived": 0}
 
-    async def one(d):
-        async with sem:
-            return d["_id"], await _olx_first_image_dead(d.get("images") or [], ua)
-
-    results = await asyncio.gather(*(one(d) for d in docs))
-    dead = [i for i, x in results if x]
-    alive = [i for i, x in results if not x]
-    if not dry_run:
-        if dead:
-            await coll.update_many({"_id": {"$in": dead}}, {"$set": {"is_stale": True, "stale_since": now, "stale_reason": "olx_image_404",
-                                                                    "last_checked_at": now, "olx_img_checked_at": now}})
-        if alive:
-            await coll.update_many({"_id": {"$in": alive}}, {"$set": {"olx_img_checked_at": now}})
+    async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as client:
+        async def one(d):
+            async with sem:
+                state, photos = await _olx_offer_state(d, client)
+                stats[state] += 1
+                if state == "active" and photos and photos != (d.get("images") or []):
+                    stats["images_refreshed"] += 1
+                if state == "active" and d.get("is_stale"):
+                    stats["revived"] += 1
+                if not dry_run:
+                    await _olx_apply_state(coll, d, state, photos, now)
+                    if revive:
+                        await coll.update_one({"_id": d["_id"]}, {"$set": {"olx_revive_checked_at": now}})
+        await asyncio.gather(*(one(d) for d in docs))
     remaining = await coll.count_documents(q)
-    return {"checked": len(docs), "marked_stale": len(dead), "alive": len(alive), "remaining": remaining, "dry_run": bool(dry_run)}
+    return {"checked": len(docs), **stats, "remaining": remaining, "dry_run": bool(dry_run), "revive": bool(revive)}
 
 
-@app.get("/api/admin/cleanup-stale")
 class AdminSetTierRequest(BaseModel):
     tier: str = Field(pattern="^(free|individual|solo|business)$")
     days: Optional[int] = Field(default=None, ge=1, le=3650)  # None = bezterminowo (10 lat)
@@ -1645,6 +1689,7 @@ async def admin_set_tier(user_id: str, body: AdminSetTierRequest, admin: dict = 
     return {"ok": True, "user": public_user(u)}
 
 
+@app.get("/api/admin/cleanup-stale")
 @app.post("/api/admin/cleanup-stale")
 async def admin_cleanup_stale(
     request: Request,
@@ -1706,7 +1751,7 @@ async def admin_cleanup_stale(
             {"last_checked_at": {"$lt": recent_cutoff}},
         ],
     }
-    cursor = coll.find(query, {"_id": 1, "url": 1, "images": 1}).sort("last_checked_at", 1).limit(limit)
+    cursor = coll.find(query, {"_id": 1, "url": 1, "images": 1, "external_id": 1, "is_stale": 1, "stale_reason": 1}).sort("last_checked_at", 1).limit(limit)
     docs = await cursor.to_list(length=limit)
     total_to_check = len(docs)
 
@@ -1727,10 +1772,14 @@ async def admin_cleanup_stale(
         url = doc.get("url", "")
         if not url or not url.startswith(("http://", "https://")):
             return (doc["_id"], False, None)
-        # OLX: usunięte/zakończone ogłoszenie nadal zwraca HTTP 200 (strona „ogłoszenie nieaktualne”),
-        # ale OLX kasuje wtedy zdjęcia z CDN → 404 na pierwszym zdjęciu = oferta nieaktualna.
+        # OLX: strona zakończonego ogłoszenia zwraca HTTP 200, a OLX rotuje ID zdjęć na CDN (martwe zdjęcie ≠ zakończona oferta).
+        # Dlatego pytamy publiczne API OLX o status; aktywna → od razu odświeżamy zdjęcia. Zapis robi _olx_apply_state.
         if "olx.pl" in url:
-            return (doc["_id"], await _olx_first_image_dead(doc.get("images") or [], ua), "olx-img")
+            async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as client:
+                state, photos = await _olx_offer_state(doc, client)
+            if not dry_run:
+                await _olx_apply_state(coll, doc, state, photos, now)
+            return (doc["_id"], False, "olx-api")  # stan zapisany wyżej; nie dublujemy w zbiorczym update
         try:
             async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
                 r = await client.head(url, headers={"User-Agent": ua})
@@ -1756,9 +1805,6 @@ async def admin_cleanup_stale(
     marked_stale = 0
     if not dry_run:
         if stale_ids:
-            olx_ids = [r[0] for r in results if r[1] and r[2] == "olx-img"]
-            if olx_ids:
-                await coll.update_many({"_id": {"$in": olx_ids}}, {"$set": {"stale_reason": "olx_image_404"}})
             up = await coll.update_many(
                 {"_id": {"$in": stale_ids}},
                 {"$set": {"is_stale": True, "stale_since": now, "last_checked_at": now}},

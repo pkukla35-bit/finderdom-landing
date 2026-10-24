@@ -30,4 +30,10 @@ jobs:
           for k in ("monthlyServiceUsage", "monthlyUsageByActor", "usage"):
               if k in u:
                   print(k, json.dumps(u[k], ensure_ascii=False)[:3000])
+          # Dziennie: koszt płatnych aktorów (PAID_ACTORS_PER_EVENT) — do oszacowania miesięcznego budżetu
+          print("--- Dziennie (USD, płatne aktory):")
+          for d in u.get("dailyServiceUsages") or []:
+              svc = d.get("serviceUsage") or {}
+              paid = (svc.get("PAID_ACTORS_PER_EVENT") or {}).get("amountAfterVolumeDiscountUsd") or 0
+              print(d.get("date", "")[:10], round(paid, 2))
           EOF

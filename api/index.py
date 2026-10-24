@@ -1989,8 +1989,10 @@ async def geo_city_center(name: str):
     if cached and cached.get("lat") is not None:
         return {"city": key, "lat": cached["lat"], "lng": cached["lng"], "n": cached.get("n", 0), "source": "cache"}
     pattern = "^" + _build_diacritic_regex(name.strip()) + "$"
+    rx = {"$regex": pattern}
     pts = []
-    async for d in db.listings.find({"city": {"$regex": pattern}, "lat": {"$type": "number"}, "lng": {"$type": "number"}},
+    # Małe miejscowości: w bazie często city = powiat („Wielicki”), a nazwa wsi/miasteczka siedzi w district („Gdów”).
+    async for d in db.listings.find({"$or": [{"city": rx}, {"district": rx}], "lat": {"$type": "number"}, "lng": {"$type": "number"}},
                                     {"lat": 1, "lng": 1}).limit(400):
         la, ln = float(d["lat"]), float(d["lng"])
         if 48.9 <= la <= 55.0 and 14.0 <= ln <= 24.2:

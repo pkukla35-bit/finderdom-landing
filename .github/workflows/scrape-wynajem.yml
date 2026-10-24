@@ -1,0 +1,57 @@
+name: Wynajem — Otodom przez ScrapingBee (pn–pt)
+
+# Oferty WYNAJMU (mieszkania + domy) z Otodom dla 20 największych miast, pobierane przez ScrapingBee
+# (osobny budżet od Apify). Trafiają do kolekcji listings z transaction_type=wynajem — w wyszukiwarce
+# widoczne po wyborze „Wynajem”. Zużycie: ~1 kredyt ScrapingBee na stronę wyników (72 ofert).
+
+on:
+  schedule:
+    - cron: '30 6 * * 1-5'   # 08:30 PL, pn–pt
+  workflow_dispatch:
+    inputs:
+      max_pages_mieszkanie:
+        description: 'Stron wyników na miasto — mieszkania (72 ofert/strona)'
+        required: false
+        type: string
+        default: '8'
+      max_pages_dom:
+        description: 'Stron wyników na miasto — domy'
+        required: false
+        type: string
+        default: '3'
+      city:
+        description: 'Jedno miasto (slug, np. krakow) — puste = wszystkie 20'
+        required: false
+        type: string
+
+jobs:
+  wynajem:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - property: mieszkanie
+            pages_input: max_pages_mieszkanie
+            pages_default: '8'
+          - property: dom
+            pages_input: max_pages_dom
+            pages_default: '3'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install -r scripts/requirements.txt
+      - name: Scrape wynajem (${{ matrix.property }})
+        run: |
+          PAGES="${{ inputs[matrix.pages_input] || matrix.pages_default }}"
+          ARGS="--transaction wynajem --property ${{ matrix.property }} --max-pages ${PAGES}"
+          if [ -n "${{ inputs.city }}" ]; then ARGS="$ARGS --city ${{ inputs.city }}"; fi
+          echo "python scripts/scrape_otodom.py $ARGS"
+          python scripts/scrape_otodom.py $ARGS
+        env:
+          SCRAPINGBEE_API_KEY: ${{ secrets.SCRAPINGBEE_API_KEY }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}

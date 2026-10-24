@@ -3888,6 +3888,21 @@ class ManualOptoutReq(BaseModel):
     email: str
 
 
+class AdminNotifyReq(BaseModel):
+    subject: str = Field(min_length=3, max_length=200)
+    text: str = Field(min_length=1, max_length=5000)
+
+
+@app.post("/api/admin/notify")
+async def admin_notify(body: AdminNotifyReq, admin: dict = Depends(require_admin)):
+    """E-mail do admina (pierwszy adres z ADMIN_EMAILS) — używane przez automaty (GitHub Actions) do alertów, np. padł import Apify."""
+    to = sorted(ADMIN_EMAILS)[0] if ADMIN_EMAILS else admin.get("email")
+    html = "<div style=\"font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#111\">" + \
+           "".join(f"<p>{escape(p)}</p>" for p in body.text.strip().split("\n\n")).replace("\n", "<br>") + "</div>"
+    mid = await send_email(to=to, subject=body.subject.strip(), html=html)
+    return {"ok": bool(mid), "to": to}
+
+
 # --- Śledzenie kliknięć i odpowiedzi w ręcznym mailingu B2B ---
 _TRACK_ALLOWED_PREFIXES = ("https://www.finderdom.pl", "https://finderdom.pl")
 

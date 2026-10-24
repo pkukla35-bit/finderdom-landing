@@ -1,0 +1,80 @@
+name: Apify — automatyczne nadrabianie nieudanych pobrań
+
+# Co 3 godziny (codziennie): dla każdego automatu Apify sprawdza ostatni zakończony bieg.
+# Jeśli ostatni bieg padł (np. „Monthly usage hard limit exceeded”) i od tego czasu nie było udanego —
+# ponawia go (workflow_dispatch) i wysyła e-mail do admina. Normalne pobieranie zostaje pn–pt;
+# nadrabianie zaległości działa też w weekend, ale tylko gdy jest co nadrabiać.
+
+on:
+  schedule:
+    - cron: '15 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Sprawdź i ponów
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          API_BASE: ${{ secrets.API_BASE || 'https://www.finderdom.pl' }}
+          FD_ADMIN_EMAIL: ${{ secrets.FD_ADMIN_EMAIL }}
+          FD_ADMIN_PASSWORD: ${{ secrets.FD_ADMIN_PASSWORD }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, urllib.request, datetime
+          repo = os.environ["REPO"]; tok = os.environ["GH_TOKEN"]
+          H = {"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json", "User-Agent": "finderdom-retry"}
+          WFS = ["apify-cron-regions.yml", "apify-cron-hot-cities.yml", "apify-cron-dzialki-lokale.yml", "apify-cron-otodom-regions.yml"]
+          def gh(path, method="GET", body=None):
+              req = urllib.request.Request(f"https://api.github.com/repos/{repo}{path}", method=method, headers=H,
+                                           data=json.dumps(body).encode() if body is not None else None)
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  return r.status, (r.read() or b"{}")
+          now = datetime.datetime.now(datetime.timezone.utc)
+          retried = []
+          for wf in WFS:
+              st, raw = gh(f"/actions/workflows/{wf}/runs?per_page=8")
+              runs = json.loads(raw).get("workflow_runs", [])
+              # pomiń, jeśli coś już biegnie / czeka
+              if any(r["status"] in ("queued", "in_progress") for r in runs):
+                  print(f"{wf}: bieg w toku — pomijam"); continue
+              done = [r for r in runs if r["status"] == "completed"]
+              if not done:
+                  continue
+              last = done[0]
+              age_h = (now - datetime.datetime.fromisoformat(last["created_at"].replace("Z", "+00:00"))).total_seconds() / 3600
+              if last["conclusion"] == "success":
+                  print(f"{wf}: ostatni bieg OK ({age_h:.0f}h temu)"); continue
+              if age_h > 96:
+                  print(f"{wf}: ostatnia porażka starsza niż 4 dni — nie nadrabiam"); continue
+              print(f"{wf}: ostatni bieg {last['conclusion']} ({age_h:.0f}h temu) → ponawiam")
+              gh(f"/actions/workflows/{wf}/dispatches", "POST", {"ref": "main"})
+              retried.append(f"{wf} (ostatni bieg: {last['conclusion']}, {age_h:.0f}h temu)")
+          if retried:
+              # e-mail do admina przez API FinderDom (logowanie kontem admina)
+              email, pw, base = os.environ.get("FD_ADMIN_EMAIL"), os.environ.get("FD_ADMIN_PASSWORD"), os.environ["API_BASE"]
+              if email and pw:
+                  try:
+                      req = urllib.request.Request(f"{base}/api/auth/login", method="POST", headers={"Content-Type": "application/json"},
+                                                   data=json.dumps({"email": email, "password": pw}).encode())
+                      with urllib.request.urlopen(req, timeout=30) as r:
+                          jwt = json.loads(r.read()).get("token", "")
+                      body = ("Automat pobierania ofert nie powiódł się i został ponowiony:\n\n- " + "\n- ".join(retried) +
+                              "\n\nNajczęstsza przyczyna: Apify „Monthly usage hard limit exceeded” — podnieś limit w Apify Console → Settings → Usage & Billing → Monthly usage limit.\n"
+                              "Ponawiam automatycznie co 3 godziny, aż się uda. Szczegóły: https://github.com/" + repo + "/actions")
+                      req = urllib.request.Request(f"{base}/api/admin/notify", method="POST",
+                                                   headers={"Content-Type": "application/json", "Authorization": f"Bearer {jwt}"},
+                                                   data=json.dumps({"subject": f"⚠️ FinderDom: ponowiono {len(retried)} pobrań Apify", "text": body}).encode())
+                      with urllib.request.urlopen(req, timeout=30) as r:
+                          print("notify:", r.status)
+                  except Exception as e:
+                      print("notify failed:", e)
+          print("retried:", retried or "nic")
+          EOF

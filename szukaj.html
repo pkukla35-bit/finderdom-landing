@@ -861,9 +861,9 @@ function computeAiVerdicts(listings) {
     const c = (l.city||'').toLowerCase();
     if (t === 'dzialka') {
       const purpose = (l.land_purpose || l.dzialka_type || 'unknown').toLowerCase();
-      return `${t}::${c}::${purpose}`;
+      return `${t}::${c}::${purpose}::${l.transaction||'sprzedaz'}`;
     }
-    return `${t}::${c}`;
+    return `${t}::${c}::${l.transaction||'sprzedaz'}`;
   };
   const typeKey = (l) => {
     const t = (l.type||'').toLowerCase();

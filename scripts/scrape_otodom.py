@@ -60,9 +60,12 @@ PROPERTY_LABELS = {
 }
 
 
+TRANSACTION = "sprzedaz"  # nadpisywane przez --transaction (sprzedaz | wynajem)
+
+
 def otodom_url(prop: str, city: Dict[str, str], page: int) -> str:
     slug = PROPERTY_SLUGS[prop]
-    return f"https://www.otodom.pl/pl/wyniki/sprzedaz/{slug}/{city['voi']}/{city['slug']}?limit=72&page={page}"
+    return f"https://www.otodom.pl/pl/wyniki/{TRANSACTION}/{slug}/{city['voi']}/{city['slug']}?limit=72&page={page}"
 
 
 def fetch_via_scrapingbee(url: str, api_key: str) -> Optional[str]:
@@ -256,7 +259,7 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         "lat": lat,
         "lng": lon,
         "image": img_url,
-        "transaction_type": "sprzedaz",
+        "transaction_type": TRANSACTION,
         "seller_type": seller_type,
         # added_at = prawdziwa data publikacji na Otodomie (fallback: teraz jeśli nie ma daty)
         "added_at": posted_iso or now_iso,
@@ -282,7 +285,11 @@ def main():
     ap.add_argument("--property", choices=list(PROPERTY_SLUGS.keys()), required=True)
     ap.add_argument("--city", help="One city slug (lowercase)")
     ap.add_argument("--max-pages", type=int, default=15)
+    ap.add_argument("--transaction", choices=["sprzedaz", "wynajem"], default="sprzedaz",
+                    help="sprzedaz (domyślnie) lub wynajem — wynajem trafia do bazy z transaction_type=wynajem")
     args = ap.parse_args()
+    global TRANSACTION
+    TRANSACTION = args.transaction
 
     api_key = os.environ.get("SCRAPINGBEE_API_KEY")
     if not api_key: log.error("SCRAPINGBEE_API_KEY not set"); sys.exit(1)
@@ -308,8 +315,8 @@ def main():
         cities = [c for c in CITIES if c["slug"].split("/")[0] == args.city.lower()]
         if not cities: log.error("Unknown city: %s", args.city); sys.exit(1)
 
-    log.info("═══ Otodom scraper — property=%s cities=%d max_pages=%d ═══",
-             args.property, len(cities), args.max_pages)
+    log.info("═══ Otodom scraper — transaction=%s property=%s cities=%d max_pages=%d ═══",
+             TRANSACTION, args.property, len(cities), args.max_pages)
     total = {"new": 0, "updated": 0, "credits": 0}
 
     for city in cities:

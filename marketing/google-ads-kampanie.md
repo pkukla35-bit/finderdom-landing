@@ -1,6 +1,6 @@
 # FinderDom.pl — kampanie Google Ads (gotowe do wklejenia)
 
-Budżet łączny: ~25 zł/dzień (Kampania 1: 15 zł, Kampania 2: 10 zł). Zasięg: Polska, język polski.
+Budżet łączny: ~35 zł/dzień (Kampania 1: 15 zł, Kampania 2: 20 zł). Zasięg: Polska, język polski.
 Typ kampanii: **Sieć wyszukiwania** (bez sieci reklamowej, bez partnerów wyszukiwania na start).
 Strategia stawek na start: **Maksymalizuj kliknięcia** z limitem CPC 1,50 zł → po ~30 konwersjach przełącz na **Maksymalizuj konwersje**.
 Harmonogram: codziennie 7:00–23:00. Urządzenia: wszystkie.
@@ -112,60 +112,63 @@ Zobacz tę samą ofertę na kilku portalach w różnych cenach i negocjuj z rapo
 
 ---
 
-## KAMPANIA 2 — Biura nieruchomości (Plan Firmowy 199 zł) · 10 zł/dzień
+## KAMPANIA 2 — Biura nieruchomości: wyszukiwarka ogłoszeń ze wszystkich portali (plany 90 / 199 zł) · 20 zł/dzień
 
 Strona docelowa: `https://www.finderdom.pl/dla-biur`
-Konwersja główna: **Rejestracja konta firmowego** (lead); drugorzędna: zakup planu 199 zł.
-Harmonogram: pon–pt 8:00–19:00 (biura pracują w tych godzinach).
+Konwersja główna: **Rejestracja konta firmowego** (lead); drugorzędna: zakup planu 90 / 199 zł.
+Harmonogram: pon–pt 8:00–19:00 (biura pracują w tych godzinach). Cel kampanii: „Potencjalni klienci”.
+Przekaz: jedna wyszukiwarka ogłoszeń ze wszystkich portali (sprzedaż + wynajem, cała Polska), oferty bezpośrednie z 24h — CRM i wyceny jako dodatek.
 
-### Grupa reklam 2A — „program dla biura nieruchomości”
+### Grupa reklam 2A — „wyszukiwarka ogłoszeń dla biur”
 ```
-"program dla biura nieruchomości"
-"oprogramowanie dla pośredników nieruchomości"
-"crm dla biura nieruchomości"
-"crm nieruchomości"
-"narzędzia dla pośredników nieruchomości"
-"pozyskiwanie ofert nieruchomości"
-"pozyskiwanie klientów biuro nieruchomości"
-"leady nieruchomości"
-"oferty bezpośrednie od właścicieli dla pośredników"
-"monitoring ogłoszeń nieruchomości dla biur"
+"wyszukiwarka ogłoszeń nieruchomości"
+"wyszukiwarka nieruchomości wszystkie portale"
+"agregator ogłoszeń nieruchomości"
+"agregator ofert nieruchomości"
+"wszystkie oferty nieruchomości w jednym miejscu"
 "wyszukiwarka ofert dla pośredników"
-"wycena nieruchomości dla pośredników"
-"program do wyceny nieruchomości"
-"agregator ogłoszeń dla biur nieruchomości"
+"monitoring ogłoszeń nieruchomości"
+"monitoring ofert nieruchomości dla biur"
+"oferty bezpośrednie od właścicieli dla pośredników"
+"ogłoszenia bezpośrednie nieruchomości"
+"pozyskiwanie ofert nieruchomości"
+"pozyskiwanie ofert do biura nieruchomości"
+"program dla biura nieruchomości"
+"narzędzia dla pośredników nieruchomości"
+"crm dla biura nieruchomości"
+"metawyszukiwarka nieruchomości"
 ```
-Nagłówki:
+Nagłówki (max 30 znaków — wpisz wszystkie 15):
 ```
-Dla Biur Nieruchomości
-199 zł/mies za Całe Biuro
-4 Loginy dla Agentów w Cenie
-Wszystkie Województwa
-Wyceny PDF Bez Limitu
-Oferty Bezpośrednie z 24h
-Leady od Właścicieli
-CRM Statusów Ofert
+Wyszukiwarka Ogłoszeń dla Biur
 Wszystkie Portale w 1 Miejscu
+Oferty z Największych Portali
+Oferty Bezpośrednie z 24h
+Cała Polska, Każde Województwo
+Od 90 zł/mies. za Biuro
+Biuro Jednoosobowe 90 zł
+Plan Firmowy 199 zł, 4 Loginy
 7 Dni za Darmo dla Firm z NIP
 Bez Umowy i Bez Karty
-Faktura VAT Automatycznie
+Sprzedaż i Wynajem w 1 Miejscu
+Filtr: Tylko od Właścicieli
+Wyceny PDF Bez Limitu
 Zanim Zadzwoni Konkurencja
-Dane z Aktów Notarialnych
 FinderDom.pl dla Pośredników
 ```
-Opisy:
+Opisy (max 90 znaków — wpisz wszystkie 4):
 ```
-Wszystkie portale, cała Polska, 4 loginy dla agentów, wyceny bez limitu — 199 zł/mies.
+Jedna wyszukiwarka zamiast 5 portali — wszystkie ogłoszenia z całej Polski w 1 miejscu.
 Oferty bezpośrednie od właścicieli z filtrem „ostatnie 24h” — dzwoń przed konkurencją.
-Wyceny z realnymi transakcjami z Rejestru Cen Nieruchomości — argument u właściciela.
+Biuro jednoosobowe 90 zł lub Firmowy 199 zł z 4 loginami. Wyceny PDF i CRM w cenie planu.
 7 dni za darmo dla firm z NIP, bez karty i umowy. Faktura VAT automatycznie po płatności.
 ```
-Ścieżka wyświetlana: `finderdom.pl/Dla-Biur/199zl`
+Ścieżka wyświetlana: `finderdom.pl/Dla-Biur/Wyszukiwarka`
 
 Rozszerzenia:
-- Linki: „Oferta dla biur” → /dla-biur · „Porównanie planów” → /pomoc-plany · „Załóż konto firmowe” → /rejestracja?typ=firma · „Przykładowa wycena” → /wycena
-- Objaśnienia: „4 loginy w cenie” · „Wyceny bez limitu” · „Wszystkie województwa” · „7 dni za darmo”
-- Cena: Plan Firmowy — 199 zł/mies — „Całe biuro, 4 agentów”
+- Linki: „Oferta dla biur” → /dla-biur · „Porównanie planów” → /pomoc-plany · „Załóż konto firmowe” → /rejestracja?typ=firma · „Wyszukiwarka ofert” → /szukaj
+- Objaśnienia: „Wszystkie portale” · „Oferty bezpośrednie z 24h” · „Od 90 zł/mies.” · „7 dni za darmo”
+- Ceny: Biuro jednoosobowe — 90 zł/mies — „1 login, wyceny bez limitu” · Plan Firmowy — 199 zł/mies — „Całe biuro, 4 loginy”
 
 ---
 
@@ -231,7 +234,7 @@ Prześlij mi te wartości (nie są tajne) — wkleję je do strony. Śledzenie z
 ## Checklista uruchomienia
 1. Kampania → Nowa → **Sieć wyszukiwania** → cel „Sprzedaż” (K1) / „Potencjalni klienci” (K2) → **odznacz** „Sieć reklamowa” i „Partnerzy wyszukiwania”.
 2. Lokalizacja: Polska → „Obecność: osoby przebywające w Polsce” (nie „zainteresowane”).
-3. Język: polski. Budżet: 15 zł (K1) / 10 zł (K2). Stawki: Maksymalizuj kliknięcia, limit CPC 1,50 zł.
+3. Język: polski. Budżet: 15 zł (K1) / 20 zł (K2). Stawki: Maksymalizuj kliknięcia, limit CPC 1,50 zł.
 4. Wklej grupy reklam, słowa kluczowe (w cudzysłowie = dopasowanie do wyrażenia), nagłówki, opisy, komponenty.
 5. Wklej listę wykluczeń (Słowa kluczowe → Wykluczające → dodaj listę).
 6. Po 7 dniach: usuń słowa bez kliknięć, dodaj wykluczenia z raportu „Wyszukiwane hasła”.

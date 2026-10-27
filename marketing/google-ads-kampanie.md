@@ -137,6 +137,18 @@ Przekaz: jedna wyszukiwarka ogłoszeń ze wszystkich portali (sprzedaż + wynaje
 "narzędzia dla pośredników nieruchomości"
 "crm dla biura nieruchomości"
 "metawyszukiwarka nieruchomości"
+"wyszukiwarka nieruchomości"
+"wyszukiwarka ogłoszeń nieruchomości online"
+"wyszukiwarka mieszkań"
+"wyszukiwarka domów"
+"wyszukiwarka działek"
+"wyszukiwarka ofert nieruchomości"
+"porównywarka nieruchomości"
+"porównywarka ofert mieszkań"
+"ogłoszenia nieruchomości wszystkie portale"
+"oferty nieruchomości z wielu portali"
+"nieruchomości wszystkie oferty w jednym miejscu"
+"szukaj nieruchomości wszystkie portale"
 ```
 Nagłówki (max 30 znaków — wpisz wszystkie 15):
 ```

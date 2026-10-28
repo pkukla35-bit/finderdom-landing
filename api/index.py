@@ -283,6 +283,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=72)
+    new_password: str = Field(min_length=8, max_length=72)
+
+
 class CheckoutRequest(BaseModel):
     plan: str
 
@@ -2700,6 +2705,21 @@ async def login(body: LoginRequest):
 @app.get("/api/auth/me")
 async def me(user: dict = Depends(current_user)):
     return {"user": await public_user_async(user)}
+
+
+@app.post("/api/auth/change-password", status_code=204)
+async def change_password(body: ChangePasswordRequest, user: dict = Depends(current_user)):
+    """Zmiana hasła zalogowanego użytkownika (wymaga aktualnego hasła)."""
+    if len(body.new_password.encode("utf-8")) > 72:
+        raise HTTPException(422, "Nowe hasło jest za długie (max 72 bajty)")
+    if not bcrypt.checkpw(body.current_password.encode("utf-8"), user["password_hash"].encode("utf-8")):
+        raise HTTPException(400, "Aktualne hasło jest nieprawidłowe")
+    if body.current_password == body.new_password:
+        raise HTTPException(400, "Nowe hasło musi różnić się od aktualnego")
+    new_hash = bcrypt.hashpw(body.new_password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+    users = await users_collection()
+    await users.update_one({"_id": user["_id"]}, {"$set": {"password_hash": new_hash, "password_changed_at": datetime.now(timezone.utc).isoformat()}})
+    return Response(status_code=204)
 
 
 # --- Payments ---

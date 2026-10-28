@@ -174,6 +174,20 @@ gtag('set', 'url_passthrough', false);
         <div class="row biz-only" style="display:none"><div class="k">NIP</div><div class="v" id="pNip">—</div></div>
         <div class="row"><div class="k">Konto od</div><div class="v" id="pCreated">—</div></div>
       </div>
+      <div class="card" style="margin-top:16px">
+        <h2>🔒 Zmień hasło</h2>
+        <form id="pwForm" class="inv-form" autocomplete="off">
+          <div class="inv-grid">
+            <label>Aktualne hasło<input type="password" id="pwCurrent" autocomplete="current-password" required></label>
+            <label>Nowe hasło (min. 8 znaków)<input type="password" id="pwNew" minlength="8" maxlength="72" autocomplete="new-password" required></label>
+            <label>Powtórz nowe hasło<input type="password" id="pwNew2" minlength="8" maxlength="72" autocomplete="new-password" required></label>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+            <button type="submit" class="btn-outline" id="pwSaveBtn">Zmień hasło</button>
+            <span id="pwMsg" style="font-size:13px;color:#8ba3d4"></span>
+          </div>
+        </form>
+      </div>
     </div>
 
     <!-- Subskrypcja -->
@@ -416,6 +430,38 @@ gtag('set', 'url_passthrough', false);
       document.getElementById('loading').textContent = 'Błąd ładowania konta. Odśwież stronę.';
     }
   }
+
+  document.getElementById('pwForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('pwSaveBtn');
+    const msg = document.getElementById('pwMsg');
+    const cur = document.getElementById('pwCurrent').value;
+    const nw = document.getElementById('pwNew').value;
+    const nw2 = document.getElementById('pwNew2').value;
+    msg.style.color = '#f87171';
+    if (nw.length < 8) { msg.textContent = '❌ Nowe hasło musi mieć min. 8 znaków.'; return; }
+    if (nw !== nw2) { msg.textContent = '❌ Hasła nie są takie same.'; return; }
+    btn.disabled = true; msg.style.color = '#8ba3d4'; msg.textContent = 'Zapisuję…';
+    try {
+      const r = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password: cur, new_password: nw }),
+      });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(Array.isArray(data.detail) ? data.detail.map(x => x.msg).join('; ') : (data.detail || 'Błąd zmiany hasła'));
+      }
+      e.target.reset();
+      msg.textContent = '✅ Hasło zmienione. Użyj go przy następnym logowaniu.';
+      msg.style.color = '#4ade80';
+    } catch (err) {
+      msg.textContent = '❌ ' + err.message;
+      msg.style.color = '#f87171';
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   document.getElementById('invDataForm').addEventListener('submit', async (e) => {
     e.preventDefault();

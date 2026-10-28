@@ -1,0 +1,28 @@
+name: Mongo — raport rozmiaru bazy (ręcznie)
+
+on:
+  workflow_dispatch:
+    inputs:
+      prune:
+        description: "Skasuj trwale stare oferty is_stale (1 = tak)"
+        default: "0"
+      prune_days:
+        description: "Stale starsze niż N dni"
+        default: "14"
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r scripts/requirements.txt
+      - run: python scripts/db_stats.py
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+          PRUNE: ${{ github.event.inputs.prune }}
+          PRUNE_DAYS: ${{ github.event.inputs.prune_days }}

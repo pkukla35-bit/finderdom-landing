@@ -170,7 +170,7 @@ FinderDom.pl dla Pośredników
 ```
 Opisy (max 90 znaków — wpisz wszystkie 4):
 ```
-Jedna wyszukiwarka zamiast 5 portali — wszystkie ogłoszenia z całej Polski w 1 miejscu.
+Jedna wyszukiwarka zamiast wszystkich portali — ogłoszenia z całej Polski w 1 miejscu.
 Oferty bezpośrednie od właścicieli z filtrem „ostatnie 24h” — dzwoń przed konkurencją.
 Biuro jednoosobowe 90 zł lub Firmowy 199 zł z 4 loginami. Wyceny PDF i CRM w cenie planu.
 7 dni za darmo dla firm z NIP, bez karty i umowy. Faktura VAT automatycznie po płatności.

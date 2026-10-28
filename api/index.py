@@ -288,6 +288,15 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=72)
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+    new_password: str = Field(min_length=8, max_length=72)
+
+
 class CheckoutRequest(BaseModel):
     plan: str
 
@@ -2719,6 +2728,52 @@ async def change_password(body: ChangePasswordRequest, user: dict = Depends(curr
     new_hash = bcrypt.hashpw(body.new_password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
     users = await users_collection()
     await users.update_one({"_id": user["_id"]}, {"$set": {"password_hash": new_hash, "password_changed_at": datetime.now(timezone.utc).isoformat()}})
+    return Response(status_code=204)
+
+
+def _reset_token_hash(token: str) -> str:
+    import hashlib
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+@app.post("/api/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest):
+    """Wysyła e-mail z linkiem do ustawienia nowego hasła (ważny 1 h). Zawsze zwraca ok — nie zdradza, czy konto istnieje."""
+    email = clean_email(body.email)
+    users = await users_collection()
+    user = await users.find_one({"email": email})
+    if user:
+        token = secrets.token_urlsafe(32)
+        expires = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        await users.update_one({"_id": user["_id"]}, {"$set": {"reset_token_hash": _reset_token_hash(token), "reset_token_expires": expires}})
+        link = f"{MAIL_PUBLIC_DOMAIN}/reset-haslo?token={token}"
+        html = (
+            "<div style='font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111'>"
+            "<h2 style='color:#0B1836'>Ustaw nowe hasło do FinderDom.pl</h2>"
+            "<p>Otrzymaliśmy prośbę o zmianę hasła do Twojego konta. Kliknij przycisk poniżej — link jest ważny przez <strong>1 godzinę</strong>.</p>"
+            f"<p style='margin:24px 0'><a href='{link}' style='background:#FFB800;color:#0B1836;padding:12px 22px;border-radius:10px;font-weight:700;text-decoration:none;display:inline-block'>Ustaw nowe hasło</a></p>"
+            "<p style='color:#555;font-size:13px'>Jeśli to nie Ty — zignoruj tę wiadomość, hasło pozostanie bez zmian.</p>"
+            "<p style='color:#888;font-size:12px'>FinderDom.pl</p></div>"
+        )
+        try:
+            await send_email(to=email, subject="FinderDom.pl — ustaw nowe hasło", html=html)
+        except Exception as e:
+            logger.error("forgot-password email failed: %s", str(e)[:200])
+    return {"ok": True}
+
+
+@app.post("/api/auth/reset-password", status_code=204)
+async def reset_password(body: ResetPasswordRequest):
+    users = await users_collection()
+    user = await users.find_one({"reset_token_hash": _reset_token_hash(body.token)})
+    if not user or (user.get("reset_token_expires") or "") < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(400, "Link jest nieprawidłowy lub wygasł. Poproś o nowy.")
+    new_hash = bcrypt.hashpw(body.new_password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+    await users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"password_hash": new_hash, "password_changed_at": datetime.now(timezone.utc).isoformat()},
+         "$unset": {"reset_token_hash": "", "reset_token_expires": ""}},
+    )
     return Response(status_code=204)
 
 

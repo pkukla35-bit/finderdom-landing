@@ -11,6 +11,7 @@ CO JEST W ŚRODKU (w obu planach):
 
 • WSZYSTKIE WOJEWÓDZTWA W JEDNYM ABONAMENCIE
   Otodom, OLX, Morizon, Gratka i pozostałe portale z całej Polski w jednej wyszukiwarce. Bez pakietów regionalnych, bez dopłat za kolejne miasto.
+  Wyszukiwarka w widoku dla biur (bez logowania): https://www.finderdom.pl/szukaj?widok=biuro
 
 • DWA WARIANTY, TE SAME FUNKCJE
   Pośrednik pracujący samodzielnie: Biuro jednoosobowe 90 zł/mies (1 login). Biuro z zespołem: Plan Firmowy 199 zł/mies — konto główne + 4 loginy dla agentów (199 : 4 = niecałe 50 zł na pośrednika), piąty i kolejny agent 55 zł/mies. Z planu 90 zł można w każdej chwili przejść na 199 zł.
@@ -36,6 +37,7 @@ CO JEST W ŚRODKU (w obu planach):
 
 7 DNI ZA DARMO dla firm z NIP — bez karty, bez umowy, pełny dostęp. Po okresie próbnym wybierają Państwo 90 zł (1 login) lub 199 zł (zespół). Faktura VAT automatycznie.
 Rejestracja: https://www.finderdom.pl/dla-biur
+Najpierw chcą Państwo zobaczyć, jak to działa? Wyszukiwarka w widoku dla biur — bez logowania, z CRM na każdej ofercie (statusy, notatki dla zespołu): https://www.finderdom.pl/szukaj?widok=biuro
 
 Chętnie pokażę to na 15-minutowej prezentacji online albo założę konto testowe dla Państwa (lub całego zespołu) — wystarczy odpowiedzieć na tę wiadomość.
 

@@ -1,0 +1,50 @@
+name: OLX bezpośrednio (pn–pt, 0 zł)
+
+# Własny scraper OLX z GitHub Actions — bez Apify. Lista sortowana od najnowszych, ~40 ofert / zapytanie.
+
+on:
+  schedule:
+    - cron: '45 6 * * 1-5'   # 07:45/08:45 PL, pn–pt
+  workflow_dispatch:
+    inputs:
+      max_pages:
+        description: "Stron listy na miasto (40 ofert/strona)"
+        default: "5"
+      city:
+        description: "Jedno miasto (slug, np. krakow) — puste = 20 miast"
+        default: ""
+      debug:
+        description: "Wypisz strukturę danych (1 = tak)"
+        default: "0"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - { property: mieszkanie, transaction: sprzedaz }
+          - { property: dom,        transaction: sprzedaz }
+          - { property: dzialka,    transaction: sprzedaz }
+          - { property: mieszkanie, transaction: wynajem }
+          - { property: dom,        transaction: wynajem }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r scripts/requirements.txt
+      - name: OLX ${{ matrix.transaction }}/${{ matrix.property }}
+        run: |
+          python scripts/scrape_olx.py \
+            --property "${{ matrix.property }}" \
+            --transaction "${{ matrix.transaction }}" \
+            --max-pages "${{ github.event.inputs.max_pages || '5' }}" \
+            ${{ github.event.inputs.city && format('--city "{0}"', github.event.inputs.city) || '' }} \
+            ${{ github.event.inputs.debug == '1' && '--debug' || '' }}
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}

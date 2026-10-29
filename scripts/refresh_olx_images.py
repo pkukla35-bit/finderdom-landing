@@ -104,9 +104,12 @@ def main():
     removed = dedupe_apify(coll, a.dry_run)
     log.info("Usunięte duplikaty apify: %d", removed)
 
-    since = (datetime.now(timezone.utc) - timedelta(days=a.recheck_days)).isoformat()
+    since_dt = datetime.now(timezone.utc) - timedelta(days=a.recheck_days)
+    since = since_dt.isoformat()
+    # olx_img_checked_at bywa stringiem ISO (ten skrypt) lub BSON Date (starszy mechanizm) — porównujemy oba typy
     q = {"url": {"$regex": r"olx\.pl/"}, "is_stale": {"$ne": True},
-         "$or": [{"olx_img_checked_at": {"$exists": False}}, {"olx_img_checked_at": {"$lt": since}}]}
+         "$or": [{"olx_img_checked_at": {"$exists": False}}, {"olx_img_checked_at": {"$lt": since}},
+                 {"olx_img_checked_at": {"$lt": since_dt}}]}
     cur = coll.find(q, {"external_id": 1, "image": 1, "images": 1, "source": 1, "olx_img_checked_at": 1}) \
               .sort("olx_img_checked_at", 1).limit(a.limit)
     docs = list(cur)

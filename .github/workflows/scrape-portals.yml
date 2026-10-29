@@ -27,12 +27,7 @@ jobs:
       max-parallel: 4
       matrix:
         portal: [morizon, gratka, domiporta, adresowo]
-        include:
-          - { property: mieszkanie, transaction: sprzedaz }
-          - { property: dom,        transaction: sprzedaz }
-          - { property: dzialka,    transaction: sprzedaz }
-          - { property: mieszkanie, transaction: wynajem }
-          - { property: dom,        transaction: wynajem }
+        combo: ["mieszkanie sprzedaz", "dom sprzedaz", "dzialka sprzedaz", "mieszkanie wynajem", "dom wynajem"]
     steps:
       - uses: actions/checkout@v4
         if: ${{ github.event.inputs.portal == '' || github.event.inputs.portal == matrix.portal }}
@@ -42,13 +37,14 @@ jobs:
           python-version: '3.11'
       - if: ${{ github.event.inputs.portal == '' || github.event.inputs.portal == matrix.portal }}
         run: pip install -r scripts/requirements.txt
-      - name: ${{ matrix.portal }} ${{ matrix.transaction }}/${{ matrix.property }}
+      - name: ${{ matrix.portal }} ${{ matrix.combo }}
         if: ${{ github.event.inputs.portal == '' || github.event.inputs.portal == matrix.portal }}
         run: |
+          set -- ${{ matrix.combo }}
           python scripts/scrape_portals.py \
             --portal "${{ matrix.portal }}" \
-            --property "${{ matrix.property }}" \
-            --transaction "${{ matrix.transaction }}" \
+            --property "$1" \
+            --transaction "$2" \
             --max-pages "${{ github.event.inputs.max_pages || '5' }}" \
             ${{ github.event.inputs.city && format('--city "{0}"', github.event.inputs.city) || '' }}
         env:

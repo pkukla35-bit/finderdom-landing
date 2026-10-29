@@ -115,15 +115,22 @@ def fetch_via_scrapingbee(url: str, api_key: str) -> Optional[str]:
 #    z rzędu przełączamy się na ScrapingBee (jeśli jest klucz), żeby import nigdy nie padł.
 _DIRECT_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
               "Chrome/124.0 Safari/537.36")
-_DIRECT = requests.Session()
-_DIRECT.headers.update({"User-Agent": _DIRECT_UA, "Accept-Language": "pl-PL,pl;q=0.9",
-                        "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"})
+_DIRECT_HEADERS = {"Accept-Language": "pl-PL,pl;q=0.9", "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
+try:
+    # curl_cffi podrabia odcisk TLS/HTTP2 Chrome — pierwsza linia obrony przed 403 (bez renderowania przeglądarki)
+    from curl_cffi import requests as _creq  # type: ignore
+    _DIRECT = _creq.Session(impersonate="chrome")
+    _DIRECT_KIND = "curl_cffi"
+except Exception:  # pragma: no cover
+    _DIRECT = requests.Session()
+    _DIRECT.headers.update({"User-Agent": _DIRECT_UA})
+    _DIRECT_KIND = "requests"
 DIRECT_STATE = {"blocked_streak": 0, "disabled": False, "direct_ok": 0, "sb_used": 0}
 
 
 def fetch_direct(url: str) -> Optional[str]:
     try:
-        r = _DIRECT.get(url, timeout=30)
+        r = _DIRECT.get(url, headers=_DIRECT_HEADERS, timeout=30)
         if r.status_code == 200 and "__NEXT_DATA__" in r.text:
             DIRECT_STATE["blocked_streak"] = 0; DIRECT_STATE["direct_ok"] += 1
             return r.text
@@ -133,7 +140,7 @@ def fetch_direct(url: str) -> Optional[str]:
             time.sleep(5)
         else:
             log.warning("direct HTTP %s", r.status_code)
-    except requests.RequestException as e:
+    except Exception as e:
         log.warning("direct error: %s", str(e)[:100])
     return None
 
@@ -434,8 +441,8 @@ def main():
                 empty_streak = 0
             time.sleep(1.0)
 
-    log.info("═══ DONE property=%s: new=%d updated=%d | direct_ok=%d sb_credits=%d ═══",
-             args.property, total["new"], total["updated"], DIRECT_STATE["direct_ok"], DIRECT_STATE["sb_used"])
+    log.info("═══ DONE property=%s: new=%d updated=%d | direct_ok=%d (%s) sb_credits=%d ═══",
+             args.property, total["new"], total["updated"], DIRECT_STATE["direct_ok"], _DIRECT_KIND, DIRECT_STATE["sb_used"])
 
 
 if __name__ == "__main__":

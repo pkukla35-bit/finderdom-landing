@@ -51,7 +51,8 @@ def fetch_ad(ext_id: str):
         log.warning("  api error %s: %s", ext_id, str(e)[:80]); return "error", None
     if r.status_code == 404: return "gone", None
     if r.status_code in (403, 429): return "blocked", None
-    if r.status_code != 200: return "error", None
+    if r.status_code != 200:
+        log.warning("  api %s → HTTP %s", ext_id, r.status_code); return "error", None
     try:
         data = r.json().get("data") or {}
     except Exception:

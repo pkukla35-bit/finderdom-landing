@@ -1389,6 +1389,17 @@ async function renderOffer(l, all) {
   if (!l.source_url && (window.__listingLocked || !window.__isPremium)) {
     // 🔒 bez planu: link do ogłoszenia ukryty — CTA do planu
     const logged = !!localStorage.getItem('finderdom_token');
+    const biuroDemo = (() => { try { return sessionStorage.getItem('fd_biuro_demo') === '1'; } catch { return false; } })();
+    if (biuroDemo && !logged) {
+      // Podgląd dla biur: CTA kieruje na konto firmowe (7 dni za darmo), nie na plan osobisty
+      el('sourceLink').href = '/rejestracja?typ=firma'; el('sourceLink').removeAttribute('target');
+      el('sourceLink').textContent = '🔒 Link do ogłoszenia — w planie dla biur';
+      el('ctaOtodom').href = '/rejestracja?typ=firma'; el('ctaOtodom').removeAttribute('target');
+      el('ctaOtodom').textContent = '🏢 Załóż konto firmowe — 7 dni za darmo';
+      const ctaHint0 = document.getElementById('ctaHint');
+      if (ctaHint0) ctaHint0.innerHTML = '<strong>🏢 Widok dla biur</strong> — na planie Biuro jednoosobowe (90 zł) lub Firmowym (199 zł) masz link do portalu, telefon, analizę AI, CRM i wyceny PDF bez limitu.';
+      return;
+    }
     const dest = logged ? '/konto' : '/rejestracja';
     el('sourceLink').href = dest; el('sourceLink').removeAttribute('target');
     el('sourceLink').textContent = '🔒 Link do ogłoszenia — w planie 45 zł/mies';

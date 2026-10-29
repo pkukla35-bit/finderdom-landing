@@ -81,6 +81,52 @@ def fetch_via_scrapingbee(url: str, api_key: str) -> Optional[str]:
     return None
 
 
+# ── Tryb bezpośredni (0 zł): z GitHub Actions Otodom odpowiada bez proxy. Po 3 blokadach (403/429)
+#    z rzędu przełączamy się na ScrapingBee (jeśli jest klucz), żeby import nigdy nie padł.
+_DIRECT_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/124.0 Safari/537.36")
+_DIRECT = requests.Session()
+_DIRECT.headers.update({"User-Agent": _DIRECT_UA, "Accept-Language": "pl-PL,pl;q=0.9",
+                        "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"})
+DIRECT_STATE = {"blocked_streak": 0, "disabled": False, "direct_ok": 0, "sb_used": 0}
+
+
+def fetch_direct(url: str) -> Optional[str]:
+    try:
+        r = _DIRECT.get(url, timeout=30)
+        if r.status_code == 200 and "__NEXT_DATA__" in r.text:
+            DIRECT_STATE["blocked_streak"] = 0; DIRECT_STATE["direct_ok"] += 1
+            return r.text
+        if r.status_code in (403, 429):
+            DIRECT_STATE["blocked_streak"] += 1
+            log.warning("direct HTTP %s (streak %d)", r.status_code, DIRECT_STATE["blocked_streak"])
+            time.sleep(5)
+        else:
+            log.warning("direct HTTP %s", r.status_code)
+    except requests.RequestException as e:
+        log.warning("direct error: %s", str(e)[:100])
+    return None
+
+
+def fetch_page(url: str, api_key: Optional[str]) -> Optional[str]:
+    """Najpierw bezpośrednio (darmowo); przy trwałej blokadzie — ScrapingBee."""
+    if not DIRECT_STATE["disabled"]:
+        html = fetch_direct(url)
+        if html:
+            return html
+        if DIRECT_STATE["blocked_streak"] >= 3 and api_key:
+            DIRECT_STATE["disabled"] = True
+            log.warning("→ Otodom blokuje IP GitHuba — przełączam na ScrapingBee do końca uruchomienia")
+        elif not api_key:
+            return None
+        else:
+            # pojedynczy błąd: spróbuj tę stronę przez SB, ale nie wyłączaj trybu direct
+            DIRECT_STATE["sb_used"] += 1
+            return fetch_via_scrapingbee(url, api_key)
+    DIRECT_STATE["sb_used"] += 1
+    return fetch_via_scrapingbee(url, api_key)
+
+
 NEXT_DATA_RE = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.DOTALL)
 
 
@@ -265,7 +311,7 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         "added_at": posted_iso or now_iso,
         "posted_at": posted_iso,          # oryginalna data ISO z Otodomu (jeśli była)
         "last_seen_at": now_iso,          # kiedy ostatnio widzieliśmy ofertę (live)
-        "scraped_via": "scrapingbee",
+        "scraped_via": "scrapingbee",   # (ta sama wartość także dla trybu bezpośredniego — filtry API)
     }
     if subtype_field and subtype:
         doc[subtype_field] = subtype
@@ -291,8 +337,8 @@ def main():
     global TRANSACTION
     TRANSACTION = args.transaction
 
-    api_key = os.environ.get("SCRAPINGBEE_API_KEY")
-    if not api_key: log.error("SCRAPINGBEE_API_KEY not set"); sys.exit(1)
+    api_key = os.environ.get("SCRAPINGBEE_API_KEY") or None
+    if not api_key: log.warning("SCRAPINGBEE_API_KEY not set — tylko tryb bezpośredni (bez fallbacku)")
 
     db = get_mongo()
     coll = db["listings"]
@@ -324,8 +370,7 @@ def main():
         empty_streak = 0
         for page in range(1, args.max_pages + 1):
             url = otodom_url(args.property, city, page)
-            html = fetch_via_scrapingbee(url, api_key)
-            total["credits"] += 1
+            html = fetch_page(url, api_key)
             if not html:
                 log.warning("  page %d: fetch failed", page); break
             items = parse_listings(html)
@@ -355,10 +400,10 @@ def main():
                     log.info("  → 2 empty pages, next city"); break
             else:
                 empty_streak = 0
-            time.sleep(0.5)
+            time.sleep(1.0)
 
-    log.info("═══ DONE property=%s: new=%d updated=%d credits≈%d ═══",
-             args.property, total["new"], total["updated"], total["credits"])
+    log.info("═══ DONE property=%s: new=%d updated=%d | direct_ok=%d sb_credits=%d ═══",
+             args.property, total["new"], total["updated"], DIRECT_STATE["direct_ok"], DIRECT_STATE["sb_used"])
 
 
 if __name__ == "__main__":

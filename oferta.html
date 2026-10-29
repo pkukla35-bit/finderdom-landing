@@ -1398,8 +1398,7 @@ async function renderOffer(l, all) {
       el('ctaOtodom').textContent = '🏢 Załóż konto firmowe — 7 dni za darmo';
       const ctaHint0 = document.getElementById('ctaHint');
       if (ctaHint0) ctaHint0.innerHTML = '<strong>🏢 Widok dla biur</strong> — na planie Biuro jednoosobowe (90 zł) lub Firmowym (199 zł) masz link do portalu, telefon, analizę AI, CRM i wyceny PDF bez limitu.';
-      return;
-    }
+    } else {
     const dest = logged ? '/konto' : '/rejestracja';
     el('sourceLink').href = dest; el('sourceLink').removeAttribute('target');
     el('sourceLink').textContent = '🔒 Link do ogłoszenia — w planie 45 zł/mies';
@@ -1407,6 +1406,7 @@ async function renderOffer(l, all) {
     el('ctaOtodom').textContent = logged ? '💎 Odblokuj link do ogłoszenia — 45 zł/mies' : '💎 Załóż konto i odblokuj link — 45 zł/mies';
     const ctaHint = document.getElementById('ctaHint');
     if (ctaHint) ctaHint.innerHTML = '<strong>🔒 Bez planu</strong> widzisz ofertę, ale link do portalu, numer telefonu i analiza AI są w planie Osobistym (45 zł/30 dni) lub Firmowym.';
+    }
   } else if (l.source_url) {
     el('sourceLink').href = l.source_url;
     el('sourceLink').textContent = `Zobacz na ${portalName} ↗`;

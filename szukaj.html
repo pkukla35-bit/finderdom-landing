@@ -790,7 +790,8 @@ function normalizeScrapedListing(raw) {
     id, source: 'otodom', source_url: raw.url, url: raw.url,
     type: baseType, title: raw.title || 'Oferta',
     location: '📍 ' + locStr, city, district,
-    price, price_display: fmtPln(price),
+    price, price_display: (raw.price_to && Number(raw.price_to) > price ? 'od ' : '') + fmtPln(price),
+    variants_count: Array.isArray(raw.variants) ? raw.variants.length : 0,
     price_pm2: ppm2,
     price_pm2_display: ppm2 ? (ppm2.toLocaleString('pl-PL').replace(/,/g,' ') + ' zł/m²') : '',
     area_m2: area, rooms: Number(raw.rooms) || detectRoomsFromText(raw.title, raw.description || raw.descriptionText) || 0,
@@ -1259,7 +1260,45 @@ function applyScrapedData(d) {
       const clusterMerged = clusteredList.length;
       const savedByClustering = deduped.length - clusterMerged;
       console.log(`Cross-portal cluster: ${deduped.length} → ${clusterMerged} (zredukowano ${savedByClustering} duplikatów)`);
-      scrapedList = clusteredList.map(normalizeScrapedListing).filter(Boolean);
+      // ── THIRD-LEVEL: „bliźniaki” z tej samej inwestycji / tego samego ogłoszenia z inną ceną:
+      //    ten sam znormalizowany tytuł (≥12 znaków) + to samo miasto i dzielnica + (to samo zdjęcie LUB metraż ±3%).
+      //    Zostaje jedna karta z najniższą ceną; pozostałe trafiają do `variants` (karta pokazuje „od … zł” i „+N podobne”).
+      const twinMap = new Map();
+      const twinList = [];
+      const firstImg = (r) => String((Array.isArray(r.images) && r.images[0]) || r.image || r.image_url || '').split('?')[0];
+      for (const r of clusteredList) {
+        const title = normalizeTitle(r.title);
+        const price = Number(r.price) || 0, area = Number(r.area_m2) || 0;
+        const city = String(r.city || '').toLowerCase().trim();
+        const district = String(r.district || '').toLowerCase().trim();
+        if (title.length < 12 || !city || price < 1000) { twinList.push(r); continue; }
+        const tk = `${title}|${city}|${district}|${String(r.transaction_type || '')}`;
+        const group = twinMap.get(tk);
+        let merged = false;
+        if (group) {
+          for (const g of group) {
+            const gArea = Number(g.area_m2) || 0;
+            const sameImg = firstImg(g) && firstImg(g) === firstImg(r);
+            const closeArea = area > 0 && gArea > 0 && Math.abs(area - gArea) / gArea <= 0.03;
+            if (sameImg || closeArea) {
+              if (!Array.isArray(g.variants)) g.variants = [];
+              g.variants.push({ id: r.id, price: r.price, area_m2: r.area_m2, url: r.url });
+              const gp = Number(g.price) || 0;
+              g.price_from = Math.min(g.price_from || gp, price);
+              g.price_to = Math.max(g.price_to || gp, price);
+              merged = true; break;
+            }
+          }
+        }
+        if (!merged) {
+          if (!group) twinMap.set(tk, [r]); else group.push(r);
+          twinList.push(r);
+        }
+      }
+      // karta pokazuje najniższą cenę z grupy
+      for (const r of twinList) if (r.price_from && r.price_from < Number(r.price)) { r.price_to = Math.max(r.price_to || 0, Number(r.price)); r.price = r.price_from; }
+      console.log(`Bliźniaki (ta sama inwestycja/ogłoszenie): ${clusteredList.length} → ${twinList.length}`);
+      scrapedList = twinList.map(normalizeScrapedListing).filter(Boolean);
     }
     // Merge with dedup by URL (scraped takes priority — fresher data)
     LISTINGS = scrapedList;
@@ -1638,6 +1677,7 @@ function renderPage() {
             <span class="p">${l.price_display}${l.transaction === 'wynajem' ? '<span style="font-size:11px;font-weight:700;color:#8ba3d4"> /mies.</span>' : ''}</span>
             <span class="pm2">${l.price_pm2_display}</span>
           </div>
+          ${l.variants_count ? `<div style="font-size:11px;color:#8ba3d4;margin-top:2px">🔁 +${l.variants_count} ${l.variants_count === 1 ? 'podobna oferta' : (l.variants_count < 5 ? 'podobne oferty' : 'podobnych ofert')} (ta sama inwestycja / ogłoszenie)</div>` : ''}
           ${(l.transaction !== 'wynajem' && window.FD_rataOd && FD_rataOd(l.price)) ? `<div class="card-rata">💳 rata od ~${Math.round(FD_rataOd(l.price)).toLocaleString('pl-PL')} zł/mies.</div>` : ''}
           ${crmBarHtml}
         </div>

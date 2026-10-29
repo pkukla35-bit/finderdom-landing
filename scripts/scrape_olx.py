@@ -35,15 +35,29 @@ def list_url(prop: str, trans: str, city_slug: str, page: int) -> str:
     return u + (f"&page={page}" if page > 1 else "")
 
 
+try:
+    # OLX odrzuca odcisk TLS biblioteki requests (403) — curl_cffi udaje Chrome i przechodzi (tak jak zwykły curl w teście)
+    from curl_cffi import requests as creq  # type: ignore
+    _CF = creq.Session(impersonate="chrome")
+except Exception:  # pragma: no cover
+    _CF = None
+
+
+def _get(url: str):
+    if _CF is not None:
+        return _CF.get(url, headers={"Accept-Language": "pl-PL,pl;q=0.9", "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}, timeout=40)
+    return S.get(url, timeout=40)
+
+
 def fetch(url: str) -> Optional[str]:
     for _ in range(3):
         try:
-            r = S.get(url, timeout=40)
+            r = _get(url)
             if r.status_code == 200 and len(r.text) > 20000: return r.text
             if r.status_code in (403, 429): log.warning("  HTTP %s — pauza 30s", r.status_code); time.sleep(30)
             elif r.status_code == 404: return None
             else: log.warning("  HTTP %s", r.status_code)
-        except requests.RequestException as e:
+        except Exception as e:
             log.warning("  fetch error: %s", str(e)[:100]); time.sleep(3)
     return None
 

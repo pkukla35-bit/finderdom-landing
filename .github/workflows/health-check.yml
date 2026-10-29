@@ -1,0 +1,30 @@
+name: Raport zdrowia importów — e-mail 09:30 PL (pn–pt)
+
+# Sprawdza 7 portali (czy odpowiadają, ile ofert weszło dziś, czy ostatni workflow OK) i wysyła raport na e-mail admina.
+
+on:
+  schedule:
+    - cron: '30 8 * * 1-5'   # 09:30 zimą / 10:30 latem PL
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r scripts/requirements.txt
+      - run: python scripts/health_check.py
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ALERT_EMAIL: ${{ secrets.ALERT_EMAIL || 'pkukla35@gmail.com' }}

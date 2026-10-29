@@ -1,4 +1,4 @@
-name: NOL — nieruchomosci-online.pl bezpośrednio (pn–pt, 0 zł)
+name: NOL — nieruchomosci-online.pl bezpośrednio, cała Polska (pn–pt, 0 zł)
 
 # Własny scraper nieruchomosci-online.pl — bez Apify/ScrapingBee, bez proxy (strony są renderowane serwerowo).
 # Codziennie pobiera tylko NOWE ogłoszenia (lista sortowana od najnowszych), dla nowych ściąga szczegóły
@@ -10,11 +10,14 @@ on:
   workflow_dispatch:
     inputs:
       max_pages:
-        description: "Stron listy na miasto (38 ofert/strona)"
-        default: "6"
+        description: "Stron listy (38 ofert/strona); tryb Polska: lista ogólnopolska od najnowszych"
+        default: "60"
       max_details:
         description: "Max szczegółów ofert na job"
-        default: "1500"
+        default: "2500"
+      regions:
+        description: "1 = cała Polska (jedna lista), 0 = 20 miast"
+        default: "1"
       city:
         description: "Jedno miasto (slug, np. krakow) — puste = 20 miast"
         default: ""
@@ -49,9 +52,10 @@ jobs:
           python scripts/scrape_nol.py \
             --property "${{ matrix.property }}" \
             --transaction "${{ matrix.transaction }}" \
-            --max-pages "${{ github.event.inputs.max_pages || '6' }}" \
-            --max-details "${{ github.event.inputs.max_details || '1500' }}" \
-            ${{ github.event.inputs.city && format('--city "{0}"', github.event.inputs.city) || '' }}
+            --max-pages "${{ github.event.inputs.max_pages || '60' }}" \
+            --max-details "${{ github.event.inputs.max_details || '2500' }}" \
+            ${{ github.event.inputs.city && format('--city "{0}"', github.event.inputs.city) || '' }} \
+            ${{ github.event.inputs.regions == '0' && '' || '--regions' }}
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}

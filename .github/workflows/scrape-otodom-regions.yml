@@ -1,0 +1,42 @@
+name: Otodom bezpośrednio — 16 województw (pn–pt, 0 zł)
+
+# Własny scraper Otodom z GitHub Actions (bez Apify). Przy blokadzie (3× 403) automatyczny fallback na ScrapingBee.
+# Sprzedaż: mieszkania, domy, działki. Wynajem: mieszkania, domy. Każde województwo od najnowszych.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1-5'   # 07:00/08:00 PL, pn–pt
+  workflow_dispatch:
+    inputs:
+      max_pages:
+        description: "Stron na województwo (72 oferty/strona)"
+        default: "8"
+      regions:
+        description: "1 = 16 województw, 0 = 20 miast"
+        default: "1"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        combo: ["mieszkanie sprzedaz", "dom sprzedaz", "dzialka sprzedaz", "mieszkanie wynajem", "dom wynajem"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r scripts/requirements.txt
+      - name: Otodom ${{ matrix.combo }}
+        run: |
+          set -- ${{ matrix.combo }}
+          python scripts/scrape_otodom.py --property "$1" --transaction "$2" \
+            --max-pages "${{ github.event.inputs.max_pages || '8' }}" \
+            ${{ github.event.inputs.regions == '0' && '' || '--regions' }}
+        env:
+          SCRAPINGBEE_API_KEY: ${{ secrets.SCRAPINGBEE_API_KEY }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}

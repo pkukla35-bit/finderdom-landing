@@ -1,4 +1,4 @@
-name: Portale bezpośrednio — Morizon, Gratka, Domiporta, Adresowo (pn–pt, 0 zł)
+name: Portale bezpośrednio — Morizon, Gratka, Domiporta, Adresowo, 16 województw (pn–pt, 0 zł)
 
 # Własny scraper bez proxy (strony renderowane serwerowo). Tylko listy wyników (35–40 ofert / zapytanie).
 # Sprzedaż: mieszkania, domy, działki. Wynajem: mieszkania, domy. 20 największych miast.
@@ -9,8 +9,11 @@ on:
   workflow_dispatch:
     inputs:
       max_pages:
-        description: "Stron listy na miasto"
-        default: "5"
+        description: "Stron listy na województwo/miasto (35–40 ofert/strona)"
+        default: "6"
+      regions:
+        description: "1 = 16 województw (adresowo: cała Polska), 0 = 20 miast"
+        default: "1"
       city:
         description: "Jedno miasto (slug, np. krakow) — puste = 20 miast"
         default: ""
@@ -45,8 +48,9 @@ jobs:
             --portal "${{ matrix.portal }}" \
             --property "$1" \
             --transaction "$2" \
-            --max-pages "${{ github.event.inputs.max_pages || '5' }}" \
-            ${{ github.event.inputs.city && format('--city "{0}"', github.event.inputs.city) || '' }}
+            --max-pages "${{ github.event.inputs.max_pages || '6' }}" \
+            ${{ github.event.inputs.city && format('--city "{0}"', github.event.inputs.city) || '' }} \
+            ${{ github.event.inputs.regions == '0' && '' || '--regions' }}
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}

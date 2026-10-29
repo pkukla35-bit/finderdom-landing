@@ -1,4 +1,4 @@
-name: OLX bezpośrednio (pn–pt, 0 zł)
+name: OLX bezpośrednio, cała Polska (pn–pt, 0 zł)
 
 # Własny scraper OLX z GitHub Actions — bez Apify. Lista sortowana od najnowszych, ~40 ofert / zapytanie.
 
@@ -8,8 +8,11 @@ on:
   workflow_dispatch:
     inputs:
       max_pages:
-        description: "Stron listy na miasto (40 ofert/strona)"
-        default: "5"
+        description: "Stron listy (40–50 ofert/strona); tryb Polska: lista ogólnopolska od najnowszych"
+        default: "120"
+      regions:
+        description: "1 = cała Polska (jedna lista), 0 = 20 miast"
+        default: "1"
       city:
         description: "Jedno miasto (slug, np. krakow) — puste = 20 miast"
         default: ""
@@ -42,7 +45,8 @@ jobs:
           python scripts/scrape_olx.py \
             --property "${{ matrix.property }}" \
             --transaction "${{ matrix.transaction }}" \
-            --max-pages "${{ github.event.inputs.max_pages || '5' }}" \
+            --max-pages "${{ github.event.inputs.max_pages || '120' }}" \
+            ${{ github.event.inputs.regions == '0' && '' || '--regions' }} \
             ${{ github.event.inputs.city && format('--city "{0}"', github.event.inputs.city) || '' }} \
             ${{ github.event.inputs.debug == '1' && '--debug' || '' }}
         env:

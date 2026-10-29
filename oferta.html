@@ -1087,20 +1087,35 @@ const CRM_LABELS = {
 async function initCrmBar(offerId) {
   try {
     const token = localStorage.getItem('finderdom_token');
-    if (!token) return;
+    const demo = (() => { try { return sessionStorage.getItem('fd_biuro_demo') === '1' || new URLSearchParams(location.search).get('widok') === 'biuro'; } catch { return false; } })();
+    if (!token && !demo) return;
     const userStr = localStorage.getItem('finderdom_user');
     const user = (userStr ? JSON.parse(userStr) : null) || {};
     // Backend decyduje o dostępie do CRM (plan Firmowy właściciela lub agenta) — i od razu zwraca bieżący status
     let cur = null;
-    try {
-      const r0 = await fetch(`/api/offer-status?ids=${encodeURIComponent(offerId)}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!r0.ok) { console.warn('[CRM] status fetch failed:', r0.status); return; }
-      const data0 = await r0.json();
-      if (!data0.crm) return;
-      cur = (data0.statuses || {})[offerId] || null;
-    } catch (e) { console.warn('[CRM] status fetch error:', e); return; }
+    let real = false;
+    if (token) {
+      try {
+        const r0 = await fetch(`/api/offer-status?ids=${encodeURIComponent(offerId)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (r0.ok) {
+          const data0 = await r0.json();
+          if (data0.crm) { real = true; cur = (data0.statuses || {})[offerId] || null; }
+        } else console.warn('[CRM] status fetch failed:', r0.status);
+      } catch (e) { console.warn('[CRM] status fetch error:', e); }
+    }
+    if (!real && !demo) return;
+    // Podgląd dla biur (bez konta firmowego): statusy trzymane lokalnie w przeglądarce
+    const demoLoad = () => { try { return JSON.parse(localStorage.getItem('fd_crm_demo') || '{}'); } catch { return {}; } };
+    if (!real) {
+      cur = demoLoad()[offerId] || null;
+      const demoNote = document.createElement('div');
+      demoNote.style.cssText = 'font-size:12px;color:#c5d0e6;margin-bottom:10px;line-height:1.45';
+      demoNote.innerHTML = '🔎 <b style="color:#FFB800">Podgląd widoku dla biur</b> — na planie Biuro jednoosobowe / Firmowy statusy i notatki widzi cały Twój zespół. Tu zapisują się tylko w tej przeglądarce. <a href="/rejestracja?typ=firma" style="color:#FFB800;font-weight:800">Załóż konto firmowe — 7 dni za darmo →</a>';
+      const barEl = el('crmBar');
+      if (barEl) barEl.insertBefore(demoNote, barEl.firstChild);
+    }
     // Show bar
     const bar = el('crmBar');
     if (!bar) return;
@@ -1112,6 +1127,15 @@ async function initCrmBar(offerId) {
     if (noteEl0) noteEl0.value = (cur && cur.note) ? cur.note : '';
 
     async function saveCrm(status, note) {
+      if (!real) {
+        const all = demoLoad();
+        if (status) all[offerId] = { status, note: note || '', marked_by: 'Ty (podgląd)', updated_at: new Date().toISOString() };
+        else delete all[offerId];
+        try { localStorage.setItem('fd_crm_demo', JSON.stringify(all)); } catch {}
+        updateCrmBadge(status ? { status, note, marked_by: 'Ty (podgląd)' } : null);
+        currentStatus = status || null;
+        return true;
+      }
       const res = await fetch('/api/offer-status', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },

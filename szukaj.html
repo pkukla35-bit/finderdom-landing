@@ -109,6 +109,10 @@ gtag('set', 'url_passthrough', false);
 
   /* Results */
   .results-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+  .view-switch{display:inline-flex;border:1px solid rgba(255,255,255,0.14);border-radius:100px;overflow:hidden;font-size:12px;font-weight:800}
+  .view-switch a{padding:8px 14px;color:#a3b3d1;text-decoration:none;min-height:36px;display:inline-flex;align-items:center}
+  .view-switch a.on{background:rgba(255,184,0,0.18);color:#FFD166}
+  .view-switch a:hover{color:#fff}
   .results-count{font-size:14px;color:#c5d0e6}
   .results-count strong{color:#fff;font-weight:900}
   .date-filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:10px 14px;margin-bottom:14px}
@@ -493,6 +497,9 @@ gtag('set', 'url_passthrough', false);
 
     <div class="results-head">
       <div class="results-count">Znaleziono <strong id="count">…</strong> ofert</div>
+      <div class="view-switch" id="viewSwitch" title="Przełącz widok wyszukiwarki">
+        <a href="?widok=prywatny" id="viewPrivate">👤 Prywatny</a><a href="?widok=biuro" id="viewBiuro">🏢 Dla biur</a>
+      </div>
       <select class="sort-select" id="sortSelect">
         <option value="ai">Sortuj: AI - najlepsze okazje</option>
         <option value="newest">Najnowsze</option>
@@ -504,6 +511,10 @@ gtag('set', 'url_passthrough', false);
       </select>
     </div>
     <!-- Info bar: aktywny promień geo-search -->
+    <div id="demoInfo" style="display:none;background:linear-gradient(135deg,rgba(79,70,229,0.14),rgba(255,184,0,0.08));border:1px solid rgba(255,184,0,0.4);color:#c5d0e6;border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:14px;line-height:1.5">
+      🏢 <b style="color:#FFB800">Widok dla biur (podgląd)</b> — tak wygląda wyszukiwarka z CRM na planie Biuro jednoosobowe / Firmowy: statusy i notatki na każdej ofercie, filtry CRM, wspólne oznaczenia dla całego zespołu. W podglądzie oznaczenia zapisują się tylko w tej przeglądarce.
+      <a href="/rejestracja?typ=firma" style="color:#FFB800;font-weight:800;white-space:nowrap">Załóż konto firmowe — 7 dni za darmo →</a>
+    </div>
     <div id="dateInfo" style="display:none;background:rgba(255,184,0,0.08);border:1px solid rgba(255,184,0,0.35);color:#c5d0e6;border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:14px;display:none"></div>
     <div id="radiusInfo" style="display:none;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#c5d0e6;border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:14px"></div>
 
@@ -1339,21 +1350,64 @@ function applyScrapedData(d) {
 
 // CRM statuses (Firmowy) — bulk fetch all statuses for the company
 window.CRM_STATUSES = {};
+// --- Widok dla biur (podgląd CRM bez konta firmowego) ---
+// ?widok=biuro włącza, ?widok=prywatny wyłącza; stan trzymany w sessionStorage, żeby przetrwał przejście na /oferta
+(function initBiuroView() {
+  try {
+    const w = new URLSearchParams(location.search).get('widok');
+    if (w === 'biuro') sessionStorage.setItem('fd_biuro_demo', '1');
+    else if (w === 'prywatny') sessionStorage.removeItem('fd_biuro_demo');
+  } catch {}
+})();
+window.CRM_DEMO = (() => { try { return sessionStorage.getItem('fd_biuro_demo') === '1'; } catch { return false; } })();
+function demoCrmLoad() { try { return JSON.parse(localStorage.getItem('fd_crm_demo') || '{}'); } catch { return {}; } }
+function demoCrmSave() { try { localStorage.setItem('fd_crm_demo', JSON.stringify(window.CRM_STATUSES || {})); } catch {} }
+function setViewSwitch(isBiuro) {
+  const a = document.getElementById('viewPrivate'), b = document.getElementById('viewBiuro');
+  if (a) a.classList.toggle('on', !isBiuro);
+  if (b) b.classList.toggle('on', isBiuro);
+  // Zachowaj bieżące filtry w linkach przełącznika
+  [a, b].forEach(el => {
+    if (!el) return;
+    const p = new URLSearchParams(location.search);
+    p.set('widok', el === b ? 'biuro' : 'prywatny');
+    el.href = '?' + p.toString();
+  });
+}
+function enableCrmUi() {
+  window.CRM_ENABLED = true;
+  const bar = document.getElementById('crmFilters');
+  if (bar) bar.style.display = 'block';
+}
 async function loadCrmStatuses() {
+  let real = false;
   try {
     const token = localStorage.getItem('finderdom_token');
-    if (!token) return;
-    // Backend decyduje (plan Firmowy właściciela lub agenta) — nie polegamy na starym obiekcie użytkownika w localStorage
-    const r = await fetch('/api/offer-status', { headers: { 'Authorization': `Bearer ${token}` }});
-    if (!r.ok) return;
-    const data = await r.json();
-    if (!data.crm) return;
-    window.CRM_STATUSES = data.statuses || {};
-    window.CRM_ENABLED = true;
-    // Show CRM filter chips
-    const bar = document.getElementById('crmFilters');
-    if (bar) bar.style.display = 'block';
+    if (token) {
+      // Backend decyduje (plan Firmowy właściciela lub agenta) — nie polegamy na starym obiekcie użytkownika w localStorage
+      const r = await fetch('/api/offer-status', { headers: { 'Authorization': `Bearer ${token}` }});
+      if (r.ok) {
+        const data = await r.json();
+        if (data.crm) {
+          window.CRM_STATUSES = data.statuses || {};
+          real = true;
+          enableCrmUi();
+        }
+      }
+    }
   } catch (e) { console.error('CRM load:', e); }
+  window.CRM_REAL = real;
+  if (real) {
+    // Konto firmowe: CRM zawsze, przełącznik widoku zbędny
+    const sw = document.getElementById('viewSwitch'); if (sw) sw.style.display = 'none';
+    return;
+  }
+  setViewSwitch(window.CRM_DEMO);
+  if (window.CRM_DEMO) {
+    window.CRM_STATUSES = demoCrmLoad();
+    enableCrmUi();
+    const info = document.getElementById('demoInfo'); if (info) info.style.display = 'block';
+  }
 }
 
 // --- CRM na karcie (plan Firmowy: właściciel + agenci) — oznaczanie bez otwierania oferty ---
@@ -1393,6 +1447,16 @@ function crmBarInnerHtml(id) {
   return `<div class="crm-head"><span>🏢 <b>CRM firmy</b></span>${meta}</div><div class="crm-btns">${btns}${rm}</div>${note}`;
 }
 async function crmSetFromCard(id, status, el) {
+  if (window.CRM_DEMO && !window.CRM_REAL) {
+    // Podgląd dla biur: zapis lokalny w przeglądarce
+    const prev = (window.CRM_STATUSES || {})[id] || {};
+    if (status) window.CRM_STATUSES[id] = {status, note: prev.note || '', marked_by: 'Ty (podgląd)', updated_at: new Date().toISOString()};
+    else delete window.CRM_STATUSES[id];
+    demoCrmSave();
+    document.querySelectorAll(`[data-crm-bar="${CSS.escape(id)}"]`).forEach(b => { b.innerHTML = crmBarInnerHtml(id); });
+    document.querySelectorAll(`[data-crm-pill="${CSS.escape(id)}"]`).forEach(p => { p.innerHTML = crmPillHtml(window.CRM_STATUSES[id]); });
+    return;
+  }
   const token = localStorage.getItem('finderdom_token');
   if (!token) { window.location.href = '/logowanie'; return; }
   const bar = document.querySelector(`[data-crm-bar="${CSS.escape(id)}"]`);

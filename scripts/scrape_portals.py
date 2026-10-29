@@ -15,7 +15,7 @@ import requests
 from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from scrape_otodom import CITIES, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num  # noqa: E402
+from scrape_otodom import CITIES, REGIONS, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num, city_from_slug  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("portals")
@@ -31,30 +31,36 @@ def city_slug(city: Dict[str, str]) -> str:
     return city["slug"].split("/")[0]
 
 
+def is_region(city: Dict[str, str]) -> bool:
+    return city.get("slug") == city.get("voi")
+
+
 # ───────────────────────── URL builders ─────────────────────────
 def url_morizon(prop, trans, city, page):
     seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki"}[prop]
-    base = f"https://www.morizon.pl/{'do-wynajecia/' if trans == 'wynajem' else ''}{seg}/{city_slug(city)}/"
+    newest = "najnowsze/" if is_region(city) else ""
+    base = f"https://www.morizon.pl/{'do-wynajecia/' if trans == 'wynajem' else ''}{seg}/{newest}{city_slug(city)}/"
     return base + (f"?page={page}" if page > 1 else "")
 
 
 def url_gratka(prop, trans, city, page):
     seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki-grunty"}[prop]
     base = f"https://gratka.pl/nieruchomosci/{seg}/{city_slug(city)}" + ("/wynajem" if trans == "wynajem" else "")
-    return base + (f"?page={page}" if page > 1 else "")
+    q = ("?sort=newest" if is_region(city) else "") + (f"{'&' if is_region(city) else '?'}page={page}" if page > 1 else "")
+    return base + q
 
 
 def url_domiporta(prop, trans, city, page):
     seg = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "dzialke"}[prop]
     t = "wynajme" if trans == "wynajem" else "sprzedam"
-    base = f"https://www.domiporta.pl/{seg}/{t}/{city['voi']}/{city_slug(city)}"
+    base = f"https://www.domiporta.pl/{seg}/{t}/{city['voi']}" + ("" if is_region(city) else f"/{city_slug(city)}")
     return base + (f"?PageNumber={page}" if page > 1 else "")
 
 
 def url_adresowo(prop, trans, city, page):
     seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki"}[prop]
     if trans == "wynajem": seg += "-wynajem"
-    base = f"https://adresowo.pl/{seg}/{city_slug(city)}/"
+    base = f"https://adresowo.pl/{seg}/" + ("" if city_slug(city) == "polska" else f"{city_slug(city)}/")
     return base + (f"_l{page}" if page > 1 else "")
 
 
@@ -118,6 +124,7 @@ def parse_domiporta(html: str) -> List[Dict[str, Any]]:
             "price": _money(price.group(1)) if price else None, "area": _money(area.group(1)) if area else None,
             "rooms": _num(_txt(rooms.group(1))) if rooms else None, "floor": None, "image": img.group(1) if img else None,
             "district": loc_parts[1] if len(loc_parts) > 1 else None, "street": loc_parts[2] if len(loc_parts) > 2 else None,
+            "loc0": loc_parts[0] if loc_parts else None,
             "desc": _txt(desc.group(1)) if desc else "", "seller": None,
         })
     return out
@@ -146,7 +153,7 @@ def parse_adresowo(html: str) -> List[Dict[str, Any]]:
         out.append({
             "id": mid.group(1), "url": "https://adresowo.pl" + href.group(1),
             "title": " ".join(x for x in [loc, street] if x), "price": price, "area": area, "rooms": rooms, "floor": None,
-            "image": img.group(1) if img else None, "district": district, "street": street,
+            "image": img.group(1) if img else None, "district": district, "street": street, "loc0": loc,
             "desc": _txt(desc.group(1)) if desc else "", "seller": "prywatna",   # adresowo = tylko bez pośredników
         })
     return out
@@ -172,7 +179,31 @@ def fetch(url: str) -> Optional[str]:
     return None
 
 
+def guess_city(portal: str, it: Dict[str, Any]) -> Optional[str]:
+    """Tryb województw: miasto z URL/tytułu oferty."""
+    u = it.get("url") or ""
+    if portal == "morizon":
+        m = re.search(r"/oferta/(?:sprzedaz|wynajem)-(?:mieszkanie|dom|dzialka|lokal)-([a-z0-9-]+)-mzn\d+", u)
+        if m: return city_from_slug(m.group(1).split("-"))
+    elif portal == "gratka":
+        m = re.search(r"/nieruchomosci/(?:mieszkanie|dom|dzialka|lokal)-([a-z0-9-]+)/ob/", u)
+        if m: return city_from_slug(m.group(1).split("-"))
+    elif portal == "domiporta":
+        t = (it.get("loc0") or "")
+        parts = t.split(" ", 1)
+        if len(parts) == 2: return parts[1].strip().title()
+    elif portal == "adresowo":
+        t = (it.get("loc0") or "").strip()
+        toks = t.split(" ")
+        two = " ".join(toks[:2])
+        if two in {"Nowy Sącz", "Zielona Góra", "Gorzów Wielkopolski", "Jelenia Góra", "Dąbrowa Górnicza", "Ruda Śląska", "Stalowa Wola", "Nowy Targ", "Tomaszów Mazowiecki", "Piotrków Trybunalski", "Ostrów Wielkopolski", "Bielsko-Biała"}: return two
+        return toks[0] if toks and toks[0] else None
+    return None
+
+
 def normalize(portal: str, it: Dict[str, Any], city_name: str, prop: str, trans: str) -> Dict[str, Any]:
+    if city_name in ("Polska",) or city_name.islower():   # tryb regionów (nazwa województwa) / cała Polska
+        city_name = guess_city(portal, it) or city_name
     blob = f"{it['title']} {it.get('desc', '')}".lower()
     subtype = None
     if prop == "dzialka":
@@ -213,10 +244,12 @@ def main():
     ap.add_argument("--property", choices=list(BASE_LABEL), required=True)
     ap.add_argument("--transaction", choices=["sprzedaz", "wynajem"], default="sprzedaz")
     ap.add_argument("--city"); ap.add_argument("--max-pages", type=int, default=5); ap.add_argument("--delay", type=float, default=1.0)
+    ap.add_argument("--regions", action="store_true", help="16 województw (adresowo: cała Polska) zamiast 20 miast")
     a = ap.parse_args()
     P = PORTALS[a.portal]
     db = get_mongo(); coll = db["listings"]
     cities = CITIES if not a.city else [c for c in CITIES if city_slug(c) == a.city.lower()]
+    if a.regions: cities = [{"name": "Polska", "slug": "polska", "voi": "polska"}] if a.portal == "adresowo" else REGIONS
     if not cities: log.error("Unknown city"); sys.exit(1)
     log.info("═══ %s — %s/%s — cities=%d max_pages=%d ═══", a.portal, a.transaction, a.property, len(cities), a.max_pages)
     tot = {"new": 0, "updated": 0, "pages": 0}

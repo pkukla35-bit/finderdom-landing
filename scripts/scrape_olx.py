@@ -31,7 +31,8 @@ ROOMS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven"
 
 
 def list_url(prop: str, trans: str, city_slug: str, page: int) -> str:
-    u = f"https://www.olx.pl/nieruchomosci/{SEG[prop]}/{trans}/{city_slug}/?search%5Border%5D=created_at%3Adesc"
+    loc = "" if city_slug == "polska" else f"{city_slug}/"
+    u = f"https://www.olx.pl/nieruchomosci/{SEG[prop]}/{trans}/{loc}?search%5Border%5D=created_at%3Adesc"
     return u + (f"&page={page}" if page > 1 else "")
 
 
@@ -182,9 +183,11 @@ def main():
     ap.add_argument("--transaction", choices=["sprzedaz", "wynajem"], default="sprzedaz")
     ap.add_argument("--city"); ap.add_argument("--max-pages", type=int, default=5); ap.add_argument("--delay", type=float, default=1.5)
     ap.add_argument("--debug", action="store_true")
+    ap.add_argument("--regions", action="store_true", help="cała Polska (lista ogólnopolska od najnowszych) zamiast 20 miast")
     a = ap.parse_args()
     db = get_mongo(); coll = db["listings"]
     cities = CITIES if not a.city else [c for c in CITIES if c["slug"].split("/")[0] == a.city.lower()]
+    if a.regions: cities = [{"name": "Polska", "slug": "polska"}]
     if not cities: log.error("Unknown city"); sys.exit(1)
     log.info("═══ OLX direct — %s/%s — cities=%d max_pages=%d ═══", a.transaction, a.property, len(cities), a.max_pages)
     tot = {"new": 0, "updated": 0, "pages": 0}

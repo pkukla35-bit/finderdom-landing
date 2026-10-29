@@ -34,7 +34,8 @@ BASE_LABEL = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "działka"}
 
 
 def list_url(prop: str, trans: str, city_name: str, page: int) -> str:
-    u = f"https://www.nieruchomosci-online.pl/szukaj.html?3,{PROPERTY_SLUGS[prop]},{trans},,{requests.utils.quote(city_name)}"
+    loc = "" if city_name == "Polska" else requests.utils.quote(city_name)
+    u = f"https://www.nieruchomosci-online.pl/szukaj.html?3,{PROPERTY_SLUGS[prop]},{trans},,{loc}"
     return u + (f"&p={page}" if page > 1 else "")
 
 
@@ -185,10 +186,12 @@ def main():
     ap.add_argument("--max-pages", type=int, default=6)
     ap.add_argument("--max-details", type=int, default=1500, help="ile szczegółów ofert pobrać w tym uruchomieniu")
     ap.add_argument("--delay", type=float, default=0.6)
+    ap.add_argument("--regions", action="store_true", help="cała Polska (lista ogólnopolska od najnowszych) zamiast 20 miast")
     a = ap.parse_args()
 
     db = get_mongo(); coll = db["listings"]
     cities = CITIES if not a.city else [c for c in CITIES if c["slug"].split("/")[0] == a.city.lower()]
+    if a.regions: cities = [{"name": "Polska", "slug": "polska"}]
     if not cities: log.error("Unknown city"); sys.exit(1)
     log.info("═══ NOL scraper — %s / %s — cities=%d max_pages=%d ═══", a.transaction, a.property, len(cities), a.max_pages)
     tot = {"new": 0, "updated": 0, "details": 0, "pages": 0}

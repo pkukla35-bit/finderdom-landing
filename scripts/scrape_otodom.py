@@ -25,6 +25,34 @@ log = logging.getLogger("otodom")
 
 SB_URL = "https://app.scrapingbee.com/api/v1/"
 
+# 16 województw — tryb --regions (cała Polska, jak w Apify). "voi" = slug używany przez Otodom/Morizon/Gratka/Domiporta.
+REGIONS: List[Dict[str, str]] = [{"name": n, "voi": v, "slug": v} for n, v in [
+    ("dolnośląskie", "dolnoslaskie"), ("kujawsko-pomorskie", "kujawsko-pomorskie"), ("lubelskie", "lubelskie"),
+    ("lubuskie", "lubuskie"), ("łódzkie", "lodzkie"), ("małopolskie", "malopolskie"), ("mazowieckie", "mazowieckie"),
+    ("opolskie", "opolskie"), ("podkarpackie", "podkarpackie"), ("podlaskie", "podlaskie"), ("pomorskie", "pomorskie"),
+    ("śląskie", "slaskie"), ("świętokrzyskie", "swietokrzyskie"), ("warmińsko-mazurskie", "warminsko-mazurskie"),
+    ("wielkopolskie", "wielkopolskie"), ("zachodniopomorskie", "zachodniopomorskie")]]
+
+TWO_WORD_CITIES = {"nowy-sacz": "Nowy Sącz", "bielsko-biala": "Bielsko-Biała", "zielona-gora": "Zielona Góra",
+    "gorzow-wielkopolski": "Gorzów Wielkopolski", "jelenia-gora": "Jelenia Góra", "dabrowa-gornicza": "Dąbrowa Górnicza",
+    "ruda-slaska": "Ruda Śląska", "piotrkow-trybunalski": "Piotrków Trybunalski", "ostrow-wielkopolski": "Ostrów Wielkopolski",
+    "stalowa-wola": "Stalowa Wola", "tomaszow-mazowiecki": "Tomaszów Mazowiecki", "nowy-targ": "Nowy Targ",
+    "nowy-dwor-mazowiecki": "Nowy Dwór Mazowiecki", "ostrowiec-swietokrzyski": "Ostrowiec Świętokrzyski",
+    "skarzysko-kamienna": "Skarżysko-Kamienna", "mielec": "Mielec", "kedzierzyn-kozle": "Kędzierzyn-Koźle",
+    "grodzisk-mazowiecki": "Grodzisk Mazowiecki", "minsk-mazowiecki": "Mińsk Mazowiecki", "tomaszow-lubelski": "Tomaszów Lubelski",
+    "czechowice-dziedzice": "Czechowice-Dziedzice", "konstancin-jeziorna": "Konstancin-Jeziorna", "busko-zdroj": "Busko-Zdrój",
+    "kudowa-zdroj": "Kudowa-Zdrój", "polanica-zdroj": "Polanica-Zdrój", "rabka-zdroj": "Rabka-Zdrój", "szczawno-zdroj": "Szczawno-Zdrój"}
+
+
+def city_from_slug(tokens: List[str]) -> str:
+    """Z tokenów sluga URL (po typie nieruchomości) odczytaj miasto: 2-wyrazowe ze słownika, inaczej pierwszy token."""
+    if not tokens: return ""
+    two = "-".join(tokens[:2])
+    if two in TWO_WORD_CITIES: return TWO_WORD_CITIES[two]
+    known = {c["slug"].split("/")[0]: c["name"] for c in CITIES}   # krakow → Kraków, lodz → Łódź …
+    return known.get(tokens[0]) or tokens[0].capitalize()
+
+
 CITIES: List[Dict[str, str]] = [
     {"name": "Warszawa",    "voi": "mazowieckie",         "slug": "warszawa/warszawa/warszawa"},
     {"name": "Kraków",      "voi": "malopolskie",         "slug": "krakow/krakow/krakow"},
@@ -65,6 +93,8 @@ TRANSACTION = "sprzedaz"  # nadpisywane przez --transaction (sprzedaz | wynajem)
 
 def otodom_url(prop: str, city: Dict[str, str], page: int) -> str:
     slug = PROPERTY_SLUGS[prop]
+    if city["slug"] == city["voi"]:   # tryb --regions: całe województwo, od najnowszych
+        return f"https://www.otodom.pl/pl/wyniki/{TRANSACTION}/{slug}/{city['voi']}?limit=72&page={page}&by=LATEST&direction=DESC"
     return f"https://www.otodom.pl/pl/wyniki/{TRANSACTION}/{slug}/{city['voi']}/{city['slug']}?limit=72&page={page}"
 
 
@@ -265,6 +295,7 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
             district = (addr.get("district") or {}).get("name", "") if isinstance(addr.get("district"), dict) else ""
             location = ", ".join(x for x in [city_part, district] if x)
     if not location: location = city_name
+    real_city = city_part if (isinstance(loc, dict) and city_part) else city_name
 
     coords = loc.get("coordinates") if isinstance(loc, dict) else None
     lat = _num((coords or {}).get("latitude"))
@@ -297,7 +328,7 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         "title": title,
         "url": url,
         "location": location,
-        "city": city_name,
+        "city": real_city,
         "price": price,
         "area_m2": area_m2,
         "price_pm2": round(price / area_m2, 2) if price and area_m2 and area_m2 > 0 else None,
@@ -333,6 +364,7 @@ def main():
     ap.add_argument("--max-pages", type=int, default=15)
     ap.add_argument("--transaction", choices=["sprzedaz", "wynajem"], default="sprzedaz",
                     help="sprzedaz (domyślnie) lub wynajem — wynajem trafia do bazy z transaction_type=wynajem")
+    ap.add_argument("--regions", action="store_true", help="16 województw zamiast 20 miast (cała Polska, od najnowszych)")
     args = ap.parse_args()
     global TRANSACTION
     TRANSACTION = args.transaction
@@ -356,7 +388,7 @@ def main():
     except Exception as e:
         log.warning("added_at migration skipped: %s", e)
 
-    cities = CITIES
+    cities = REGIONS if args.regions else CITIES
     if args.city:
         cities = [c for c in CITIES if c["slug"].split("/")[0] == args.city.lower()]
         if not cities: log.error("Unknown city: %s", args.city); sys.exit(1)

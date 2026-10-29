@@ -244,7 +244,7 @@
         <div id="mmResults" style="margin-top:10px;font-size:13px"></div>
         <div style="margin-top:14px;padding:12px 14px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.35);border-radius:10px">
           <div style="font-weight:800;font-size:14px;margin-bottom:4px">🔁 Follow-up do wszystkich wcześniej zaadresowanych biur</div>
-          <p style="color:#8ba3d4;font-size:12px;margin:0 0 10px;line-height:1.5">Wysyła wybrany wyżej szablon (i temat) do każdego adresu, który kiedykolwiek dostał mailing — z pominięciem listy „nie”, wypisanych, tych którzy odpisali oraz tych, którzy ten szablon już dostali. Wysyłka idzie partiami po 8 co kilka sekund; zostaw tę kartę otwartą do końca.</p>
+          <p style="color:#8ba3d4;font-size:12px;margin:0 0 10px;line-height:1.5">Wysyła wybrany wyżej szablon (i temat) do każdego adresu, który kiedykolwiek dostał mailing — z pominięciem listy „nie”, wypisanych, tych którzy odpisali oraz tych, którzy ten szablon już dostali. Wysyłka idzie partiami po 8 co ok. 10 sekund (łagodniej dla skrzynki home.pl); zostaw tę kartę otwartą do końca.</p>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
             <button type="button" id="mmFollowCount" class="refresh-btn" style="min-height:44px">🔢 Policz odbiorców</button>
             <button type="button" id="mmFollowSend" class="refresh-btn" style="min-height:44px;display:none">🚀 Wyślij do wszystkich</button>
@@ -882,7 +882,7 @@ document.addEventListener('click', async (e) => {
       out.innerHTML += r.results.map(x => `<div>${escapeHtml(x.email)} — ${escapeHtml(x.status)}</div>`).join('');
       out.scrollTop = out.scrollHeight;
       if (r.remaining <= 0 || (r.sent === 0 && r.failed > 0)) break;
-      await new Promise(res => setTimeout(res, 4000));
+      await new Promise(res => setTimeout(res, 10000));
     }
     msg.innerHTML = `<span class="ok">✅ Gotowe: wysłano ${total}${failed ? `, błędów ${failed}` : ''}${_mmFollowStop ? ' (zatrzymano)' : ''}</span>`;
     loadManualMail();

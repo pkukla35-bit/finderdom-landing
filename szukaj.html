@@ -1257,6 +1257,7 @@ function applyScrapedData(d) {
           const newPortal = detectPortalFromUrl2(r.url) || (r.sources?.[0]?.portal || '');
           if (newPortal && !existingPortals.has(newPortal.toLowerCase())) {
             existing.sources.push({ portal: newPortal, url: r.url, price: r.price });
+            existingPortals.add(newPortal.toLowerCase());
           }
           // Zsumuj tez sources z r
           if (Array.isArray(r.sources)) {

@@ -1,0 +1,25 @@
+name: Test — czy Otodom odpowiada bez proxy (ręcznie)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Otodom direct fetch
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+          for u in "https://www.otodom.pl/robots.txt" \
+                   "https://www.otodom.pl/pl/wyniki/sprzedaz/mieszkanie/malopolskie/krakow/krakow/krakow?limit=36" \
+                   "https://www.morizon.pl/mieszkania/krakow/" \
+                   "https://gratka.pl/nieruchomosci/mieszkania/krakow" \
+                   "https://www.domiporta.pl/mieszkanie/sprzedam/malopolskie/krakow" \
+                   "https://adresowo.pl/mieszkania/krakow/" \
+                   "https://www.olx.pl/nieruchomosci/mieszkania/sprzedaz/krakow/"; do
+            code=$(curl -s -L -A "$UA" -H "Accept-Language: pl-PL,pl;q=0.9" -H "Accept: text/html,application/xhtml+xml" -o /tmp/p.html -w "%{http_code}" "$u")
+            size=$(wc -c < /tmp/p.html)
+            nd=$(grep -c "__NEXT_DATA__\|application/ld+json\|data-cy\|listing" /tmp/p.html || true)
+            echo "$code  size=$size  markers=$nd  $u"
+          done

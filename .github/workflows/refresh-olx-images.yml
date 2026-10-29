@@ -1,0 +1,39 @@
+name: OLX zdjęcia – odświeżanie (codziennie, 0 zł)
+
+# OLX zmienia adresy zdjęć aktywnych ogłoszeń → stare linki = szare logo. Ten job sprawdza zdjęcia ofert OLX,
+# pobiera świeże z publicznego API OLX, wygasza ogłoszenia których OLX już nie ma i usuwa duplikaty apify+olx.
+
+on:
+  schedule:
+    - cron: '20 3 * * *'   # 04:20/05:20 PL, codziennie (przed importami)
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Ile ofert OLX sprawdzić w tym uruchomieniu"
+        default: "1500"
+      recheck_days:
+        description: "Pomiń oferty sprawdzone w ciągu N dni"
+        default: "5"
+      dry_run:
+        description: "1 = tylko raport, bez zapisu"
+        default: "0"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r scripts/requirements.txt
+      - name: Odśwież zdjęcia OLX
+        run: |
+          python scripts/refresh_olx_images.py \
+            --limit "${{ github.event.inputs.limit || '1500' }}" \
+            --recheck-days "${{ github.event.inputs.recheck_days || '5' }}" \
+            ${{ github.event.inputs.dry_run == '1' && '--dry-run' || '' }}
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}

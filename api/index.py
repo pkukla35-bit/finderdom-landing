@@ -2318,7 +2318,6 @@ async def listings_scraped_endpoint(
                 "_id": 0,
                 "description": 0,
                 "source_actor": 0,
-                "last_seen_at": 0,
                 "phone": 0,
                 "posted_at": 0,
                 # images: keep, but slice server-side ponizej do max 5 (bo OLX URL sa dlugie)

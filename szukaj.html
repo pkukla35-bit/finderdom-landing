@@ -1187,10 +1187,13 @@ function applyScrapedData(d) {
         if (!key) continue;
         const existing = scrapedByKey.get(key);
         if (!existing) { scrapedByKey.set(key, r); continue; }
-        const priorityOf = (x) => x.scraped_via === 'apify' ? 2 : x.scraped_via === 'scrapingbee' ? 1 : 0;
+        // Ten sam URL 2× w bazie (np. stary rekord Apify + nowy z darmowego scrapera): wygrywa ŚWIEŻSZY
+        // (OLX zmienia adresy zdjęć — stary rekord ma szare logo zamiast fotek), a przy remisie direct > apify > scrapingbee
+        const priorityOf = (x) => /-direct$/.test(x.scraped_via || '') ? 3 : x.scraped_via === 'apify' ? 2 : x.scraped_via === 'scrapingbee' ? 1 : 0;
+        const seenOf = (x) => String(x.last_seen_at || x.updated_at || x.added_at || '');
         const pE = priorityOf(existing), pR = priorityOf(r);
-        if (pR > pE) { scrapedByKey.set(key, r); }
-        else if (pR === pE && (r.added_at || '') > (existing.added_at || '')) { scrapedByKey.set(key, r); }
+        if (seenOf(r) > seenOf(existing)) { scrapedByKey.set(key, r); }
+        else if (seenOf(r) === seenOf(existing) && pR > pE) { scrapedByKey.set(key, r); }
       }
       const deduped = Array.from(scrapedByKey.values());
       // ── SECOND-LEVEL DEDUP: łączy oferty które są tym samym mieszkaniem na różnych portalach
@@ -1213,6 +1216,21 @@ function applyScrapedData(d) {
         return '';
       }
       const clusteredList = [];
+      // Odcisk oferty niezależny od tytułu/miejscowości: ta sama cena + metraż + liczba pokoi + typ + transakcja.
+      // Łapie np. „DOM … BLISKO KRAKOWA | 204 m2” (Michałowice) i „Na sprzedaż dom 204 m² … w Więcławicach” (Więcławice)
+      // — to samo ogłoszenie, inny portal, inny tytuł i inna miejscowość. Pomijamy rynek pierwotny (deweloper ma
+      // wiele identycznych mieszkań w jednej cenie — to NIE są duplikaty).
+      const fpMap = new Map();
+      const olxRotating = (u) => /\/v1\/files\/[a-z0-9]+-PL\//i.test(String(u || ''));
+      const fingerprintOf = (r) => {
+        const price = Number(r.price) || 0, area = Number(r.area_m2) || 0, rooms = Number(r.rooms) || 0;
+        if (price < 1000 || area < 10 || !rooms) return '';
+        if (String(r.market_type || '').toLowerCase() === 'pierwotny') return '';
+        const blob = String(r.title || '').toLowerCase();
+        if (/dewelop|inwestycj|etap|nowe mieszkan/.test(blob)) return '';
+        const base = String(r.type || '').toLowerCase().split(/\s+/)[0];
+        return `${price}|${Math.round(area)}|${rooms}|${base}|${String(r.transaction_type || '')}`;
+      };
       for (const r of deduped) {
         const price = Number(r.price) || 0;
         const area = Number(r.area_m2) || 0;
@@ -1224,11 +1242,15 @@ function applyScrapedData(d) {
           continue;
         }
         const ck = `${price}|${Math.round(area)}|${city}|${title}`;
-        const existing = clusterMap.get(ck);
+        const fp = fingerprintOf(r);
+        const existing = clusterMap.get(ck) || (fp && fpMap.get(fp));
         if (!existing) {
           clusterMap.set(ck, r);
+          if (fp) fpMap.set(fp, r);
           clusteredList.push(r);
         } else {
+          if (!clusterMap.has(ck)) clusterMap.set(ck, existing);
+          if (fp && !fpMap.has(fp)) fpMap.set(fp, existing);
           // Merge - dodaj do sources istniejącego
           if (!Array.isArray(existing.sources)) existing.sources = [];
           const existingPortals = new Set(existing.sources.map(s => (s.portal || '').toLowerCase()));
@@ -1254,6 +1276,13 @@ function applyScrapedData(d) {
           else if (r.image_url) rImgs.push(r.image_url);
           for (const u of rImgs) {
             if (u && !existing.images.includes(u)) existing.images.push(u);
+          }
+          // Karta OLX+Otodom pokazywała szare logo OLX (rotujące adresy zdjęć OLX) — jeśli drugi portal ma
+          // stabilne zdjęcia, one idą na początek karuzeli
+          if (olxRotating(existing.images[0]) && rImgs.length && !olxRotating(rImgs[0])) {
+            existing.images = [...rImgs.filter(Boolean), ...existing.images.filter(u => !rImgs.includes(u))];
+            existing.image = existing.images[0];
+            if (existing.image_url) existing.image_url = existing.images[0];
           }
         }
       }

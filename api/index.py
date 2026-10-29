@@ -1045,11 +1045,11 @@ async def deactivate_agent(agent_id: str, user: dict = Depends(current_user)):
 
 class OfferStatusUpdate(BaseModel):
     offer_id: str = Field(min_length=1, max_length=200)
-    status: Optional[str] = None  # contacted | scheduled | outdated | direct | None to remove
+    status: Optional[str] = None  # contacted | scheduled | outdated | direct | bad_contact | later | None to remove
     note: Optional[str] = None
 
 
-VALID_STATUSES = {"contacted", "scheduled", "outdated", "direct"}
+VALID_STATUSES = {"contacted", "scheduled", "outdated", "direct", "bad_contact", "later"}
 
 
 def _company_scope(user: dict) -> str:

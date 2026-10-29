@@ -365,6 +365,8 @@ gtag('set', 'url_passthrough', false);
         <button class="crm-btn" data-status="scheduled" style="background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.4);color:#4ade80;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">📅 Umówione</button>
         <button class="crm-btn" data-status="direct" style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);color:#60a5fa;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">🚷 Bez pośrednika</button>
         <button class="crm-btn" data-status="outdated" style="background:rgba(248,113,113,0.15);border:1px solid rgba(248,113,113,0.4);color:#f87171;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">🚫 Nieaktualna</button>
+        <button class="crm-btn" data-status="bad_contact" style="background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.4);color:#c4b5fd;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">❌ Zły kontakt</button>
+        <button class="crm-btn" data-status="later" style="background:rgba(251,146,60,0.15);border:1px solid rgba(251,146,60,0.4);color:#fdba74;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">⏰ Kontakt później</button>
         <button class="crm-btn" data-status="" style="background:rgba(139,163,212,0.1);border:1px solid rgba(139,163,212,0.3);color:#8ba3d4;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">✕ Usuń</button>
       </div>
       <textarea id="crmNote" placeholder="📝 Notatka (opcjonalnie): np. 'Umówione na środę 14:00, klient bardzo zainteresowany'" style="width:100%;box-sizing:border-box;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;font-size:13px;font-family:inherit;min-height:60px;resize:vertical" maxlength="500"></textarea>
@@ -1082,6 +1084,8 @@ const CRM_LABELS = {
   scheduled: '📅 Umówione',
   direct: '🚷 Bez pośrednika',
   outdated: '🚫 Nieaktualna',
+  bad_contact: '❌ Zły kontakt',
+  later: '⏰ Kontakt później',
 };
 
 async function initCrmBar(offerId) {

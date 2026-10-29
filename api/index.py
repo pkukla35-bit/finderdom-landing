@@ -2142,9 +2142,9 @@ async def listings_scraped_endpoint(
         await ensure_indexes()  # zapewnia indexy na added_at/scraped_via/city/type dla szybkiego sortowania
         # Server-side filtering
         # Uwaga: gdy BRAK city/type/transaction — nie filtrujemy po scraped_via żeby uniknąć slow scan
-        # (99% ofert i tak ma scraped_via w [scrapingbee, apify])
+        # (99% ofert i tak ma scraped_via w [scrapingbee, apify, nol-direct])
         if city or type or transaction or (lat and lng and radius_km):
-            query = {"scraped_via": {"$in": ["scrapingbee", "apify"]}, "is_stale": {"$ne": True}, "price": {"$gt": 1000}}
+            query = {"scraped_via": {"$in": ["scrapingbee", "apify", "nol-direct"]}, "is_stale": {"$ne": True}, "price": {"$gt": 1000}}
         else:
             query = {"is_stale": {"$ne": True}, "price": {"$gt": 1000}}
         # GEO filter (bounding box): 1° lat = 111 km; 1° lng = 111 * cos(lat) km

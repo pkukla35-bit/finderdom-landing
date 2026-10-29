@@ -93,7 +93,7 @@ def parse_list(html: str) -> List[Dict[str, Any]]:
             "price": _price(price_m.group(1)) if price_m else None,
             "area": area,
             "image": img_m.group(1) if img_m else None,
-            "market": {"secondary": "wtórny", "primary": "pierwotny"}.get(market.group(1) if market else "", None),
+            "market": {"secondary": "wtorny", "primary": "pierwotny"}.get(market.group(1) if market else "", None),
             "rooms": _num(attrs.get("Liczba pokoi")),
             "floor": attrs.get("Piętro"),
             "year": _num(attrs.get("Rok budowy")),
@@ -160,7 +160,7 @@ def normalize(it: Dict[str, Any], det: Dict[str, Any], city_name: str, prop: str
         "price_pm2": round(price / area, 2) if price and area and area > 0 else None,
         "rooms": int(it["rooms"]) if it.get("rooms") else None,
         "floor": it.get("floor"), "year_built": int(it["year"]) if it.get("year") else None,
-        "market": it.get("market"), "image": (det.get("images") or [it.get("image")] or [None])[0] or it.get("image"),
+        "market_type": it.get("market"), "image": (det.get("images") or [it.get("image")] or [None])[0] or it.get("image"),
         "transaction_type": trans, "seller_type": seller, "last_seen_at": now_iso, "scraped_via": "nol-direct",
     }
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype

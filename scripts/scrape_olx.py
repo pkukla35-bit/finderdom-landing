@@ -102,10 +102,27 @@ def normalize(ad: dict, city_name: str, prop: str, trans: str) -> Optional[Dict[
     if not oid or not url: return None
     title = ad.get("title") or ""
     desc = (ad.get("description") or "")[:3000]
-    pv = _param(ad, "price") or {}
-    price = _num(pv.get("value")) if isinstance(pv, dict) else _num(pv)
-    mv = _param(ad, "m") or {}
-    area = _num((mv.get("key") if isinstance(mv, dict) else mv) or "") or _num(re.sub(r"[^\d.,]", "", str((mv.get("label") if isinstance(mv, dict) else "") or "")).replace(",", "."))
+    # Cena: top-level ad["price"] = {"regularPrice": {"value": 850000, ...}, "displayValue": "850 000 zł"} (lub param "price")
+    price = None
+    pr = ad.get("price")
+    if isinstance(pr, dict):
+        rp = pr.get("regularPrice") or {}
+        price = _num(rp.get("value")) if isinstance(rp, dict) else None
+        if not price and pr.get("displayValue"):
+            price = _num(re.sub(r"[^\d]", "", str(pr["displayValue"])) or "")
+    if not price:
+        pv = _param(ad, "price") or {}
+        price = _num(pv.get("value")) if isinstance(pv, dict) else _num(pv)
+
+    def _pnum(key):
+        v = _param(ad, key) or {}
+        raw = (v.get("key") if isinstance(v, dict) else v) or ""
+        n = _num(str(raw).replace(",", "."))
+        if n is None and isinstance(v, dict):
+            n = _num(re.sub(r"[^\d.,]", "", str(v.get("label") or "")).replace(",", "."))
+        return n
+    area = _pnum("m") or (_pnum("area") if prop == "dzialka" else None)
+    plot_area = _pnum("area") if prop in ("dom", "dzialka") else None
     rv = _param(ad, "rooms") or {}
     rooms = ROOMS.get((rv.get("key") if isinstance(rv, dict) else rv) or "") or _num(re.sub(r"\D", "", str((rv.get("label") if isinstance(rv, dict) else "") or "")))
     mk = _param(ad, "market") or {}
@@ -145,7 +162,7 @@ def normalize(ad: dict, city_name: str, prop: str, trans: str) -> Optional[Dict[
         "price": price, "area_m2": area, "price_pm2": round(price / area, 2) if price and area and area > 0 else None,
         "rooms": int(rooms) if rooms else None, "floor": floor, "market_type": market,
         "image": photos[0] if photos else None, "images": photos[:12], "description": desc,
-        "lat": lat, "lng": lng, "transaction_type": trans, "seller_type": seller,
+        "lat": lat, "lng": lng, "plot_area_m2": plot_area, "transaction_type": trans, "seller_type": seller,
         "posted_at": posted, "last_seen_at": now_iso, "scraped_via": "olx-direct",
     }
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype
@@ -183,6 +200,7 @@ def main():
             if a.debug and page == 1:
                 log.info("  DEBUG keys: %s", sorted(ads[0].keys())[:40])
                 log.info("  DEBUG params: %s", [p.get("key") for p in ads[0].get("params") or []])
+                log.info("  DEBUG price=%s photos0=%s location=%s map=%s", json.dumps(ads[0].get("price"))[:200], json.dumps((ads[0].get("photos") or [None])[0])[:150], json.dumps(ads[0].get("location"))[:150], json.dumps(ads[0].get("map"))[:80])
             ops = []
             for ad in ads:
                 d = normalize(ad, city["name"], a.property, a.transaction)

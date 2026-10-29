@@ -242,6 +242,17 @@
           </div>
         </form>
         <div id="mmResults" style="margin-top:10px;font-size:13px"></div>
+        <div style="margin-top:14px;padding:12px 14px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.35);border-radius:10px">
+          <div style="font-weight:800;font-size:14px;margin-bottom:4px">🔁 Follow-up do wszystkich wcześniej zaadresowanych biur</div>
+          <p style="color:#8ba3d4;font-size:12px;margin:0 0 10px;line-height:1.5">Wysyła wybrany wyżej szablon (i temat) do każdego adresu, który kiedykolwiek dostał mailing — z pominięciem listy „nie”, wypisanych, tych którzy odpisali oraz tych, którzy ten szablon już dostali. Wysyłka idzie partiami po 8 co kilka sekund; zostaw tę kartę otwartą do końca.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <button type="button" id="mmFollowCount" class="refresh-btn" style="min-height:44px">🔢 Policz odbiorców</button>
+            <button type="button" id="mmFollowSend" class="refresh-btn" style="min-height:44px;display:none">🚀 Wyślij do wszystkich</button>
+            <button type="button" id="mmFollowStop" class="refresh-btn" style="min-height:44px;display:none">⏹ Zatrzymaj</button>
+            <span id="mmFollowMsg" style="font-size:13px"></span>
+          </div>
+          <div id="mmFollowResults" style="margin-top:8px;font-size:12px;max-height:220px;overflow:auto"></div>
+        </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
           <input id="mmOptout" placeholder="ktoś odpisał „nie”? wpisz jego e-mail" style="flex:1;min-width:220px;padding:10px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
           <button type="button" id="mmOptoutBtn" class="refresh-btn" style="min-height:44px">🚫 Dodaj do listy „nie”</button>
@@ -839,6 +850,46 @@ document.addEventListener('submit', async (e) => {
   } catch(err) { msg.innerHTML = `<span class="bad">❌ ${escapeHtml(err.message)}</span>`; }
   finally { btn.disabled = false; }
 });
+// 🔁 Follow-up do wszystkich wcześniej zaadresowanych (partie po 8, pętla aż remaining=0)
+let _mmFollowStop = false;
+document.addEventListener('click', async (e) => {
+  if (e.target.id === 'mmFollowStop') { _mmFollowStop = true; e.target.disabled = true; return; }
+  if (e.target.id !== 'mmFollowCount' && e.target.id !== 'mmFollowSend') return;
+  const tpl = document.getElementById('mmTemplate').value, subject = document.getElementById('mmSubject').value.trim();
+  const msg = document.getElementById('mmFollowMsg'), out = document.getElementById('mmFollowResults');
+  const sendBtn = document.getElementById('mmFollowSend'), stopBtn = document.getElementById('mmFollowStop'), countBtn = document.getElementById('mmFollowCount');
+  if (!subject) { msg.innerHTML = '<span class="bad">Wpisz temat wiadomości</span>'; return; }
+  if (e.target.id === 'mmFollowCount') {
+    countBtn.disabled = true; msg.innerHTML = '⏳ Liczę…'; out.innerHTML = '';
+    try {
+      const r = await apiPost('/admin/mailing/send-followup', { template: tpl, subject, dry_run: true });
+      msg.innerHTML = `<b>${r.remaining}</b> biur dostanie szablon „${escapeHtml(tpl)}”` + (r.sample.length ? ` — np. ${r.sample.slice(0,3).map(escapeHtml).join(', ')}…` : '');
+      sendBtn.style.display = r.remaining > 0 ? '' : 'none';
+    } catch(err) { msg.innerHTML = `<span class="bad">❌ ${escapeHtml(err.message)}</span>`; }
+    finally { countBtn.disabled = false; }
+    return;
+  }
+  // Wysyłka w pętli
+  if (!confirm(`Wysłać szablon „${tpl}” do wszystkich wcześniej zaadresowanych biur?\nTemat: ${subject}`)) return;
+  _mmFollowStop = false; sendBtn.disabled = true; countBtn.disabled = true; stopBtn.style.display = ''; stopBtn.disabled = false; out.innerHTML = '';
+  let total = 0, failed = 0, batch = 0;
+  try {
+    while (!_mmFollowStop) {
+      batch++;
+      msg.innerHTML = `⏳ Partia ${batch}… wysłano dotąd ${total}`;
+      const r = await apiPost('/admin/mailing/send-followup', { template: tpl, subject, dry_run: false, limit: 8 });
+      total += r.sent; failed += r.failed;
+      out.innerHTML += r.results.map(x => `<div>${escapeHtml(x.email)} — ${escapeHtml(x.status)}</div>`).join('');
+      out.scrollTop = out.scrollHeight;
+      if (r.remaining <= 0 || (r.sent === 0 && r.failed > 0)) break;
+      await new Promise(res => setTimeout(res, 4000));
+    }
+    msg.innerHTML = `<span class="ok">✅ Gotowe: wysłano ${total}${failed ? `, błędów ${failed}` : ''}${_mmFollowStop ? ' (zatrzymano)' : ''}</span>`;
+    loadManualMail();
+  } catch(err) { msg.innerHTML = `<span class="bad">❌ ${escapeHtml(err.message)} — wysłano ${total}</span>`; }
+  finally { sendBtn.disabled = false; countBtn.disabled = false; stopBtn.style.display = 'none'; }
+});
+
 document.addEventListener('click', async (e) => {
   if (e.target.id !== 'mmOptoutBtn') return;
   const inp = document.getElementById('mmOptout'); const v = inp.value.trim(); if (!v) return;

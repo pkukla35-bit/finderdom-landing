@@ -1,0 +1,23 @@
+Temat: FinderDom.pl — wyszukiwarka w widoku dla biur, bez logowania
+
+Dzień dobry,
+
+pisałem niedawno o FinderDom.pl — jednej wyszukiwarce ogłoszeń ze wszystkich portali dla biur nieruchomości. Od dziś można ją obejrzeć w WIDOKU DLA BIUR bez zakładania konta:
+
+https://www.finderdom.pl/szukaj?widok=biuro
+
+Co tam widać:
+• CRM na każdej ofercie — statusy „był kontakt”, „umówione”, „bez pośrednika”, „nieaktualna” i notatki widoczne dla całego zespołu (w podglądzie zapisują się tylko w Państwa przeglądarce),
+• filtry CRM (np. tylko nieoznaczone, tylko umówione),
+• oferty bezpośrednie od właścicieli, filtr „ostatnie 24h”, sprzedaż i wynajem, cała Polska,
+• analizę AI ceny (okazja / rynkowa / zawyżona) i wyceny PDF z realnymi cenami transakcyjnymi.
+
+Plany dla pośredników: Biuro jednoosobowe 90 zł/mies (1 login) lub Firmowy 199 zł/mies (konto główne + 4 loginy). 7 dni za darmo dla firm z NIP — bez karty, bez umowy: https://www.finderdom.pl/dla-biur
+
+Chętnie pokażę to na 15-minutowej prezentacji online — wystarczy odpowiedzieć na tę wiadomość.
+
+Jeśli nie życzą sobie Państwo kolejnych informacji, wystarczy odpowiedzieć „nie” — więcej nie napiszę.
+
+Pozdrawiam,
+Paweł Kukla
+FinderDom.pl · kontakt@finderdom.pl

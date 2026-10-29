@@ -3963,6 +3963,61 @@ class ManualOptoutReq(BaseModel):
     email: str
 
 
+class FollowupReq(BaseModel):
+    template: str
+    subject: str = Field(min_length=3, max_length=200)
+    limit: int = Field(default=8, ge=1, le=15)
+    dry_run: bool = True
+
+
+async def _followup_recipients(db, key: str) -> List[str]:
+    """Adresy, które dostały wcześniej dowolny szablon (ok), minus: lista „nie”, wypisani, ci którzy odpisali (nie auto-odpowiedź),
+    i ci którzy już dostali ten szablon (lub próba wysyłki się nie udała — nie ponawiamy automatycznie)."""
+    sent_all = await db.manual_mail_log.distinct("email", {"ok": True})
+    if not sent_all:
+        return []
+    optout = set(await db.manual_mail_optout.distinct("email"))
+    replied = set(await db.manual_mail_log.distinct("email", {"replied_at": {"$ne": None}, "reply_auto": {"$ne": True}}))
+    got_this = set(await db.manual_mail_log.distinct("email", {"template": key}))  # także nieudane — nie ponawiamy w pętli
+    users_out = set(await db.users.distinct("email", {"marketing_opt_out": True}))
+    return sorted(e for e in sent_all if e not in optout and e not in replied and e not in got_this and e not in users_out)
+
+
+@app.post("/api/admin/mailing/send-followup")
+async def admin_send_followup(body: FollowupReq, admin: dict = Depends(require_admin)):
+    """Follow-up do wszystkich wcześniej zaadresowanych biur. dry_run=true → tylko liczy odbiorców.
+    Wysyła max `limit` na jedno wywołanie (limit czasu funkcji) — panel woła w pętli aż remaining=0."""
+    key = re.sub(r"[^a-z0-9-]", "", body.template.lower())
+    path = _MANUAL_TPL_DIR / f"{key}.html"
+    if not path.exists() or key == "index":
+        raise HTTPException(404, "Nie ma takiego szablonu")
+    db = database()
+    recipients = await _followup_recipients(db, key)
+    if body.dry_run:
+        return {"dry_run": True, "remaining": len(recipients), "sample": recipients[:10]}
+    if not (await _smtp_cfg() or await _email_key()):
+        raise HTTPException(400, "Najpierw skonfiguruj skrzynkę nadawczą (SMTP) w tej zakładce")
+    html = path.read_text(encoding="utf-8")
+    now = datetime.now(timezone.utc)
+    results = []
+    for e in recipients[: body.limit]:
+        track_id = secrets.token_urlsafe(9)
+        mid = None
+        try:
+            mid = await send_email(to=e, subject=body.subject.strip(), html=_track_links(html, track_id))
+        except Exception as exc:
+            logger.warning("followup mail failed %s: %s", e, str(exc)[:120])
+        await db.manual_mail_log.insert_one({"email": e, "template": key, "subject": body.subject.strip(), "ok": bool(mid),
+                                             "sent_at": now, "by": admin.get("email"), "track_id": track_id, "clicks": 0,
+                                             "followup": True,
+                                             "error": None if mid else (LAST_EMAIL_ERROR.get("error") or "")[:200]})
+        results.append({"email": e, "status": "✅ wysłano" if mid else f"❌ błąd: {(LAST_EMAIL_ERROR.get('error') or 'nieznany')[:120]}"})
+    sent = sum(1 for r in results if r["status"].startswith("✅"))
+    failed = len(results) - sent
+    remaining = len(recipients) - len(results)
+    return {"dry_run": False, "sent": sent, "failed": failed, "remaining": remaining, "results": results}
+
+
 class AdminNotifyReq(BaseModel):
     subject: str = Field(min_length=3, max_length=200)
     text: str = Field(min_length=1, max_length=5000)

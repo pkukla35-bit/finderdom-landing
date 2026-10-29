@@ -143,6 +143,14 @@ def _normalize_city_name(name):
     return n
 
 
+_WB_CHARS = "A-Za-ząęćłńóśźżĄĘĆŁŃÓŚŹŻ"
+
+
+def _word_bounded(pattern: str) -> str:
+    """Regex z granicami słowa dla polskich liter (PCRE lookbehind/lookahead — MongoDB je wspiera)."""
+    return f"(?<![{_WB_CHARS}])" + pattern + f"(?![{_WB_CHARS}])"
+
+
 def _build_diacritic_regex(text: str) -> str:
     """Buduje regex ktory pasuje case+diacritic-insensitive.
     Np. "gdansk" -> "[gG][dD][aąAĄ][nńNŃ][sS][kK]"
@@ -2158,7 +2166,8 @@ async def listings_scraped_endpoint(
             query["lng"] = {"$gte": float(lng) - lng_delta, "$lte": float(lng) + lng_delta}
         if city and not use_geo:
             # Case+diacritic-insensitive: "gdansk" pasuje do "Gdańsk", "krakow" -> "Kraków" itd.
-            city_pattern = _build_diacritic_regex(city.strip())
+            # Granice słowa: „Kraków” NIE łapie „Krakowska” (al. Krakowska w Warszawie, os. Krakowska w Rzeszowie)
+            city_pattern = _word_bounded(_build_diacritic_regex(city.strip()))
             city_re = {"$regex": city_pattern}
             query["$or"] = [{"city": city_re}, {"district": city_re}, {"title": city_re}]
         if type:
@@ -2443,7 +2452,7 @@ async def similar_offers_endpoint(
 
     # Diakrytyka: uzywamy _build_diacritic_regex zeby "Kielce" pasowalo do "kielce"/"Kielce"
     if city:
-        city_pattern = _build_diacritic_regex(city.strip())
+        city_pattern = _word_bounded(_build_diacritic_regex(city.strip()))
         city_re = {"$regex": city_pattern}
 
     projection = {

@@ -1351,15 +1351,15 @@ function applyScrapedData(d) {
 // CRM statuses (Firmowy) — bulk fetch all statuses for the company
 window.CRM_STATUSES = {};
 // --- Widok dla biur (podgląd CRM bez konta firmowego) ---
-// ?widok=biuro włącza, ?widok=prywatny wyłącza; stan trzymany w sessionStorage, żeby przetrwał przejście na /oferta
+// ?widok=biuro włącza, ?widok=prywatny wyłącza; stan trzymany w localStorage (działa też w nowej karcie), żeby przetrwał przejście na /oferta
 (function initBiuroView() {
   try {
     const w = new URLSearchParams(location.search).get('widok');
-    if (w === 'biuro') sessionStorage.setItem('fd_biuro_demo', '1');
-    else if (w === 'prywatny') sessionStorage.removeItem('fd_biuro_demo');
+    if (w === 'biuro') localStorage.setItem("fd_biuro_demo", "1");
+    else if (w === 'prywatny') localStorage.removeItem("fd_biuro_demo");
   } catch {}
 })();
-window.CRM_DEMO = (() => { try { return sessionStorage.getItem('fd_biuro_demo') === '1'; } catch { return false; } })();
+window.CRM_DEMO = (() => { try { return localStorage.getItem("fd_biuro_demo") === "1"; } catch { return false; } })();
 function demoCrmLoad() { try { return JSON.parse(localStorage.getItem('fd_crm_demo') || '{}'); } catch { return {}; } }
 function demoCrmSave() { try { localStorage.setItem('fd_crm_demo', JSON.stringify(window.CRM_STATUSES || {})); } catch {} }
 function setViewSwitch(isBiuro) {
@@ -1572,7 +1572,7 @@ function renderPage() {
     if (l.floor > 0) specs += ` · 🏢 ${l.floor} piętro`;
     if (l.type === 'dom') specs += ' · 🏡 Dom';
     if (l.type === 'dzialka') specs += ' · 🌳 Działka';
-    const targetUrl = `/oferta?id=${l.id}`;
+    const targetUrl = `/oferta?id=${l.id}` + ((window.CRM_DEMO && !window.CRM_REAL) ? '&widok=biuro' : '');
     // Karuzela POKAZUJE tylko oryginalne zdjecia z bazy
     const primaryImages = (l.images && l.images.length > 0)
       ? l.images.slice()

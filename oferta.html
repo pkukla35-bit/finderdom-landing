@@ -1087,7 +1087,7 @@ const CRM_LABELS = {
 async function initCrmBar(offerId) {
   try {
     const token = localStorage.getItem('finderdom_token');
-    const demo = (() => { try { return sessionStorage.getItem('fd_biuro_demo') === '1' || new URLSearchParams(location.search).get('widok') === 'biuro'; } catch { return false; } })();
+    const demo = (() => { try { if (new URLSearchParams(location.search).get('widok') === 'biuro') localStorage.setItem("fd_biuro_demo", "1"); return localStorage.getItem("fd_biuro_demo") === "1"; } catch { return false; } })();
     if (!token && !demo) return;
     const userStr = localStorage.getItem('finderdom_user');
     const user = (userStr ? JSON.parse(userStr) : null) || {};
@@ -1389,7 +1389,7 @@ async function renderOffer(l, all) {
   if (!l.source_url && (window.__listingLocked || !window.__isPremium)) {
     // 🔒 bez planu: link do ogłoszenia ukryty — CTA do planu
     const logged = !!localStorage.getItem('finderdom_token');
-    const biuroDemo = (() => { try { return sessionStorage.getItem('fd_biuro_demo') === '1'; } catch { return false; } })();
+    const biuroDemo = (() => { try { return localStorage.getItem("fd_biuro_demo") === "1" || new URLSearchParams(location.search).get('widok') === 'biuro'; } catch { return false; } })();
     if (biuroDemo && !logged) {
       // Podgląd dla biur: CTA kieruje na konto firmowe (7 dni za darmo), nie na plan osobisty
       el('sourceLink').href = '/rejestracja?typ=firma'; el('sourceLink').removeAttribute('target');

@@ -8,15 +8,15 @@
  */
 window.FD_KREDYT = {
   BANKS: [
-    // Expander — pośrednik, porównanie 20+ banków (MyLead, CPL) → przycisk główny
+    // Lendi — porównywarka kredytów (MyLead, CPL) → przycisk główny (kolejność ustalona przez właściciela)
+    { name: 'Lendi — porównywarka kredytów', short: 'Lendi', note: 'oferty 20+ banków online, bezpłatny doradca', url: 'https://goradar.xyz/a/rkPJYhDWqhLG89' },
+    // Lista pod przyciskiem: Expander, Kasa Stefczyka, VeloBank (nieaktywny), PKO BP, Millennium
     { name: 'Expander — porównanie 20+ banków', short: 'Expander', note: 'bezpłatne porównanie ofert banków online', url: 'https://goradar.xyz/a/4xl59Tl2k6h3jk4' },
-    // Kolejność listy pod przyciskiem (ustalona przez właściciela): 1. Kasa Stefczyka, 2. VeloBank, 3. PKO BP, potem reszta
     { name: 'Kasa Stefczyka', note: 'kredyt hipoteczny, krótki wniosek online', url: 'https://goradar.xyz/a/1wg29CqAWkFmy75' },
     // VeloBank — link z MyLead zwraca na razie „inactiveprogram” (kampania nieaktywna). Ustaw disabled:false, gdy zacznie działać.
     { name: 'VeloBank', note: 'kredyt hipoteczny', url: 'https://goradar.xyz/a/G6LD9IAzg3Sr1or', disabled: true },
     { name: 'PKO Bank Polski', note: 'największy bank hipoteczny w Polsce', url: 'https://goradar.xyz/a/NkVN8hM62Uyz1D' },
     { name: 'Bank Millennium', note: 'wniosek online w kilka minut', url: 'https://myleadltd.ebrokerpartner.pl/targetclick.php?param=eyJsZWFkSUQiOi0xLCJ0YXJnZXRJRCI6IjYwOTgiLCJwYXJ0bmVySUQiOiIzMTE1MTQiLCJkb21haW5JRCI6IjMxNTI2OCJ9' },
-    { name: 'Lendi — porównywarka kredytów', note: 'oferty 20+ banków online, bezpłatny doradca', url: 'https://goradar.xyz/a/rkPJYhDWqhLG89' },
   ],
   AFFILIATE_NOTE: 'Linki partnerskie · bez zobowiązań · wniosek online',
   // Przycisk: bezpłatna konsultacja z doradcą (nasz formularz leadowy na /kredyt)

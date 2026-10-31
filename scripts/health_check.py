@@ -78,6 +78,7 @@ def main():
     yday0 = (now.astimezone(PL).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)).astimezone(timezone.utc).isoformat()
     week0 = (now.astimezone(PL).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7)).astimezone(timezone.utc).isoformat()
 
+    weekend = now.astimezone(PL).weekday() >= 5   # importy chodzą pn–pt — w weekend 0 ofert „dziś” to norma, nie awaria
     rows, problems = [], []
     for label, src, wf, url, counter in PORTALS:
         code, html = fetch(url)
@@ -96,13 +97,14 @@ def main():
         run_ok = run.get("conclusion") in ("success", "w toku")
         rent_expected = week_r > 0          # portal normalnie dostarcza wynajem (w ostatnich 7 dniach)
         rent_ok = (not rent_expected) or today_r > 0
-        status = "✅" if (live_ok and run_ok and today_s > 0 and rent_ok) else ("⚠️" if live_ok else "❌")
+        fresh_ok = weekend or (today_s > 0 and rent_ok)
+        status = "✅" if (live_ok and run_ok and fresh_ok) else ("⚠️" if live_ok else "❌")
         if status != "✅":
             why = []
             if not live_ok: why.append(f"strona portalu: HTTP {code}, ofert w HTML: {n_live}")
             if not run_ok: why.append(f"workflow: {run.get('conclusion')}")
-            if today_s == 0: why.append("0 ofert SPRZEDAŻY dodanych dziś")
-            if not rent_ok: why.append(f"0 ofert WYNAJMU dziś (wczoraj {yday_r}, w 7 dni {week_r})")
+            if not weekend and today_s == 0: why.append("0 ofert SPRZEDAŻY dodanych dziś")
+            if not weekend and not rent_ok: why.append(f"0 ofert WYNAJMU dziś (wczoraj {yday_r}, w 7 dni {week_r})")
             problems.append(f"{label}: " + "; ".join(why))
         rows.append((status, label, f"HTTP {code} / {n_live} ofert", today_s, today_r, yday_s, yday_r, run.get("conclusion", "—"), run.get("url", "")))
 
@@ -127,6 +129,7 @@ def main():
         for s, l, live, ts, trn, ys, yr, c, u in rows)
     html = f"""<div style="font-family:Arial,sans-serif;max-width:720px;color:#111">
 <h2 style="color:#0B1836;margin:0 0 6px">Raport zdrowia importów — {date_s}</h2>
+{'<p style="margin:0 0 10px;color:#666;font-size:13px">Weekend — importy działają pn–pt, dzisiejsze „0” jest normalne; sprawdzono tylko dostępność portali i ostatnie biegi.</p>' if weekend else ''}
 <p style="margin:0 0 14px;color:#444">Dziś dodano <b>{today_all}</b> ofert: sprzedaż <b>{today_all - today_rent}</b>, wynajem <b>{today_rent}</b>. Aktywnych w bazie: <b>{total_active:,}</b> (w tym wynajem {active_rent:,}). Rozmiar bazy: {size_mb:.0f} MB / 5 GB.</p>
 {('<div style="background:#fff3cd;border:1px solid #ffe08a;border-radius:8px;padding:10px 14px;margin:0 0 14px"><b>Do sprawdzenia:</b><br>' + '<br>'.join(problems) + '</div>') if problems else ''}
 <table style="border-collapse:collapse;font-size:14px;width:100%"><thead><tr style="background:#f3f4f6;text-align:left">

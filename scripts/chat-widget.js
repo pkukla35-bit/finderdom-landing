@@ -67,7 +67,7 @@
   document.body.appendChild(box);
 
   var inner = box.querySelector('#fdChatInner');
-  var state = { loaded: false, busy: false, used: 0, limit: 0 };
+  var state = { loaded: false, busy: false, used: 0, limit: 0, canSearch: false };
 
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function fmt(s) {
@@ -115,7 +115,7 @@
     function showChips(show) {
       chips.innerHTML = '';
       if (!show) return;
-      ['Szukam 3 pokoi do 700 tys. w Krakowie', 'Czym różnią się plany?', 'Jak działa wycena PDF?', 'Chcę kontakt z zespołem'].forEach(function (q) {
+      (state.canSearch ? ['Szukam 3 pokoi do 700 tys. w Krakowie'] : []).concat(['Czym różnią się plany?', 'Jak działa wycena PDF?', 'Chcę kontakt z zespołem']).forEach(function (q) {
         var c = document.createElement('button'); c.type = 'button'; c.className = 'fd-chip'; c.textContent = q;
         c.onclick = function () { input.value = q; doSend(); }; chips.appendChild(c);
       });
@@ -129,7 +129,7 @@
       fetch(API + '/history', { method: 'DELETE', headers: authHeaders() }).then(function () { body.innerHTML = ''; greet(); });
     };
     function greet() {
-      add('assistant', 'Cześć! Jestem asystentem FinderDom. Opisz, czego szukasz (np. „3 pokoje do 700 tys. w Krakowie”), a pokażę oferty z bazy. Odpowiem też na pytania o plany, CRM, wyceny PDF i kredyt — a jeśli trzeba, przekażę Twój kontakt zespołowi.' + (token() ? '' : ' Jako gość masz 3 pytania na próbę.'));
+      add('assistant', (state.canSearch ? 'Cześć! Jestem asystentem FinderDom. Opisz, czego szukasz (np. „3 pokoje do 700 tys. w Krakowie”), a pokażę oferty z bazy. Odpowiem też na pytania o plany, CRM, wyceny PDF i kredyt — a jeśli trzeba, przekażę Twój kontakt zespołowi.' : 'Cześć! Jestem asystentem FinderDom. Odpowiem na pytania o wyszukiwarkę, plany, CRM, wyceny PDF i kredyt — a jeśli trzeba, przekażę Twój kontakt zespołowi. W planie płatnym wyszukam też oferty z bazy prosto w czacie.') + (token() ? '' : ' Jako gość masz 3 pytania na próbę.'));
       showChips(true);
     }
 
@@ -160,7 +160,7 @@
       return r.json();
     }).then(function (d) {
       if (!d) return;
-      state.used = d.used_today || 0; state.limit = d.limit_today || 0; setQuota();
+      state.used = d.used_today || 0; state.limit = d.limit_today || 0; state.canSearch = !!d.can_search; setQuota();
       if (d.enabled === false) { add('assistant', 'Czat AI jest chwilowo niedostępny. Napisz do nas: kontakt@finderdom.pl'); send.disabled = true; return; }
       if (!token() && d.used_today >= d.limit_today) { renderLogin(true); return; }
       if (d.messages && d.messages.length) { d.messages.forEach(function (m) { add(m.role, m.content); if (m.offers && m.offers.length) addOffers(m.offers); }); showChips(false); }

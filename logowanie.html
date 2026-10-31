@@ -159,7 +159,10 @@ gtag('set', 'url_passthrough', false);
       localStorage.setItem('finderdom_token', data.token);
       localStorage.setItem('finderdom_user', JSON.stringify(data.user));
       showAlert('Zalogowano! Przekierowuję...', 'success');
-      setTimeout(() => { window.location.href = '/konto'; }, 500);
+      // ?next=/strona — powrót tam, skąd przyszedł użytkownik (np. z dymka czatu); tylko ścieżki lokalne
+      const nextRaw = new URLSearchParams(location.search).get('next') || '';
+      const nextUrl = /^\/[^\/\\]/.test(nextRaw) ? nextRaw : '/konto';
+      setTimeout(() => { window.location.href = nextUrl; }, 500);
     } catch (err) {
       showAlert(err.message || 'Nie udało się zalogować.', 'error');
       submitBtn.disabled = false;

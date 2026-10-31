@@ -94,12 +94,18 @@
       var d = document.createElement('div'); d.className = 'fd-msg ' + (role === 'user' ? 'me' : 'ai'); d.innerHTML = fmt(text);
       body.appendChild(d); body.scrollTop = body.scrollHeight; return d;
     }
+    function img(u) {
+      if (!u) return '';
+      if (u.indexOf('apollo.olxcdn.com') >= 0) return u.replace(/;s=\d+x\d+/, ';s=320x240');
+      if (u.indexOf('galeria.domiporta.pl') >= 0 || u.indexOf('/api/img?') >= 0 || u.charAt(0) === '/') return u;
+      return '/api/img?u=' + encodeURIComponent(u);
+    }
     function fmtPrice(p) { return p ? Math.round(p).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' zł' : ''; }
     function addOffers(offers) {
       (offers || []).forEach(function (o) {
         var a = document.createElement('a'); a.className = 'fd-offer'; a.href = o.link || '/szukaj'; a.target = '_blank'; a.rel = 'noopener';
         var meta = [o.area_m2 ? Math.round(o.area_m2) + ' m²' : '', o.rooms ? o.rooms + ' pok.' : '', [o.city, o.district].filter(Boolean).join(', ')].filter(Boolean).join(' · ');
-        a.innerHTML = (o.image ? '<img src="' + esc(o.image) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div style="width:64px;height:48px;border-radius:8px;background:#1e293b;flex:none"></div>') +
+        a.innerHTML = (o.image ? '<img src="' + esc(img(o.image)) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div style="width:64px;height:48px;border-radius:8px;background:#1e293b;flex:none"></div>') +
           '<div><b>' + esc(o.title || 'Oferta') + '</b><span class="fd-price">' + fmtPrice(o.price) + '</span> <small>' + esc(meta) + '</small></div>';
         body.appendChild(a);
       });

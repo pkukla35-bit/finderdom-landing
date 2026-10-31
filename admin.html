@@ -114,6 +114,7 @@
     <button class="tab" data-tab="scrapers">🕷️ Scrapery</button>
     <button class="tab" data-tab="stripe">💰 Płatności Stripe</button>
     <button class="tab" data-tab="mailing">✉️ Mailing</button>
+    <button class="tab" data-tab="ai">🤖 Czat AI</button>
   </div>
 
   <!-- OVERVIEW -->
@@ -266,6 +267,26 @@
       <div id="mailingLog" style="margin-top:18px"></div>
     </div>
   </section>
+
+  <section data-panel="ai">
+    <div class="stripe-card" style="max-width:1100px">
+      <h2 style="margin:0 0 6px;font-size:18px">🤖 Czat AI (dymek na stronach)</h2>
+      <p style="color:#8ba3d4;font-size:13px;margin:0 0 14px;line-height:1.5">Asystent odpowiada zalogowanym użytkownikom (także Free) na pytania o portal, plany, CRM i wyceny. Gdy klient prosi o kontakt, zbiera imię / e-mail / telefon i wysyła Ci powiadomienie e-mail. Koszt: z salda klucza Emergent.</p>
+      <div id="aiStatus" class="loader">Ładuję…</div>
+      <form id="aiForm" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:14px">
+        <input id="aiKey" type="password" placeholder="Klucz Emergent (sk-emergent-…) — puste = bez zmian" autocomplete="new-password" style="padding:11px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
+        <input id="aiModel" placeholder="Model (np. gpt-5.4)" style="padding:11px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
+        <input id="aiLimitFree" type="number" min="1" placeholder="Limit dzienny – konta Free" style="padding:11px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
+        <input id="aiLimitPaid" type="number" min="1" placeholder="Limit dzienny – konta płatne" style="padding:11px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
+        <input id="aiLeadEmail" type="email" placeholder="E-mail na kontakty z czatu" style="padding:11px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;min-height:44px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;min-height:44px"><input id="aiEnabled" type="checkbox"> Czat włączony</label>
+        <button type="submit" class="refresh-btn" id="aiSaveBtn" style="min-height:44px">💾 Zapisz</button>
+      </form>
+      <div id="aiMsg" style="margin-top:8px;font-size:13px"></div>
+      <h3 style="margin:22px 0 8px;font-size:15px">📇 Kontakty zebrane przez czat</h3>
+      <div id="aiLeads" class="loader">Ładuję…</div>
+    </div>
+  </section>
 </main>
 </template>
 
@@ -340,6 +361,7 @@ function initTabs(){
       if (t.dataset.tab === 'scrapers' && !window._loadedScrapers) { window._loadedScrapers = true; loadScrapers(); }
       if (t.dataset.tab === 'stripe') loadStripe();
       if (t.dataset.tab === 'mailing') loadMailing();
+      if (t.dataset.tab === 'ai') loadAi();
     });
   });
 }
@@ -790,6 +812,44 @@ async function previewMailing(id){
     document.getElementById('mailingPreview').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch(e){ setHtml('mailingPreview', `<div class="err">Błąd: ${escapeHtml(e.message)}</div>`); }
 }
+
+async function loadAi(){
+  try {
+    const d = await api('/admin/ai/settings');
+    setHtml('aiStatus', `
+      <div style="display:grid;grid-template-columns:200px 1fr;gap:6px 14px;font-size:14px">
+        <div style="color:#8ba3d4">Klucz AI</div><div>${d.key_set ? '<span class="ok">✓ ustawiony (' + escapeHtml(d.key_hint) + ', źródło: ' + (d.key_source === 'panel' ? 'panel' : 'serwer') + ')</span>' : '<span class="bad">✗ brak klucza — wklej poniżej</span>'}</div>
+        <div style="color:#8ba3d4">Status</div><div>${d.enabled && d.key_set ? '<span class="ok">● czat działa</span>' : '<span class="warn">○ czat wyłączony</span>'} · model <b>${escapeHtml(d.model)}</b></div>
+        <div style="color:#8ba3d4">Dziś</div><div>${d.messages_today} wiadomości od ${d.users_today} użytkowników</div>
+        <div style="color:#8ba3d4">Kontakty</div><div>${d.leads_total} łącznie, <b>${d.leads_new}</b> nowych · powiadomienia na ${escapeHtml(d.lead_email || '—')}</div>
+      </div>`);
+    document.getElementById('aiModel').value = d.model || '';
+    document.getElementById('aiLimitFree').value = d.limit_free || '';
+    document.getElementById('aiLimitPaid').value = d.limit_paid || '';
+    document.getElementById('aiLeadEmail').value = d.lead_email || '';
+    document.getElementById('aiEnabled').checked = !!d.enabled;
+    const L = await api('/admin/ai/leads?limit=100');
+    if (!L.leads.length) { setHtml('aiLeads', '<div style="color:#8ba3d4;font-size:13px">Brak kontaktów z czatu.</div>'); return; }
+    setHtml('aiLeads', '<div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Imię</th><th>E-mail</th><th>Telefon</th><th>Temat</th><th>Konto</th><th>Status</th></tr></thead><tbody>' +
+      L.leads.map(l => '<tr><td>' + fmtDate(l.created_at) + '</td><td>' + escapeHtml(l.name || '') + '</td><td>' + (l.email ? '<a class="link" href="mailto:' + escapeHtml(l.email) + '">' + escapeHtml(l.email) + '</a>' : '') + '</td><td>' + (l.phone ? '<a class="link" href="tel:' + escapeHtml(l.phone) + '">' + escapeHtml(l.phone) + '</a>' : '') + '</td><td style="max-width:320px">' + escapeHtml(l.topic || '') + '</td><td style="font-size:12px">' + escapeHtml(l.user_email || '') + '</td><td>' + (l.status === 'new' ? '<span class="warn">nowy</span> <button class="refresh-btn" style="padding:4px 8px;font-size:12px" onclick="aiLeadDone(\'' + l.id + '\')">✓ załatwione</button>' : '<span class="ok">załatwione</span>') + '</td></tr>').join('') + '</tbody></table></div>');
+  } catch (e) { setHtml('aiStatus', '<span class="bad">Błąd: ' + escapeHtml(e.message) + '</span>'); }
+}
+async function aiLeadDone(id){ try { await apiPost('/admin/ai/leads/' + id + '/status?status=done', {}); loadAi(); } catch (e) { alert(e.message); } }
+document.addEventListener('submit', async (e) => {
+  if (e.target.id !== 'aiForm') return;
+  e.preventDefault();
+  const msg = document.getElementById('aiMsg'); const btn = document.getElementById('aiSaveBtn');
+  btn.disabled = true; msg.innerHTML = '⏳ Zapisuję…';
+  try {
+    const body = { model: document.getElementById('aiModel').value.trim() || null, limit_free: Number(document.getElementById('aiLimitFree').value) || null, limit_paid: Number(document.getElementById('aiLimitPaid').value) || null, lead_email: document.getElementById('aiLeadEmail').value.trim() || null, enabled: document.getElementById('aiEnabled').checked };
+    const k = document.getElementById('aiKey').value.trim(); if (k) body.emergent_key = k;
+    await apiPost('/admin/ai/settings', body);
+    document.getElementById('aiKey').value = '';
+    msg.innerHTML = '<span class="ok">✓ Zapisano' + (k ? ' — klucz sprawdzony, działa' : '') + '</span>';
+    loadAi();
+  } catch (err) { msg.innerHTML = '<span class="bad">✗ ' + escapeHtml(err.message) + '</span>'; }
+  finally { btn.disabled = false; }
+});
 
 document.addEventListener('submit', async (e) => {
   if (e.target.id !== 'smtpForm') return;

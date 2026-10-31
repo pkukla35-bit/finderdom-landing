@@ -4124,10 +4124,11 @@ async def chat_message(body: ChatMessageReq, request: Request, credentials: HTTP
     if search and not paid:
         # Szukanie ofert w czacie tylko dla zalogowanych z płatnym planem (decyzja użytkownika)
         search_link = _search_link(search)
+        reply = ""  # „Sprawdzam oferty w bazie…” od modelu nie ma sensu bez wyników
         if user is None:
-            reply = (reply + "\n\n" if reply else "") + f"Wyszukiwanie ofert w czacie jest dostępne dla zalogowanych użytkowników z planem płatnym. Możesz za to skorzystać z wyszukiwarki (podgląd 5 ofert bez planu): {search_link} — albo założyć konto: /rejestracja"
+            reply = f"Wyszukiwanie ofert w czacie jest dostępne dla zalogowanych użytkowników z planem płatnym. Możesz za to skorzystać z wyszukiwarki (podgląd 5 ofert bez planu): {search_link} — albo założyć konto: /rejestracja"
         else:
-            reply = (reply + "\n\n" if reply else "") + f"Wyszukiwanie ofert w czacie jest częścią planów płatnych (Osobisty 45 zł/30 dni, Solo 90 zł, Firmowy 199 zł) — plan wybierzesz w /konto. Bez planu zobaczysz podgląd 5 ofert w wyszukiwarce: {search_link}"
+            reply = f"Wyszukiwanie ofert w czacie jest częścią planów płatnych (Osobisty 45 zł/30 dni, Solo 90 zł, Firmowy 199 zł) — plan wybierzesz w /konto. Bez planu zobaczysz podgląd 5 ofert w wyszukiwarce: {search_link}"
         search = None
     if search:
         try:

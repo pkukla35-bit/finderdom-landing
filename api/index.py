@@ -4011,9 +4011,16 @@ async def _chat_search_offers(spec: dict) -> list:
     if str(spec.get("seller") or "").startswith("prywat"):
         q["seller_type"] = "prywatna"
     proj = {"_id": 0, "external_id": 1, "title": 1, "price": 1, "area_m2": 1, "rooms": 1, "city": 1, "district": 1, "image": 1, "images": 1, "url": 1, "added_at": 1, "ai_verdict": 1}
-    docs = await database().listings.find(q, proj).sort("added_at", -1).limit(5).to_list(length=5)
-    out = []
+    docs = await database().listings.find(q, proj).sort("added_at", -1).limit(20).to_list(length=20)
+    out, seen = [], set()
     for d in docs:
+        # ta sama oferta z 2 portali (identyczny tytuł+cena) → pokaż raz
+        key = (re.sub(r"\W+", "", (d.get("title") or "").lower())[:40], int(d.get("price") or 0))
+        if key in seen:
+            continue
+        seen.add(key)
+        if len(out) >= 5:
+            break
         ext = str(d.get("external_id") or "")
         out.append({"id": ext, "title": (d.get("title") or "")[:90], "price": d.get("price"), "area_m2": d.get("area_m2"), "rooms": d.get("rooms"),
                     "city": d.get("city"), "district": d.get("district"), "image": d.get("image") or ((d.get("images") or [None])[0]),
@@ -4118,7 +4125,7 @@ async def chat_message(body: ChatMessageReq, request: Request, credentials: HTTP
             search_link = _search_link(search)
             where = f" w: {search.get('city')}" if search.get("city") else ""
             if offers:
-                reply = (reply + "\n\n" if reply else "") + f"Znalazłem {len(offers)} najnowsze oferty{where} pasujące do opisu (poniżej). Pełną listę z filtrami zobaczysz w wyszukiwarce: {search_link}"
+                reply = (reply + "\n\n" if reply else "") + f"Oto najnowsze oferty{where} pasujące do opisu ({len(offers)} poniżej). Pełną listę z filtrami zobaczysz w wyszukiwarce: {search_link}"
             else:
                 reply = (reply + "\n\n" if reply else "") + f"Nie znalazłem w bazie ofert dokładnie pod te kryteria{where}. Spróbuj szerzej — większy budżet, promień lub inna miejscowość: {search_link}"
         except Exception as e:

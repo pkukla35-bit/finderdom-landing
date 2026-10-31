@@ -366,7 +366,7 @@ gtag('set', 'url_passthrough', false);
       <span class="info-badge">🔥 Promocja</span>
       <div class="info-price">35 zł <small>/ jednorazowo</small></div>
       <div class="info-price-strike">Konkurencja: od 49 zł</div>
-      <p class="info-desc">Profesjonalny raport PDF z realną wartością rynkową Twojej nieruchomości.</p>
+      <p class="info-desc">Profesjonalny raport PDF z realną wartością rynkową Twojej nieruchomości. <strong>W planie Osobistym (45 zł/mies) 6 wycen w miesiącu w cenie</strong>, w planach dla biur bez limitu.</p>
       <ul class="info-list">
         <li>Wycena min / średnia / max</li>
         <li>10 podobnych transakcji w okolicy</li>
@@ -481,9 +481,14 @@ gtag('set', 'url_passthrough', false);
 
     const orig = btn.innerHTML;
     btn.disabled = true;
-    if (isBusinessUser()) {
+    if (quotaIncluded()) {
       btn.innerHTML = '<span class="spinner"></span> Generuję wycenę PDF (w cenie planu)...';
-      try { await downloadBusinessValuation({ property }); btn.innerHTML = '✅ Pobrano PDF — zrób kolejną'; btn.disabled = false; }
+      try {
+        await downloadBusinessValuation({ property });
+        await loadValuationQuota(); applyQuotaButton();
+        btn.disabled = false;
+        if (quotaIncluded()) btn.innerHTML = '✅ Pobrano PDF — zrób kolejną (' + quotaLabel() + ')';
+      }
       catch(err){ errBox.textContent = '⚠️ ' + err.message; errBox.className = 'val-err show'; btn.disabled = false; btn.innerHTML = orig; }
       return false;
     }
@@ -508,10 +513,27 @@ gtag('set', 'url_passthrough', false);
   }
 
 
-  // 🏢 Plan Firmowy: wycena w cenie abonamentu — PDF generowany od razu, bez Stripe
-  function isBusinessUser(){
-    try { const u = JSON.parse(localStorage.getItem('finderdom_user') || 'null'); return !!(u && (u.tier === 'business' || u.tier === 'solo')); } catch(e){ return false; }
+
+  // Wycena w cenie planu: Firmowy/Solo bez limitu (trial 3), Osobisty 45 zł = 6 wycen w miesiącu — liczy serwer (/api/valuation/quota)
+  let __valQuota = null;
+  async function loadValuationQuota(){
+    const t = localStorage.getItem('finderdom_token'); if (!t) { __valQuota = null; return null; }
+    try { const r = await fetch('/api/valuation/quota', { headers: { 'Authorization': 'Bearer ' + t } }); __valQuota = r.ok ? await r.json() : null; } catch(e){ __valQuota = null; }
+    return __valQuota;
   }
+  function quotaIncluded(){ return !!(__valQuota && __valQuota.included && (__valQuota.unlimited || __valQuota.remaining > 0)); }
+  function quotaLabel(){
+    if (!__valQuota || !__valQuota.included) return '';
+    if (__valQuota.unlimited) return 'w cenie planu';
+    return 'w cenie planu — zostało ' + __valQuota.remaining + ' z ' + __valQuota.limit + (__valQuota.trial ? ' (okres próbny)' : ' w tym miesiącu');
+  }
+  function applyQuotaButton(){
+    const b = document.getElementById('vSubmit'); if (!b) return;
+    if (quotaIncluded()) b.innerHTML = '📄 Generuj wycenę PDF — ' + quotaLabel() + ' →';
+    else if (__valQuota && __valQuota.included) b.innerHTML = '💳 Zapłać 35 zł kartą / BLIK → (limit ' + __valQuota.limit + ' wycen w cenie planu wykorzystany)';
+    else b.innerHTML = '💳 Zapłać 35 zł kartą / BLIK →';
+  }
+  // Wycena w cenie abonamentu — PDF generowany od razu, bez Stripe (limit sprawdza serwer)
   async function downloadBusinessValuation(payload){
     const r = await fetch('/api/valuation/business', {
       method: 'POST',
@@ -527,7 +549,7 @@ gtag('set', 'url_passthrough', false);
 
   // Show consent checkbox only when user starts typing phone
   document.addEventListener('DOMContentLoaded', function() {
-    if (isBusinessUser()) { const b = document.getElementById('vSubmit'); if (b) b.innerHTML = '🏢 Generuj wycenę PDF — w cenie Planu Firmowego →'; }
+    loadValuationQuota().then(applyQuotaButton);
     const phoneEl = document.getElementById('vPhone');
     const consentWrap = document.getElementById('vPhoneConsentWrap');
     if (phoneEl && consentWrap) {

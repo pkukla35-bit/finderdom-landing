@@ -3896,9 +3896,9 @@ FAKTY O FINDERDOM.PL:
 - Wyszukiwarka (/szukaj) zbiera ogłoszenia z Otodom, OLX, Morizon, Gratka, Domiporta, Adresowo, nieruchomosci-online — mieszkania, domy, działki, lokale; sprzedaż i wynajem; cała Polska (16 województw). Duplikaty tej samej oferty z kilku portali są łączone w jedną kartę („od … zł”, lista portali).
 - Filtry: miasto + promień (km), rodzaj nieruchomości, rynek (pierwotny/wtórny), typ budynku, kto oferuje (prywatna/biuro), cena, metraż, pokoje, data dodania. Przy każdej ofercie analiza AI ceny (okazja / typowa / zawyżona) i podobne oferty w okolicy. Filtr „tylko od właściciela” = oferty bez pośrednika.
 - Konta: Osobiste (bez NIP) lub Firmowe (NIP + nazwa firmy). Rejestracja: /rejestracja. Logowanie: /logowanie. Reset hasła: link „Nie pamiętasz hasła?” na stronie logowania (e-mail z linkiem ważnym 1 godzinę). Zmiana hasła: /konto → Profil.
-- Plany: Bez planu (0 zł) = podgląd pierwszych 5 ofert + podstawowe filtry. Osobisty 45 zł / 30 dni = wszystkie oferty, analiza AI, podobne oferty, ulubione i alerty, bez reklam. Biuro jednoosobowe (Solo) 90 zł/mies = 1 login, CRM, leady, wyceny PDF bez limitu. Firmowy 199 zł/mies = konto główne + 4 loginy dla agentów, CRM, leady, wyceny PDF bez limitu; każdy kolejny agent 55 zł/mies. Firmy z NIP: 7 dni za darmo bez karty, po okresie próbnym wybierasz plan. Płatność kartą/BLIK przez Stripe, anulujesz kiedy chcesz. Faktura VAT automatycznie na podstawie NIP.
+- Plany: Bez planu (0 zł) = podgląd pierwszych 5 ofert + podstawowe filtry. Osobisty 45 zł / 30 dni = wszystkie oferty, analiza AI, podobne oferty, ulubione i alerty, bez reklam, 6 wycen PDF w miesiącu w cenie (kolejne 35 zł/szt.). Biuro jednoosobowe (Solo) 90 zł/mies = 1 login, CRM, leady, wyceny PDF bez limitu. Firmowy 199 zł/mies = konto główne + 4 loginy dla agentów, CRM, leady, wyceny PDF bez limitu; każdy kolejny agent 55 zł/mies. Firmy z NIP: 7 dni za darmo bez karty, po okresie próbnym wybierasz plan. Płatność kartą/BLIK przez Stripe, anulujesz kiedy chcesz. Faktura VAT automatycznie na podstawie NIP.
 - CRM (dla kont firmowych): statusy na kartach ofert: Był kontakt, Umówione, Bez pośrednika, Nieaktualna, Zły kontakt, Kontakt później; filtry CRM; wspólna baza dla zespołu. Podgląd widoku dla biur bez logowania: /szukaj?widok=biuro.
-- Wycena PDF (/wycena): 35 zł za raport bez konta i abonamentu — realna wartość rynkowa, zakres min–max, porównanie z transakcjami z Rejestru Cen Nieruchomości (akty notarialne), podobne oferty, opinia AI. W planach Solo/Firmowy wyceny bez limitu. PDF do pobrania od razu po płatności (nie wysyłamy PDF e-mailem).
+- Wycena PDF (/wycena): 35 zł za raport bez konta i abonamentu — realna wartość rynkowa, zakres min–max, porównanie z transakcjami z Rejestru Cen Nieruchomości (akty notarialne), podobne oferty, opinia AI. W planie Osobistym 6 wycen w miesiącu w cenie; w planach Solo/Firmowy bez limitu. PDF do pobrania od razu po płatności (nie wysyłamy PDF e-mailem).
 - Kredyt: kalkulator raty i zdolności (/kredyt), partner główny Lendi (porównanie ofert banków).
 - Leady dla biur: osoby zamawiające wycenę mogą zostawić telefon — lead trafia do biur z regionu.
 - Kontakt: kontakt@finderdom.pl, odpowiedź do 24 h w dni robocze (pn–pt 9–18). Formularz: /kontakt. Pomoc: /pomoc. Dla biur: /dla-biur. Dla prywatnych: /dla-prywatnych.
@@ -5184,6 +5184,38 @@ async def _render_valuation_pdf(val_type: str, md: dict, session_id: str) -> Tup
 
 
 BUSINESS_TRIAL_VALUATIONS = 3  # w okresie próbnym; opłacony Plan Firmowy = bez limitu
+INDIVIDUAL_MONTHLY_VALUATIONS = 6  # Plan Osobisty (45 zł): pierwszych 6 wycen PDF w miesiącu w cenie, kolejne 35 zł/szt.
+
+
+def _month_start_utc() -> datetime:
+    now = datetime.now(timezone.utc)
+    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+async def _valuation_quota(user: dict) -> dict:
+    """Ile wycen PDF w cenie planu ma użytkownik: business/solo = bez limitu (trial: 3), individual = 6/mies., free = 0."""
+    tier = await effective_tier_async(user)
+    is_admin = (user.get("email") or "").lower() in ADMIN_EMAILS
+    db = database()
+    owner_id = str(user.get("master_id") or user["_id"])
+    if is_admin or (tier in BUSINESS_TIERS and not user.get("is_trial")):
+        return {"tier": tier, "included": True, "unlimited": True, "limit": None, "used": 0, "remaining": None, "resets_at": None}
+    if tier in BUSINESS_TIERS:  # trial firmowy
+        used = await db.valuation_log.count_documents({"owner_id": owner_id, "source": "business"})
+        return {"tier": tier, "included": True, "unlimited": False, "limit": BUSINESS_TRIAL_VALUATIONS, "used": used,
+                "remaining": max(0, BUSINESS_TRIAL_VALUATIONS - used), "resets_at": None, "trial": True}
+    if tier == "individual":
+        ms = _month_start_utc()
+        used = await db.valuation_log.count_documents({"owner_id": owner_id, "source": "business", "created_at": {"$gte": ms}})
+        nxt = (ms.replace(year=ms.year + 1, month=1) if ms.month == 12 else ms.replace(month=ms.month + 1))
+        return {"tier": tier, "included": True, "unlimited": False, "limit": INDIVIDUAL_MONTHLY_VALUATIONS, "used": used,
+                "remaining": max(0, INDIVIDUAL_MONTHLY_VALUATIONS - used), "resets_at": nxt.isoformat()}
+    return {"tier": tier, "included": False, "unlimited": False, "limit": 0, "used": 0, "remaining": 0, "resets_at": None}
+
+
+@app.get("/api/valuation/quota")
+async def valuation_quota(user: dict = Depends(current_user)):
+    return await _valuation_quota(user)
 
 
 class BusinessValuationReq(BaseModel):
@@ -5193,16 +5225,17 @@ class BusinessValuationReq(BaseModel):
 
 @app.post("/api/valuation/business")
 async def valuation_business(body: BusinessValuationReq, user: dict = Depends(current_user)):
-    """Wycena PDF w cenie planu biurowego (Firmowy / Biuro jednoosobowe, bez Stripe). Trial: limit BUSINESS_TRIAL_VALUATIONS, opłacony plan: bez limitu."""
-    tier = await effective_tier_async(user)
-    if tier not in BUSINESS_TIERS and (user.get("email") or "").lower() not in ADMIN_EMAILS:
-        raise HTTPException(402, "Wyceny w cenie abonamentu są dostępne w planach Biuro jednoosobowe (90 zł) i Firmowy (199 zł)")
+    """Wycena PDF w cenie planu (Firmowy / Solo: bez limitu, trial 3; Osobisty: 6 w miesiącu) — bez Stripe."""
+    q = await _valuation_quota(user)
+    if not q["included"]:
+        raise HTTPException(402, "Wyceny w cenie abonamentu: plan Osobisty (45 zł) — 6 wycen w miesiącu, Biuro jednoosobowe (90 zł) i Firmowy (199 zł) — bez limitu")
+    if not q["unlimited"] and q["remaining"] <= 0:
+        if q.get("trial"):
+            raise HTTPException(402, f"W okresie próbnym masz {BUSINESS_TRIAL_VALUATIONS} wyceny. Opłać plan Biuro jednoosobowe (90 zł) lub Firmowy (199 zł) — wyceny bez limitu.")
+        raise HTTPException(402, f"Wykorzystałeś {INDIVIDUAL_MONTHLY_VALUATIONS} bezpłatnych wycen w tym miesiącu. Kolejne wyceny 35 zł/szt. albo plan Biuro jednoosobowe (90 zł) — bez limitu.")
     db = database()
     owner_id = str(user.get("master_id") or user["_id"])
-    if user.get("is_trial"):
-        used = await db.valuation_log.count_documents({"owner_id": owner_id, "source": "business"})
-        if used >= BUSINESS_TRIAL_VALUATIONS:
-            raise HTTPException(402, f"W okresie próbnym masz {BUSINESS_TRIAL_VALUATIONS} wyceny. Opłać plan Biuro jednoosobowe (90 zł) lub Firmowy (199 zł) — wyceny bez limitu.")
+    tier = q["tier"]
     email = user.get("email") or ""
     if body.listing_id:
         val_type, md = "valuation", {"type": "valuation", "listing_id": body.listing_id, "email": email}
@@ -5214,7 +5247,7 @@ async def valuation_business(body: BusinessValuationReq, user: dict = Depends(cu
         ins = await db.valuation_requests.insert_one({"property": safe_prop, "email": email, "user_id": str(user["_id"]), "source": "business", "created_at": datetime.now(timezone.utc)})
         val_type, md = "valuation_custom", {"type": "valuation_custom", "req_id": str(ins.inserted_id), "email": email}
     pdf_data, fname = await _render_valuation_pdf(val_type, md, f"biz{int(datetime.now(timezone.utc).timestamp())}")
-    await db.valuation_log.insert_one({"owner_id": owner_id, "user_id": str(user["_id"]), "email": email, "source": "business",
+    await db.valuation_log.insert_one({"owner_id": owner_id, "user_id": str(user["_id"]), "email": email, "source": "business", "tier": tier,
                                        "listing_id": body.listing_id, "created_at": datetime.now(timezone.utc)})
     return StreamingResponse(io.BytesIO(pdf_data), media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="{fname}"'})

@@ -669,10 +669,7 @@ async function loadOffer() {
   }
   window.__isPremium = isPremiumUser();
 
-  // 🏢 Plan Firmowy: wycena w cenie abonamentu — PDF generowany od razu, bez Stripe
-  function isBusinessUser(){
-    try { const u = JSON.parse(localStorage.getItem('finderdom_user') || 'null'); return !!(u && (u.tier === 'business' || u.tier === 'solo')); } catch(e){ return false; }
-  }
+  // Wycena w cenie abonamentu — PDF generowany od razu, bez Stripe (limit sprawdza serwer)
   async function downloadBusinessValuation(payload){
     const r = await fetch('/api/valuation/business', {
       method: 'POST',
@@ -1962,11 +1959,26 @@ loadOffer();
     <label for="valEmail">Twój email (na który wyślemy potwierdzenie)</label>
     <input type="email" id="valEmail" placeholder="twoj@email.pl" autocomplete="email" required>
     <button type="button" class="val-btn" id="valBuyBtn" onclick="startValuationCheckout()">Zapłać 35 zł kartą / BLIK →</button>
+    <div id="valQuotaHint" style="font-size:12px;color:#8ba3d4;margin-top:6px;text-align:center"></div>
     <div class="val-small">Płatność bezpieczna przez Stripe. Po opłacie automatycznie wygenerujemy PDF.</div>
   </div>
 </div>
 
 <script>
+
+  // Wycena w cenie planu: Firmowy/Solo bez limitu (trial 3), Osobisty 45 zł = 6 wycen w miesiącu — liczy serwer (/api/valuation/quota)
+  let __valQuota = null;
+  async function loadValuationQuota(){
+    const t = localStorage.getItem('finderdom_token'); if (!t) { __valQuota = null; return null; }
+    try { const r = await fetch('/api/valuation/quota', { headers: { 'Authorization': 'Bearer ' + t } }); __valQuota = r.ok ? await r.json() : null; } catch(e){ __valQuota = null; }
+    return __valQuota;
+  }
+  function quotaIncluded(){ return !!(__valQuota && __valQuota.included && (__valQuota.unlimited || __valQuota.remaining > 0)); }
+  function quotaLabel(){
+    if (!__valQuota || !__valQuota.included) return '';
+    if (__valQuota.unlimited) return 'w cenie planu';
+    return 'w cenie planu — zostało ' + __valQuota.remaining + ' z ' + __valQuota.limit + (__valQuota.trial ? ' (okres próbny)' : ' w tym miesiącu');
+  }
   function openValuationModal(){
     const m = document.getElementById('valModal');
     if (!m) return;
@@ -1977,6 +1989,17 @@ loadOffer();
     } catch(e){}
     m.classList.add('show');
     setTimeout(() => document.getElementById('valEmail').focus(), 100);
+    // przycisk: w cenie planu (Firmowy/Solo bez limitu, Osobisty 6/mies.) albo płatność 35 zł
+    const bb = document.getElementById('valBuyBtn');
+    if (bb) {
+      bb.textContent = 'Sprawdzam Twój plan…';
+      loadValuationQuota().then(() => {
+        bb.textContent = quotaIncluded() ? ('📄 Generuj wycenę PDF — ' + quotaLabel() + ' →') : 'Zapłać 35 zł kartą / BLIK →';
+        const hint = document.getElementById('valQuotaHint');
+        if (hint) hint.textContent = (__valQuota && __valQuota.included && !__valQuota.unlimited && __valQuota.remaining <= 0)
+          ? 'Wykorzystałeś ' + __valQuota.limit + ' wycen w cenie planu' + (__valQuota.trial ? '' : ' w tym miesiącu') + ' — kolejne 35 zł/szt.' : '';
+      });
+    }
   }
   function closeValuationModal(){
     document.getElementById('valModal').classList.remove('show');
@@ -2009,9 +2032,14 @@ loadOffer();
 
     const orig = btn.innerHTML;
     btn.disabled = true;
-    if (isBusinessUser()) {
+    if (quotaIncluded()) {
       btn.innerHTML = 'Generuję wycenę PDF (w cenie planu)...';
-      try { await downloadBusinessValuation({ listing_id: listingId }); btn.innerHTML = '✅ Pobrano PDF'; btn.disabled = false; }
+      try {
+        await downloadBusinessValuation({ listing_id: listingId });
+        await loadValuationQuota();
+        btn.innerHTML = '✅ Pobrano PDF' + (__valQuota && !__valQuota.unlimited ? ' — zostało ' + __valQuota.remaining + ' z ' + __valQuota.limit : '');
+        btn.disabled = false;
+      }
       catch(e){ errBox.textContent = '⚠️ ' + e.message; errBox.className = 'val-err show'; btn.disabled = false; btn.innerHTML = orig; }
       return;
     }

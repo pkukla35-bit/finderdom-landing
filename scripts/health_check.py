@@ -76,47 +76,63 @@ def main():
     now = datetime.now(timezone.utc)
     today0 = now.astimezone(PL).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
     yday0 = (now.astimezone(PL).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)).astimezone(timezone.utc).isoformat()
+    week0 = (now.astimezone(PL).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7)).astimezone(timezone.utc).isoformat()
 
     rows, problems = [], []
     for label, src, wf, url, counter in PORTALS:
         code, html = fetch(url)
         n_live = counter(html) if code == 200 else 0
         live_ok = code == 200 and n_live > 0
-        today = L.count_documents({"source": src, "added_at": {"$gte": today0}})
-        yday = L.count_documents({"source": src, "added_at": {"$gte": yday0, "$lt": today0}})
+        # sprzedaż i wynajem liczone osobno — awaria importu wynajmu nie może się „schować” za sprzedażą
+        def cnt(extra):
+            return L.count_documents({"source": src, **extra})
+        today_s = cnt({"added_at": {"$gte": today0}, "transaction_type": {"$ne": "wynajem"}})
+        today_r = cnt({"added_at": {"$gte": today0}, "transaction_type": "wynajem"})
+        yday_s = cnt({"added_at": {"$gte": yday0, "$lt": today0}, "transaction_type": {"$ne": "wynajem"}})
+        yday_r = cnt({"added_at": {"$gte": yday0, "$lt": today0}, "transaction_type": "wynajem"})
+        week_r = cnt({"added_at": {"$gte": week0}, "transaction_type": "wynajem"})
+        today = today_s + today_r
         run = gh_last_run(wf) or {}
         run_ok = run.get("conclusion") in ("success", "w toku")
-        status = "✅" if (live_ok and run_ok and today > 0) else ("⚠️" if live_ok else "❌")
+        rent_expected = week_r > 0          # portal normalnie dostarcza wynajem (w ostatnich 7 dniach)
+        rent_ok = (not rent_expected) or today_r > 0
+        status = "✅" if (live_ok and run_ok and today_s > 0 and rent_ok) else ("⚠️" if live_ok else "❌")
         if status != "✅":
             why = []
             if not live_ok: why.append(f"strona portalu: HTTP {code}, ofert w HTML: {n_live}")
             if not run_ok: why.append(f"workflow: {run.get('conclusion')}")
-            if today == 0: why.append("0 ofert dodanych dziś")
+            if today_s == 0: why.append("0 ofert SPRZEDAŻY dodanych dziś")
+            if not rent_ok: why.append(f"0 ofert WYNAJMU dziś (wczoraj {yday_r}, w 7 dni {week_r})")
             problems.append(f"{label}: " + "; ".join(why))
-        rows.append((status, label, f"HTTP {code} / {n_live} ofert", today, yday, run.get("conclusion", "—"), run.get("url", "")))
+        rows.append((status, label, f"HTTP {code} / {n_live} ofert", today_s, today_r, yday_s, yday_r, run.get("conclusion", "—"), run.get("url", "")))
 
     total_active = L.count_documents({"is_stale": {"$ne": True}})
     today_all = L.count_documents({"added_at": {"$gte": today0}})
     today_rent = L.count_documents({"added_at": {"$gte": today0}, "transaction_type": "wynajem"})
+    active_rent = L.count_documents({"is_stale": {"$ne": True}, "transaction_type": "wynajem"})
     st = db.command("dbStats"); size_mb = (st["dataSize"] + st["indexSize"]) / 1024 / 1024
 
     date_s = now.astimezone(PL).strftime("%d.%m.%Y %H:%M")
     subject = ("✅ FinderDom: importy OK" if not problems else f"⚠️ FinderDom: {len(problems)} portal(e) do sprawdzenia") + f" — {date_s}"
     def link(c, u):
         return f'<a href="{u}">{c}</a>' if u else str(c)
+    def rent_cell(v, bold=False):
+        col = "#b45309" if v == 0 else "#111"
+        return f"<td style='padding:6px 10px;text-align:right;color:{col}'>{'<b>' if bold else ''}{v}{'</b>' if bold else ''}</td>"
     tr = "".join(
         f"<tr><td style='padding:6px 10px'>{s} <b>{l}</b></td><td style='padding:6px 10px'>{live}</td>"
-        f"<td style='padding:6px 10px;text-align:right'><b>{t}</b></td><td style='padding:6px 10px;text-align:right;color:#666'>{y}</td>"
+        f"<td style='padding:6px 10px;text-align:right'><b>{ts}</b></td>{rent_cell(trn, True)}"
+        f"<td style='padding:6px 10px;text-align:right;color:#666'>{ys}</td><td style='padding:6px 10px;text-align:right;color:#666'>{yr}</td>"
         f"<td style='padding:6px 10px'>{link(c, u)}</td></tr>"
-        for s, l, live, t, y, c, u in rows)
+        for s, l, live, ts, trn, ys, yr, c, u in rows)
     html = f"""<div style="font-family:Arial,sans-serif;max-width:720px;color:#111">
 <h2 style="color:#0B1836;margin:0 0 6px">Raport zdrowia importów — {date_s}</h2>
-<p style="margin:0 0 14px;color:#444">Dziś dodano <b>{today_all}</b> ofert (w tym wynajem: {today_rent}). Aktywnych w bazie: <b>{total_active:,}</b>. Rozmiar bazy: {size_mb:.0f} MB / 5 GB.</p>
+<p style="margin:0 0 14px;color:#444">Dziś dodano <b>{today_all}</b> ofert: sprzedaż <b>{today_all - today_rent}</b>, wynajem <b>{today_rent}</b>. Aktywnych w bazie: <b>{total_active:,}</b> (w tym wynajem {active_rent:,}). Rozmiar bazy: {size_mb:.0f} MB / 5 GB.</p>
 {('<div style="background:#fff3cd;border:1px solid #ffe08a;border-radius:8px;padding:10px 14px;margin:0 0 14px"><b>Do sprawdzenia:</b><br>' + '<br>'.join(problems) + '</div>') if problems else ''}
 <table style="border-collapse:collapse;font-size:14px;width:100%"><thead><tr style="background:#f3f4f6;text-align:left">
-<th style="padding:6px 10px">Portal</th><th style="padding:6px 10px">Strona portalu</th><th style="padding:6px 10px;text-align:right">Dziś</th><th style="padding:6px 10px;text-align:right">Wczoraj</th><th style="padding:6px 10px">Ostatni bieg</th></tr></thead>
+<th style="padding:6px 10px">Portal</th><th style="padding:6px 10px">Strona portalu</th><th style="padding:6px 10px;text-align:right">Dziś sprzedaż</th><th style="padding:6px 10px;text-align:right">Dziś wynajem</th><th style="padding:6px 10px;text-align:right">Wczoraj sprz.</th><th style="padding:6px 10px;text-align:right">Wczoraj wyn.</th><th style="padding:6px 10px">Ostatni bieg</th></tr></thead>
 <tbody>{tr}</tbody></table>
-<p style="color:#888;font-size:12px;margin-top:14px">✅ = portal odpowiada, workflow OK, są dzisiejsze oferty · ⚠️ = portal odpowiada, ale import nie dał ofert lub workflow padł · ❌ = portal nie odpowiada (blokada/awaria).<br>
+<p style="color:#888;font-size:12px;margin-top:14px">✅ = portal odpowiada, workflow OK, są dzisiejsze oferty sprzedaży i wynajmu · ⚠️ = portal odpowiada, ale import sprzedaży lub wynajmu nie dał ofert albo workflow padł · ❌ = portal nie odpowiada (blokada/awaria).<br>
 Workflowy: https://github.com/{os.environ.get('GITHUB_REPOSITORY','')}/actions</p></div>"""
 
     print(subject); [print(r) for r in rows]; print("problems:", problems)

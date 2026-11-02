@@ -3725,11 +3725,81 @@ async def _alerts_run(limit_alerts: int = 100) -> dict:
 @app.get("/api/admin/alerts/run")
 @app.post("/api/admin/alerts/run")
 async def admin_alerts_run(request: Request, limit: int = 100):
-    """Codzienny cron (Vercel) — wysyła nowe oferty do aktywnych alertów."""
+    """Codzienny cron (Vercel) — wysyła nowe oferty do aktywnych alertów.
+    Przy okazji (ten sam cron, 06:30 UTC codziennie) odpala importy ofert na GitHub — bo harmonogramy GitHub Actions
+    potrafią startować z 6–7 h opóźnieniem, a workflow_dispatch rusza od razu."""
     await _authorize_cron_or_admin(request)
+    imports = await _trigger_imports_if_due()
     if not (await _smtp_cfg() or await _email_key()):
-        return {"skipped": True, "reason": "email_not_configured"}
-    return await _alerts_run(limit_alerts=max(1, min(500, limit)))
+        return {"skipped": True, "reason": "email_not_configured", "imports": imports}
+    out = await _alerts_run(limit_alerts=max(1, min(500, limit)))
+    if isinstance(out, dict):
+        out["imports"] = imports
+    return out
+
+
+IMPORT_WORKFLOWS = ["scrape-otodom-regions.yml", "scrape-olx.yml", "scrape-nol.yml", "scrape-portals.yml", "scrape-wynajem.yml"]
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "pkukla35-bit/finderdom-landing")
+
+
+async def _github_token() -> str:
+    doc = await database().settings.find_one({"_id": "github"}) or {}
+    return doc.get("token") or os.environ.get("GITHUB_DISPATCH_TOKEN") or ""
+
+
+async def _trigger_imports_if_due(force: bool = False) -> dict:
+    """Raz dziennie (7 dni w tygodniu) uruchamia workflowy importów przez GitHub API (workflow_dispatch)."""
+    db = database()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    st = await db.settings.find_one({"_id": "imports"}) or {}
+    if not force and st.get("last_triggered_day") == today:
+        return {"skipped": True, "reason": "already_today"}
+    tok = await _github_token()
+    if not tok:
+        return {"skipped": True, "reason": "no_github_token"}
+    results = {}
+    async with httpx.AsyncClient(timeout=20) as client:
+        for wf in IMPORT_WORKFLOWS:
+            try:
+                r = await client.post(f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{wf}/dispatches",
+                                      headers={"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json"},
+                                      json={"ref": "main"})
+                results[wf] = r.status_code
+            except Exception as e:
+                results[wf] = str(e)[:80]
+    ok = all(v == 204 for v in results.values())
+    await db.settings.update_one({"_id": "imports"}, {"$set": {"last_triggered_day": today if ok else st.get("last_triggered_day"),
+                                                              "last_attempt_at": datetime.now(timezone.utc).isoformat(), "last_results": results}}, upsert=True)
+    logger.info("imports dispatch: %s", results)
+    return {"triggered": ok, "results": results}
+
+
+class GithubTokenReq(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+
+
+@app.post("/api/admin/github/token")
+async def admin_github_token(body: GithubTokenReq, admin: dict = Depends(require_admin)):
+    """Zapisuje token GitHub (fine-grained, Actions: read/write) używany do codziennego odpalania importów."""
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.get(f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows", headers={"Authorization": f"Bearer {body.token.strip()}"})
+    if r.status_code != 200:
+        raise HTTPException(400, f"Token odrzucony przez GitHub ({r.status_code})")
+    await database().settings.update_one({"_id": "github"}, {"$set": {"token": body.token.strip(), "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": admin.get("email")}}, upsert=True)
+    return {"ok": True}
+
+
+@app.post("/api/admin/imports/trigger")
+async def admin_imports_trigger(force: bool = True, admin: dict = Depends(require_admin)):
+    """Ręczne uruchomienie wszystkich importów ofert (GitHub Actions) — przycisk w panelu / awaryjnie."""
+    return await _trigger_imports_if_due(force=force)
+
+
+@app.get("/api/admin/imports/status")
+async def admin_imports_status(admin: dict = Depends(require_admin)):
+    st = await database().settings.find_one({"_id": "imports"}) or {}
+    return {"last_triggered_day": st.get("last_triggered_day"), "last_attempt_at": st.get("last_attempt_at"), "last_results": st.get("last_results"),
+            "github_token_set": bool(await _github_token()), "workflows": IMPORT_WORKFLOWS}
 
 
 @app.get("/api/admin/alerts")
@@ -3896,9 +3966,9 @@ FAKTY O FINDERDOM.PL:
 - Wyszukiwarka (/szukaj) zbiera ogłoszenia z Otodom, OLX, Morizon, Gratka, Domiporta, Adresowo, nieruchomosci-online — mieszkania, domy, działki, lokale; sprzedaż i wynajem; cała Polska (16 województw). Duplikaty tej samej oferty z kilku portali są łączone w jedną kartę („od … zł”, lista portali).
 - Filtry: miasto + promień (km), rodzaj nieruchomości, rynek (pierwotny/wtórny), typ budynku, kto oferuje (prywatna/biuro), cena, metraż, pokoje, data dodania. Przy każdej ofercie analiza AI ceny (okazja / typowa / zawyżona) i podobne oferty w okolicy. Filtr „tylko od właściciela” = oferty bez pośrednika.
 - Konta: Osobiste (bez NIP) lub Firmowe (NIP + nazwa firmy). Rejestracja: /rejestracja. Logowanie: /logowanie. Reset hasła: link „Nie pamiętasz hasła?” na stronie logowania (e-mail z linkiem ważnym 1 godzinę). Zmiana hasła: /konto → Profil.
-- Plany: Bez planu (0 zł) = podgląd pierwszych 5 ofert + podstawowe filtry. Osobisty 45 zł / 30 dni = wszystkie oferty, analiza AI, podobne oferty, ulubione i alerty, bez reklam, 6 wycen PDF w miesiącu w cenie (kolejne 35 zł/szt.). Biuro jednoosobowe (Solo) 90 zł/mies = 1 login, CRM, leady, wyceny PDF bez limitu. Firmowy 199 zł/mies = konto główne + 4 loginy dla agentów, CRM, leady, wyceny PDF bez limitu; każdy kolejny agent 55 zł/mies. Firmy z NIP: 7 dni za darmo bez karty, po okresie próbnym wybierasz plan. Płatność kartą/BLIK przez Stripe, anulujesz kiedy chcesz. Faktura VAT automatycznie na podstawie NIP.
+- Plany: Bez planu (0 zł) = podgląd pierwszych 5 ofert + podstawowe filtry. Osobisty 45 zł / 30 dni = wszystkie oferty, analiza AI, podobne oferty, ulubione i alerty, bez reklam, 3 wyceny PDF w miesiącu w cenie (kolejne 35 zł/szt.). Biuro jednoosobowe (Solo) 90 zł/mies = 1 login, CRM, leady, wyceny PDF bez limitu. Firmowy 199 zł/mies = konto główne + 4 loginy dla agentów, CRM, leady, wyceny PDF bez limitu; każdy kolejny agent 55 zł/mies. Firmy z NIP: 7 dni za darmo bez karty, po okresie próbnym wybierasz plan. Płatność kartą/BLIK przez Stripe, anulujesz kiedy chcesz. Faktura VAT automatycznie na podstawie NIP.
 - CRM (dla kont firmowych): statusy na kartach ofert: Był kontakt, Umówione, Bez pośrednika, Nieaktualna, Zły kontakt, Kontakt później; filtry CRM; wspólna baza dla zespołu. Podgląd widoku dla biur bez logowania: /szukaj?widok=biuro.
-- Wycena PDF (/wycena): 35 zł za raport bez konta i abonamentu — realna wartość rynkowa, zakres min–max, porównanie z transakcjami z Rejestru Cen Nieruchomości (akty notarialne), podobne oferty, opinia AI. W planie Osobistym 6 wycen w miesiącu w cenie; w planach Solo/Firmowy bez limitu. PDF do pobrania od razu po płatności (nie wysyłamy PDF e-mailem).
+- Wycena PDF (/wycena): 35 zł za raport bez konta i abonamentu — realna wartość rynkowa, zakres min–max, porównanie z transakcjami z Rejestru Cen Nieruchomości (akty notarialne), podobne oferty, opinia AI. W planie Osobistym 3 wyceny w miesiącu w cenie; w planach Solo/Firmowy bez limitu. PDF do pobrania od razu po płatności (nie wysyłamy PDF e-mailem).
 - Kredyt: kalkulator raty i zdolności (/kredyt), partner główny Lendi (porównanie ofert banków).
 - Leady dla biur: osoby zamawiające wycenę mogą zostawić telefon — lead trafia do biur z regionu.
 - Kontakt: kontakt@finderdom.pl, odpowiedź do 24 h w dni robocze (pn–pt 9–18). Formularz: /kontakt. Pomoc: /pomoc. Dla biur: /dla-biur. Dla prywatnych: /dla-prywatnych.
@@ -5184,7 +5254,7 @@ async def _render_valuation_pdf(val_type: str, md: dict, session_id: str) -> Tup
 
 
 BUSINESS_TRIAL_VALUATIONS = 3  # w okresie próbnym; opłacony Plan Firmowy = bez limitu
-INDIVIDUAL_MONTHLY_VALUATIONS = 6  # Plan Osobisty (45 zł): pierwszych 6 wycen PDF w miesiącu w cenie, kolejne 35 zł/szt.
+INDIVIDUAL_MONTHLY_VALUATIONS = 3  # Plan Osobisty (45 zł): pierwsze 3 wyceny PDF w miesiącu w cenie, kolejne 35 zł/szt.
 
 
 def _month_start_utc() -> datetime:
@@ -5228,7 +5298,7 @@ async def valuation_business(body: BusinessValuationReq, user: dict = Depends(cu
     """Wycena PDF w cenie planu (Firmowy / Solo: bez limitu, trial 3; Osobisty: 6 w miesiącu) — bez Stripe."""
     q = await _valuation_quota(user)
     if not q["included"]:
-        raise HTTPException(402, "Wyceny w cenie abonamentu: plan Osobisty (45 zł) — 6 wycen w miesiącu, Biuro jednoosobowe (90 zł) i Firmowy (199 zł) — bez limitu")
+        raise HTTPException(402, f"Wyceny w cenie abonamentu: plan Osobisty (45 zł) — {INDIVIDUAL_MONTHLY_VALUATIONS} wyceny w miesiącu, Biuro jednoosobowe (90 zł) i Firmowy (199 zł) — bez limitu")
     if not q["unlimited"] and q["remaining"] <= 0:
         if q.get("trial"):
             raise HTTPException(402, f"W okresie próbnym masz {BUSINESS_TRIAL_VALUATIONS} wyceny. Opłać plan Biuro jednoosobowe (90 zł) lub Firmowy (199 zł) — wyceny bez limitu.")

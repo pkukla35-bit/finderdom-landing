@@ -76,6 +76,19 @@ gtag('set', 'url_passthrough', false);
   .final{text-align:center;margin:56px 0 0}
   footer{max-width:1100px;margin:40px auto 24px;padding:24px 20px 0;border-top:1px solid rgba(255,255,255,0.08);display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;color:#8ba3d4;font-size:13px}
   footer a{color:#8ba3d4;text-decoration:none}
+
+  /* Telefon: menu w jednym przewijanym wierszu (zamiast rozsypanej kolumny), logo + konto u góry */
+  @media(max-width:760px){
+    .topnav{padding:10px 14px}
+    .nav-inner{flex-wrap:wrap;gap:8px 12px}
+    .nav-inner > .logo{font-size:16px}
+    .nav-links{order:3;flex:0 0 100%;flex-wrap:nowrap;overflow-x:auto;gap:6px;padding:2px 0 4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .nav-links::-webkit-scrollbar{display:none}
+    .nav-links a{white-space:nowrap;padding:9px 11px;min-height:40px;display:inline-flex;align-items:center;border-radius:10px;background:rgba(255,255,255,0.05);font-size:13px}
+    .nav-links a.active{background:rgba(255,184,0,0.14)}
+    #authWidget{order:2;margin-left:auto;flex:0 0 auto}
+    #authWidget .a-cta{white-space:nowrap}
+  }
 </style>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18518225811"></script>
@@ -98,8 +111,8 @@ gtag('set', 'url_passthrough', false);
       <a href="/dla-prywatnych" class="active">🏠 Dla prywatnych</a>
       <a href="/dla-biur">🏢 Dla biur</a>
       <a href="/pomoc">💬 Pomoc</a>
-      <span id="authWidget"></span>
     </div>
+      <span id="authWidget"></span>
   </div>
 </nav>
 

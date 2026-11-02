@@ -67,6 +67,19 @@ gtag('set', 'url_passthrough', false);
   .btn{padding:12px 22px;border-radius:100px;font-weight:800;text-decoration:none;font-size:14px;display:inline-block;background:#FFB800;color:#0B1836 !important;border:none}
   footer{max-width:900px;margin:40px auto 24px;padding:24px 20px 0;border-top:1px solid rgba(255,255,255,0.08);display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;color:#8ba3d4;font-size:13px}
   footer a{color:#a3b3d1;text-decoration:none}
+
+  /* Telefon: menu w jednym przewijanym wierszu (zamiast rozsypanej kolumny), logo + konto u góry */
+  @media(max-width:760px){
+    .topnav{padding:10px 14px}
+    .nav-inner{flex-wrap:wrap;gap:8px 12px}
+    .nav-inner > .logo{font-size:16px}
+    .nav-links{order:3;flex:0 0 100%;flex-wrap:nowrap;overflow-x:auto;gap:6px;padding:2px 0 4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .nav-links::-webkit-scrollbar{display:none}
+    .nav-links a{white-space:nowrap;padding:9px 11px;min-height:40px;display:inline-flex;align-items:center;border-radius:10px;background:rgba(255,255,255,0.05);font-size:13px}
+    .nav-links a.active{background:rgba(255,184,0,0.14)}
+    #authWidget{order:2;margin-left:auto;flex:0 0 auto}
+    #authWidget .a-cta{white-space:nowrap}
+  }
 </style>
 </head>
 <body>

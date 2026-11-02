@@ -256,9 +256,10 @@ gtag('set', 'url_passthrough', false);
        Wcześniej panel był pod wynikami (niewidoczny), potem pływający przycisk — też nie zauważany. */
     .filters{display:block;position:static;order:-1;max-height:none;padding:0 14px;border-radius:14px;overflow:visible}
     .filters > h3{display:none}
-    .filters:not(.open) > *:not(.filters-mob-head){display:none}
+    .filters:not(.open) > *:not(.filters-mob-head){display:none!important}
+    .filters-mob-head > div{min-width:0;flex:1}
     .filters-mob-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0;cursor:pointer;min-height:52px;-webkit-tap-highlight-color:transparent}
-    .filters-mob-head b{font-size:15px;color:#fff}
+    .filters-mob-head b{font-size:15px;color:#fff;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .filters-mob-head small{display:block;font-size:12px;color:#8ba3d4;font-weight:500;margin-top:2px}
     .filters-mob-head button{background:rgba(255,184,0,0.15);border:0;color:#FFB800;min-width:44px;height:40px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;padding:0 12px;white-space:nowrap}
     .filters.open .filters-mob-head{border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:10px}
@@ -364,7 +365,7 @@ gtag('set', 'url_passthrough', false);
 
   <!-- Sidebar filters -->
   <aside class="filters" id="filtersPanel">
-    <div class="filters-mob-head" id="filtersHead"><div><b>🎯 Filtry: rynek, kto oferuje, cena, metraż…</b><small id="filtersSummary">Dotknij, aby rozwinąć</small></div><button type="button" id="filtersToggle" aria-expanded="false">Rozwiń ▾</button></div>
+    <div class="filters-mob-head" id="filtersHead"><div><b>🎯 Filtry zaawansowane</b><small id="filtersSummary">Rynek, kto oferuje, cena, metraż, pokoje…</small></div><button type="button" id="filtersToggle" aria-expanded="false">Rozwiń ▾</button></div>
     <h3>🎯 Filtry zaawansowane</h3>
 
     <div class="filter-group" id="radiusSidebarGroup" style="display:none">
@@ -2761,7 +2762,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMulti
   }
   function update(){
     var n = activeCount(); var sum = document.getElementById('filtersSummary');
-    if (sum) sum.textContent = isOpen() ? 'Zmiany działają od razu' : (n ? ('Aktywne filtry: ' + n + ' · dotknij, aby zmienić') : 'Dotknij, aby rozwinąć');
+    if (sum) sum.textContent = isOpen() ? 'Zmiany działają od razu' : (n ? ('Aktywne filtry: ' + n + ' · dotknij, aby zmienić') : 'Rynek, kto oferuje, cena, metraż, pokoje…');
     var apply = document.getElementById('filtersApply'); var res = document.getElementById('count');
     var cnt = res ? res.textContent.trim() : '';
     if (apply) apply.textContent = (cnt && cnt !== '…') ? ('Pokaż ' + cnt + ' ofert ↓') : 'Pokaż oferty ↓';

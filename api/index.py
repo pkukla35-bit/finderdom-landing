@@ -3738,7 +3738,7 @@ async def admin_alerts_run(request: Request, limit: int = 100):
     return out
 
 
-IMPORT_WORKFLOWS = ["scrape-otodom-regions.yml", "scrape-olx.yml", "scrape-nol.yml", "scrape-portals.yml", "scrape-wynajem.yml"]
+IMPORT_WORKFLOWS = ["scrape-otodom-regions.yml", "scrape-olx.yml", "scrape-nol.yml", "scrape-portals.yml"]  # scrape-wynajem (ScrapingBee, płatny) wyłączony 2.11 na prośbę użytkownika
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "pkukla35-bit/finderdom-landing")
 
 

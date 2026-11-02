@@ -252,9 +252,11 @@ gtag('set', 'url_passthrough', false);
   @media(max-width:900px){
     .search-bar{grid-template-columns:1fr;gap:8px}
     .main-container{grid-template-columns:1fr;padding:16px}
+    .main-container > *{min-width:0;max-width:100%}
+    .main-container > main{overflow-x:hidden}
     /* Telefon: filtry (Rynek, Kto oferuje: prywatna/pośrednik, cena…) jako rozwijany panel NAD listą ofert.
        Wcześniej panel był pod wynikami (niewidoczny), potem pływający przycisk — też nie zauważany. */
-    .filters{display:block;position:static;order:-1;max-height:none;padding:0 14px;border-radius:14px;overflow:visible}
+    .filters{display:block;position:static;order:-1;max-height:none;padding:0 14px;border-radius:14px;overflow:hidden}
     .filters > h3{display:none}
     .filters:not(.open) > *:not(.filters-mob-head){display:none!important}
     .filters-mob-head > div{min-width:0;flex:1}

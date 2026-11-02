@@ -267,8 +267,12 @@ gtag('set', 'url_passthrough', false);
     .filters.open .filters-mob-head{border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:10px}
     .filters-mob-foot{padding:6px 0 14px}
     .filters-mob-foot button{width:100%;min-height:48px;border:0;border-radius:12px;background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;font-size:15px;cursor:pointer}
-    .nav-links{gap:12px;font-size:12px}
+    .topnav{padding:10px 14px}
+    .nav-inner{flex-wrap:wrap;gap:8px 10px}
+    .nav-links{gap:8px;font-size:12px;flex-wrap:wrap;justify-content:flex-end;min-width:0}
+    .nav-links a.a-wycena{padding:7px 10px;font-size:12px}
     .nav-links .hide-mob{display:none}
+    html,body{overflow-x:hidden;max-width:100%}
   }
   .filters-mob-head,.filters-mob-foot,#mobFiltersBtn{display:none}
   @media(max-width:900px){.filters-mob-head{display:flex}.filters.open .filters-mob-foot{display:block}}

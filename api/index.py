@@ -2171,7 +2171,8 @@ async def listings_scraped_endpoint(
             city_re = {"$regex": city_pattern}
             query["$or"] = [{"city": city_re}, {"district": city_re}, {"title": city_re}]
         if type:
-            query["type"] = {"$regex": f"^{type}", "$options": "i"}
+            # diacritic-insensitive: „dzialka” łapie też „działka budowlana” (tak zapisują darmowe scrapery)
+            query["type"] = {"$regex": "^" + _build_diacritic_regex(type)}
         if transaction:
             query["transaction_type"] = transaction
         if seller_type:
@@ -2437,7 +2438,7 @@ async def similar_offers_endpoint(
         "price": {"$gt": 1000},
     }
     if type:
-        base_query["type"] = {"$regex": f"^{type}", "$options": "i"}
+        base_query["type"] = {"$regex": "^" + _build_diacritic_regex(type)}
     # transaction filter jako czesc AND (moze byc None w bazie)
     transaction_and_clause = None
     if transaction:
@@ -3540,7 +3541,7 @@ def _alert_label(a: dict) -> str:
 
 def _alert_query(a: dict, since_iso: Optional[str]) -> dict:
     q = {"is_stale": {"$ne": True}, "price": {"$gt": 1000},
-         "type": {"$regex": f"^{re.escape(a['type'])}", "$options": "i"},
+         "type": {"$regex": "^" + _build_diacritic_regex(a['type'])},
          "transaction_type": a.get("transaction") or "sprzedaz"}
     city_re = {"$regex": _build_diacritic_regex(a["city"].strip())}
     q["$or"] = [{"city": city_re}, {"district": city_re}]
@@ -4064,7 +4065,7 @@ async def _chat_search_offers(spec: dict) -> list:
         q["$or"] = [{"city": city_re}, {"district": city_re}]
     t = str(spec.get("type") or "mieszkanie").lower().split("|")[0].strip()
     if t in ("mieszkanie", "dom", "dzialka", "lokal"):
-        q["type"] = {"$regex": f"^{t}", "$options": "i"}
+        q["type"] = {"$regex": "^" + _build_diacritic_regex(t)}
     tr = str(spec.get("transaction") or "sprzedaz").lower().split("|")[0].strip()
     q["transaction_type"] = "wynajem" if tr.startswith("wynaj") else "sprzedaz"
     pmax, pmin = _num_or_zero(spec.get("price_max")), _num_or_zero(spec.get("price_min"))

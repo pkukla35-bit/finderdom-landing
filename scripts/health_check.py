@@ -112,6 +112,21 @@ def main():
     today_all = L.count_documents({"added_at": {"$gte": today0}})
     today_rent = L.count_documents({"added_at": {"$gte": today0}, "transaction_type": "wynajem"})
     active_rent = L.count_documents({"is_stale": {"$ne": True}, "transaction_type": "wynajem"})
+    # Rodzaje nieruchomości osobno — 2.11 działki i lokale stały 3 dni (Apify wyłączone, scrapery zapisywały „działka …”),
+    # a raport mówił „OK”, bo patrzył tylko na sumy per portal. Typ porównujemy bez polskich znaków.
+    import unicodedata as _ud
+    def _ascii(t): return _ud.normalize("NFKD", t or "").encode("ascii", "ignore").decode().lower()
+    type_rows = []
+    today_docs = list(L.find({"added_at": {"$gte": today0}}, {"type": 1}))
+    yday_docs = list(L.find({"added_at": {"$gte": yday0, "$lt": today0}}, {"type": 1}))
+    def _cnt(docs, key): return sum(1 for d in docs if _ascii(str(d.get("type"))).startswith(key))
+    for label_t, key in (("🏢 Mieszkania", "mieszkanie"), ("🏠 Domy", "dom"), ("🌳 Działki", "dzialka"), ("🏪 Lokale", "lokal")):
+        t_today, t_yday = _cnt(today_docs, key), _cnt(yday_docs, key)
+        t_week = L.count_documents({"added_at": {"$gte": week0}, "type": {"$regex": "^" + key[:3], "$options": "i"}})
+        ok_t = weekend or t_today > 0 or t_week == 0
+        type_rows.append((("✅" if ok_t else "⚠️"), label_t, t_today, t_yday))
+        if not ok_t:
+            problems.append(f"{label_t}: 0 ofert dodanych dziś (wczoraj {t_yday})")
     st = db.command("dbStats"); size_mb = (st["dataSize"] + st["indexSize"]) / 1024 / 1024
 
     date_s = now.astimezone(PL).strftime("%d.%m.%Y %H:%M")
@@ -131,6 +146,9 @@ def main():
 <h2 style="color:#0B1836;margin:0 0 6px">Raport zdrowia importów — {date_s}</h2>
 {'<p style="margin:0 0 10px;color:#666;font-size:13px">Weekend — importy działają pn–pt, dzisiejsze „0” jest normalne; sprawdzono tylko dostępność portali i ostatnie biegi.</p>' if weekend else ''}
 <p style="margin:0 0 14px;color:#444">Dziś dodano <b>{today_all}</b> ofert: sprzedaż <b>{today_all - today_rent}</b>, wynajem <b>{today_rent}</b>. Aktywnych w bazie: <b>{total_active:,}</b> (w tym wynajem {active_rent:,}). Rozmiar bazy: {size_mb:.0f} MB / 5 GB.</p>
+<table style="border-collapse:collapse;margin:0 0 16px;font-size:13px"><thead><tr style="background:#f3f4f6"><th style="padding:5px 10px;text-align:left">Rodzaj</th><th style="padding:5px 10px;text-align:right">Dziś</th><th style="padding:5px 10px;text-align:right">Wczoraj</th></tr></thead><tbody>
+{"".join(f"<tr><td style='padding:5px 10px'>{st} {lb}</td><td style='padding:5px 10px;text-align:right;color:{'#b45309' if td == 0 else '#111'}'><b>{td}</b></td><td style='padding:5px 10px;text-align:right;color:#666'>{ty}</td></tr>" for st, lb, td, ty in type_rows)}
+</tbody></table>
 {('<div style="background:#fff3cd;border:1px solid #ffe08a;border-radius:8px;padding:10px 14px;margin:0 0 14px"><b>Do sprawdzenia:</b><br>' + '<br>'.join(problems) + '</div>') if problems else ''}
 <table style="border-collapse:collapse;font-size:14px;width:100%"><thead><tr style="background:#f3f4f6;text-align:left">
 <th style="padding:6px 10px">Portal</th><th style="padding:6px 10px">Strona portalu</th><th style="padding:6px 10px;text-align:right">Dziś sprzedaż</th><th style="padding:6px 10px;text-align:right">Dziś wynajem</th><th style="padding:6px 10px;text-align:right">Wczoraj sprz.</th><th style="padding:6px 10px;text-align:right">Wczoraj wyn.</th><th style="padding:6px 10px">Ostatni bieg</th></tr></thead>

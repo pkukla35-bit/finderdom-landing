@@ -29,8 +29,8 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": UA, "Accept-Language": "pl-PL,pl;q=0.9", "Accept": "text/html,*/*"})
 
-PROPERTY_SLUGS = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "dzialka"}
-BASE_LABEL = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "działka"}
+PROPERTY_SLUGS = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "dzialka", "lokal": "lokal"}
+BASE_LABEL = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "działka", "lokal": "lokal"}
 
 
 def list_url(prop: str, trans: str, city_name: str, page: int) -> str:
@@ -236,5 +236,33 @@ def main():
              a.transaction, a.property, tot["new"], tot["updated"], tot["details"], tot["pages"])
 
 
-if __name__ == "__main__":
+# ── Lokale użytkowe: matryce w .github/workflows nie mają „lokal” (nie da się ich edytować bez uprawnienia „Workflows”
+#    na tokenie GitHub), więc lokal (sprzedaż + wynajem) jedzie w tym samym zadaniu co działki. 2.11.2026
+CHAIN_AFTER = {"dzialka": [("lokal", "sprzedaz"), ("lokal", "wynajem")]}
+
+
+def _run_with_chain():
     main()
+    argv = sys.argv[1:]
+    if "--property" not in argv:
+        return
+    prop = argv[argv.index("--property") + 1]
+    for p2, t2 in CHAIN_AFTER.get(prop, []):
+        nxt = list(argv)
+        nxt[nxt.index("--property") + 1] = p2
+        if "--transaction" in nxt:
+            nxt[nxt.index("--transaction") + 1] = t2
+        else:
+            nxt += ["--transaction", t2]
+        sys.argv = [sys.argv[0]] + nxt
+        log.info("═══ CHAIN → property=%s transaction=%s ═══", p2, t2)
+        try:
+            main()
+        except SystemExit:
+            pass
+        except Exception as e:  # lokal nie może wywrócić całego zadania
+            log.error("CHAIN %s/%s failed: %s", p2, t2, str(e)[:200])
+
+
+if __name__ == "__main__":
+    _run_with_chain()

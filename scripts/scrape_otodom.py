@@ -80,11 +80,13 @@ PROPERTY_SLUGS = {
     "mieszkanie": "mieszkanie",
     "dom":        "dom",
     "dzialka":    "dzialka",
+    "lokal":      "lokal",
 }
 PROPERTY_LABELS = {
     "mieszkanie": "mieszkanie",
     "dom":        "dom",
     "dzialka":    "działka",
+    "lokal":      "lokal",
 }
 
 
@@ -445,5 +447,33 @@ def main():
              args.property, total["new"], total["updated"], DIRECT_STATE["direct_ok"], _DIRECT_KIND, DIRECT_STATE["sb_used"])
 
 
-if __name__ == "__main__":
+# ── Lokale użytkowe: matryce w .github/workflows nie mają „lokal” (nie da się ich edytować bez uprawnienia „Workflows”
+#    na tokenie GitHub), więc lokal (sprzedaż + wynajem) jedzie w tym samym zadaniu co działki. 2.11.2026
+CHAIN_AFTER = {"dzialka": [("lokal", "sprzedaz"), ("lokal", "wynajem")]}
+
+
+def _run_with_chain():
     main()
+    argv = sys.argv[1:]
+    if "--property" not in argv:
+        return
+    prop = argv[argv.index("--property") + 1]
+    for p2, t2 in CHAIN_AFTER.get(prop, []):
+        nxt = list(argv)
+        nxt[nxt.index("--property") + 1] = p2
+        if "--transaction" in nxt:
+            nxt[nxt.index("--transaction") + 1] = t2
+        else:
+            nxt += ["--transaction", t2]
+        sys.argv = [sys.argv[0]] + nxt
+        log.info("═══ CHAIN → property=%s transaction=%s ═══", p2, t2)
+        try:
+            main()
+        except SystemExit:
+            pass
+        except Exception as e:  # lokal nie może wywrócić całego zadania
+            log.error("CHAIN %s/%s failed: %s", p2, t2, str(e)[:200])
+
+
+if __name__ == "__main__":
+    _run_with_chain()

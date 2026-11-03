@@ -25,8 +25,8 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
 S = requests.Session()
 S.headers.update({"User-Agent": UA, "Accept-Language": "pl-PL,pl;q=0.9", "Accept": "text/html,application/json;q=0.9,*/*;q=0.8"})
 
-SEG = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki"}
-BASE_LABEL = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "działka"}
+SEG = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki", "lokal": "biura-lokale"}
+BASE_LABEL = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "działka", "lokal": "lokal"}
 ROOMS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
 
 
@@ -224,5 +224,33 @@ def main():
     log.info("═══ DONE olx %s/%s: new=%d updated=%d pages=%d ═══", a.transaction, a.property, tot["new"], tot["updated"], tot["pages"])
 
 
-if __name__ == "__main__":
+# ── Lokale użytkowe: matryce w .github/workflows nie mają „lokal” (nie da się ich edytować bez uprawnienia „Workflows”
+#    na tokenie GitHub), więc lokal (sprzedaż + wynajem) jedzie w tym samym zadaniu co działki. 2.11.2026
+CHAIN_AFTER = {"dzialka": [("lokal", "sprzedaz"), ("lokal", "wynajem")]}
+
+
+def _run_with_chain():
     main()
+    argv = sys.argv[1:]
+    if "--property" not in argv:
+        return
+    prop = argv[argv.index("--property") + 1]
+    for p2, t2 in CHAIN_AFTER.get(prop, []):
+        nxt = list(argv)
+        nxt[nxt.index("--property") + 1] = p2
+        if "--transaction" in nxt:
+            nxt[nxt.index("--transaction") + 1] = t2
+        else:
+            nxt += ["--transaction", t2]
+        sys.argv = [sys.argv[0]] + nxt
+        log.info("═══ CHAIN → property=%s transaction=%s ═══", p2, t2)
+        try:
+            main()
+        except SystemExit:
+            pass
+        except Exception as e:  # lokal nie może wywrócić całego zadania
+            log.error("CHAIN %s/%s failed: %s", p2, t2, str(e)[:200])
+
+
+if __name__ == "__main__":
+    _run_with_chain()

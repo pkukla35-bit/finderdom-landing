@@ -24,7 +24,7 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
       "Chrome/124.0 Safari/537.36")
 S = requests.Session()
 S.headers.update({"User-Agent": UA, "Accept-Language": "pl-PL,pl;q=0.9", "Accept": "text/html,*/*;q=0.8"})
-BASE_LABEL = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "działka"}
+BASE_LABEL = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "działka", "lokal": "lokal"}
 
 
 def city_slug(city: Dict[str, str]) -> str:
@@ -37,28 +37,28 @@ def is_region(city: Dict[str, str]) -> bool:
 
 # ───────────────────────── URL builders ─────────────────────────
 def url_morizon(prop, trans, city, page):
-    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki"}[prop]
+    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki", "lokal": "lokale-uzytkowe"}[prop]
     newest = "najnowsze/" if is_region(city) else ""
     base = f"https://www.morizon.pl/{'do-wynajecia/' if trans == 'wynajem' else ''}{seg}/{newest}{city_slug(city)}/"
     return base + (f"?page={page}" if page > 1 else "")
 
 
 def url_gratka(prop, trans, city, page):
-    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki-grunty"}[prop]
+    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki-grunty", "lokal": "lokale-uzytkowe"}[prop]
     base = f"https://gratka.pl/nieruchomosci/{seg}/{city_slug(city)}" + ("/wynajem" if trans == "wynajem" else "")
     q = ("?sort=newest" if is_region(city) else "") + (f"{'&' if is_region(city) else '?'}page={page}" if page > 1 else "")
     return base + q
 
 
 def url_domiporta(prop, trans, city, page):
-    seg = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "dzialke"}[prop]
+    seg = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "dzialke", "lokal": "lokal-uzytkowy"}[prop]
     t = "wynajme" if trans == "wynajem" else "sprzedam"
     base = f"https://www.domiporta.pl/{seg}/{t}/{city['voi']}" + ("" if is_region(city) else f"/{city_slug(city)}")
     return base + (f"?PageNumber={page}" if page > 1 else "")
 
 
 def url_adresowo(prop, trans, city, page):
-    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki"}[prop]
+    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki", "lokal": "lokale"}[prop]
     if trans == "wynajem": seg += "-wynajem"
     base = f"https://adresowo.pl/{seg}/" + ("" if city_slug(city) == "polska" else f"{city_slug(city)}/")
     return base + (f"_l{page}" if page > 1 else "")
@@ -280,5 +280,33 @@ def main():
     log.info("═══ DONE %s %s/%s: new=%d updated=%d pages=%d ═══", a.portal, a.transaction, a.property, tot["new"], tot["updated"], tot["pages"])
 
 
-if __name__ == "__main__":
+# ── Lokale użytkowe: matryce w .github/workflows nie mają „lokal” (nie da się ich edytować bez uprawnienia „Workflows”
+#    na tokenie GitHub), więc lokal (sprzedaż + wynajem) jedzie w tym samym zadaniu co działki. 2.11.2026
+CHAIN_AFTER = {"dzialka": [("lokal", "sprzedaz"), ("lokal", "wynajem")]}
+
+
+def _run_with_chain():
     main()
+    argv = sys.argv[1:]
+    if "--property" not in argv:
+        return
+    prop = argv[argv.index("--property") + 1]
+    for p2, t2 in CHAIN_AFTER.get(prop, []):
+        nxt = list(argv)
+        nxt[nxt.index("--property") + 1] = p2
+        if "--transaction" in nxt:
+            nxt[nxt.index("--transaction") + 1] = t2
+        else:
+            nxt += ["--transaction", t2]
+        sys.argv = [sys.argv[0]] + nxt
+        log.info("═══ CHAIN → property=%s transaction=%s ═══", p2, t2)
+        try:
+            main()
+        except SystemExit:
+            pass
+        except Exception as e:  # lokal nie może wywrócić całego zadania
+            log.error("CHAIN %s/%s failed: %s", p2, t2, str(e)[:200])
+
+
+if __name__ == "__main__":
+    _run_with_chain()

@@ -4058,9 +4058,9 @@ FAKTY O FINDERDOM.PL:
 - Wyszukiwarka (/szukaj) zbiera ogłoszenia z Otodom, OLX, Morizon, Gratka, Domiporta, Adresowo, nieruchomosci-online — mieszkania, domy, działki, lokale; sprzedaż i wynajem; cała Polska (16 województw). Duplikaty tej samej oferty z kilku portali są łączone w jedną kartę („od … zł”, lista portali).
 - Filtry: miasto + promień (km), rodzaj nieruchomości, rynek (pierwotny/wtórny), typ budynku, kto oferuje (prywatna/biuro), cena, metraż, pokoje, data dodania. Przy każdej ofercie analiza AI ceny (okazja / typowa / zawyżona) i podobne oferty w okolicy. Filtr „tylko od właściciela” = oferty bez pośrednika.
 - Konta: Osobiste (bez NIP) lub Firmowe (NIP + nazwa firmy). Rejestracja: /rejestracja. Logowanie: /logowanie. Reset hasła: link „Nie pamiętasz hasła?” na stronie logowania (e-mail z linkiem ważnym 1 godzinę). Zmiana hasła: /konto → Profil.
-- Plany: Bez planu (0 zł) = podgląd pierwszych 5 ofert + podstawowe filtry. Osobisty 45 zł / 30 dni = wszystkie oferty, analiza AI, podobne oferty, ulubione i alerty, bez reklam, 3 wyceny PDF w miesiącu w cenie (kolejne 35 zł/szt.). Biuro jednoosobowe (Solo) 90 zł/mies = 1 login, CRM, leady, wyceny PDF bez limitu. Firmowy 199 zł/mies = konto główne + 4 loginy dla agentów, CRM, leady, wyceny PDF bez limitu; każdy kolejny agent 55 zł/mies. Firmy z NIP: 7 dni za darmo bez karty, po okresie próbnym wybierasz plan. Płatność kartą/BLIK przez Stripe, anulujesz kiedy chcesz. Faktura VAT automatycznie na podstawie NIP.
+- Plany: Bez planu (0 zł) = podgląd pierwszych 5 ofert + podstawowe filtry. Osobisty 45 zł / 30 dni = wszystkie oferty, analiza AI, podobne oferty, ulubione i alerty, bez reklam, wyceny PDF bez limitu przez cały miesiąc w cenie. Biuro jednoosobowe (Solo) 90 zł/mies = 1 login, CRM, leady, wyceny PDF bez limitu. Firmowy 199 zł/mies = konto główne + 4 loginy dla agentów, CRM, leady, wyceny PDF bez limitu; każdy kolejny agent 55 zł/mies. Firmy z NIP: 7 dni za darmo bez karty, po okresie próbnym wybierasz plan. Płatność kartą/BLIK przez Stripe, anulujesz kiedy chcesz. Faktura VAT automatycznie na podstawie NIP.
 - CRM (dla kont firmowych): statusy na kartach ofert: Był kontakt, Umówione, Bez pośrednika, Nieaktualna, Zły kontakt, Kontakt później; filtry CRM; wspólna baza dla zespołu. Podgląd widoku dla biur bez logowania: /szukaj?widok=biuro.
-- Wycena PDF (/wycena): 35 zł za raport bez konta i abonamentu — realna wartość rynkowa, zakres min–max, porównanie z transakcjami z Rejestru Cen Nieruchomości (akty notarialne), podobne oferty, opinia AI. W planie Osobistym 3 wyceny w miesiącu w cenie; w planach Solo/Firmowy bez limitu. PDF do pobrania od razu po płatności (nie wysyłamy PDF e-mailem).
+- Wycena PDF (/wycena): 35 zł za raport bez konta i abonamentu — realna wartość rynkowa, zakres min–max, porównanie z transakcjami z Rejestru Cen Nieruchomości (akty notarialne), podobne oferty, opinia AI. W każdym opłaconym planie (Osobisty, Solo, Firmowy) wyceny PDF bez limitu w cenie. PDF do pobrania od razu po płatności (nie wysyłamy PDF e-mailem).
 - Kredyt: kalkulator raty i zdolności (/kredyt), partner główny Lendi (porównanie ofert banków).
 - Leady dla biur: osoby zamawiające wycenę mogą zostawić telefon — lead trafia do biur z regionu.
 - Kontakt: kontakt@finderdom.pl, odpowiedź do 24 h w dni robocze (pn–pt 9–18). Formularz: /kontakt. Pomoc: /pomoc. Dla biur: /dla-biur. Dla prywatnych: /dla-prywatnych.
@@ -5406,12 +5406,13 @@ def _month_start_utc() -> datetime:
 
 
 async def _valuation_quota(user: dict) -> dict:
-    """Ile wycen PDF w cenie planu ma użytkownik: business/solo = bez limitu (trial: 3), individual = 6/mies., free = 0."""
+    """Ile wycen PDF w cenie planu ma użytkownik: business/solo/individual = bez limitu (trial firmowy: 3), free = 0."""
     tier = await effective_tier_async(user)
     is_admin = (user.get("email") or "").lower() in ADMIN_EMAILS
     db = database()
     owner_id = str(user.get("master_id") or user["_id"])
-    if is_admin or (tier in BUSINESS_TIERS and not user.get("is_trial")):
+    # 4.11: opłacony plan Osobisty (45 zł) = wyceny PDF bez limitu przez cały miesiąc (wcześniej 3/mies.)
+    if is_admin or (tier in BUSINESS_TIERS and not user.get("is_trial")) or tier == "individual":
         return {"tier": tier, "included": True, "unlimited": True, "limit": None, "used": 0, "remaining": None, "resets_at": None}
     if tier in BUSINESS_TIERS:  # trial firmowy
         used = await db.valuation_log.count_documents({"owner_id": owner_id, "source": "business"})
@@ -5438,10 +5439,10 @@ class BusinessValuationReq(BaseModel):
 
 @app.post("/api/valuation/business")
 async def valuation_business(body: BusinessValuationReq, user: dict = Depends(current_user)):
-    """Wycena PDF w cenie planu (Firmowy / Solo: bez limitu, trial 3; Osobisty: 6 w miesiącu) — bez Stripe."""
+    """Wycena PDF w cenie planu (Firmowy / Solo / Osobisty: bez limitu; trial firmowy: 3) — bez Stripe."""
     q = await _valuation_quota(user)
     if not q["included"]:
-        raise HTTPException(402, f"Wyceny w cenie abonamentu: plan Osobisty (45 zł) — {INDIVIDUAL_MONTHLY_VALUATIONS} wyceny w miesiącu, Biuro jednoosobowe (90 zł) i Firmowy (199 zł) — bez limitu")
+        raise HTTPException(402, "Wyceny PDF bez limitu są w cenie każdego opłaconego planu: Osobisty (45 zł), Biuro jednoosobowe (90 zł), Firmowy (199 zł)")
     if not q["unlimited"] and q["remaining"] <= 0:
         if q.get("trial"):
             raise HTTPException(402, f"W okresie próbnym masz {BUSINESS_TRIAL_VALUATIONS} wyceny. Opłać plan Biuro jednoosobowe (90 zł) lub Firmowy (199 zł) — wyceny bez limitu.")

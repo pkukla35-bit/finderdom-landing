@@ -79,7 +79,7 @@ def main():
     week0 = (now.astimezone(PL).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7)).astimezone(timezone.utc).isoformat()
 
     weekend = now.astimezone(PL).weekday() >= 5   # importy chodzą pn–pt — w weekend 0 ofert „dziś” to norma, nie awaria
-    rows, problems = [], []
+    rows, problems, critical = [], [], []
     for label, src, wf, url, counter in PORTALS:
         code, html = fetch(url)
         n_live = counter(html) if code == 200 else 0
@@ -95,15 +95,22 @@ def main():
         today = today_s + today_r
         run = gh_last_run(wf) or {}
         run_ok = run.get("conclusion") in ("success", "w toku")
+        run_today = (run.get("at") or "") >= today0 and run.get("conclusion") == "success"   # job skończył się DZIŚ sukcesem
         rent_expected = week_r > 0          # portal normalnie dostarcza wynajem (w ostatnich 7 dniach)
         rent_ok = (not rent_expected) or today_r > 0
         fresh_ok = weekend or (today_s > 0 and rent_ok)
-        status = "✅" if (live_ok and run_ok and fresh_ok) else ("⚠️" if live_ok else "❌")
-        if status != "✅":
+        # 🔴 CICHA AWARIA: job „success” dziś, a portal wczytał 0 ofert (4.11 Gratka+Morizon zmieniły HTML — joby zielone, new=0)
+        silent_zero = (not weekend) and run_today and today == 0
+        status = "🔴" if silent_zero else ("✅" if (live_ok and run_ok and fresh_ok) else ("⚠️" if live_ok else "❌"))
+        if silent_zero:
+            critical.append(f"{label}: job zakończył się sukcesem ({(run.get('at') or '')[11:16]} UTC), ale wczytał <b>0 ofert</b> (wczoraj {yday_s + yday_r}) — "
+                            f"najpewniej zmiana strony portalu lub blokada; parser do sprawdzenia")
+        elif status != "✅":
             why = []
             if not live_ok: why.append(f"strona portalu: HTTP {code}, ofert w HTML: {n_live}")
             if not run_ok: why.append(f"workflow: {run.get('conclusion')}")
-            if not weekend and today_s == 0: why.append("0 ofert SPRZEDAŻY dodanych dziś")
+            if not weekend and today_s == 0:
+                why.append("0 ofert SPRZEDAŻY dodanych dziś" + ("" if run_today else " (import jeszcze dziś nie biegł — GitHub opóźnia harmonogram)"))
             if not weekend and not rent_ok: why.append(f"0 ofert WYNAJMU dziś (wczoraj {yday_r}, w 7 dni {week_r})")
             problems.append(f"{label}: " + "; ".join(why))
         rows.append((status, label, f"HTTP {code} / {n_live} ofert", today_s, today_r, yday_s, yday_r, run.get("conclusion", "—"), run.get("url", "")))
@@ -130,7 +137,8 @@ def main():
     st = db.command("dbStats"); size_mb = (st["dataSize"] + st["indexSize"]) / 1024 / 1024
 
     date_s = now.astimezone(PL).strftime("%d.%m.%Y %H:%M")
-    subject = ("✅ FinderDom: importy OK" if not problems else f"⚠️ FinderDom: {len(problems)} portal(e) do sprawdzenia") + f" — {date_s}"
+    subject = (f"🔴 FinderDom: {len(critical)} portal(e) wczytały 0 OFERT mimo udanego joba" if critical else
+               ("✅ FinderDom: importy OK" if not problems else f"⚠️ FinderDom: {len(problems)} portal(e) do sprawdzenia")) + f" — {date_s}"
     def link(c, u):
         return f'<a href="{u}">{c}</a>' if u else str(c)
     def rent_cell(v, bold=False):
@@ -149,14 +157,15 @@ def main():
 <table style="border-collapse:collapse;margin:0 0 16px;font-size:13px"><thead><tr style="background:#f3f4f6"><th style="padding:5px 10px;text-align:left">Rodzaj</th><th style="padding:5px 10px;text-align:right">Dziś</th><th style="padding:5px 10px;text-align:right">Wczoraj</th></tr></thead><tbody>
 {"".join(f"<tr><td style='padding:5px 10px'>{st} {lb}</td><td style='padding:5px 10px;text-align:right;color:{'#b45309' if td == 0 else '#111'}'><b>{td}</b></td><td style='padding:5px 10px;text-align:right;color:#666'>{ty}</td></tr>" for st, lb, td, ty in type_rows)}
 </tbody></table>
+{('<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:8px;padding:12px 14px;margin:0 0 14px;color:#7f1d1d"><b style="font-size:15px">🔴 ALARM — zerowy import mimo „sukcesu” joba:</b><br>' + '<br>'.join(critical) + '</div>') if critical else ''}
 {('<div style="background:#fff3cd;border:1px solid #ffe08a;border-radius:8px;padding:10px 14px;margin:0 0 14px"><b>Do sprawdzenia:</b><br>' + '<br>'.join(problems) + '</div>') if problems else ''}
 <table style="border-collapse:collapse;font-size:14px;width:100%"><thead><tr style="background:#f3f4f6;text-align:left">
 <th style="padding:6px 10px">Portal</th><th style="padding:6px 10px">Strona portalu</th><th style="padding:6px 10px;text-align:right">Dziś sprzedaż</th><th style="padding:6px 10px;text-align:right">Dziś wynajem</th><th style="padding:6px 10px;text-align:right">Wczoraj sprz.</th><th style="padding:6px 10px;text-align:right">Wczoraj wyn.</th><th style="padding:6px 10px">Ostatni bieg</th></tr></thead>
 <tbody>{tr}</tbody></table>
-<p style="color:#888;font-size:12px;margin-top:14px">✅ = portal odpowiada, workflow OK, są dzisiejsze oferty sprzedaży i wynajmu · ⚠️ = portal odpowiada, ale import sprzedaży lub wynajmu nie dał ofert albo workflow padł · ❌ = portal nie odpowiada (blokada/awaria).<br>
+<p style="color:#888;font-size:12px;margin-top:14px">🔴 = job skończył się dziś sukcesem, ale wczytał 0 ofert (cicha awaria parsera/blokada) · ✅ = portal odpowiada, workflow OK, są dzisiejsze oferty sprzedaży i wynajmu · ⚠️ = portal odpowiada, ale import sprzedaży lub wynajmu nie dał ofert albo workflow padł · ❌ = portal nie odpowiada (blokada/awaria).<br>
 Workflowy: https://github.com/{os.environ.get('GITHUB_REPOSITORY','')}/actions</p></div>"""
 
-    print(subject); [print(r) for r in rows]; print("problems:", problems)
+    print(subject); [print(r) for r in rows]; print("critical:", critical); print("problems:", problems)
     cfg = ((db.settings.find_one({"_id": "email"}) or {}).get("smtp") or {})
     if not (cfg.get("host") and cfg.get("user") and cfg.get("password")):
         print("Brak konfiguracji SMTP w settings.email — e-mail pominięty"); return

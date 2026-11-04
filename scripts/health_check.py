@@ -122,7 +122,8 @@ def main():
     # Rodzaje nieruchomości osobno — 2.11 działki i lokale stały 3 dni (Apify wyłączone, scrapery zapisywały „działka …”),
     # a raport mówił „OK”, bo patrzył tylko na sumy per portal. Typ porównujemy bez polskich znaków.
     import unicodedata as _ud
-    def _ascii(t): return _ud.normalize("NFKD", t or "").encode("ascii", "ignore").decode().lower()
+    def _ascii(t):   # UWAGA: „ł” nie ma dekompozycji NFKD → bez tej zamiany „działka” stawało się „dziaka” i raport pokazywał 0 działek
+        return _ud.normalize("NFKD", (t or "").replace("ł", "l").replace("Ł", "L")).encode("ascii", "ignore").decode().lower()
     type_rows = []
     today_docs = list(L.find({"added_at": {"$gte": today0}}, {"type": 1}))
     yday_docs = list(L.find({"added_at": {"$gte": yday0, "$lt": today0}}, {"type": 1}))

@@ -37,7 +37,7 @@ def is_region(city: Dict[str, str]) -> bool:
 
 # ───────────────────────── URL builders ─────────────────────────
 def url_morizon(prop, trans, city, page):
-    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki", "lokal": "lokale-uzytkowe"}[prop]
+    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki", "lokal": "komercyjne"}[prop]   # Morizon: lokale = sekcja „komercyjne”
     newest = "najnowsze/" if is_region(city) else ""
     base = f"https://www.morizon.pl/{'do-wynajecia/' if trans == 'wynajem' else ''}{seg}/{newest}{city_slug(city)}/"
     return base + (f"?page={page}" if page > 1 else "")
@@ -82,7 +82,10 @@ def parse_ldjson_offers(html: str, id_re: str) -> List[Dict[str, Any]]:
     for m in re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.S):
         try: d = json.loads(m)
         except Exception: continue
-        if d.get("@type") != "Product": continue
+        # od 11.2026 Morizon/Gratka pakują dane w {"@graph": [Product, BreadcrumbList, ...]}
+        nodes = d.get("@graph") if isinstance(d, dict) and isinstance(d.get("@graph"), list) else (d if isinstance(d, list) else [d])
+        d = next((n for n in nodes if isinstance(n, dict) and n.get("@type") == "Product"), None)
+        if not d: continue
         for o in (d.get("offers") or {}).get("offers") or []:
             url = o.get("url") or ""
             mid = re.search(id_re, url)
@@ -183,8 +186,13 @@ def guess_city(portal: str, it: Dict[str, Any]) -> Optional[str]:
     """Tryb województw: miasto z URL/tytułu oferty."""
     u = it.get("url") or ""
     if portal == "morizon":
-        m = re.search(r"/oferta/(?:sprzedaz|wynajem)-(?:mieszkanie|dom|dzialka|lokal)-([a-z0-9-]+)-mzn\d+", u)
-        if m: return city_from_slug(m.group(1).split("-"))
+        m = re.search(r"/oferta/(?:sprzedaz|wynajem)-(?:hale-magazyny|handel-uslugi|biura-lokale|lokale-uzytkowe|[a-z_]+)-([a-z0-9-]+?)(?:-\d+m2)?-mzn\d+", u)
+        if m:
+            toks = m.group(1).split("-")
+            # poza dużymi miastami Morizon daje „powiat-miejscowość” (np. piaseczynski-piaseczno) → bierzemy miejscowość
+            if len(toks) >= 2 and re.search(r"(ski|cki|zki)$", toks[0]) and toks[0] not in ("mikolajki",):
+                toks = toks[1:]
+            return city_from_slug(toks)
     elif portal == "gratka":
         m = re.search(r"/nieruchomosci/(?:mieszkanie|dom|dzialka|lokal)-([a-z0-9-]+)/ob/", u)
         if m: return city_from_slug(m.group(1).split("-"))

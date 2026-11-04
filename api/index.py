@@ -4288,6 +4288,21 @@ async def admin_ai_leads(limit: int = 100, admin: dict = Depends(require_admin))
     return {"leads": out}
 
 
+@app.get("/api/admin/ai/leads/{lead_id}")
+async def admin_ai_lead_detail(lead_id: str, admin: dict = Depends(require_admin)):
+    """Szczegóły leada z czatu AI wraz z pełną rozmową (transcript + cała historia czatu użytkownika)."""
+    try:
+        d = await database().chat_leads.find_one({"_id": ObjectId(lead_id)})
+    except Exception:
+        d = None
+    if not d:
+        raise HTTPException(404, "Lead nie istnieje")
+    d["id"] = str(d.pop("_id"))
+    cur = database().chat_messages.find({"user_id": d.get("user_id")}, {"_id": 0, "role": 1, "content": 1, "ts": 1, "page": 1}).sort("ts", 1).limit(200)
+    d["history"] = await cur.to_list(length=200)
+    return d
+
+
 @app.post("/api/admin/ai/leads/{lead_id}/status")
 async def admin_ai_lead_status(lead_id: str, status: str = "done", admin: dict = Depends(require_admin)):
     if status not in ("new", "done"):

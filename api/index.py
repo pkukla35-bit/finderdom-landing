@@ -4303,6 +4303,34 @@ async def admin_ai_lead_detail(lead_id: str, admin: dict = Depends(require_admin
     return d
 
 
+class LeadReplyReq(BaseModel):
+    subject: str = Field(min_length=3, max_length=200)
+    message: str = Field(min_length=10, max_length=6000)
+
+
+@app.post("/api/admin/ai/leads/{lead_id}/reply")
+async def admin_ai_lead_reply(lead_id: str, body: LeadReplyReq, admin: dict = Depends(require_admin)):
+    """Odpowiedź e-mail (zwykły tekst) do osoby z leada czatu AI — wysyłana ze skrzynki portalu. Oznacza lead jako 'done'."""
+    try:
+        d = await database().chat_leads.find_one({"_id": ObjectId(lead_id)})
+    except Exception:
+        d = None
+    if not d:
+        raise HTTPException(404, "Lead nie istnieje")
+    to = (d.get("email") or d.get("user_email") or "").strip().lower()
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", to):
+        raise HTTPException(400, "Lead nie ma poprawnego adresu e-mail")
+    paras = "".join(f"<p style='margin:0 0 12px'>{escape(p.strip()).replace(chr(10), '<br>')}</p>" for p in re.split(r"\n\s*\n", body.message.strip()) if p.strip())
+    html = f"<div style='font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1f2937;max-width:640px'>{paras}</div>"
+    mid = await send_email(to=to, subject=body.subject.strip(), html=html)
+    if not mid:
+        raise HTTPException(502, f"Nie udało się wysłać: {LAST_EMAIL_ERROR.get('error') or 'nieznany błąd'}")
+    now = datetime.now(timezone.utc).isoformat()
+    await database().chat_leads.update_one({"_id": d["_id"]}, {"$set": {"status": "done", "replied_at": now, "reply_by": admin.get("email")},
+                                                            "$push": {"replies": {"ts": now, "subject": body.subject.strip(), "message": body.message.strip(), "message_id": mid}}})
+    return {"ok": True, "to": to, "message_id": mid}
+
+
 @app.post("/api/admin/ai/leads/{lead_id}/status")
 async def admin_ai_lead_status(lead_id: str, status: str = "done", admin: dict = Depends(require_admin)):
     if status not in ("new", "done"):

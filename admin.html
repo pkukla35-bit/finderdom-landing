@@ -571,6 +571,24 @@ async function grantTier(id, email){
   } catch(e){ alert('Błąd: ' + e.message); }
 }
 
+// Admin: indywidualna cena na PIERWSZĄ płatność (klient widzi ją w Koncie, Stripe pobiera tyle; po opłaceniu znika)
+async function setPromo(id, email, current){
+  const cur = current || {};
+  const b = prompt(`🎁 Cena specjalna dla ${email}\n\nFirmowy (standard 199 zł) — podaj cenę w zł za 1. miesiąc, 0 = bez promocji:`, cur.business || '');
+  if (b === null) return;
+  const s = prompt('Biuro jednoosobowe (standard 90 zł) — cena w zł za 1. miesiąc, 0 = bez promocji:', cur.solo || '');
+  if (s === null) return;
+  const i = prompt('Osobisty (standard 45 zł) — cena w zł za 1. miesiąc, 0 = bez promocji:', cur.individual || '');
+  if (i === null) return;
+  const num = v => { const n = parseInt(String(v).replace(/[^\d]/g, ''), 10); return n > 0 ? n : null; };
+  const body = { business: num(b), solo: num(s), individual: num(i) };
+  try {
+    const d = await apiPost(`/admin/users/${id}/promo`, body);
+    alert(d.promo ? `✅ ${email}: cena specjalna ustawiona — ` + Object.entries(d.promo).map(([k,v]) => k + ' ' + v + ' zł').join(', ') + '.\nKlient zobaczy ją w zakładce Konto przy przycisku „Zapłać”.' : `✅ ${email}: promocja usunięta — obowiązują ceny standardowe.`);
+    loadUsers();
+  } catch(e){ alert('Błąd: ' + e.message); }
+}
+
 async function loadUsers(){
   try {
     const d = await api('/admin/users?limit=100');
@@ -588,13 +606,14 @@ async function loadUsers(){
         <td>${escapeHtml(u.company_name || '—')}</td>
         <td>${fmtDate(u.expires_at)}</td>
         <td>${fmtDateShort(u.created_at)}</td>
-        <td><button class="btn-mini" onclick="grantTier('${u.id}','${escapeHtml(u.email)}')">Nadaj plan</button></td>
+        <td>${u.promo ? '<span class="ok" style="font-size:12px">🎁 ' + Object.entries(u.promo).map(([k,v]) => ({individual:'Osobisty',solo:'Solo',business:'Firmowy'}[k] || k) + ' ' + v + ' zł').join(', ') + '</span>' : '<span style="color:#8ba3d4;font-size:12px">—</span>'}</td>
+        <td style="white-space:nowrap"><button class="btn-mini" onclick="grantTier('${u.id}','${escapeHtml(u.email)}')">Nadaj plan</button> <button class="btn-mini" onclick="setPromo('${u.id}','${escapeHtml(u.email)}', ${u.promo ? JSON.stringify(u.promo).replace(/"/g, '&quot;') : 'null'})">🎁 Cena specjalna</button></td>
       </tr>
     `).join('');
     setHtml('usersTable', `
       <table>
         <thead><tr>
-          <th>Email</th><th>Typ</th><th>Plan</th><th>NIP</th><th>Firma</th><th>Wygasa</th><th>Rejestracja</th><th></th>
+          <th>Email</th><th>Typ</th><th>Plan</th><th>NIP</th><th>Firma</th><th>Wygasa</th><th>Rejestracja</th><th>Cena specjalna</th><th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -830,11 +849,47 @@ async function loadAi(){
     document.getElementById('aiEnabled').checked = !!d.enabled;
     const L = await api('/admin/ai/leads?limit=100');
     if (!L.leads.length) { setHtml('aiLeads', '<div style="color:#8ba3d4;font-size:13px">Brak kontaktów z czatu.</div>'); return; }
-    setHtml('aiLeads', '<div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Imię</th><th>E-mail</th><th>Telefon</th><th>Temat</th><th>Konto</th><th>Status</th></tr></thead><tbody>' +
-      L.leads.map(l => '<tr><td>' + fmtDate(l.created_at) + '</td><td>' + escapeHtml(l.name || '') + '</td><td>' + (l.email ? '<a class="link" href="mailto:' + escapeHtml(l.email) + '">' + escapeHtml(l.email) + '</a>' : '') + '</td><td>' + (l.phone ? '<a class="link" href="tel:' + escapeHtml(l.phone) + '">' + escapeHtml(l.phone) + '</a>' : '') + '</td><td style="max-width:320px">' + escapeHtml(l.topic || '') + '</td><td style="font-size:12px">' + escapeHtml(l.user_email || '') + '</td><td>' + (l.status === 'new' ? '<span class="warn">nowy</span> <button class="refresh-btn" style="padding:4px 8px;font-size:12px" onclick="aiLeadDone(\'' + l.id + '\')">✓ załatwione</button>' : '<span class="ok">załatwione</span>') + '</td></tr>').join('') + '</tbody></table></div>');
+    setHtml('aiLeads', '<div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Imię</th><th>E-mail</th><th>Telefon</th><th>Temat</th><th>Konto</th><th>Status</th><th></th></tr></thead><tbody>' +
+      L.leads.map(l => '<tr><td>' + fmtDate(l.created_at) + '</td><td>' + escapeHtml(l.name || '') + '</td><td>' + (l.email ? '<a class="link" href="mailto:' + escapeHtml(l.email) + '">' + escapeHtml(l.email) + '</a>' : '') + '</td><td>' + (l.phone ? '<a class="link" href="tel:' + escapeHtml(l.phone) + '">' + escapeHtml(l.phone) + '</a>' : '') + '</td><td style="max-width:320px">' + escapeHtml(l.topic || '') + '</td><td style="font-size:12px">' + escapeHtml(l.user_email || '') + '</td><td>' + (l.status === 'new' ? '<span class="warn">nowy</span> <button class="refresh-btn" style="padding:4px 8px;font-size:12px" onclick="aiLeadDone(\'' + l.id + '\')">✓ załatwione</button>' : '<span class="ok">załatwione</span>' + (l.replied_at ? '<div style="font-size:11px;color:#8ba3d4">odpisano ' + fmtDate(l.replied_at) + '</div>' : '')) + '</td><td><button class="btn-mini" onclick="aiLeadOpen(\'' + l.id + '\')">💬 Rozmowa / Odpowiedz</button></td></tr>' +
+        '<tr id="aiLeadRow-' + l.id + '" style="display:none"><td colspan="8" id="aiLeadBox-' + l.id + '" style="background:rgba(0,0,0,0.25);padding:14px"></td></tr>').join('') + '</tbody></table></div>');
   } catch (e) { setHtml('aiStatus', '<span class="bad">Błąd: ' + escapeHtml(e.message) + '</span>'); }
 }
 async function aiLeadDone(id){ try { await apiPost('/admin/ai/leads/' + id + '/status?status=done', {}); loadAi(); } catch (e) { alert(e.message); } }
+// Podgląd pełnej rozmowy z czatu + odpowiedź e-mail ze skrzynki portalu
+async function aiLeadOpen(id){
+  const row = document.getElementById('aiLeadRow-' + id), box = document.getElementById('aiLeadBox-' + id);
+  if (!row || !box) return;
+  if (row.style.display !== 'none') { row.style.display = 'none'; return; }
+  row.style.display = '';
+  box.innerHTML = '<span style="color:#8ba3d4">Ładuję rozmowę…</span>';
+  try {
+    const d = await api('/admin/ai/leads/' + id);
+    const msgs = (d.history && d.history.length) ? d.history : (d.transcript || []);
+    const conv = msgs.map(m => '<div style="margin:6px 0;padding:8px 12px;border-radius:10px;max-width:720px;font-size:13px;line-height:1.5;white-space:pre-wrap;' +
+      (m.role === 'user' ? 'background:rgba(255,184,0,0.12);border:1px solid rgba(255,184,0,0.25)' : 'background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1)') + '">' +
+      '<b style="font-size:11px;color:#8ba3d4">' + (m.role === 'user' ? '👤 Klient' : '🤖 AI') + (m.ts ? ' · ' + fmtDate(m.ts) : '') + '</b><br>' + escapeHtml(m.content || '') + '</div>').join('') || '<div style="color:#8ba3d4">Brak zapisanej rozmowy.</div>';
+    const replies = (d.replies || []).map(r => '<div style="margin:6px 0;padding:8px 12px;border-radius:10px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);font-size:13px;white-space:pre-wrap"><b style="font-size:11px;color:#86efac">📧 Twoja odpowiedź · ' + fmtDate(r.ts) + ' · ' + escapeHtml(r.subject) + '</b><br>' + escapeHtml(r.message) + '</div>').join('');
+    const to = d.email || d.user_email || '';
+    box.innerHTML = '<div style="display:grid;gap:12px;grid-template-columns:1fr;align-items:start">' +
+      '<div><div style="font-size:12px;color:#8ba3d4;margin-bottom:4px">Rozmowa z czatu' + (d.page ? ' · strona ' + escapeHtml(d.page) : '') + '</div>' + conv + replies + '</div>' +
+      '<div style="max-width:720px"><div style="font-size:12px;color:#8ba3d4;margin-bottom:6px">✉️ Odpowiedz e-mailem ze skrzynki portalu → <b>' + escapeHtml(to || 'brak adresu') + '</b></div>' +
+      '<input id="aiReplySubj-' + id + '" placeholder="Temat" value="' + escapeHtml('FinderDom.pl — odpowiedź na Twoją wiadomość z czatu') + '" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;margin-bottom:6px;min-height:44px">' +
+      '<textarea id="aiReplyMsg-' + id + '" rows="8" placeholder="Treść (akapity oddzielaj pustą linią)" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-family:inherit;font-size:13px">Dzień dobry' + (d.name ? ' ' + escapeHtml(d.name.split(' ')[0]) : '') + ',\n\ndziękujemy za wiadomość przekazaną przez czat na FinderDom.pl.\n\n\n\nZ poważaniem\nZespół FinderDom.pl\nkontakt@finderdom.pl</textarea>' +
+      '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><button class="refresh-btn" style="min-height:44px" ' + (to ? '' : 'disabled') + ' onclick="aiLeadReply(\'' + id + '\')">📨 Wyślij odpowiedź</button><span id="aiReplyMsgStatus-' + id + '" style="font-size:12px;color:#8ba3d4"></span></div></div></div>';
+  } catch (e) { box.innerHTML = '<span class="bad">Błąd: ' + escapeHtml(e.message) + '</span>'; }
+}
+async function aiLeadReply(id){
+  const subj = document.getElementById('aiReplySubj-' + id).value.trim(), msg = document.getElementById('aiReplyMsg-' + id).value.trim();
+  const st = document.getElementById('aiReplyMsgStatus-' + id);
+  if (subj.length < 3 || msg.length < 10) { st.innerHTML = '<span class="bad">Uzupełnij temat i treść.</span>'; return; }
+  if (!confirm('Wysłać tę odpowiedź e-mailem do klienta?')) return;
+  st.textContent = 'Wysyłam…';
+  try {
+    const d = await apiPost('/admin/ai/leads/' + id + '/reply', { subject: subj, message: msg });
+    st.innerHTML = '<span class="ok">✓ Wysłano do ' + escapeHtml(d.to) + '</span>';
+    setTimeout(loadAi, 1200);
+  } catch (e) { st.innerHTML = '<span class="bad">Błąd: ' + escapeHtml(e.message) + '</span>'; }
+}
 document.addEventListener('submit', async (e) => {
   if (e.target.id !== 'aiForm') return;
   e.preventDefault();
@@ -884,7 +939,7 @@ async function loadManualMail(){
       ${tc.length ? `<table style="width:100%;font-size:12px;margin-top:8px"><thead><tr><th style="text-align:left">E-mail</th><th>Kliknięcia</th><th>Odpowiedź</th><th></th></tr></thead><tbody>${tc.map(r => `<tr>
         <td><a href="mailto:${escapeHtml(r.email)}" style="color:#fff;font-weight:700">${escapeHtml(r.email)}</a><div style="color:#8ba3d4;font-size:11px">${escapeHtml(r.templates.join(', '))}</div></td>
         <td style="text-align:center">${r.clicks ? `<b style="color:#FFB800">${r.clicks}×</b><div style="color:#8ba3d4;font-size:11px">${fmtT(r.last_click_at)}</div>` : '—'}</td>
-        <td style="text-align:center">${r.replied_at ? `<span class="ok">✉️ ${fmtT(r.replied_at)}</span>${r.reply_snippet ? `<div style="color:#c5d0e6;font-size:11px;max-width:260px;margin:2px auto 0">„${escapeHtml(r.reply_snippet.slice(0,120))}${r.reply_snippet.length > 120 ? '…' : ''}”</div>` : ''}` : '—'}</td>
+        <td style="text-align:center">${r.replied_at ? `<span class="ok">✉️ ${fmtT(r.replied_at)}</span><div style="color:#8ba3d4;font-size:11px">${r.reply_source === 'manual' ? '🖱️ oznaczone ręcznie przyciskiem „Odpisał” — nie z poczty' : r.reply_source === 'imap' ? '📥 znaleziono w skrzynce' + (r.reply_subject ? ': „' + escapeHtml(r.reply_subject.slice(0, 80)) + '”' : '') : ''}</div>${r.reply_snippet ? `<div style="color:#c5d0e6;font-size:11px;max-width:260px;margin:2px auto 0">„${escapeHtml(r.reply_snippet.slice(0,120))}${r.reply_snippet.length > 120 ? '…' : ''}”</div>` : ''}` : '—'}</td>
         <td style="text-align:right;white-space:nowrap">${btns(r.email)}</td></tr>`).join('')}</tbody></table>` : '<div style="color:#8ba3d4;font-size:12px;margin-top:6px">Na razie nikt nie kliknął ani nie odpisał. Linki w wysyłanych mailach są śledzone automatycznie.</div>'}
     </div>`;
     const rows = (lg.log || []).map(l => `<tr>

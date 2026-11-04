@@ -1428,6 +1428,7 @@ async def admin_users(limit: int = 30, offset: int = 0, admin: dict = Depends(re
             "expires_at": exp.isoformat() if isinstance(exp, datetime) else exp,
             "role": u.get("role"),
             "active": u.get("active", True),
+            "promo": u.get("promo") or None,
             "created_at": u["created_at"].isoformat() if isinstance(u.get("created_at"), datetime) else u.get("created_at"),
         })
     return {"total": total, "items": items, "limit": limit, "offset": offset}
@@ -4811,6 +4812,7 @@ async def admin_manual_log(admin: dict = Depends(require_admin), limit: int = 50
             row["last_click_at"] = lc
         if l.get("replied_at") and not l.get("reply_auto") and not row["replied_at"]:
             row["replied_at"] = _iso(l.get("replied_at")); row["reply_snippet"] = (l.get("reply_snippet") or "")[:200]
+            row["reply_source"] = l.get("reply_source"); row["reply_subject"] = (l.get("reply_subject") or "")[:160]
         if l["template"] not in row["templates"]:
             row["templates"].append(l["template"])
     # tylko auto-odpowiedź (bez kliknięć) → nie ma do kogo dzwonić

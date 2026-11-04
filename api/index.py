@@ -421,6 +421,8 @@ def public_user(user: dict) -> dict:
         "master_id": user.get("master_id"),  # if agent, points to master's user id
         "active": user.get("active", True),
         "is_admin": is_admin,
+        # indywidualna cena promocyjna na 1. płatność: {"solo": 49, "business": 100} (PLN brutto), znika po opłaceniu
+        "promo": {k: v for k, v in (user.get("promo") or {}).items() if k in PLANS and isinstance(v, (int, float)) and v > 0} or None,
     }
 
 
@@ -1692,6 +1694,54 @@ class AdminSetTierRequest(BaseModel):
     days: Optional[int] = Field(default=None, ge=1, le=3650)  # None = bezterminowo (10 lat)
 
 
+class AdminPromoRequest(BaseModel):
+    individual: Optional[int] = Field(default=None, ge=1, le=10000)
+    solo: Optional[int] = Field(default=None, ge=1, le=10000)
+    business: Optional[int] = Field(default=None, ge=1, le=10000)
+    note: Optional[str] = Field(default=None, max_length=200)
+
+
+@app.post("/api/admin/users/{user_id}/promo")
+async def admin_set_promo(user_id: str, body: AdminPromoRequest, admin: dict = Depends(require_admin)):
+    """Admin: indywidualna cena (PLN brutto) na PIERWSZĄ płatność wybranych planów. Puste wszystkie pola = usuń promocję."""
+    users_col = await users_collection()
+    try:
+        oid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(400, "Nieprawidłowe id użytkownika")
+    promo = {k: getattr(body, k) for k in PLANS if getattr(body, k)}
+    if promo:
+        upd = {"$set": {"promo": promo, "promo_note": body.note or "", "promo_set_by": admin.get("email"), "promo_set_at": datetime.now(timezone.utc).isoformat()}}
+    else:
+        upd = {"$unset": {"promo": "", "promo_note": ""}}
+    res = await users_col.update_one({"_id": oid}, upd)
+    if not res.matched_count:
+        raise HTTPException(404, "Użytkownik nie istnieje")
+    return {"ok": True, "promo": promo or None}
+
+
+class AdminEmailReq(BaseModel):
+    to: str = Field(min_length=5, max_length=200)
+    subject: str = Field(min_length=3, max_length=200)
+    message: str = Field(min_length=10, max_length=8000)
+
+
+@app.post("/api/admin/mailing/send-custom")
+async def admin_send_custom(body: AdminEmailReq, admin: dict = Depends(require_admin)):
+    """Admin: pojedynczy e-mail (zwykły tekst, akapity po pustej linii) ze skrzynki portalu na dowolny adres."""
+    to = body.to.strip().lower()
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", to):
+        raise HTTPException(400, "Nieprawidłowy adres e-mail")
+    paras = "".join(f"<p style='margin:0 0 12px'>{escape(p.strip()).replace(chr(10), '<br>')}</p>" for p in re.split(r"\n\s*\n", body.message.strip()) if p.strip())
+    html = f"<div style='font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1f2937;max-width:640px'>{paras}</div>"
+    mid = await send_email(to=to, subject=body.subject.strip(), html=html)
+    if not mid:
+        raise HTTPException(502, f"Nie udało się wysłać: {LAST_EMAIL_ERROR.get('error') or 'nieznany błąd'}")
+    await database().manual_mail_log.insert_one({"email": to, "template": "custom", "subject": body.subject.strip(), "ok": True,
+                                                 "sent_at": datetime.now(timezone.utc), "by": admin.get("email"), "message_id": mid})
+    return {"ok": True, "to": to, "message_id": mid}
+
+
 @app.post("/api/admin/users/{user_id}/tier")
 async def admin_set_tier(user_id: str, body: AdminSetTierRequest, admin: dict = Depends(require_admin)):
     """Admin: ręczne nadanie planu użytkownikowi (np. konto własnej firmy, partner, test).
@@ -2793,6 +2843,9 @@ async def create_checkout(body: CheckoutRequest, user: dict = Depends(current_us
         raise HTTPException(503, "Płatności są chwilowo niedostępne (Stripe nieskonfigurowany)")
     if body.plan not in PLANS:
         raise HTTPException(400, "Nieznany plan")
+    promo = (user.get("promo") or {}).get(body.plan)
+    price_pln = promo if isinstance(promo, (int, float)) and promo > 0 else PLANS[body.plan]
+    desc = "Dostęp do funkcji premium na 30 dni." + (f" Cena promocyjna za pierwszy miesiąc (standardowo {PLANS[body.plan]} zł)." if promo else "")
 
     def create():
         return stripe.checkout.Session.create(
@@ -2800,17 +2853,17 @@ async def create_checkout(body: CheckoutRequest, user: dict = Depends(current_us
             line_items=[{
                 "price_data": {
                     "currency": "pln",
-                    "unit_amount": money_grosze(PLANS[body.plan]),
+                    "unit_amount": money_grosze(price_pln),
                     "product_data": {
                         "name": f"FinderDom.pl — {PLAN_LABELS[body.plan]} (30 dni)",
-                        "description": f"Dostęp do funkcji premium na 30 dni.",
+                        "description": desc,
                     },
                 },
                 "quantity": 1,
             }],
             customer_email=user["email"],
             billing_address_collection="required",
-            metadata={"user_id": str(user["_id"]), "plan": body.plan},
+            metadata={"user_id": str(user["_id"]), "plan": body.plan, "promo": "1" if promo else "0"},
             success_url=f"{DOMAIN}/platnosc-sukces?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{DOMAIN}/platnosc-anulowana",
             locale="pl",
@@ -2842,6 +2895,7 @@ async def apply_payment(user_id: str, plan: str, stripe_session_id: str, amount_
     update = {
         "tier": plan,
         "expires_at": expires,
+        "is_trial": False,
         "subscription_status": "active",
         "updated_at": now,
     }
@@ -2853,7 +2907,7 @@ async def apply_payment(user_id: str, plan: str, stripe_session_id: str, amount_
     if existing:
         return True
 
-    gross = Decimal(PLANS[plan])
+    gross = (Decimal(amount_grosze) / 100).quantize(Decimal("0.01")) if amount_grosze and amount_grosze > 0 else Decimal(PLANS[plan])
     net = (gross / Decimal("1.23")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     vat = (gross - net).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     number = await next_invoice_number()
@@ -2879,7 +2933,8 @@ async def apply_payment(user_id: str, plan: str, stripe_session_id: str, amount_
         await db.invoices.insert_one(invoice)
     except DuplicateKeyError:
         return True
-    await db.users.update_one({"_id": user["_id"]}, {"$set": update})
+    # cena promocyjna obowiązuje tylko na 1. płatność — po opłaceniu znika
+    await db.users.update_one({"_id": user["_id"]}, {"$set": update, "$unset": {"promo": ""}})
     return True
 
 

@@ -422,10 +422,26 @@ gtag('set', 'url_passthrough', false);
       document.querySelectorAll('.plan').forEach(p => {
         p.classList.remove('current');
         const btn = p.querySelector('.p-btn');
-        if (p.dataset.plan === u.tier){
+        const promoPrice = u.promo && u.promo[p.dataset.plan];
+        if (promoPrice && (p.dataset.plan !== u.tier || u.is_trial)) {
+          const std = { individual: 45, solo: 90, business: 199 }[p.dataset.plan];
+          const priceEl = p.querySelector('.p-price');
+          if (priceEl) priceEl.innerHTML = `<span style="text-decoration:line-through;opacity:.55;font-size:.6em;margin-right:6px">${std} zł</span>${promoPrice} zł <span class="m">/ 1. miesiąc</span>`;
+          btn.textContent = `Zapłać ${promoPrice} zł (cena specjalna)`;
+          const tag = document.createElement('div');
+          tag.className = 'plan-tag';
+          tag.textContent = `🎁 ${promoPrice} zł za 1. miesiąc`;
+          tag.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
+          const oldTag = p.querySelector('.plan-tag'); if (oldTag) oldTag.remove();
+          p.prepend(tag);
+        }
+        if (p.dataset.plan === u.tier && !u.is_trial){
           p.classList.add('current');
           btn.textContent = u.tier === 'free' ? 'Bez planu' : 'Aktywny plan';
           btn.disabled = true;
+        } else if (p.dataset.plan === u.tier && u.is_trial) {
+          p.classList.add('recommended');
+          if (!promoPrice) btn.textContent = `Wykup po trialu — ${btn.textContent.replace('Zapłać ', '')}`;
         }
       });
     } catch(e){

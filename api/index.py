@@ -1787,29 +1787,13 @@ async def admin_cleanup_stale(
 
     Auth: albo admin JWT albo header X-Cron-Secret=$CRON_SECRET (dla GitHub Actions)
     """
-    # Auth: 3 opcje
-    #  1. Vercel Cron - dodaje header 'x-vercel-cron: 1' automatycznie
-    #  2. Admin JWT (Bearer token)
-    #  3. Custom CRON_SECRET (dla GitHub Actions)
-    cron_secret_env = os.getenv("CRON_SECRET") or ""
-    x_cron_secret = request.headers.get("x-cron-secret") or ""
-    is_vercel_cron = request.headers.get("x-vercel-cron") == "1"
-    is_custom_cron = bool(cron_secret_env and x_cron_secret == cron_secret_env)
-    is_authorized = is_vercel_cron or is_custom_cron
-
-    if not is_authorized:
-        # Sprobuj admin JWT
-        auth_header = (request.headers.get("authorization") or "").replace("Bearer ", "").strip()
-        if not auth_header:
-            raise HTTPException(401, "unauthorized (need admin JWT, X-Cron-Secret, or Vercel Cron)")
+    await _authorize_cron_or_admin(request)
+    daily = None
+    if not dry_run:
         try:
-            user = await current_user(HTTPAuthorizationCredentials(scheme="Bearer", credentials=auth_header))
-            if (user.get("email") or "").lower() not in ADMIN_EMAILS:
-                raise HTTPException(403, "admin only")
-        except HTTPException:
-            raise
-        except Exception:
-            raise HTTPException(401, "invalid token")
+            daily = await _daily_jobs_if_due()
+        except Exception as e:
+            logger.error("daily jobs failed: %s", str(e)[:200])
 
     limit = max(1, min(limit, 1000))
     concurrency = max(1, min(concurrency, 50))
@@ -1909,6 +1893,7 @@ async def admin_cleanup_stale(
         "deleted_permanent": deleted_permanent,
         "dry_run": bool(dry_run),
         "sample_status_codes": [r[2] for r in results[:20]],
+        "daily_jobs": daily,
     }
 
 
@@ -3300,6 +3285,7 @@ async def admin_stripe_account(admin: dict = Depends(require_admin)):
 # MAILING — automatyczna sekwencja do niezdecydowanych (free / trial)
 # ======================================================================
 import hmac as _hmac, hashlib as _hashlib, base64 as _b64
+from zoneinfo import ZoneInfo
 
 MAIL_PUBLIC_DOMAIN = "https://www.finderdom.pl"
 
@@ -3515,6 +3501,10 @@ async def _mailing_auto_run(limit: int = 60) -> dict:
     sent_pairs = set()
     async for row in db.mail_log.find({"ok": True}, {"email": 1, "template": 1}):
         sent_pairs.add((row["email"], row["template"]))
+    # komu w ostatnich 7 dniach napisaliśmy osobiście (admin send-custom / odpowiedź na lead) — nie dokładamy automatu
+    recently_contacted = set()
+    async for row in db.manual_mail_log.find({"template": "custom", "ok": True, "sent_at": {"$gte": now - timedelta(days=7)}}, {"email": 1}):
+        recently_contacted.add((row.get("email") or "").lower())
     candidates: List[Tuple[str, str]] = []
     async for u in db.users.find({}, {"email": 1, "account_type": 1, "tier": 1, "expires_at": 1, "is_trial": 1,
                                        "created_at": 1, "active": 1, "master_id": 1, "marketing_opt_out": 1}):
@@ -3526,8 +3516,13 @@ async def _mailing_auto_run(limit: int = 60) -> dict:
         days = (now - created).days
         aud = _mail_audience(u)
         email = u["email"].lower()
+        if email in recently_contacted:
+            continue
         for tpl_id, t in sorted(MAIL_TEMPLATES.items(), key=lambda kv: kv[1]["day"]):
             if t.get("auto") and t["audience"] == aud and days >= t["day"] and (email, tpl_id) not in sent_pairs:
+                # krok wysyłamy tylko „na czas” (do 3 dni spóźnienia) — stare, przegapione kroki pomijamy i patrzymy na kolejny
+                if days - t["day"] > 3:
+                    continue
                 candidates.append((email, tpl_id))
                 break
         if len(candidates) >= limit:
@@ -3874,10 +3869,50 @@ async def admin_alerts_overview(admin: dict = Depends(require_admin)):
     return {"active": active, "total": total, "recent": recent, "log": log}
 
 
+def _is_cron_request(request: Request) -> bool:
+    """Vercel Cron wysyła `Authorization: Bearer <CRON_SECRET>` (gdy CRON_SECRET ustawiony w env); GitHub Actions — `X-Cron-Secret`."""
+    secret = os.getenv("CRON_SECRET") or ""
+    if not secret:
+        return False
+    bearer = (request.headers.get("authorization") or "").replace("Bearer ", "").strip()
+    return _hmac.compare_digest(request.headers.get("x-cron-secret") or "", secret) or _hmac.compare_digest(bearer, secret)
+
+
+async def _daily_jobs_if_due() -> Optional[dict]:
+    """Zapasowy „cron”: raz dziennie (data PL) odpala mailing auto-run + alerty + importy — wołany z endpointów,
+    które i tak uruchamia GitHub Actions co kilka godzin (cleanup-stale). Vercel Cron bez CRON_SECRET nie przechodził autoryzacji."""
+    db = database()
+    today = datetime.now(ZoneInfo("Europe/Warsaw")).date().isoformat()
+    prev = await db.settings.find_one_and_update({"_id": "daily_jobs", "last_day": {"$ne": today}},
+                                                 {"$set": {"last_day": today, "started_at": datetime.now(timezone.utc).isoformat()}}, upsert=False)
+    if prev is None:
+        if not await db.settings.find_one({"_id": "daily_jobs"}):
+            await db.settings.update_one({"_id": "daily_jobs"}, {"$setOnInsert": {"last_day": today, "started_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+        else:
+            return None
+    out: dict = {"day": today}
+    try:
+        out["imports"] = await _trigger_imports_if_due()
+    except Exception as e:
+        out["imports"] = {"error": str(e)[:200]}
+    email_ok = bool(await _smtp_cfg() or await _email_key())
+    if email_ok:
+        try:
+            out["mailing"] = await _mailing_auto_run(25) if (await _mailing_settings())["auto_enabled"] else {"skipped": "auto_disabled"}
+        except Exception as e:
+            out["mailing"] = {"error": str(e)[:200]}
+        try:
+            out["alerts"] = await _alerts_run(limit_alerts=300)
+        except Exception as e:
+            out["alerts"] = {"error": str(e)[:200]}
+    else:
+        out["mailing"] = out["alerts"] = {"skipped": "email_not_configured"}
+    await db.settings.update_one({"_id": "daily_jobs"}, {"$set": {"last_result": out, "finished_at": datetime.now(timezone.utc).isoformat()}})
+    return out
+
+
 async def _authorize_cron_or_admin(request: Request) -> None:
-    cron_secret_env = os.getenv("CRON_SECRET") or ""
-    x_cron_secret = request.headers.get("x-cron-secret") or ""
-    if request.headers.get("x-vercel-cron") == "1" or (cron_secret_env and x_cron_secret == cron_secret_env):
+    if _is_cron_request(request):
         return
     auth_header = (request.headers.get("authorization") or "").replace("Bearer ", "").strip()
     if not auth_header:

@@ -982,6 +982,8 @@ function normalizeScrapedListing(raw) {
     price_pm2: ppm2,
     price_pm2_display: ppm2 ? (ppm2.toLocaleString('pl-PL').replace(/,/g,' ') + ' zł/m²') : '',
     area_m2: area, rooms: raw.rooms || 0,
+    plot_area_m2: Number(raw.plot_area_m2) || Number(raw.plot_area) || 0,
+    phone: raw.phone || null, phone_masked: raw.phone_masked || null,
     floor: raw.floor || 0, max_floor: raw.max_floor || 0,
     year_built: raw.build_year || raw.year_built || 0,
     build_year: raw.build_year || raw.year_built || 0,
@@ -1729,7 +1731,14 @@ async function renderOffer(l, all) {
   if (l.has_garage) specs.push({label:'Garaż', val: '✓ Tak'});
   if (l.has_parking) specs.push({label:'Parking', val: '✓ Tak'});
   if (l.has_ac) specs.push({label:'Klimatyzacja', val: '✓ Tak'});
+  if (l.plot_area_m2 > 0 && (l.type === 'dom' || l.type === 'dzialka')) specs.push({label:'🌳 Działka', val: l.plot_area_m2 >= 10000 ? (l.plot_area_m2 / 10000).toLocaleString('pl-PL', { maximumFractionDigits: 2 }) + ' ha' : Math.round(l.plot_area_m2).toLocaleString('pl-PL') + ' m²'});
   specs.push({label:'Sprzedający', val: l.seller_label || '—'});
+  if (l.phone) {
+    const d = String(l.phone).replace(/\D/g, ''), n = d.slice(-9);
+    specs.push({label:'📞 Telefon właściciela', val: `<a href="tel:${l.phone}" style="color:#86efac;font-weight:800">+48 ${n.slice(0,3)} ${n.slice(3,6)} ${n.slice(6)}</a>`});
+  } else if (l.phone_masked) {
+    specs.push({label:'📞 Telefon właściciela', val: `<a href="/dla-biur" style="color:#c5d0e6">${l.phone_masked} <span style="font-size:11px;color:#FFB800">🔒 w planie dla biur</span></a>`});
+  }
   specs.push({label:'Portal', val: l.portal || 'Otodom'});
   specs.push({label:'Dodane', val: l.added_display || '—'});
   if (l.is_original === false) {

@@ -37,6 +37,10 @@ PORTALS = [
      "https://www.domiporta.pl/mieszkanie/sprzedam/malopolskie/krakow", lambda h: len(re.findall(r'data-detail-id="\d+"', h))),
     ("Adresowo", "adresowo", "scrape-portals.yml",
      "https://adresowo.pl/mieszkania/krakow/", lambda h: h.count("data-offer-card")),
+    ("Gethome", "gethome", "scrape-portals.yml",
+     "https://gethome.pl/mieszkania/na-sprzedaz/malopolskie/?sort=newest", lambda h: h.count('"slug":') if "__INITIAL_STATE__" in h else 0),
+    ("OdWlasciciela", "odwlasciciela", "scrape-portals.yml",
+     "https://odwlasciciela.pl/mieszkania/sprzedaz/malopolskie.html", lambda h: h.count('<article class="offers-item')),
 ]
 
 
@@ -100,7 +104,7 @@ def main():
         rent_ok = (not rent_expected) or today_r > 0
         fresh_ok = weekend or (today_s > 0 and rent_ok)
         # 🔴 CICHA AWARIA: job „success” dziś, a portal wczytał 0 ofert (4.11 Gratka+Morizon zmieniły HTML — joby zielone, new=0)
-        silent_zero = (not weekend) and run_today and today == 0
+        silent_zero = (not weekend) and run_today and today == 0 and (yday_s + yday_r) >= 20   # małe portale (0 wczoraj też) → tylko ⚠️
         status = "🔴" if silent_zero else ("✅" if (live_ok and run_ok and fresh_ok) else ("⚠️" if live_ok else "❌"))
         if silent_zero:
             critical.append(f"{label}: job zakończył się sukcesem ({(run.get('at') or '')[11:16]} UTC), ale wczytał <b>0 ofert</b> (wczoraj {yday_s + yday_r}) — "

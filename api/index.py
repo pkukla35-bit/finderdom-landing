@@ -81,7 +81,8 @@ async def _stripe_cfg():
         stripe.api_key = _STRIPE_RT["secret"]
     return _STRIPE_RT["secret"], _STRIPE_RT["whsec"]
 
-PLANS = {"individual": 45, "solo": 90, "business": 199}  # gross PLN per 30 days
+PLANS = {"individual": 45, "solo": 90, "business": 199}
+ARCHIVE_PRIVATE_DAYS = 90   # wygasłe oferty PRYWATNE zostają w archiwum (dla biur) tyle dni po zniknięciu z portalu  # gross PLN per 30 days
 PLAN_LABELS = {"individual": "Osobisty", "solo": "Biuro jednoosobowe", "business": "Firmowy"}
 # Plany „biurowe”: pełne funkcje B2B (CRM, leady, wyceny bez limitu). Solo = 1 login (bez agentów), Firmowy = 4 loginy w cenie.
 BUSINESS_TIERS = {"business", "solo"}
@@ -1801,13 +1802,19 @@ async def admin_cleanup_stale(
     coll = database().listings
 
     # 1) Krok pierwszy: skasuj oferty stale > delete_after_days
+    #    WYJĄTEK (4.11): oferty PRYWATNE zostają w ARCHIWUM przez ARCHIVE_PRIVATE_DAYS (plany Solo/Firmowy widzą je w trybie archiwum)
     now = datetime.now(timezone.utc)
     delete_cutoff = now - timedelta(days=max(1, delete_after_days))
+    archive_cutoff = now - timedelta(days=ARCHIVE_PRIVATE_DAYS)
+    del_q = {"is_stale": True, "$or": [
+        {"seller_type": {"$ne": "prywatna"}, "stale_since": {"$lt": delete_cutoff}},
+        {"seller_type": "prywatna", "stale_since": {"$lt": archive_cutoff}},
+    ]}
     if not dry_run:
-        r = await coll.delete_many({"is_stale": True, "stale_since": {"$lt": delete_cutoff}})
+        r = await coll.delete_many(del_q)
         deleted_permanent = r.deleted_count
     else:
-        deleted_permanent = await coll.count_documents({"is_stale": True, "stale_since": {"$lt": delete_cutoff}})
+        deleted_permanent = await coll.count_documents(del_q)
 
     # 2) Pobierz N ofert z URL, najstarsze najdawniej sprawdzone (i te nieoznakowane)
     recent_cutoff = now - timedelta(hours=24)
@@ -2084,8 +2091,19 @@ async def listing_single(listing_id: str, request: Request, response: Response):
                 doc.pop(k, None)
             response.headers["Cache-Control"] = "public, max-age=300, s-maxage=600, stale-while-revalidate=120"
             return {"listing": doc, "locked": True}
+        # 📞 telefon właściciela (oferty prywatne) tylko dla planów Solo/Firmowy; Osobisty widzi zamaskowany
+        broker = (paid.get("email") or "").lower() in ADMIN_EMAILS or await effective_tier_async(paid) in BUSINESS_TIERS
+        ph = doc.pop("phone", None)
+        if ph and doc.get("seller_type") == "prywatna":
+            digits = re.sub(r"\D", "", str(ph))
+            if broker:
+                doc["phone"] = ph
+            elif len(digits) >= 9:
+                doc["phone_masked"] = f"+48 {digits[-9:-6]} ••• •••"
+        if isinstance(doc.get("stale_since"), datetime):
+            doc["stale_since"] = doc["stale_since"].isoformat()
         response.headers["Cache-Control"] = "private, max-age=60"
-        return {"listing": doc, "locked": False}
+        return {"listing": doc, "locked": False, "broker": broker}
     except Exception as e:
         logger.warning("listing/{%s} error: %s", listing_id, e)
         response.status_code = 500
@@ -2170,6 +2188,7 @@ async def listings_scraped_endpoint(
     lat: Optional[float] = None,
     lng: Optional[float] = None,
     radius_km: Optional[float] = None,
+    archive: Optional[int] = None,  # 1 = ARCHIWUM: wygasłe oferty PRYWATNE (tylko plany Solo/Firmowy)
 ):
     """Returns listings scraped via ScrapingBee/Apify.
 
@@ -2187,7 +2206,16 @@ async def listings_scraped_endpoint(
         # Server-side filtering
         # Uwaga: gdy BRAK city/type/transaction — nie filtrujemy po scraped_via żeby uniknąć slow scan
         # (99% ofert i tak ma scraped_via w [scrapingbee, apify, nol-direct])
-        if city or type or transaction or (lat and lng and radius_km):
+        # Kto pyta: plan dla biur (Solo/Firmowy, także trial) widzi telefony właścicieli i archiwum wygasłych ofert prywatnych
+        paid = await _paid_user_from_request(request)
+        broker = paid is not None and ((paid.get("email") or "").lower() in ADMIN_EMAILS or await effective_tier_async(paid) in BUSINESS_TIERS)
+        if archive:
+            if not broker:
+                return {"listings": [], "count": 0, "total_count": 0, "offset": 0, "limit": limit, "lite": bool(lite), "filtered": True,
+                        "locked": True, "archive": True, "archive_locked": True,
+                        "message": "Archiwum wygasłych ofert prywatnych jest dostępne w planach Biuro jednoosobowe i Firmowy."}
+            query = {"is_stale": True, "seller_type": "prywatna", "price": {"$gt": 1000}}
+        elif city or type or transaction or (lat and lng and radius_km):
             query = {"scraped_via": {"$in": ["scrapingbee", "apify", "nol-direct", "portal-direct", "olx-direct"]}, "is_stale": {"$ne": True}, "price": {"$gt": 1000}}
         else:
             query = {"is_stale": {"$ne": True}, "price": {"$gt": 1000}}
@@ -2355,7 +2383,6 @@ async def listings_scraped_endpoint(
                 "_id": 0,
                 "description": 0,
                 "source_actor": 0,
-                "phone": 0,
                 "posted_at": 0,
                 # images: keep, but slice server-side ponizej do max 5 (bo OLX URL sa dlugie)
             }
@@ -2364,14 +2391,16 @@ async def listings_scraped_endpoint(
         # Sortowanie: gdy filtr po mieście/typie już zawęża do ~500-2000 rekordów, można sortować po added_at.
         # Gdy BRAK filtrów (cała baza 50k) sort byłby zbyt kosztowny → skip sort dla wydajności.
         cursor = coll.find(query, projection)
-        if city or type or transaction or seller_type or market_type or has_bt or has_dt or has_verdict or has_range or portals or has_date:
+        if archive:
+            cursor = cursor.sort("stale_since", -1)   # archiwum: ostatnio wygasłe najpierw
+        elif city or type or transaction or seller_type or market_type or has_bt or has_dt or has_verdict or has_range or portals or has_date:
             cursor = cursor.sort("added_at", -1)
         cursor = cursor.skip(offset).limit(limit)
 
         # Total count (dla frontend: pokazuje "Znaleziono X ofert" nawet gdy załadowaliśmy tylko limit)
         async def _count():
             try:
-                if not (city or type or transaction or seller_type or rooms or market_type or has_bt or has_dt or has_verdict or use_geo or has_range or portals or has_date):
+                if not (archive or city or type or transaction or seller_type or rooms or market_type or has_bt or has_dt or has_verdict or use_geo or has_range or portals or has_date):
                     # Cała baza — estimated_document_count jest instant (używa metadata)
                     return await coll.estimated_document_count()
                 return await coll.count_documents(query, maxTimeMS=3000)
@@ -2393,7 +2422,6 @@ async def listings_scraped_endpoint(
                     d.pop("image", None)
         # 🔒 PAYWALL: bez opłaconego planu tylko podgląd FREE_PREVIEW_LIMIT ofert (odpowiedź publiczna → CDN cache),
         #    opłacony plan → pełna lista, odpowiedź prywatna (frontend dodaje &p=1, więc CDN nie pomiesza cache).
-        paid = await _paid_user_from_request(request)
         locked = paid is None
         if locked:
             docs = docs[:FREE_PREVIEW_LIMIT]
@@ -2403,8 +2431,27 @@ async def listings_scraped_endpoint(
             response.headers["Cache-Control"] = "public, max-age=120, s-maxage=900, stale-while-revalidate=86400"
         else:
             response.headers["Cache-Control"] = "private, max-age=60"
+        # 📞 Telefon właściciela (tylko oferty prywatne): pełny numer dla planów Solo/Firmowy; pozostali widzą zamaskowany
+        for d in docs:
+            ph = d.pop("phone", None)
+            if d.get("seller_type") != "prywatna" or not ph:
+                continue
+            digits = re.sub(r"\D", "", str(ph))
+            if len(digits) < 9:
+                continue
+            if broker:
+                d["phone"] = ph
+            else:
+                d["phone_masked"] = f"+48 {digits[-9:-6]} ••• •••"
+            if "stale_since" in d and isinstance(d["stale_since"], datetime):
+                d["stale_since"] = d["stale_since"].isoformat()
+        if archive:
+            for d in docs:
+                if isinstance(d.get("stale_since"), datetime):
+                    d["stale_since"] = d["stale_since"].isoformat()
         return {"listings": docs, "count": len(docs), "total_count": total_count, "offset": offset, "limit": limit, "lite": bool(lite),
-                "filtered": bool(city or type), "locked": locked, "preview_limit": FREE_PREVIEW_LIMIT if locked else None}
+                "filtered": bool(city or type), "locked": locked, "preview_limit": FREE_PREVIEW_LIMIT if locked else None,
+                "archive": bool(archive), "broker": broker}
     except Exception as e:
         logger.warning("listings-scraped error: %s", e)
         return {"listings": [], "count": 0, "error": str(e)[:200]}

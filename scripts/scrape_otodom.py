@@ -355,7 +355,68 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
     }
     if subtype_field and subtype:
         doc[subtype_field] = subtype
+    # Wielkość działki (domy, działki) — Otodom podaje ją już na liście wyników
+    try:
+        ta = item.get("terrainAreaInSquareMeters")
+        if ta and float(ta) > 0 and prop in ("dom", "dzialka"):
+            doc["plot_area_m2"] = float(ta)
+    except (TypeError, ValueError):
+        pass
     return doc
+
+
+# ── Dociąganie ze strony oferty: telefon właściciela (PRYWATNE) + wielkość działki (DOMY) ────────
+# __NEXT_DATA__ strony oferty: ad.contactDetails.phones (prywatni jawnie) i ad.target.Terrain_area (lista wyników tego nie ma).
+def _fetch_detail_ad(url: str) -> Optional[Dict[str, Any]]:
+    html = fetch_direct(url)
+    if not html:
+        return None
+    m = NEXT_DATA_RE.search(html)
+    try:
+        return json.loads(m.group(1))["props"]["pageProps"]["ad"] if m else {}
+    except Exception:
+        return {}
+
+
+def enrich_from_details(coll, prop_type: str, transaction: str, phone_limit: int, plot_limit: int) -> Dict[str, int]:
+    """Dociąga ze stron ofert: (a) telefon właściciela dla ofert PRYWATNYCH, (b) wielkość działki dla DOMÓW (każdy sprzedający).
+    Każdą ofertę odwiedzamy raz (detail_checked_at). Limity na uruchomienie chronią przed blokadą."""
+    stats = {"checked": 0, "phones": 0, "plots": 0, "failed": 0}
+    base = {"source": "otodom", "transaction_type": transaction, "is_stale": {"$ne": True},
+            "type": {"$regex": f"^{re.escape(prop_type)}", "$options": "i"}, "detail_checked_at": {"$exists": False}}
+    targets: List[Dict[str, Any]] = []
+    if phone_limit > 0:
+        targets += list(coll.find({**base, "seller_type": "prywatna", "phone": {"$exists": False}}, {"url": 1}).sort("added_at", -1).limit(phone_limit))
+    if plot_limit > 0 and prop_type == "dom":
+        seen = {t["_id"] for t in targets}
+        targets += [t for t in coll.find({**base, "plot_area_m2": {"$exists": False}}, {"url": 1}).sort("added_at", -1).limit(plot_limit) if t["_id"] not in seen]
+    now_iso = datetime.now(timezone.utc).isoformat()
+    streak = 0
+    for d in targets:
+        stats["checked"] += 1
+        ad = _fetch_detail_ad(d["url"])
+        if ad is None:
+            stats["failed"] += 1; streak += 1
+            if streak >= 8:
+                log.warning("  detale: 8 nieudanych pobrań z rzędu — przerywam (blokada?)"); break
+            time.sleep(2.0); continue
+        streak = 0
+        upd: Dict[str, Any] = {"detail_checked_at": now_iso}
+        cd = ad.get("contactDetails") or {}
+        phones = [p for p in (cd.get("phones") or []) if p]
+        if (cd.get("type") or (ad.get("owner") or {}).get("type")) == "private" and phones:
+            upd["phone"] = re.sub(r"[^\d+]", "", str(phones[0])); stats["phones"] += 1
+        ta = (ad.get("target") or {}).get("Terrain_area")
+        if ta:
+            try:
+                upd["plot_area_m2"] = float(str(ta).replace(",", ".")); stats["plots"] += 1
+            except ValueError:
+                pass
+        coll.update_one({"_id": d["_id"]}, {"$set": upd})
+        time.sleep(1.0)
+    log.info("  detale (%s/%s): sprawdzono=%d telefonów=%d działek=%d nieudane=%d",
+             prop_type, transaction, stats["checked"], stats["phones"], stats["plots"], stats["failed"])
+    return stats
 
 
 def get_mongo():
@@ -445,6 +506,13 @@ def main():
 
     log.info("═══ DONE property=%s: new=%d updated=%d | direct_ok=%d (%s) sb_credits=%d ═══",
              args.property, total["new"], total["updated"], DIRECT_STATE["direct_ok"], _DIRECT_KIND, DIRECT_STATE["sb_used"])
+
+    # Telefony właścicieli (oferty prywatne) — po imporcie listy, bez ScrapingBee (tylko bezpośrednio)
+    try:
+        enrich_from_details(coll, PROPERTY_LABELS.get(args.property, args.property), TRANSACTION,
+                            int(os.environ.get("OTODOM_PHONE_LIMIT") or "120"), int(os.environ.get("OTODOM_PLOT_LIMIT") or "250"))
+    except Exception as e:
+        log.warning("detail enrichment skipped: %s", e)
 
 
 # ── Lokale użytkowe: matryce w .github/workflows nie mają „lokal” (nie da się ich edytować bez uprawnienia „Workflows”

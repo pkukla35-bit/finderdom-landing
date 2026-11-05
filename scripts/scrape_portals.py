@@ -64,6 +64,25 @@ def url_adresowo(prop, trans, city, page):
     return base + (f"_l{page}" if page > 1 else "")
 
 
+def url_gethome(prop, trans, city, page):
+    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki"}.get(prop)
+    if not seg:
+        return None   # gethome: lokale za logowaniem (302 → kontomieszkaniowe)
+    t = "do-wynajecia" if trans == "wynajem" else "na-sprzedaz"
+    loc = city_slug(city) if city_slug(city) != "polska" else ""
+    return f"https://gethome.pl/{seg}/{t}/" + (f"{loc}/" if loc else "") + f"?sort=newest&page={page}"
+
+
+def url_odwlasciciela(prop, trans, city, page):
+    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki"}.get(prop)
+    if not seg:
+        return None   # portal nie ma kategorii lokali
+    loc = city.get("voi") or city_slug(city)
+    if city.get("voi") and city_slug(city) not in (city.get("voi"), "polska"):
+        loc = f"{city['voi']},{city_slug(city)}"
+    return f"https://odwlasciciela.pl/{seg}/{'wynajem' if trans == 'wynajem' else 'sprzedaz'}/{loc}.html" + (f"?offset={(page - 1) * 20}" if page > 1 else "")
+
+
 # ───────────────────────── Parsers (→ lista słowników: id,url,title,price,area,rooms,image,district,street,desc,floor,seller) ─────────────────────────
 def _txt(s: str) -> str:
     s = re.sub(r"<[^>]+>", " ", s or ""); s = htmllib.unescape(s).replace("\xa0", " ")
@@ -102,6 +121,78 @@ def parse_ldjson_offers(html: str, id_re: str) -> List[Dict[str, Any]]:
             })
         break
     return out
+
+
+def parse_gethome(html: str) -> List[Dict[str, Any]]:
+    """gethome.pl: pełna lista w window.__INITIAL_STATE__ → offerList.offers.offers (JSON)."""
+    m = re.search(r"window\.__INITIAL_STATE__\s*=\s*", html or "")
+    if not m: return []
+    try:
+        state, _ = json.JSONDecoder().raw_decode(html[m.end():])
+        offers = (((state.get("offerList") or {}).get("offers") or {}).get("offers")) or []
+    except Exception:
+        return []
+    out = []
+    for o in offers:
+        slug = o.get("slug") or ""
+        mid = re.search(r"-(\d+)$", slug)
+        if not slug or not mid: continue
+        pr, prop, addr = o.get("price") or {}, o.get("property") or {}, (o.get("property") or {}).get("address_details") or {}
+        pics = o.get("pictures") or []
+        img = next((v for v in (pics[0] or {}).values() if isinstance(v, str) and v.startswith("http")), None) if pics else None
+        coords = o.get("coordinates") or {}
+        loc_path = (prop.get("location") or {}).get("path") or []
+        city_name = addr.get("city") or next((x.get("name") for x in reversed(loc_path) if isinstance(x, dict) and (x.get("type") or "").lower().startswith(("miasto", "gmina", "miejscowo"))), None)
+        out.append({
+            "id": mid.group(1), "url": f"https://gethome.pl/oferta/{slug}/", "title": o.get("name") or "",
+            "price": _num(pr.get("total")), "area": _num(prop.get("size")), "rooms": _num(prop.get("room_number")),
+            "floor": _num(prop.get("floor")), "image": img, "district": None, "street": addr.get("street"),
+            "loc0": city_name, "desc": (o.get("description") or "")[:2000],
+            "seller": "prywatna" if o.get("is_private") else ("deweloper" if o.get("market_type") == "primary_market" else "posrednik"),
+            "lat": coords.get("lat"), "lng": coords.get("lon"), "plot_area_m2": _num(prop.get("lot_size")),
+            "posted_at": o.get("created_at"), "build_year": _num(prop.get("building_year")),
+        })
+    return out
+
+
+def parse_odwlasciciela(html: str) -> List[Dict[str, Any]]:
+    """odwlasciciela.pl: tylko oferty bezpośrednio od właścicieli (karty <article class="offers-item">)."""
+    out = []
+    for a in re.findall(r'<article class="offers-item[^"]*">(.*?)</article>', html or "", re.S):
+        href = re.search(r'href="(/oferty/podglad/(\d+),[^"]+)"', a)
+        if not href: continue
+        city = re.search(r'<strong class="text--gray-2 text--medium">(.*?)</strong>', a, re.S)
+        street = re.search(r'<div class="text--gray-3">(.*?)</div>', a, re.S)
+        kind = re.search(r'<span class="offers-item__attribute"><strong>([^<]*(?:sprzeda|wynaj|dzier)[^<]*)</strong>', a, re.I)
+        area = re.search(r'<strong>([\d\s.,]+)</strong>\s*m2', a)
+        rooms = re.search(r'L\.pokoi:\s*<strong>(\d+)</strong>', a)
+        floor = re.search(r'Piętro:\s*<strong>(\d+)', a)
+        price = re.search(r'font-weight-bold">([\d\s&nbsp;]+)<small>PLN</small>', a)
+        img = re.search(r'<img src="(/assets/userfiles/[^"]+)"', a)
+        desc = re.search(r'text--small text--gray-2[^"]*">(.*?)</div>', a, re.S)
+        c = _txt(city.group(1)) if city else None
+        out.append({
+            "id": href.group(2), "url": "https://odwlasciciela.pl" + href.group(1),
+            "title": " ".join(x for x in [_txt(kind.group(1)) if kind else "", c or "", _txt(street.group(1)) if street else ""] if x),
+            "price": _money(price.group(1)) if price else None, "area": _money(area.group(1)) if area else None,
+            "rooms": _num(rooms.group(1)) if rooms else None, "floor": _num(floor.group(1)) if floor else None,
+            "image": ("https://odwlasciciela.pl" + img.group(1)) if img else None, "district": None,
+            "street": _txt(street.group(1)) if street else None, "loc0": c, "desc": _txt(desc.group(1)) if desc else "",
+            "seller": "prywatna",
+        })
+    return out
+
+
+def enrich_odwlasciciela_phone(url: str) -> Optional[str]:
+    """Strona oferty odwlasciciela.pl ma numer ogłoszeniodawcy w ld+json: "provider": {"@type": "Person", "telephone": "505258412"}."""
+    html = fetch(url)
+    if not html: return None
+    m = re.search(r'"provider"\s*:\s*\{[^}]*"telephone"\s*:\s*"([^"]+)"', html)
+    if not m: return None
+    digits = re.sub(r"\D", "", m.group(1))
+    if len(digits) == 9: return "+48" + digits
+    if len(digits) == 11 and digits.startswith("48"): return "+" + digits
+    return None
 
 
 def parse_morizon(html): return parse_ldjson_offers(html, r"-mzn(\d+)$")
@@ -167,6 +258,9 @@ PORTALS = {
     "gratka":    {"url": url_gratka,    "parse": parse_gratka},
     "domiporta": {"url": url_domiporta, "parse": parse_domiporta},
     "adresowo":  {"url": url_adresowo,  "parse": parse_adresowo},
+    # nowe portale 5.11.2026 (odpalane łańcuchem po istniejących — patrz PORTAL_CHAIN)
+    "gethome":        {"url": url_gethome,        "parse": parse_gethome},
+    "odwlasciciela":  {"url": url_odwlasciciela,  "parse": parse_odwlasciciela},
 }
 
 
@@ -200,6 +294,9 @@ def guess_city(portal: str, it: Dict[str, Any]) -> Optional[str]:
         t = (it.get("loc0") or "")
         parts = t.split(" ", 1)
         if len(parts) == 2: return parts[1].strip().title()
+    elif portal in ("gethome", "odwlasciciela"):
+        t = (it.get("loc0") or "").strip()
+        return t.title() if t and t.islower() else (t or None)
     elif portal == "adresowo":
         t = (it.get("loc0") or "").strip()
         toks = t.split(" ")
@@ -236,6 +333,19 @@ def normalize(portal: str, it: Dict[str, Any], city_name: str, prop: str, trans:
         "last_seen_at": now_iso, "scraped_via": "portal-direct",
     }
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype
+    for k in ("lat", "lng", "plot_area_m2", "phone", "build_year", "posted_at"):
+        if it.get(k) not in (None, "", 0): doc[k] = it[k]
+    # 🌳 wielkość działki z opisu (Gratka/Morizon/Domiporta nie podają jej w danych listy)
+    if "plot_area_m2" not in doc and prop in ("dom", "dzialka"):
+        m = re.search(r"dzia[łl]k[aięą]\w*\D{0,30}?(\d[\d\s.,]{1,8})\s*(m2|m²|mkw|m kw|ar(?:y|ów)?|ha)\b", blob)
+        if m:
+            try:
+                v = float(m.group(1).replace(" ", "").replace(",", ".").rstrip("."))
+                unit = m.group(2)
+                v = v * 100 if unit.startswith("ar") else v * 10000 if unit == "ha" else v
+                if 30 <= v <= 5_000_000: doc["plot_area_m2"] = round(v, 1)
+            except ValueError:
+                pass
     return doc
 
 
@@ -258,22 +368,32 @@ def main():
     db = get_mongo(); coll = db["listings"]
     cities = CITIES if not a.city else [c for c in CITIES if city_slug(c) == a.city.lower()]
     if a.regions: cities = [{"name": "Polska", "slug": "polska", "voi": "polska"}] if a.portal == "adresowo" else REGIONS
+    if a.portal == "odwlasciciela": a.max_pages = max(a.max_pages, 3)   # mały portal — 20 ofert/strona
     if not cities: log.error("Unknown city"); sys.exit(1)
     log.info("═══ %s — %s/%s — cities=%d max_pages=%d ═══", a.portal, a.transaction, a.property, len(cities), a.max_pages)
     tot = {"new": 0, "updated": 0, "pages": 0}
     for city in cities:
         log.info("── %s ──", city["name"])
         for page in range(1, a.max_pages + 1):
-            html = fetch(P["url"](a.property, a.transaction, city, page)); tot["pages"] += 1
+            u = P["url"](a.property, a.transaction, city, page)
+            if not u: log.info("  %s: portal nie ma kategorii %s", a.portal, a.property); break
+            html = fetch(u); tot["pages"] += 1
             if not html: log.info("  page %d: brak HTML", page); break
             items = P["parse"](html)
             if not items: log.info("  page %d: 0 ofert", page); break
             ops = []
+            if a.portal == "odwlasciciela":   # numer właściciela ze strony oferty — tylko dla ofert, których jeszcze nie mamy
+                have = {x["external_id"] for x in coll.find({"source": a.portal, "external_id": {"$in": [str(it["id"]) for it in items]}}, {"external_id": 1})}
+                for it in items:
+                    if str(it["id"]) not in have and tot.setdefault("phones", 0) < 60:
+                        ph = enrich_odwlasciciela_phone(it["url"]); time.sleep(0.8)
+                        if ph: it["phone"] = ph; tot["phones"] += 1
             for it in items:
                 d = normalize(a.portal, it, city["name"], a.property, a.transaction)
                 if not d["price"]: continue
+                posted = d.pop("posted_at", None)
                 ops.append(UpdateOne({"source": a.portal, "external_id": d["external_id"]},
-                                     {"$set": d, "$setOnInsert": {"added_at": d["last_seen_at"], "posted_at": None},
+                                     {"$set": d, "$setOnInsert": {"added_at": posted or d["last_seen_at"], "posted_at": posted},
                                       "$unset": {"is_stale": "", "stale_since": "", "stale_reason": ""}}, upsert=True))
             new = upd = 0
             if ops:
@@ -291,11 +411,29 @@ def main():
 # ── Lokale użytkowe: matryce w .github/workflows nie mają „lokal” (nie da się ich edytować bez uprawnienia „Workflows”
 #    na tokenie GitHub), więc lokal (sprzedaż + wynajem) jedzie w tym samym zadaniu co działki. 2.11.2026
 CHAIN_AFTER = {"dzialka": [("lokal", "sprzedaz"), ("lokal", "wynajem")]}
+# Nowe portale (5.11.2026) jadą w zadaniach istniejących portali (ta sama property/transaction):
+PORTAL_CHAIN = {"adresowo": ["odwlasciciela"], "domiporta": ["gethome"]}
+
+
+def _run_portal_chain(argv0: List[str]) -> None:
+    if "--portal" not in argv0:
+        return
+    for p2 in PORTAL_CHAIN.get(argv0[argv0.index("--portal") + 1], []):
+        nxt = list(argv0); nxt[nxt.index("--portal") + 1] = p2
+        sys.argv = [sys.argv[0]] + nxt
+        log.info("═══ PORTAL CHAIN → %s ═══", p2)
+        try:
+            main()
+        except SystemExit:
+            pass
+        except Exception as e:
+            log.error("PORTAL CHAIN %s failed: %s", p2, str(e)[:200])
 
 
 def _run_with_chain():
     main()
     argv = sys.argv[1:]
+    _run_portal_chain(argv)
     if "--property" not in argv:
         return
     prop = argv[argv.index("--property") + 1]
@@ -314,6 +452,7 @@ def _run_with_chain():
             pass
         except Exception as e:  # lokal nie może wywrócić całego zadania
             log.error("CHAIN %s/%s failed: %s", p2, t2, str(e)[:200])
+        _run_portal_chain(nxt)
 
 
 if __name__ == "__main__":

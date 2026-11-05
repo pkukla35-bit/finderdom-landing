@@ -214,6 +214,11 @@ gtag('set', 'url_passthrough', false);
   .card-price .p{font-size:18px;font-weight:900;color:#fff}
   .card-price .pm2{font-size:11px;color:#8ba3d4}
   .card-rata{font-size:11px;color:#FFB800;margin-top:4px;font-weight:700;opacity:.9}
+  .card-phone{margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.35);color:#86efac;font-weight:800;font-size:13px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:40px}
+  .card-phone:hover{background:rgba(74,222,128,0.2)}
+  .card-phone-sub{font-size:10px;font-weight:700;color:#8ba3d4;margin-left:auto}
+  .card-phone-locked{background:rgba(255,184,0,0.08);border-color:rgba(255,184,0,0.3);color:#c5d0e6}
+  .card-archived{font-size:11px;color:#f87171;font-weight:700;margin:2px 0 4px}
   /* CRM firmy na karcie (plan Firmowy) */
   .card-img .crm-pill-wrap{position:absolute;top:34px;right:10px;z-index:5;pointer-events:none}
   .card-crm{margin-top:12px;padding-top:10px;border-top:1px dashed rgba(255,184,0,0.25)}
@@ -490,6 +495,14 @@ gtag('set', 'url_passthrough', false);
         <div class="chip" data-crm="later">⏰ Kontakt później</div>
         <div class="chip" data-crm="none">🆕 Nieoznaczone</div>
       </div>
+    </div>
+
+    <div class="filter-group" id="archiveGroup">
+      <div class="filter-title">🗄️ Archiwum (dla biur)</div>
+      <div class="chip-group">
+        <div class="chip" id="chipArchive" title="Wygasłe oferty właścicieli z ostatnich 90 dni — z telefonem">🗄️ Wygasłe oferty prywatne</div>
+      </div>
+      <div style="font-size:11px;color:#8ba3d4;margin-top:6px;line-height:1.4">Właściciele, których ogłoszenie zniknęło z portalu — często wciąż sprzedają. Plany Biuro jednoosobowe / Firmowy.</div>
     </div>
 
     <div class="filter-actions">
@@ -834,6 +847,12 @@ function normalizeScrapedListing(raw) {
     emoji: TYPE_EMOJI[baseType] || '🏠',
     img_class: imgClass, portal: detectPortalFromUrl(raw.url) || 'Portal', is_original: true,
     seller_type: sellerType, seller_label: sellerLabel,
+    // 📞 numer właściciela (oferty prywatne): pełny dla planów Solo/Firmowy, zamaskowany dla pozostałych
+    phone: raw.phone || null, phone_masked: raw.phone_masked || null,
+    // 🌳 wielkość działki (domy, działki)
+    plot_area_m2: Number(raw.plot_area_m2) || Number(raw.plot_area) || 0,
+    // 🗄️ archiwum: kiedy oferta zniknęła z portalu
+    stale_since: raw.stale_since || null, is_stale: !!raw.is_stale,
     verdict_badge: 'normal', verdict_text: '✨ Nowa',
     verdict_full: 'Świeżo zescrapowana', ai_delta_pct: 0,
     // Prekomputowana analiza AI (scripts/compute_ai_verdicts.py, pełna baza) — ma pierwszeństwo przed lokalną
@@ -860,6 +879,30 @@ function normalizeScrapedListing(raw) {
 }
 
 // Wykrywanie portalu z URL — dla poprawnego wyświetlania badge
+function fmtPhone(p) {
+  const d = String(p || '').replace(/\D/g, '');
+  const n = d.length > 9 ? d.slice(-9) : d;
+  return n.length === 9 ? `+48 ${n.slice(0,3)} ${n.slice(3,6)} ${n.slice(6)}` : p;
+}
+function fmtPlot(m2) {
+  if (!m2) return '';
+  return m2 >= 10000 ? (m2 / 10000).toLocaleString('pl-PL', { maximumFractionDigits: 2 }) + ' ha' : Math.round(m2).toLocaleString('pl-PL') + ' m²';
+}
+// 🗄️ Archiwum wygasłych ofert prywatnych — przełącznik (stan w URL ?archiwum=1)
+window.ARCHIVE_MODE = new URLSearchParams(location.search).get('archiwum') === '1';
+document.addEventListener('DOMContentLoaded', () => {
+  const chip = document.getElementById('chipArchive');
+  if (!chip) return;
+  chip.classList.toggle('active', window.ARCHIVE_MODE);
+  chip.addEventListener('click', () => {
+    window.ARCHIVE_MODE = !window.ARCHIVE_MODE;
+    chip.classList.toggle('active', window.ARCHIVE_MODE);
+    const p = new URLSearchParams(location.search);
+    if (window.ARCHIVE_MODE) p.set('archiwum', '1'); else p.delete('archiwum');
+    history.replaceState(null, '', '?' + p.toString());
+    if (typeof loadListings === 'function') loadListings();
+  });
+});
 function detectPortalFromUrl(url) {
   if (!url) return null;
   const u = String(url).toLowerCase();
@@ -1154,6 +1197,8 @@ async function loadListings() {
         apiParams.set('radius_km', String(uiRadiusKm));
       }
     }
+    // 🗄️ Archiwum wygasłych ofert prywatnych (plany Solo/Firmowy) — zamiast aktywnych ofert
+    if (window.ARCHIVE_MODE) { apiParams.set('archive', '1'); apiParams.set('seller_type', 'prywatna'); }
     const scrapedUrl = '/api/listings-scraped' + (apiParams.toString() ? '?' + apiParams.toString() : '');
     // 🔒 Zalogowani wysyłają token (opłacony plan = pełna lista); &p=1 rozdziela cache CDN od publicznego podglądu
     const __tok = localStorage.getItem('finderdom_token');
@@ -1202,6 +1247,8 @@ function applyScrapedData(d) {
       scrapedTotalCount = Number(d.total_count) || 0;
       window.__locked = !!d.locked;
       window.__previewLimit = Number(d.preview_limit) || 5;
+      window.__archiveLocked = !!d.archive_locked;
+      window.__brokerView = !!d.broker;
       // ── Dedup wewnątrz scraped: apify > scrapingbee dla tego samego URL/external_id
       const scrapedByKey = new Map();
       for (const r of raw) {
@@ -1656,7 +1703,11 @@ function renderPage() {
   const grid = document.getElementById('grid');
   const pager = document.getElementById('pager');
   if (CURRENT_FILTERED.length === 0) {
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Brak wyników</div>Zmień filtry aby zobaczyć więcej ofert</div>';
+    if (window.ARCHIVE_MODE && window.__archiveLocked) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🗄️</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Archiwum wygasłych ofert prywatnych</div>Oferty właścicieli, które zniknęły z portali w ostatnich 90 dniach — z numerem telefonu. Dostępne w planach <b style="color:#FFB800">Biuro jednoosobowe (90 zł)</b> i <b style="color:#FFB800">Firmowy (199 zł)</b>.<br><br><a href="/dla-biur" class="paywall-btn" style="display:inline-block">🏢 Załóż konto firmowe — 7 dni za darmo →</a></div>';
+    } else {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Brak wyników</div>' + (window.ARCHIVE_MODE ? 'W archiwum nie ma jeszcze wygasłych ofert prywatnych dla tych filtrów — zbieramy je od 5.11.2026' : 'Zmień filtry aby zobaczyć więcej ofert') + '</div>';
+    }
     if (pager) pager.innerHTML = '';
     return;
   }
@@ -1670,6 +1721,15 @@ function renderPage() {
     if (l.floor > 0) specs += ` · 🏢 ${l.floor} piętro`;
     if (l.type === 'dom') specs += ' · 🏡 Dom';
     if (l.type === 'dzialka') specs += ' · 🌳 Działka';
+    if (l.plot_area_m2 > 0 && (l.type === 'dom' || l.type === 'dzialka')) specs += ` · 🌳 działka ${fmtPlot(l.plot_area_m2)}`;
+    // 📞 telefon właściciela — tylko oferty prywatne
+    let phoneHtml = '';
+    if (l.phone) {
+      phoneHtml = `<div class="card-phone" onclick="event.preventDefault();event.stopPropagation();window.location.href='tel:${l.phone}'" title="Zadzwoń do właściciela">📞 ${fmtPhone(l.phone)} <span class="card-phone-sub">właściciel</span></div>`;
+    } else if (l.phone_masked) {
+      phoneHtml = `<div class="card-phone card-phone-locked" onclick="event.preventDefault();event.stopPropagation();window.location.href='/dla-biur'" title="Numer właściciela w planie Biuro jednoosobowe / Firmowy">📞 ${l.phone_masked} <span class="card-phone-sub">🔒 numer w planie dla biur</span></div>`;
+    }
+    const archiveHtml = (window.ARCHIVE_MODE && l.stale_since) ? `<div class="card-archived">🗄️ zniknęła z portalu ${new Date(l.stale_since).toLocaleDateString('pl-PL')}</div>` : '';
     const targetUrl = `/oferta?id=${l.id}` + ((window.CRM_DEMO && !window.CRM_REAL) ? '&widok=biuro' : '');
     // Karuzela POKAZUJE tylko oryginalne zdjecia z bazy
     const primaryImages = (l.images && l.images.length > 0)
@@ -1726,12 +1786,14 @@ function renderPage() {
           <div class="card-title">${l.title}</div>
           <div class="card-loc">${l.location}</div>
           <div class="card-specs">${specs}</div>
+          ${archiveHtml}
           <div class="card-price">
             <span class="p">${l.price_display}${l.transaction === 'wynajem' ? '<span style="font-size:11px;font-weight:700;color:#8ba3d4"> /mies.</span>' : ''}</span>
             <span class="pm2">${l.price_pm2_display}</span>
           </div>
           ${l.variants_count ? `<div style="font-size:11px;color:#8ba3d4;margin-top:2px">🔁 +${l.variants_count} ${l.variants_count === 1 ? 'podobna oferta' : (l.variants_count < 5 ? 'podobne oferty' : 'podobnych ofert')} (ta sama inwestycja / ogłoszenie)</div>` : ''}
           ${(l.transaction !== 'wynajem' && window.FD_rataOd && FD_rataOd(l.price)) ? `<div class="card-rata">💳 rata od ~${Math.round(FD_rataOd(l.price)).toLocaleString('pl-PL')} zł/mies.</div>` : ''}
+          ${phoneHtml}
           ${crmBarHtml}
         </div>
       </a>

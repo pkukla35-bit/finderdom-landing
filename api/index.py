@@ -3893,6 +3893,70 @@ async def admin_github_token(body: GithubTokenReq, admin: dict = Depends(require
     return {"ok": True}
 
 
+# ── Podgląd i ręczne uruchamianie workflowów GitHub z panelu admina (token z settings.github) ──
+_WF_RE = re.compile(r"^[a-z0-9-]+\.yml$")
+
+
+@app.get("/api/admin/github/runs")
+async def admin_github_runs(workflow: str, per_page: int = 5, admin: dict = Depends(require_admin)):
+    """Ostatnie przebiegi jednego workflow (status, wynik, czas) + joby ostatniego przebiegu."""
+    if not _WF_RE.match(workflow):
+        raise HTTPException(400, "zła nazwa workflow")
+    tok = await _github_token()
+    if not tok:
+        raise HTTPException(400, "brak tokena GitHub (settings.github)")
+    hdr = {"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json"}
+    async with httpx.AsyncClient(timeout=25) as client:
+        r = await client.get(f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{workflow}/runs?per_page={max(1, min(per_page, 20))}", headers=hdr)
+        if r.status_code != 200:
+            raise HTTPException(502, f"GitHub {r.status_code}")
+        runs = [{"id": x["id"], "status": x["status"], "conclusion": x["conclusion"], "created_at": x["created_at"], "event": x["event"], "html_url": x["html_url"]}
+                for x in r.json().get("workflow_runs", [])]
+        jobs = []
+        if runs:
+            jr = await client.get(f"https://api.github.com/repos/{GITHUB_REPO}/actions/runs/{runs[0]['id']}/jobs?per_page=50", headers=hdr)
+            if jr.status_code == 200:
+                jobs = [{"id": j["id"], "name": j["name"], "status": j["status"], "conclusion": j["conclusion"]} for j in jr.json().get("jobs", [])]
+    return {"workflow": workflow, "runs": runs, "last_run_jobs": jobs}
+
+
+@app.get("/api/admin/github/job-log")
+async def admin_github_job_log(job_id: int, tail: int = 12000, admin: dict = Depends(require_admin)):
+    """Końcówka logu jednego joba (do diagnozy importów bez wchodzenia na GitHub)."""
+    tok = await _github_token()
+    if not tok:
+        raise HTTPException(400, "brak tokena GitHub (settings.github)")
+    async with httpx.AsyncClient(timeout=40, follow_redirects=True) as client:
+        r = await client.get(f"https://api.github.com/repos/{GITHUB_REPO}/actions/jobs/{job_id}/logs", headers={"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json"})
+    if r.status_code != 200:
+        raise HTTPException(502, f"GitHub {r.status_code}")
+    txt = r.text
+    return {"job_id": job_id, "length": len(txt), "tail": txt[-max(1000, min(tail, 60000)):]}
+
+
+class GithubDispatchReq(BaseModel):
+    workflow: str = Field(min_length=5, max_length=80)
+    inputs: dict = Field(default_factory=dict)
+
+
+@app.post("/api/admin/github/dispatch")
+async def admin_github_dispatch(body: GithubDispatchReq, admin: dict = Depends(require_admin)):
+    """Ręczne uruchomienie jednego workflow z parametrami (np. scrape-portals.yml, portal=adresowo)."""
+    if not _WF_RE.match(body.workflow):
+        raise HTTPException(400, "zła nazwa workflow")
+    tok = await _github_token()
+    if not tok:
+        raise HTTPException(400, "brak tokena GitHub (settings.github)")
+    inputs = {str(k)[:40]: str(v)[:200] for k, v in (body.inputs or {}).items()}
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.post(f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{body.workflow}/dispatches",
+                              headers={"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json"}, json={"ref": "main", "inputs": inputs})
+    if r.status_code != 204:
+        raise HTTPException(502, f"GitHub {r.status_code}: {r.text[:200]}")
+    logger.info("admin dispatch %s %s by %s", body.workflow, inputs, admin.get("email"))
+    return {"ok": True, "workflow": body.workflow, "inputs": inputs}
+
+
 @app.post("/api/admin/imports/trigger")
 async def admin_imports_trigger(force: bool = True, admin: dict = Depends(require_admin)):
     """Ręczne uruchomienie wszystkich importów ofert (GitHub Actions) — przycisk w panelu / awaryjnie."""

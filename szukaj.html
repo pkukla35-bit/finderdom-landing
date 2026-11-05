@@ -1111,9 +1111,10 @@ function computeAiVerdicts(listings) {
       const hm = houseMedian(l);
       if (hm) { med = hm.med; source = 'similar'; scopeTxt = hm.scope; l.ai_sample_n = hm.n; }
       else {
+        // brak werdyktu z serwera (oferta dodana po ostatnim przeliczeniu) i za mało podobnych domów w załadowanej paczce
         l.verdict_badge = 'normal';
-        l.verdict_text = '🔍 Brak porównania';
-        l.verdict_full = 'Za mało podobnych domów w okolicy, by ocenić cenę';
+        l.verdict_text = '🆕 Analiza wkrótce';
+        l.verdict_full = 'Werdykt AI (okazja / w normie / zawyżona) pojawi się po najbliższym przeliczeniu bazy (co kilka godzin)';
         l.ai_delta_pct = 0;
         continue;
       }

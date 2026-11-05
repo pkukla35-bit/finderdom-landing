@@ -48,7 +48,14 @@ def dispatch_all(db, reason: str) -> dict:
     if not tok:
         log.warning("fresh: brak tokena GitHub (settings.github.token) — pętla nie ruszy"); return {"error": "no_token"}
     out = {}
-    for wf, inputs in FRESH_INPUTS.items():
+    from zoneinfo import ZoneInfo
+    hour_pl = datetime.now(ZoneInfo("Europe/Warsaw")).hour
+    targets = dict(FRESH_INPUTS)
+    # werdykty AI (okazja / norma / zawyżona) dla ofert z ostatnich godzin: przeliczenie całej bazy trwa ~3 min,
+    # odpalane w turach 12:00, 16:00 i 19:00 PL (poranne liczy cron 05:30 UTC) — bez edycji pliku workflow (brak uprawnienia „workflow”)
+    if hour_pl in (12, 16, 19):
+        targets["compute-ai-verdicts.yml"] = {"dry_run": "no"}
+    for wf, inputs in targets.items():
         try:
             _, runs = _gh(tok, f"/actions/workflows/{wf}/runs?per_page=5")
             if any(r["status"] in ("queued", "in_progress") for r in runs.get("workflow_runs", [])):

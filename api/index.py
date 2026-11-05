@@ -1796,6 +1796,12 @@ async def admin_cleanup_stale(
             daily = await _daily_jobs_if_due()
         except Exception as e:
             logger.error("daily jobs failed: %s", str(e)[:200])
+        try:
+            fs = await _fresh_sweep_backstop()
+            if fs:
+                logger.info("fresh sweep backstop: %s", fs)
+        except Exception as e:
+            logger.error("fresh sweep backstop failed: %s", str(e)[:200])
 
     limit = max(1, min(limit, 1000))
     concurrency = max(1, min(concurrency, 50))
@@ -3955,6 +3961,38 @@ async def _daily_jobs_if_due() -> Optional[dict]:
     else:
         out["mailing"] = out["alerts"] = {"skipped": "email_not_configured"}
     await db.settings.update_one({"_id": "daily_jobs"}, {"$set": {"last_result": out, "finished_at": datetime.now(timezone.utc).isoformat()}})
+    return out
+
+
+async def _fresh_sweep_backstop() -> Optional[dict]:
+    """⏰ Godzinne odświeżanie ofert 9–19 PL to samonapędzająca się pętla w GitHub Actions (scripts/fresh_sweep.py).
+    Backstop: gdy ostatni dispatch był > 2 h temu, a jesteśmy w oknie 9–19 PL — odpal lekką turę (max_pages=1) ponownie."""
+    db = database()
+    now_pl = datetime.now(ZoneInfo("Europe/Warsaw"))
+    if not (9 <= now_pl.hour <= 19):
+        return None
+    st = await db.settings.find_one({"_id": "fresh_sweep"}) or {}
+    last = st.get("last_dispatch_at")
+    if last and (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds() < 2 * 3600:
+        return None
+    tok = await _github_token()
+    if not tok:
+        return {"error": "no_github_token"}
+    inputs = {"scrape-otodom-regions.yml": {"max_pages": "1", "regions": "1"}, "scrape-olx.yml": {"max_pages": "2", "regions": "1"},
+              "scrape-nol.yml": {"max_pages": "2", "max_details": "150", "regions": "1"}, "scrape-portals.yml": {"max_pages": "1", "regions": "1"}}
+    out = {}
+    async with httpx.AsyncClient(timeout=20) as client:
+        hdr = {"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json"}
+        for wf, inp in inputs.items():
+            try:
+                runs = (await client.get(f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{wf}/runs?per_page=5", headers=hdr)).json().get("workflow_runs", [])
+                if any(r["status"] in ("queued", "in_progress") for r in runs):
+                    out[wf] = "running-skip"; continue
+                r = await client.post(f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{wf}/dispatches", headers=hdr, json={"ref": "main", "inputs": inp})
+                out[wf] = r.status_code
+            except Exception as e:
+                out[wf] = str(e)[:80]
+    await db.settings.update_one({"_id": "fresh_sweep"}, {"$set": {"last_dispatch_at": datetime.now(timezone.utc).isoformat(), "last_results": out, "reason": "backend-backstop"}}, upsert=True)
     return out
 
 

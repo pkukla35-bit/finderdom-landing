@@ -427,6 +427,9 @@ def get_mongo():
     return client[os.environ.get("MONGODB_DB") or "finderdom"]
 
 
+_JOB_STARTED_AT = time.time()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--property", choices=list(PROPERTY_SLUGS.keys()), required=True)
@@ -509,10 +512,20 @@ def main():
 
     # Telefony właścicieli (oferty prywatne) — po imporcie listy, bez ScrapingBee (tylko bezpośrednio)
     try:
+        fresh = args.max_pages <= 2
         enrich_from_details(coll, PROPERTY_LABELS.get(args.property, args.property), TRANSACTION,
-                            int(os.environ.get("OTODOM_PHONE_LIMIT") or "120"), int(os.environ.get("OTODOM_PLOT_LIMIT") or "250"))
+                            int(os.environ.get("OTODOM_PHONE_LIMIT") or ("40" if fresh else "120")),
+                            int(os.environ.get("OTODOM_PLOT_LIMIT") or ("60" if fresh else "250")))
     except Exception as e:
         log.warning("detail enrichment skipped: %s", e)
+
+    # ⏰ Godzinne odświeżanie 9–19 PL: job-lider (mieszkanie/sprzedaz, tryb regiony) odpala kolejną lekką turę importów
+    if args.regions and args.property == "mieszkanie" and TRANSACTION == "sprzedaz":
+        try:
+            import fresh_sweep
+            fresh_sweep.wait_and_dispatch_next(db, _JOB_STARTED_AT)
+        except Exception as e:
+            log.warning("fresh sweep loop skipped: %s", e)
 
 
 # ── Lokale użytkowe: matryce w .github/workflows nie mają „lokal” (nie da się ich edytować bez uprawnienia „Workflows”

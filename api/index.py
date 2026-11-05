@@ -2423,15 +2423,7 @@ async def listings_scraped_endpoint(
         # 🔒 PAYWALL: bez opłaconego planu tylko podgląd FREE_PREVIEW_LIMIT ofert (odpowiedź publiczna → CDN cache),
         #    opłacony plan → pełna lista, odpowiedź prywatna (frontend dodaje &p=1, więc CDN nie pomiesza cache).
         locked = paid is None
-        if locked:
-            docs = docs[:FREE_PREVIEW_LIMIT]
-            for d in docs:  # bez planu: brak linków do portali źródłowych
-                for k in ("url", "source_url", "offer_url", "phone", "contact_phone"):
-                    d.pop(k, None)
-            response.headers["Cache-Control"] = "public, max-age=120, s-maxage=900, stale-while-revalidate=86400"
-        else:
-            response.headers["Cache-Control"] = "private, max-age=60"
-        # 📞 Telefon właściciela (tylko oferty prywatne): pełny numer dla planów Solo/Firmowy; pozostali widzą zamaskowany
+        # 📞 Telefon właściciela (tylko oferty prywatne): pełny numer dla planów Solo/Firmowy; pozostali (gość/Free/Osobisty) widzą zamaskowany
         for d in docs:
             ph = d.pop("phone", None)
             if d.get("seller_type") != "prywatna" or not ph:
@@ -2443,12 +2435,17 @@ async def listings_scraped_endpoint(
                 d["phone"] = ph
             else:
                 d["phone_masked"] = f"+48 {digits[-9:-6]} ••• •••"
-            if "stale_since" in d and isinstance(d["stale_since"], datetime):
+        if locked:
+            docs = docs[:FREE_PREVIEW_LIMIT]
+            for d in docs:  # bez planu: brak linków do portali źródłowych
+                for k in ("url", "source_url", "offer_url", "phone", "contact_phone"):
+                    d.pop(k, None)
+            response.headers["Cache-Control"] = "public, max-age=120, s-maxage=900, stale-while-revalidate=86400"
+        else:
+            response.headers["Cache-Control"] = "private, max-age=60"
+        for d in docs:
+            if isinstance(d.get("stale_since"), datetime):
                 d["stale_since"] = d["stale_since"].isoformat()
-        if archive:
-            for d in docs:
-                if isinstance(d.get("stale_since"), datetime):
-                    d["stale_since"] = d["stale_since"].isoformat()
         return {"listings": docs, "count": len(docs), "total_count": total_count, "offset": offset, "limit": limit, "lite": bool(lite),
                 "filtered": bool(city or type), "locked": locked, "preview_limit": FREE_PREVIEW_LIMIT if locked else None,
                 "archive": bool(archive), "broker": broker}

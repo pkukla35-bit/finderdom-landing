@@ -1270,6 +1270,12 @@ async function loadListings() {
     if (heroMax && (!apiParams.get('price_to') || heroMax < parseFloat(apiParams.get('price_to')))) apiParams.set('price_to', String(heroMax));
     // GEO filter: gdy user wpisal miasto + promien (heroRadiusKm), wysylamy lat/lng+radius zamiast city
     // Backend zwraca oferty z bounding box, wiec dla Krakow+50km dostaniemy tez Wieliczka, Skawina, Zabierzów
+    // Deep link ?km=20: pole promienia seedowane jest dopiero PO pierwszym fetchu (applyScrapedData → URL params init),
+    // więc pierwszy request szedł BEZ lat/lng/radius → wynik tylko z miasta (1162), a pasek pokazywał „20 km”. Seedujemy tu.
+    if (firstLoad) {
+      const urlKm0 = parseFloat(urlParams.get('km') || urlParams.get('radius') || '0');
+      if (urlKm0 > 0) { ['heroRadiusKm', 'fRadiusKm'].forEach(id => { const el = document.getElementById(id); if (el) el.value = String(urlKm0); }); }
+    }
     const uiRadiusKm = parseFloat(document.getElementById('heroRadiusKm')?.value || '0');
     if (uiRadiusKm > 0 && preCity && window.CITY_COORDS) {
       const cityKey = normalizeCity(preCity);
@@ -2411,16 +2417,17 @@ function collectFilterState() {
     const sk = document.getElementById('fRadiusKm'); if (sk) sk.value = explicitKm > 0 ? String(explicitKm) : ''; }
   // AUTO-RADIUS: jeśli user wpisał miasto ale nie km, i miasto jest znane w CITY_COORDS → automatycznie użyj 15 km
   //   (dzięki temu "Kraków" pokazuje 1099 domów z aglomeracji, a nie tylko 364 z city==Kraków)
+  //   UWAGA (2026-06): auto-radius 15 km po stronie przeglądarki mógł tylko ZAWĘŻAĆ wynik z backendu (miasto), a każde odrzucenie
+  //   choćby 1 oferty przełączało licznik z realnego total (1162) na rozmiar batcha (≤1000) → „bez km pokazuje mało”. Wyłączony.
   let radiusKm = explicitKm;
   let radiusCenter = null;
   let radiusCityKey = null;
-  let autoRadius = false;
+  const autoRadius = false;
   if (radiusCityRaw) {
     const key = normalizeCity(radiusCityRaw);
     if (window.CITY_COORDS && window.CITY_COORDS[key]) {
       radiusCenter = window.CITY_COORDS[key];
       radiusCityKey = key;
-      if (radiusKm <= 0) { radiusKm = 15; autoRadius = true; }
     } else if (explicitKm > 0) {
       // km wpisane ale miasto nieznane — pomijamy radius
       radiusKm = 0;
@@ -2584,8 +2591,10 @@ function applyAllFilters() {
       if (explicitVerdicts.length > 0 && !explicitVerdicts.includes(v)) return false;
     }
 
-    // Promień od miasta centralnego (haversine) — priorytet: lat/lng oferty; fallback: CITY_COORDS po miescie
-    if (f.radiusCenter && f.radiusKm > 0) {
+    // Promień od miasta centralnego (haversine) — TYLKO gdy backend NIE dostał lat/lng/radius (wtedy __NEARBY_CITIES === null).
+    // Gdy backend już zawęził (GPS w boxie | miejscowość z okolicy | wpisane miasto), nie filtrujemy drugi raz: każde odrzucenie
+    // choćby 1 oferty z batcha ≤1000 przełączało licznik z realnego total (2765) na rozmiar batcha → „+20 km daje MNIEJ niż miasto”.
+    if (f.radiusCenter && f.radiusKm > 0 && !window.__NEARBY_CITIES) {
       let ofLat = null, ofLng = null;
       if (l.lat && l.lng) {
         // Oferta ma dokladny GPS - uzywamy realny dystans (Krakow ma 15km srednicy,

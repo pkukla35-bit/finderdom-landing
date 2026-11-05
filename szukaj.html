@@ -2592,8 +2592,9 @@ function applyAllFilters() {
         if (c) { ofLat = c[0]; ofLng = c[1]; }
         else if (ofCityKey === f.radiusCityKey) {
           // Ta sama nazwa miasta ale nieznane wspolrzedne - przepusc (nie mozemy zmierzyc)
-        } else if (window.__NEARBY_CITIES && window.__NEARBY_CITIES.has(ofCityKey)) {
-          // miejscowość potwierdzona przez backend jako leżąca w promieniu (po medianie GPS jej ofert) — przepuść
+        } else if (window.__NEARBY_CITIES) {
+          // backend już zawęził wyniki do promienia (GPS / miejscowości z okolicy / wpisane miasto) — ofert bez GPS nie odrzucamy
+          // (np. „Kraków Swoszowice”, „Janowice” — nazwy spoza CITY_COORDS wcześniej wypadały i promień 20 km dawał 3 zamiast 23 ofert)
         } else {
           return false;
         }

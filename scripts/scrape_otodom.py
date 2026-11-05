@@ -297,12 +297,33 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
     # location
     loc = item.get("location") or {}
     location = ""
+    city_part = district = ""
     if isinstance(loc, dict):
         addr = loc.get("address") or {}
         if isinstance(addr, dict):
             city_part = (addr.get("city") or {}).get("name", "") if isinstance(addr.get("city"), dict) else ""
             district = (addr.get("district") or {}).get("name", "") if isinstance(addr.get("district"), dict) else ""
-            location = ", ".join(x for x in [city_part, district] if x)
+        # tryb --regions: address.city bywa puste → miasto z reverseGeocoding.locations
+        # (np. [{"fullName": "Kraków, małopolskie", "locationLevel": "city"}, {"fullName": "Krowodrza, Kraków, małopolskie", "locationLevel": "district"}])
+        if not city_part:
+            rg = loc.get("reverseGeocoding") or {}
+            locs = rg.get("locations") if isinstance(rg, dict) else None
+            if isinstance(locs, list):
+                for x in locs:
+                    if not isinstance(x, dict): continue
+                    lvl = str(x.get("locationLevel") or "").lower()
+                    parts = [p.strip() for p in str(x.get("fullName") or x.get("name") or "").split(",") if p.strip()]
+                    if lvl in ("city", "town", "village") and parts:
+                        city_part = parts[0]
+                    elif lvl in ("district", "sub_district", "subdistrict") and len(parts) >= 2:
+                        city_part = city_part or parts[1]
+                        district = district or parts[0]
+                if not city_part and locs:
+                    last = locs[-1] if isinstance(locs[-1], dict) else {}
+                    parts = [p.strip() for p in str(last.get("fullName") or "").split(",") if p.strip()]
+                    # ostatni element to najdokładniejsza lokalizacja; jego fullName kończy się województwem
+                    if len(parts) >= 2 and parts[-1].islower(): city_part = parts[-2]
+        location = ", ".join(x for x in [city_part, district] if x)
     if not location: location = city_name
     real_city = city_part if (isinstance(loc, dict) and city_part) else city_name
 
@@ -483,6 +504,13 @@ def main():
                 log.info("  page %d: no listings", page); break
 
             docs = [d for d in (normalize(it, city["name"], args.property) for it in items) if d]
+            if docs and city["slug"] == city["voi"]:   # diagnostyka trybu regionów: ile ofert ma rozpoznane miasto
+                no_city = sum(1 for d in docs if d.get("city") == city["name"])
+                log.info("  miasto rozpoznane: %d/%d", len(docs) - no_city, len(docs))
+                if no_city and not DIRECT_STATE.get("loc_dumped"):
+                    DIRECT_STATE["loc_dumped"] = True
+                    bad = next((it for it in items if (it.get("location") or {}) and normalize(it, city["name"], args.property) and normalize(it, city["name"], args.property).get("city") == city["name"]), None)
+                    if bad: log.info("  przykład location bez miasta: %s", json.dumps(bad.get("location"), ensure_ascii=False)[:700])
             batch_new = batch_upd = 0
             if docs:
                 # added_at = zawsze prawdziwa data z Otodomu (posted_at) — pozwala poprawnie działać

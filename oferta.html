@@ -1000,7 +1000,7 @@ function normalizeScrapedListing(raw) {
       return cleanImageList(raw_imgs).slice(0, 30).map(u => proxyImg(u));
     })(),
     emoji: TYPE_EMOJI_OFF[baseType] || '🏠',
-    img_class: imgClass, portal: detectPortalFromUrlOff(raw.url) || 'Portal', is_original: true,
+    img_class: imgClass, portal: detectPortalFromUrlOff(raw.url) || portalFromSource(raw.source) || 'Portal', is_original: true,
     seller_type: sellerType, seller_label: sellerLabel,
     verdict_badge: 'normal', verdict_text: '✨ Nowa',
     verdict_full: 'Świeżo zescrapowana', ai_delta_pct: 0,
@@ -1024,6 +1024,8 @@ function normalizeScrapedListing(raw) {
 }
 
 // Wykrywanie portalu z URL (oferta.html)
+// Bez planu API nie zwraca linku (url) — nazwę portalu bierzemy z pola source
+function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
 function detectPortalFromUrlOff(url) {
   if (!url) return null;
   const u = String(url).toLowerCase();

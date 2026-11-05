@@ -187,6 +187,8 @@ gtag('set', 'url_passthrough', false);
   .b-over{background:rgba(239,68,68,0.95);color:#3d0a0a}
   .b-outlier{background:rgba(148,163,184,0.95);color:#0f172a}
   .b-new{background:rgba(255,184,0,0.95);color:#0B1836}
+  .card-ago{position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,0.6);color:#c5d0e6;padding:3px 8px;border-radius:100px;font-size:10px;font-weight:700;backdrop-filter:blur(8px)}
+  .card-ago.fresh{background:rgba(34,197,94,0.85);color:#fff}
   .card-portal{position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.6);color:#fff;padding:3px 8px;border-radius:100px;font-size:9px;font-weight:700;backdrop-filter:blur(8px)}
   /* Badge Multi-portal — klikalny, otwiera modal z listą portali (wersja na top-right zamiast pojedynczego portalu) */
   .card-portal-multi{cursor:pointer;border:none;background:rgba(96,165,250,0.95);color:#0c1e3e;font-size:10px;font-weight:900;letter-spacing:0.3px;padding:4px 10px;box-shadow:0 3px 10px rgba(0,0,0,0.35);z-index:5;transition:transform .12s, background .15s}
@@ -879,6 +881,22 @@ function normalizeScrapedListing(raw) {
 }
 
 // Wykrywanie portalu z URL — dla poprawnego wyświetlania badge
+// 🕐 „11 min temu” — kiedy oferta pojawiła się w FinderDom (added_at)
+function fmtAgo(iso) {
+  if (!iso) return '';
+  const t = new Date(iso).getTime(); if (!t) return '';
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (m < 1) return 'przed chwilą';
+  if (m < 60) return `${m} min temu`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} godz. temu`;
+  const d = Math.round(h / 24);
+  if (d === 1) return 'wczoraj';
+  if (d < 7) return `${d} dni temu`;
+  if (d < 30) return `${Math.round(d / 7)} tyg. temu`;
+  return new Date(iso).toLocaleDateString('pl-PL');
+}
+function isFresh(iso) { const t = iso ? new Date(iso).getTime() : 0; return t && (Date.now() - t) < 3 * 3600 * 1000; }
 function fmtPhone(p) {
   const d = String(p || '').replace(/\D/g, '');
   const n = d.length > 9 ? d.slice(-9) : d;
@@ -1789,6 +1807,7 @@ function renderPage() {
           ${(l.sources_count || 1) > 1
             ? `<button type="button" class="card-portal card-portal-multi" data-multi-id="${l.id}" title="Kliknij aby zobaczyć wszystkie linki (${l.sources_count} portali)">🌐 ${l.sources_count} portali</button>`
             : `<div class="card-portal">${l.portal}</div>`}
+          ${fmtAgo(l.added_at) ? `<div class="card-ago${isFresh(l.added_at) ? ' fresh' : ''}" title="Kiedy oferta pojawiła się w FinderDom">🕐 ${fmtAgo(l.added_at)}</div>` : ''}
           ${crmBadgeHtml}
           ${l.seller_label ? `<div style="position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,0.75);color:#FFB800;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:800;backdrop-filter:blur(8px)">${l.seller_label}</div>` : ''}
         </div>

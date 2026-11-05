@@ -136,6 +136,10 @@
       "destination": "/api/index"
     },
     {
+      "source": "/api/ai-search",
+      "destination": "/api/index"
+    },
+    {
       "source": "/api/listings-scraped",
       "destination": "/api/index"
     },

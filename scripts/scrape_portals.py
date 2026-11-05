@@ -248,9 +248,19 @@ def parse_adresowo(html: str) -> List[Dict[str, Any]]:
             "id": mid.group(1), "url": "https://adresowo.pl" + href.group(1),
             "title": " ".join(x for x in [loc, street] if x), "price": price, "area": area, "rooms": rooms, "floor": None,
             "image": img.group(1) if img else None, "district": district, "street": street, "loc0": loc,
-            "desc": _txt(desc.group(1)) if desc else "", "seller": "prywatna",   # adresowo = tylko bez pośredników
+            # adresowo: karta prywatna ma etykietę „bez pośredników”; pozostałe (~40%) to agencje (strona oferty: „Właściciel powierzył sprzedaż agencji”)
+            "desc": _txt(desc.group(1)) if desc else "", "seller": "prywatna" if "bez pośredników" in c else "posrednik",
         })
     return out
+
+
+def verify_adresowo_seller(url: str) -> Optional[str]:
+    """Strona oferty adresowo.pl: `re.offerPhoneType = 'realtor'` → agencja; 'owner'/inne → właściciel. None gdy brak HTML."""
+    html = fetch(url)
+    if not html: return None
+    m = re.search(r"PhoneType\s*=\s*'(\w+)'", html)
+    if not m: return "prywatna" if "bez pośredników" in html else None
+    return "posrednik" if m.group(1) == "realtor" else "prywatna"
 
 
 PORTALS = {
@@ -333,6 +343,7 @@ def normalize(portal: str, it: Dict[str, Any], city_name: str, prop: str, trans:
         "last_seen_at": now_iso, "scraped_via": "portal-direct",
     }
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype
+    if portal == "adresowo": doc["seller_verified"] = True   # seller z etykiety karty („bez pośredników”)
     for k in ("lat", "lng", "plot_area_m2", "phone", "build_year", "posted_at"):
         if it.get(k) not in (None, "", 0): doc[k] = it[k]
     # 🌳 wielkość działki z opisu (Gratka/Morizon/Domiporta nie podają jej w danych listy)
@@ -382,10 +393,10 @@ def main():
             items = P["parse"](html)
             if not items: log.info("  page %d: 0 ofert", page); break
             ops = []
-            if a.portal == "odwlasciciela":   # numer właściciela ze strony oferty — tylko dla ofert, których jeszcze nie mamy
-                have = {x["external_id"] for x in coll.find({"source": a.portal, "external_id": {"$in": [str(it["id"]) for it in items]}}, {"external_id": 1})}
+            if a.portal == "odwlasciciela":   # numer właściciela ze strony oferty — dla ofert, które nie mają jeszcze numeru w bazie (nowe i stare)
+                have_phone = {x["external_id"] for x in coll.find({"source": a.portal, "external_id": {"$in": [str(it["id"]) for it in items]}, "phone": {"$regex": r"\d{9}"}}, {"external_id": 1})}
                 for it in items:
-                    if str(it["id"]) not in have and tot.setdefault("phones", 0) < 60:
+                    if str(it["id"]) not in have_phone and tot.setdefault("phones", 0) < ODW_PHONE_LIMIT:
                         ph = enrich_odwlasciciela_phone(it["url"]); time.sleep(0.8)
                         if ph: it["phone"] = ph; tot["phones"] += 1
             for it in items:
@@ -406,6 +417,28 @@ def main():
             if new == 0 and page >= 2: log.info("  → brak nowych, następne miasto"); break
             time.sleep(a.delay)
     log.info("═══ DONE %s %s/%s: new=%d updated=%d pages=%d ═══", a.portal, a.transaction, a.property, tot["new"], tot["updated"], tot["pages"])
+    if a.portal == "adresowo":
+        _verify_adresowo_sellers(coll, a.property, a.transaction)
+
+
+ODW_PHONE_LIMIT = int(os.environ.get("ODW_PHONE_LIMIT", "150"))
+ADRESOWO_VERIFY_LIMIT = int(os.environ.get("ADRESOWO_VERIFY_LIMIT", "120"))
+
+
+def _verify_adresowo_sellers(coll, prop: str, trans: str) -> None:
+    """Do 5.11.2026 wszystkie oferty adresowo były zapisywane jako „prywatna” — ok. 40% to agencje.
+    Weryfikacja istniejących rekordów (bez flagi seller_verified) ze strony oferty, ADRESOWO_VERIFY_LIMIT/run."""
+    q = {"source": "adresowo", "seller_type": "prywatna", "seller_verified": {"$ne": True}, "is_stale": {"$ne": True},
+         "transaction_type": trans, "type": {"$regex": "^" + re.escape(BASE_LABEL[prop])}}
+    fixed = checked = 0
+    for d in coll.find(q, {"url": 1}).limit(ADRESOWO_VERIFY_LIMIT):
+        s = verify_adresowo_seller(d["url"]); time.sleep(0.8)
+        if not s: continue
+        checked += 1
+        upd = {"seller_verified": True}
+        if s != "prywatna": upd["seller_type"] = s; fixed += 1
+        coll.update_one({"_id": d["_id"]}, {"$set": upd})
+    log.info("═══ adresowo seller-verify %s/%s: checked=%d → posrednik=%d ═══", trans, prop, checked, fixed)
 
 
 # ── Lokale użytkowe: matryce w .github/workflows nie mają „lokal” (nie da się ich edytować bez uprawnienia „Workflows”

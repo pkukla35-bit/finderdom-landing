@@ -1782,6 +1782,9 @@ function renderPage() {
       phoneHtml = `<div class="card-phone" onclick="event.preventDefault();event.stopPropagation();window.location.href='tel:${l.phone}'" title="Zadzwoń do właściciela">📞 ${fmtPhone(l.phone)} <span class="card-phone-sub">właściciel</span></div>`;
     } else if (l.phone_masked) {
       phoneHtml = `<div class="card-phone card-phone-locked" onclick="event.preventDefault();event.stopPropagation();window.location.href='/dla-biur'" title="Numer właściciela w planie Biuro jednoosobowe / Firmowy">📞 ${l.phone_masked} <span class="card-phone-sub">🔒 numer w planie dla biur</span></div>`;
+    } else if (l.seller_type === 'prywatna' && l.url) {
+      // plan z dostępem do numerów, ale portal (OLX, Adresowo) pokazuje numer dopiero po zalogowaniu u siebie — nie da się go pobrać
+      phoneHtml = `<div class="card-phone card-phone-locked" style="opacity:.75" onclick="event.preventDefault();event.stopPropagation();window.open('${l.url}','_blank','noopener')" title="Ten portal ukrywa numer za logowaniem — otwórz ogłoszenie u źródła">📞 numer tylko na ${l.portal || 'portalu'} <span class="card-phone-sub">otwórz ogłoszenie →</span></div>`;
     }
     const archiveHtml = (window.ARCHIVE_MODE && l.stale_since) ? `<div class="card-archived">🗄️ zniknęła z portalu ${new Date(l.stale_since).toLocaleDateString('pl-PL')}</div>` : '';
     const targetUrl = `/oferta?id=${l.id}` + ((window.CRM_DEMO && !window.CRM_REAL) ? '&widok=biuro' : '');

@@ -1746,6 +1746,9 @@ async function renderOffer(l, all) {
     specs.push({label:'📞 Telefon właściciela', val: `<a href="tel:${l.phone}" style="color:#86efac;font-weight:800">+48 ${n.slice(0,3)} ${n.slice(3,6)} ${n.slice(6)}</a>`});
   } else if (l.phone_masked) {
     specs.push({label:'📞 Telefon właściciela', val: `<a href="/dla-biur" style="color:#c5d0e6">${l.phone_masked} <span style="font-size:11px;color:#FFB800">🔒 w planie dla biur</span></a>`});
+  } else if (l.seller_type === 'prywatna' && l.url) {
+    // portal (OLX, Adresowo) pokazuje numer dopiero po zalogowaniu u siebie — nie da się go pobrać
+    specs.push({label:'📞 Telefon właściciela', val: `<a href="${l.url}" target="_blank" rel="noopener" style="color:#c5d0e6">numer tylko na ${l.portal || 'portalu'} <span style="font-size:11px;color:#8ba3d4">(portal ukrywa numer za logowaniem) →</span></a>`});
   }
   specs.push({label:'Portal', val: l.portal || 'Otodom'});
   specs.push({label:'Dodane', val: l.added_display || '—'});

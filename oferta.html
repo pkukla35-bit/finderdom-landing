@@ -970,7 +970,7 @@ function normalizeScrapedListing(raw) {
   }
   const locStr = raw.location || city || '';
   const sellerType = raw.seller_type || 'posrednik';
-  const sellerLabel = sellerType === 'prywatna' ? '👨‍👩‍👧 Prywatna' : '🏢 Pośrednik';
+  const sellerLabel = sellerType === 'prywatna' ? '👨‍👩‍👧 Prywatna' : sellerType === 'przetarg' ? (raw.auction_kind === 'licytacja' ? '🔨 Licytacja komornicza' : raw.auction_kind === 'syndyk' ? '🔨 Syndyk' : '🔨 Przetarg') : '🏢 Pośrednik';
   let h = 0;
   for (let i = 0; i < raw.external_id.length; i++) h = (h * 31 + raw.external_id.charCodeAt(i)) & 0xffff;
   const imgClass = IMG_CLASSES_OFF[h % IMG_CLASSES_OFF.length];
@@ -983,6 +983,7 @@ function normalizeScrapedListing(raw) {
     price_pm2_display: ppm2 ? (ppm2.toLocaleString('pl-PL').replace(/,/g,' ') + ' zł/m²') : '',
     area_m2: area, rooms: raw.rooms || 0,
     plot_area_m2: Number(raw.plot_area_m2) || Number(raw.plot_area) || 0,
+    auction_kind: raw.auction_kind || null, auction_deadline: raw.auction_deadline || null,
     phone: raw.phone || null, phone_masked: raw.phone_masked || null,
     floor: raw.floor || 0, max_floor: raw.max_floor || 0,
     year_built: raw.build_year || raw.year_built || 0,
@@ -1025,7 +1026,7 @@ function normalizeScrapedListing(raw) {
 
 // Wykrywanie portalu z URL (oferta.html)
 // Bez planu API nie zwraca linku (url) — nazwę portalu bierzemy z pola source
-function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
+function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania',listaprzetargow:'ListaPrzetargów'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
 function detectPortalFromUrlOff(url) {
   if (!url) return null;
   const u = String(url).toLowerCase();
@@ -1041,6 +1042,7 @@ function detectPortalFromUrlOff(url) {
   if (u.includes('odwlasciciela.pl')) return 'OdWłaściciela';
   if (u.includes('szybko.pl')) return 'Szybko';
   if (u.includes('kupmieszkania.pl')) return 'KupMieszkania';
+  if (u.includes('listaprzetargow.pl')) return 'ListaPrzetargów';
   // nieznany portal: nazwa z domeny (np. „xyz.pl” → „Xyz”) zamiast ogólnego „Portal”
   const m = u.match(/^https?:\/\/(?:www\.)?([a-z0-9-]+)\./);
   return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : null;
@@ -1741,6 +1743,10 @@ async function renderOffer(l, all) {
   if (l.has_ac) specs.push({label:'Klimatyzacja', val: '✓ Tak'});
   if (l.plot_area_m2 > 0 && (l.type === 'dom' || l.type === 'dzialka')) specs.push({label:'🌳 Działka', val: l.plot_area_m2 >= 10000 ? (l.plot_area_m2 / 10000).toLocaleString('pl-PL', { maximumFractionDigits: 2 }) + ' ha' : Math.round(l.plot_area_m2).toLocaleString('pl-PL') + ' m²'});
   specs.push({label:'Sprzedający', val: l.seller_label || '—'});
+  if (l.seller_type === 'przetarg') {
+    specs.push({label:'🔨 Cena', val: 'wywoławcza — ostateczna cena ustalana w przetargu / na licytacji'});
+    if (l.auction_deadline) specs.push({label:'⏰ Termin', val: new Date(l.auction_deadline).toLocaleDateString('pl-PL')});
+  }
   if (l.phone) {
     const d = String(l.phone).replace(/\D/g, ''), n = d.slice(-9);
     specs.push({label:'📞 Telefon właściciela', val: `<a href="tel:${l.phone}" style="color:#86efac;font-weight:800">+48 ${n.slice(0,3)} ${n.slice(3,6)} ${n.slice(6)}</a>`});

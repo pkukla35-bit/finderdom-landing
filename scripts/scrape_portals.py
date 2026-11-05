@@ -83,6 +83,15 @@ def url_odwlasciciela(prop, trans, city, page):
     return f"https://odwlasciciela.pl/{seg}/{'wynajem' if trans == 'wynajem' else 'sprzedaz'}/{loc}.html" + (f"?offset={(page - 1) * 20}" if page > 1 else "")
 
 
+def url_listaprzetargow(prop, trans, city, page):
+    """listaprzetargow.pl — przetargi i licytacje komornicze (tylko sprzedaż). Lista ogólnopolska od najnowszych, 25/str."""
+    if trans != "sprzedaz":
+        return None
+    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki", "lokal": "lokale-uzytkowe"}[prop]
+    loc = "" if city_slug(city) in ("polska", city.get("voi")) else f"/{city_slug(city)}"
+    return f"https://listaprzetargow.pl/oferty/{seg}{loc}?sort=created_at-desc&page={page}"
+
+
 # ───────────────────────── Parsers (→ lista słowników: id,url,title,price,area,rooms,image,district,street,desc,floor,seller) ─────────────────────────
 def _txt(s: str) -> str:
     s = re.sub(r"<[^>]+>", " ", s or ""); s = htmllib.unescape(s).replace("\xa0", " ")
@@ -271,7 +280,49 @@ PORTALS = {
     # nowe portale 5.11.2026 (odpalane łańcuchem po istniejących — patrz PORTAL_CHAIN)
     "gethome":        {"url": url_gethome,        "parse": parse_gethome},
     "odwlasciciela":  {"url": url_odwlasciciela,  "parse": parse_odwlasciciela},
+    "listaprzetargow": {"url": url_listaprzetargow, "parse": None},   # parse ustawiony niżej (funkcja zdefiniowana dalej)
 }
+
+
+def parse_listaprzetargow(html: str) -> List[Dict[str, Any]]:
+    """Karty <a href=".../oferty/{id}-{slug}" class="modernCard ...">: lokalizacja „Radom, Południe”, typ, cena (wywoławcza),
+    zł/m², metraż, tag źródła (Przetarg / Licytacja komornicza / Syndyk), termin (DD-MM-RRRR), zdjęcie, badge obniżki (-40%)."""
+    out = []
+    html = re.sub(r"<svg.*?</svg>", "", html, flags=re.S)
+    for m in re.finditer(r'<a href="(https://listaprzetargow\.pl/oferty/(\d+)-[^"]+)"[^>]*class="modernCard[^"]*"[^>]*>(.*?)</a>\s*(?=<a |<div|<nav|$)', html, re.S):
+        url, mid, c = m.group(1), m.group(2), m.group(3)
+        loc = re.search(r'modernCard__location[^>]*>(.*?)</p>', c, re.S)
+        ftype = re.search(r'modernCard__facilityType[^>]*>(.*?)</div>', c, re.S)
+        price = re.search(r'modernCard__priceMain[^>]*>(.*?)</div>', c, re.S)
+        area = re.search(r'modernCard__tag--area.*?<span>\s*(.*?)\s*</span>', c, re.S)
+        src = re.search(r'modernCard__tag--source[^>]*>(.*?)</span>', c, re.S)
+        deadline = re.search(r'modernCard__deadline[^>]*>.*?(\d{2}-\d{2}-\d{4})', c, re.S)
+        img = re.search(r'<img src="(https://[^"]+)"', c)
+        red = re.search(r'reductionBadge[^>]*>\s*(-?\d+)\s*%', c, re.S)
+        loc_txt = _txt(loc.group(1)) if loc else ""
+        parts = [p.strip() for p in loc_txt.split(",") if p.strip()]
+        area_v = None
+        if area:
+            a_txt = _txt(area.group(1)); area_v = _money(a_txt)
+            if area_v and re.search(r"\bha\b", a_txt): area_v *= 10000      # działki: „1.2895 ha”
+            elif area_v and re.search(r"\bar(?:y|ów)?\b", a_txt): area_v *= 100
+        kind = _txt(src.group(1)).lower() if src else "przetarg"
+        kind = "licytacja" if "licytac" in kind else "syndyk" if "syndyk" in kind else "przetarg"
+        dl = None
+        if deadline:
+            d_, mo, y = deadline.group(1).split("-"); dl = f"{y}-{mo}-{d_}"
+        img_u = img.group(1) if img and "default" not in img.group(1) else None   # _medium → 403, zostaje _small (karta i tak ≤640px)
+        out.append({
+            "id": mid, "url": url, "title": f"{'Licytacja komornicza' if kind == 'licytacja' else 'Syndyk' if kind == 'syndyk' else 'Przetarg'}: {_txt(ftype.group(1)) if ftype else ''} {loc_txt}".strip(),
+            "price": _money(price.group(1)) if price else None, "area": area_v, "rooms": None, "floor": None,
+            "image": img_u, "district": parts[1] if len(parts) > 1 and not parts[1].islower() else None, "street": None,   # „Brzeszcze, małopolskie” → to województwo, nie dzielnica
+            "loc0": parts[0] if parts else None, "desc": "", "seller": "przetarg",
+            "auction_kind": kind, "auction_deadline": dl, "auction_discount_pct": int(red.group(1)) if red else None,
+        })
+    return out
+
+
+PORTALS["listaprzetargow"]["parse"] = parse_listaprzetargow
 
 
 def fetch(url: str) -> Optional[str]:
@@ -313,6 +364,8 @@ def guess_city(portal: str, it: Dict[str, Any]) -> Optional[str]:
         two = " ".join(toks[:2])
         if two in {"Nowy Sącz", "Zielona Góra", "Gorzów Wielkopolski", "Jelenia Góra", "Dąbrowa Górnicza", "Ruda Śląska", "Stalowa Wola", "Nowy Targ", "Tomaszów Mazowiecki", "Piotrków Trybunalski", "Ostrów Wielkopolski", "Bielsko-Biała"}: return two
         return toks[0] if toks and toks[0] else None
+    elif portal == "listaprzetargow":
+        return (it.get("loc0") or "").strip() or None   # „Radom, Południe” → Radom
     return None
 
 
@@ -344,7 +397,7 @@ def normalize(portal: str, it: Dict[str, Any], city_name: str, prop: str, trans:
     }
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype
     if portal == "adresowo": doc["seller_verified"] = True   # seller z etykiety karty („bez pośredników”)
-    for k in ("lat", "lng", "plot_area_m2", "phone", "build_year", "posted_at"):
+    for k in ("lat", "lng", "plot_area_m2", "phone", "build_year", "posted_at", "auction_kind", "auction_deadline", "auction_discount_pct"):
         if it.get(k) not in (None, "", 0): doc[k] = it[k]
     # 🌳 wielkość działki z opisu (Gratka/Morizon/Domiporta nie podają jej w danych listy)
     if "plot_area_m2" not in doc and prop in ("dom", "dzialka"):
@@ -378,8 +431,9 @@ def main():
     P = PORTALS[a.portal]
     db = get_mongo(); coll = db["listings"]
     cities = CITIES if not a.city else [c for c in CITIES if city_slug(c) == a.city.lower()]
-    if a.regions: cities = [{"name": "Polska", "slug": "polska", "voi": "polska"}] if a.portal == "adresowo" else REGIONS
+    if a.regions: cities = [{"name": "Polska", "slug": "polska", "voi": "polska"}] if a.portal in ("adresowo", "listaprzetargow") else REGIONS
     if a.portal == "odwlasciciela": a.max_pages = max(a.max_pages, 3)   # mały portal — 20 ofert/strona
+    if a.portal == "listaprzetargow": a.max_pages = max(a.max_pages, 4)  # lista ogólnopolska, 25/str. — 4 strony = ~100 najnowszych
     if not cities: log.error("Unknown city"); sys.exit(1)
     log.info("═══ %s — %s/%s — cities=%d max_pages=%d ═══", a.portal, a.transaction, a.property, len(cities), a.max_pages)
     tot = {"new": 0, "updated": 0, "pages": 0}
@@ -445,7 +499,7 @@ def _verify_adresowo_sellers(coll, prop: str, trans: str) -> None:
 #    na tokenie GitHub), więc lokal (sprzedaż + wynajem) jedzie w tym samym zadaniu co działki. 2.11.2026
 CHAIN_AFTER = {"dzialka": [("lokal", "sprzedaz"), ("lokal", "wynajem")]}
 # Nowe portale (5.11.2026) jadą w zadaniach istniejących portali (ta sama property/transaction):
-PORTAL_CHAIN = {"adresowo": ["odwlasciciela"], "domiporta": ["gethome"]}
+PORTAL_CHAIN = {"adresowo": ["odwlasciciela"], "domiporta": ["gethome"], "gratka": ["listaprzetargow"]}   # listaprzetargow (5.11): przetargi i licytacje, badge 🔨
 
 
 def _run_portal_chain(argv0: List[str]) -> None:

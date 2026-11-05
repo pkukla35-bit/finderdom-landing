@@ -435,6 +435,7 @@ gtag('set', 'url_passthrough', false);
       <div class="chip-group">
         <div class="chip" data-seller="prywatna">👨‍👩‍👧 Prywatna (bez prowizji)</div>
         <div class="chip" data-seller="posrednik">🏢 Pośrednik</div>
+        <div class="chip" data-seller="przetarg" title="Przetargi, licytacje komornicze i sprzedaż przez syndyka (listaprzetargow.pl) — cena wywoławcza">🔨 Przetargi i licytacje</div>
       </div>
     </div>
 
@@ -795,7 +796,7 @@ function normalizeScrapedListing(raw) {
 
   // Seller: not detected by scraper → default 'posrednik' (Otodom is 80% agencies)
   const sellerType = raw.seller_type || 'posrednik';
-  const sellerLabel = sellerType === 'prywatna' ? '👨‍👩‍👧 Prywatna' : '🏢 Pośrednik';
+  const sellerLabel = sellerType === 'prywatna' ? '👨‍👩‍👧 Prywatna' : sellerType === 'przetarg' ? (raw.auction_kind === 'licytacja' ? '🔨 Licytacja komornicza' : raw.auction_kind === 'syndyk' ? '🔨 Syndyk' : '🔨 Przetarg') : '🏢 Pośrednik';
 
   // Autodetekcja market_type z title+description+URL+build_year (dla starych importów bez tego pola)
   let marketType = raw.market_type || '';
@@ -866,6 +867,8 @@ function normalizeScrapedListing(raw) {
     phone: raw.phone || null, phone_masked: raw.phone_masked || null,
     // 🌳 wielkość działki (domy, działki)
     plot_area_m2: Number(raw.plot_area_m2) || Number(raw.plot_area) || 0,
+    // 🔨 przetargi / licytacje (listaprzetargow.pl): cena = wywoławcza, termin składania ofert/licytacji
+    auction_kind: raw.auction_kind || null, auction_deadline: raw.auction_deadline || null,
     // 🗄️ archiwum: kiedy oferta zniknęła z portalu
     stale_since: raw.stale_since || null, is_stale: !!raw.is_stale,
     verdict_badge: 'normal', verdict_text: '✨ Nowa',
@@ -946,7 +949,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('archiveBack')?.addEventListener('click', (e) => { e.preventDefault(); setArchiveMode(false); });
 });
 // Bez planu API nie zwraca linku (url) — nazwę portalu bierzemy z pola source
-function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
+function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania',listaprzetargow:'ListaPrzetargów'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
 function detectPortalFromUrl(url) {
   if (!url) return null;
   const u = String(url).toLowerCase();
@@ -962,6 +965,7 @@ function detectPortalFromUrl(url) {
   if (u.includes('odwlasciciela.pl')) return 'OdWłaściciela';
   if (u.includes('szybko.pl')) return 'Szybko';
   if (u.includes('kupmieszkania.pl')) return 'KupMieszkania';
+  if (u.includes('listaprzetargow.pl')) return 'ListaPrzetargów';
   // nieznany portal: nazwa z domeny (np. „xyz.pl” → „Xyz”) zamiast ogólnego „Portal”
   const m = u.match(/^https?:\/\/(?:www\.)?([a-z0-9-]+)\./);
   return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : null;
@@ -1776,6 +1780,7 @@ function renderPage() {
     if (l.type === 'dom') specs += ' · 🏡 Dom';
     if (l.type === 'dzialka') specs += ' · 🌳 Działka';
     if (l.plot_area_m2 > 0 && (l.type === 'dom' || l.type === 'dzialka')) specs += ` · 🌳 działka ${fmtPlot(l.plot_area_m2)}`;
+    if (l.seller_type === 'przetarg' && l.auction_deadline) specs += ` · ⏰ do ${new Date(l.auction_deadline).toLocaleDateString('pl-PL')}`;
     // 📞 telefon właściciela — tylko oferty prywatne
     let phoneHtml = '';
     if (l.phone) {
@@ -1838,7 +1843,7 @@ function renderPage() {
             : `<div class="card-portal">${l.portal}</div>`}
           ${fmtAgo(l.added_at) ? `<div class="card-ago${isFresh(l.added_at) ? ' fresh' : ''}" title="Kiedy oferta pojawiła się w FinderDom">🕐 ${fmtAgo(l.added_at)}</div>` : ''}
           ${crmBadgeHtml}
-          ${l.seller_label ? `<div style="position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,0.75);color:#FFB800;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:800;backdrop-filter:blur(8px)">${l.seller_label}</div>` : ''}
+          ${l.seller_label ? `<div style="position:absolute;bottom:10px;left:10px;background:${l.seller_type === 'przetarg' ? 'rgba(220,38,38,0.9)' : 'rgba(0,0,0,0.75)'};color:${l.seller_type === 'przetarg' ? '#fff' : '#FFB800'};padding:4px 10px;border-radius:100px;font-size:10px;font-weight:800;backdrop-filter:blur(8px)" title="${l.seller_type === 'przetarg' ? 'Cena wywoławcza — przetarg / licytacja z listaprzetargow.pl' : ''}">${l.seller_label}</div>` : ''}
         </div>
         <div class="card-body">
           <div class="card-title">${l.title}</div>

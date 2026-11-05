@@ -2254,6 +2254,8 @@ async def listings_scraped_endpoint(
                 query["seller_type"] = "prywatna"
             elif st in ("posrednik", "pośrednik", "agencja"):
                 query["seller_type"] = "posrednik"
+            elif st in ("przetarg", "licytacja"):   # 🔨 listaprzetargow.pl — przetargi, licytacje komornicze, syndyk
+                query["seller_type"] = "przetarg"
         # Filter po rynku (pierwotny / wtorny) — na pełnej bazie, nie tylko na batchu 1000
         if market_type:
             mt_vals = [m.strip().lower() for m in market_type.split(",") if m.strip().lower() in ("pierwotny", "wtorny")]

@@ -41,6 +41,8 @@ PORTALS = [
      "https://gethome.pl/mieszkania/na-sprzedaz/malopolskie/?sort=newest", lambda h: h.count('"slug":') if "__INITIAL_STATE__" in h else 0),
     ("OdWlasciciela", "odwlasciciela", "scrape-portals.yml",
      "https://odwlasciciela.pl/mieszkania/sprzedaz/malopolskie.html", lambda h: h.count('<article class="offers-item')),
+    ("ListaPrzetargow", "listaprzetargow", "scrape-portals.yml",
+     "https://listaprzetargow.pl/oferty/mieszkania?sort=created_at-desc", lambda h: h.count('class="modernCard ')),
 ]
 
 

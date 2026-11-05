@@ -903,13 +903,19 @@ function normalizeScrapedListing(raw) {
     // 🔁 Duplikaty (widok dla biur): ile kopii tego ogłoszenia i ilu różnych pośredników je ma
     dupes_count: Array.isArray(raw.dupes) ? raw.dupes.length : 1,
     agents_count: (() => {
+      // Ilu RÓŻNYCH pośredników ma tę nieruchomość. Scrapery nie zapisują nazwy biura, więc: ta sama oferta na Gratce i Morizonie
+      // to zwykle JEDNO biuro (eksport), ale 2 kopie na TYM SAMYM portalu to na pewno 2 biura → liczymy max kopii per portal
+      // (dolne, pewne oszacowanie). Gdy agency_name będzie dostępne — liczymy po nazwach.
       const ds = Array.isArray(raw.dupes) ? raw.dupes : [raw];
-      const keys = new Set();
+      const names = new Set(); const perPortal = {};
       for (const d of ds) {
         if ((d.seller_type || 'posrednik') !== 'posrednik') continue;
-        keys.add(String(d.agency_name || `${d.source || ''}:${d.external_id || ''}`).toLowerCase());
+        if (d.agency_name) names.add(String(d.agency_name).toLowerCase());
+        const p = String(d.source || detectPortalFromUrl(d.url) || 'x').toLowerCase();
+        perPortal[p] = (perPortal[p] || 0) + 1;
       }
-      return keys.size;
+      const byPortal = Math.max(0, ...Object.values(perPortal));
+      return Math.max(names.size, byPortal);
     })(),
     has_owner_copy: (Array.isArray(raw.dupes) ? raw.dupes : [raw]).some(d => d.seller_type === 'prywatna'),
     dupes_list: (Array.isArray(raw.dupes) ? raw.dupes : [raw]).map(d => ({ portal: detectPortalFromUrl(d.url) || portalFromSource(d.source) || 'Portal', url: d.url, price: d.price, seller: d.seller_type || 'posrednik', agency: d.agency_name || '', added_at: d.added_at })),

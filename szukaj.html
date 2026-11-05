@@ -113,6 +113,14 @@ gtag('set', 'url_passthrough', false);
   .view-switch a{padding:8px 14px;color:#a3b3d1;text-decoration:none;min-height:36px;display:inline-flex;align-items:center}
   .view-switch a.on{background:rgba(255,184,0,0.18);color:#FFD166}
   .view-switch a:hover{color:#fff}
+  /* 🗄️ Przełącznik archiwum wygasłych ofert prywatnych — widoczny nad listą (nie tylko na dole filtrów) */
+  .archive-toggle{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:8px 14px;border-radius:100px;border:1px solid rgba(248,113,113,0.5);background:rgba(248,113,113,0.1);color:#fca5a5;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;transition:background .15s,border-color .15s}
+  .archive-toggle:hover{background:rgba(248,113,113,0.2);border-color:#f87171}
+  .archive-toggle.on{background:#f87171;border-color:#f87171;color:#1a0505}
+  .archive-info{display:none;background:linear-gradient(135deg,rgba(248,113,113,0.14),rgba(255,184,0,0.06));border:1px solid rgba(248,113,113,0.45);color:#c5d0e6;border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:14px;line-height:1.5}
+  .archive-info b{color:#fca5a5}
+  .archive-info a{color:#FFB800;font-weight:800;white-space:nowrap}
+  @media(max-width:900px){.archive-toggle{flex:1;justify-content:center}}
   .results-count{font-size:14px;color:#c5d0e6}
   .results-count strong{color:#fff;font-weight:900}
   .date-filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:10px 14px;margin-bottom:14px}
@@ -430,6 +438,14 @@ gtag('set', 'url_passthrough', false);
       </div>
     </div>
 
+    <div class="filter-group" id="archiveGroup">
+      <div class="filter-title">🗄️ Archiwum — zadzwoń, zanim trafi do pośrednika</div>
+      <div class="chip-group">
+        <div class="chip" id="chipArchive" title="Wygasłe oferty właścicieli z ostatnich 90 dni — z telefonem">🗄️ Wygasłe oferty prywatne</div>
+      </div>
+      <div style="font-size:11px;color:#8ba3d4;margin-top:6px;line-height:1.4">Oferty właścicieli, które zniknęły z portali w ostatnich 90 dniach — z numerem telefonu. Właściciel często wciąż sprzedaje: zadzwoń, zanim nieruchomość trafi do pośrednika. Plan Osobisty (45 zł) oraz plany dla biur.</div>
+    </div>
+
     <!-- (Usunięto sekcję Uzbrojenie działki: WODA/PRĄD/GAZ/KANALIZACJA/WARUNKI ZABUDOWY —
          dane te nie są dostępne w Otodom API, filtry generowały fałszywe wyniki) -->
 
@@ -499,14 +515,6 @@ gtag('set', 'url_passthrough', false);
       </div>
     </div>
 
-    <div class="filter-group" id="archiveGroup">
-      <div class="filter-title">🗄️ Archiwum — zadzwoń, zanim trafi do pośrednika</div>
-      <div class="chip-group">
-        <div class="chip" id="chipArchive" title="Wygasłe oferty właścicieli z ostatnich 90 dni — z telefonem">🗄️ Wygasłe oferty prywatne</div>
-      </div>
-      <div style="font-size:11px;color:#8ba3d4;margin-top:6px;line-height:1.4">Oferty właścicieli, które zniknęły z portali w ostatnich 90 dniach — z numerem telefonu. Właściciel często wciąż sprzedaje: zadzwoń, zanim nieruchomość trafi do pośrednika. Plan Osobisty (45 zł) oraz plany dla biur.</div>
-    </div>
-
     <div class="filter-actions">
       <button class="btn-clear">Wyczyść</button>
       <button class="btn-apply">Zastosuj</button>
@@ -541,6 +549,7 @@ gtag('set', 'url_passthrough', false);
       <div class="view-switch" id="viewSwitch" title="Przełącz widok wyszukiwarki">
         <a href="?widok=prywatny" id="viewPrivate">👤 Prywatny</a><a href="?widok=biuro" id="viewBiuro">🏢 Dla biur</a>
       </div>
+      <button type="button" class="archive-toggle" id="archiveToggle" title="Wygasłe oferty właścicieli z ostatnich 90 dni — z numerem telefonu. Zadzwoń, zanim trafi do pośrednika.">🗄️ Archiwum prywatne</button>
       <select class="sort-select" id="sortSelect">
         <option value="ai">Sortuj: AI - najlepsze okazje</option>
         <option value="newest">Najnowsze</option>
@@ -557,6 +566,10 @@ gtag('set', 'url_passthrough', false);
       <a href="/rejestracja?typ=firma" style="color:#FFB800;font-weight:800;white-space:nowrap">Załóż konto firmowe — 7 dni za darmo →</a>
     </div>
     <div id="dateInfo" style="display:none;background:rgba(255,184,0,0.08);border:1px solid rgba(255,184,0,0.35);color:#c5d0e6;border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:14px;display:none"></div>
+    <div class="archive-info" id="archiveInfo">
+      🗄️ <b>Przeglądasz archiwum wygasłych ofert prywatnych</b> — ogłoszenia właścicieli, które zniknęły z portali w ostatnich 90 dniach, z numerem telefonu. Właściciel często wciąż sprzedaje: zadzwoń, zanim nieruchomość trafi do pośrednika.
+      <a href="#" id="archiveBack">← Wróć do aktywnych ofert</a>
+    </div>
     <div id="radiusInfo" style="display:none;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#c5d0e6;border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:14px"></div>
 
     <!-- AdSense: Nad wynikami -->
@@ -907,19 +920,30 @@ function fmtPlot(m2) {
   return m2 >= 10000 ? (m2 / 10000).toLocaleString('pl-PL', { maximumFractionDigits: 2 }) + ' ha' : Math.round(m2).toLocaleString('pl-PL') + ' m²';
 }
 // 🗄️ Archiwum wygasłych ofert prywatnych — przełącznik (stan w URL ?archiwum=1)
+// Sterowanie: przycisk nad listą (#archiveToggle), chip w filtrach (#chipArchive), link „wróć” w pasku info (#archiveBack)
 window.ARCHIVE_MODE = new URLSearchParams(location.search).get('archiwum') === '1';
-document.addEventListener('DOMContentLoaded', () => {
+function syncArchiveUi() {
+  const on = !!window.ARCHIVE_MODE;
   const chip = document.getElementById('chipArchive');
-  if (!chip) return;
-  chip.classList.toggle('active', window.ARCHIVE_MODE);
-  chip.addEventListener('click', () => {
-    window.ARCHIVE_MODE = !window.ARCHIVE_MODE;
-    chip.classList.toggle('active', window.ARCHIVE_MODE);
-    const p = new URLSearchParams(location.search);
-    if (window.ARCHIVE_MODE) p.set('archiwum', '1'); else p.delete('archiwum');
-    history.replaceState(null, '', '?' + p.toString());
-    if (typeof loadListings === 'function') loadListings();
-  });
+  const btn = document.getElementById('archiveToggle');
+  const info = document.getElementById('archiveInfo');
+  if (chip) chip.classList.toggle('active', on);
+  if (btn) { btn.classList.toggle('on', on); btn.textContent = on ? '🗄️ Archiwum: włączone ✓' : '🗄️ Archiwum prywatne'; }
+  if (info) info.style.display = on ? 'block' : 'none';
+}
+function setArchiveMode(on) {
+  window.ARCHIVE_MODE = !!on;
+  const p = new URLSearchParams(location.search);
+  if (window.ARCHIVE_MODE) p.set('archiwum', '1'); else p.delete('archiwum');
+  history.replaceState(null, '', '?' + p.toString());
+  syncArchiveUi();
+  if (typeof loadListings === 'function') loadListings();
+}
+document.addEventListener('DOMContentLoaded', () => {
+  syncArchiveUi();
+  document.getElementById('chipArchive')?.addEventListener('click', () => setArchiveMode(!window.ARCHIVE_MODE));
+  document.getElementById('archiveToggle')?.addEventListener('click', () => setArchiveMode(!window.ARCHIVE_MODE));
+  document.getElementById('archiveBack')?.addEventListener('click', (e) => { e.preventDefault(); setArchiveMode(false); });
 });
 // Bez planu API nie zwraca linku (url) — nazwę portalu bierzemy z pola source
 function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }

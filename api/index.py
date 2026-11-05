@@ -2163,6 +2163,33 @@ async def geo_city_center(name: str):
     return {"city": key, "lat": lat, "lng": lng, "n": len(pts), "source": "listings"}
 
 
+async def _nearby_cities(coll, box: dict, lat: float, lng: float, radius_km: float) -> list:
+    """Miejscowości „w promieniu”: nazwy `city` ofert z GPS w bounding-boxie, zawężone do realnego koła (haversine po medianie
+    współrzędnych każdej miejscowości). Cache 24 h w geo_cache (klucz: środek zaokrąglony do 0.01° + promień)."""
+    key = f"near:{lat:.2f}:{lng:.2f}:{radius_km:g}"
+    db = database()
+    cached = await db.geo_cache.find_one({"_id": key})
+    if cached and isinstance(cached.get("cities"), list) and cached.get("at") and (datetime.now(timezone.utc) - cached["at"].replace(tzinfo=timezone.utc)).total_seconds() < 86400:
+        return cached["cities"]
+    pipeline = [{"$match": {**box, "city": {"$type": "string", "$ne": ""}, "is_stale": {"$ne": True}}},
+                {"$group": {"_id": "$city", "lat": {"$avg": "$lat"}, "lng": {"$avg": "$lng"}, "n": {"$sum": 1}}},
+                {"$limit": 400}]
+    cities = []
+    try:
+        async for r in coll.aggregate(pipeline):
+            name = r["_id"]
+            if not name or name.islower():   # „małopolskie” = województwo (tryb regionów), nie miejscowość
+                continue
+            d = 2 * 6371 * math.asin(math.sqrt(math.sin(math.radians(r["lat"] - lat) / 2) ** 2 + math.cos(math.radians(lat)) * math.cos(math.radians(r["lat"])) * math.sin(math.radians(r["lng"] - lng) / 2) ** 2))
+            if d <= radius_km * 1.15:
+                cities.append(name)
+    except Exception as e:
+        logger.warning("nearby_cities: %s", e)
+        return []
+    await db.geo_cache.update_one({"_id": key}, {"$set": {"cities": cities, "at": datetime.now(timezone.utc)}}, upsert=True)
+    return cities
+
+
 @app.get("/api/listings-scraped")
 async def listings_scraped_endpoint(
     request: Request,
@@ -2230,12 +2257,25 @@ async def listings_scraped_endpoint(
         # GEO filter (bounding box): 1° lat = 111 km; 1° lng = 111 * cos(lat) km
         # Uzywane gdy user chce ofert w promieniu X km od danych wspolrzednych (np. Krakow 50km -> Wieliczka, Skawina)
         use_geo = bool(lat is not None and lng is not None and radius_km and radius_km > 0)
+        nearby_cities: list = []
         if use_geo:
             import math as _math
             lat_delta = float(radius_km) / 111.0
             lng_delta = float(radius_km) / (111.0 * max(_math.cos(_math.radians(float(lat))), 0.1))
-            query["lat"] = {"$gte": float(lat) - lat_delta, "$lte": float(lat) + lat_delta}
-            query["lng"] = {"$gte": float(lng) - lng_delta, "$lte": float(lng) + lng_delta}
+            box = {"lat": {"$gte": float(lat) - lat_delta, "$lte": float(lat) + lat_delta},
+                   "lng": {"$gte": float(lng) - lng_delta, "$lte": float(lng) + lng_delta}}
+            # Tylko ~10% ofert ma współrzędne (Otodom/OLX/NOL). Sam bounding-box gubił oferty z samego miasta i okolicznych
+            # miejscowości bez GPS → promień 20 km dawał MNIEJ wyników niż samo miasto. Dlatego:
+            #  (a) oferty z GPS w boxie  LUB  (b) oferty z miejscowości, które mają w boxie jakiekolwiek oferty z GPS
+            #  LUB (c) oferty z wpisanego miasta (city/district/title) — tak jak bez promienia.
+            nearby_cities = await _nearby_cities(coll, box, float(lat), float(lng), float(radius_km))
+            geo_or = [box]
+            if nearby_cities:
+                geo_or.append({"city": {"$in": nearby_cities}})
+            if city:
+                city_re_geo = {"$regex": _word_bounded(_build_diacritic_regex(city.strip()))}
+                geo_or += [{"city": city_re_geo}, {"district": city_re_geo}, {"title": city_re_geo}]
+            query["$or"] = geo_or
         if city and not use_geo:
             # Case+diacritic-insensitive: "gdansk" pasuje do "Gdańsk", "krakow" -> "Kraków" itd.
             # Granice słowa: „Kraków” NIE łapie „Krakowska” (al. Krakowska w Warszawie, os. Krakowska w Rzeszowie)
@@ -2458,7 +2498,7 @@ async def listings_scraped_endpoint(
                 d["stale_since"] = d["stale_since"].isoformat()
         return {"listings": docs, "count": len(docs), "total_count": total_count, "offset": offset, "limit": limit, "lite": bool(lite),
                 "filtered": bool(city or type), "locked": locked, "preview_limit": FREE_PREVIEW_LIMIT if locked else None,
-                "archive": bool(archive), "broker": broker}
+                "archive": bool(archive), "broker": broker, "nearby_cities": nearby_cities if use_geo else None}
     except Exception as e:
         logger.warning("listings-scraped error: %s", e)
         return {"listings": [], "count": 0, "error": str(e)[:200]}

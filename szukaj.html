@@ -229,6 +229,12 @@ gtag('set', 'url_passthrough', false);
   .card-phone-sub{font-size:10px;font-weight:700;color:#8ba3d4;margin-left:auto}
   .card-phone-locked{background:rgba(255,184,0,0.08);border-color:rgba(255,184,0,0.3);color:#c5d0e6}
   .card-archived{font-size:11px;color:#f87171;font-weight:700;margin:2px 0 4px}
+  /* 🔁 Duplikaty (widok dla biur) */
+  .card-dupes{margin-top:8px;padding:7px 10px;border-radius:10px;background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.35);color:#bfdbfe;font-size:11px;font-weight:700;cursor:pointer}
+  .card-dupes b{color:#fff}
+  .card-dupes:hover{background:rgba(96,165,250,0.22)}
+  .card-dupes.solo{background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.1);color:#8ba3d4;cursor:default}
+  .fd-modal-item .p-agency{font-size:11px;color:#8ba3d4;margin-left:8px}
   /* CRM firmy na karcie (plan Firmowy) */
   .card-img .crm-pill-wrap{position:absolute;top:34px;right:10px;z-index:5;pointer-events:none}
   .card-crm{margin-top:12px;padding-top:10px;border-top:1px dashed rgba(255,184,0,0.25)}
@@ -500,6 +506,17 @@ gtag('set', 'url_passthrough', false);
         <div class="chip" id="chipUnique" title="Oferty wystawione tylko na jednym portalu — często mniej konkurencji">🎯 Tylko unikalne (1 portal)</div>
         <div class="chip" id="chipMulti" title="Ta sama oferta jest na wielu serwisach (Otodom+Morizon+Gratka)">🌐 Multi-portal (2+)</div>
       </div>
+    </div>
+
+    <!-- 🔁 Duplikaty (widok dla biur — zamiast kalkulatora kredytu) -->
+    <div class="filter-group" id="dupesGroup" style="display:none">
+      <div class="filter-title">🔁 Duplikaty i konkurencja</div>
+      <div class="chip-group">
+        <div class="chip" id="chipDupes2" title="Ta sama nieruchomość wystawiona przez 2 lub więcej pośredników">🏢 2+ pośredników</div>
+        <div class="chip" id="chipDupes1" title="Tylko jedno ogłoszenie tej nieruchomości — brak konkurencji">🎯 Bez duplikatów</div>
+        <div class="chip" id="chipDupesOwner" title="Oprócz ofert pośredników jest też ogłoszenie właściciela — można ominąć prowizję">👤 Właściciel ogłasza też sam</div>
+      </div>
+      <div style="font-size:11px;color:#8ba3d4;margin-top:6px;line-height:1.4">Łączymy ogłoszenia tej samej nieruchomości z różnych portali i biur (cena + metraż + pokoje). Na karcie: „🔁 3 ogłoszenia · 2 pośredników”.</div>
     </div>
 
     <!-- CRM filters (Firmowy only - shown via JS) -->
@@ -883,6 +900,19 @@ function normalizeScrapedListing(raw) {
     // Multi-portal: Apify klaster - ta sama oferta wystawiona na kilku serwisach
     // Liczymy UNIKATOWE portale (nie relistings tego samego portalu)
     sources: Array.isArray(raw.sources) ? raw.sources : [],
+    // 🔁 Duplikaty (widok dla biur): ile kopii tego ogłoszenia i ilu różnych pośredników je ma
+    dupes_count: Array.isArray(raw.dupes) ? raw.dupes.length : 1,
+    agents_count: (() => {
+      const ds = Array.isArray(raw.dupes) ? raw.dupes : [raw];
+      const keys = new Set();
+      for (const d of ds) {
+        if ((d.seller_type || 'posrednik') !== 'posrednik') continue;
+        keys.add(String(d.agency_name || `${d.source || ''}:${d.external_id || ''}`).toLowerCase());
+      }
+      return keys.size;
+    })(),
+    has_owner_copy: (Array.isArray(raw.dupes) ? raw.dupes : [raw]).some(d => d.seller_type === 'prywatna'),
+    dupes_list: (Array.isArray(raw.dupes) ? raw.dupes : [raw]).map(d => ({ portal: detectPortalFromUrl(d.url) || portalFromSource(d.source) || 'Portal', url: d.url, price: d.price, seller: d.seller_type || 'posrednik', agency: d.agency_name || '', added_at: d.added_at })),
     sources_count: (() => {
       const src = Array.isArray(raw.sources) ? raw.sources : [];
       if (src.length > 0) {
@@ -1378,10 +1408,12 @@ function applyScrapedData(d) {
         if (!existing) {
           clusterMap.set(ck, r);
           if (fp) fpMap.set(fp, r);
+          r.dupes = [r];   // 🔁 wszystkie kopie tego ogłoszenia (różne portale / różni pośrednicy)
           clusteredList.push(r);
         } else {
           if (!clusterMap.has(ck)) clusterMap.set(ck, existing);
           if (fp && !fpMap.has(fp)) fpMap.set(fp, existing);
+          (existing.dupes || (existing.dupes = [existing])).push(r);
           // Merge - dodaj do sources istniejącego
           if (!Array.isArray(existing.sources)) existing.sources = [];
           const existingPortals = new Set(existing.sources.map(s => (s.portal || '').toLowerCase()));
@@ -1582,6 +1614,11 @@ function enableCrmUi() {
   window.CRM_ENABLED = true;
   const bar = document.getElementById('crmFilters');
   if (bar) bar.style.display = 'block';
+  // 🔁 Widok dla biur: zamiast kalkulatora kredytu — duplikaty (ile kopii / ilu pośredników ma tę nieruchomość)
+  const dg = document.getElementById('dupesGroup');
+  if (dg) dg.style.display = 'block';
+  const kb = document.getElementById('kredytBox');
+  if (kb) kb.style.display = 'none';
 }
 async function loadCrmStatuses() {
   let real = false;
@@ -1861,6 +1898,9 @@ function renderPage() {
           ${l.variants_count ? `<div style="font-size:11px;color:#8ba3d4;margin-top:2px">🔁 +${l.variants_count} ${l.variants_count === 1 ? 'podobna oferta' : (l.variants_count < 5 ? 'podobne oferty' : 'podobnych ofert')} (ta sama inwestycja / ogłoszenie)</div>` : ''}
           ${(l.transaction !== 'wynajem' && window.FD_rataOd && FD_rataOd(l.price)) ? `<div class="card-rata">💳 rata od ~${Math.round(FD_rataOd(l.price)).toLocaleString('pl-PL')} zł/mies.</div>` : ''}
           ${phoneHtml}
+          ${(window.CRM_DEMO || window.CRM_REAL) ? ((l.dupes_count || 1) > 1
+            ? `<div class="card-dupes" data-dupes-id="${l.id}" title="Kliknij — lista wszystkich ogłoszeń tej nieruchomości">🔁 ${l.dupes_count} ogłoszeń · <b>${l.agents_count} ${l.agents_count === 1 ? 'pośrednik' : (l.agents_count >= 2 && l.agents_count <= 4 ? 'pośredników' : 'pośredników')}</b>${l.has_owner_copy ? ' · <span style="color:#86efac">👤 właściciel ogłasza też sam</span>' : ''}</div>`
+            : `<div class="card-dupes solo">🎯 1 ogłoszenie — bez duplikatów</div>`) : ''}
           ${crmBarHtml}
         </div>
       </a>
@@ -2224,7 +2264,7 @@ function updateSubType(type){
     const isMainType = g.querySelector('#propertyType');
     const isSubType = g.id === 'subTypeGroup';
     const isRadiusSidebar = g.id === 'radiusSidebarGroup'; // trzymany ukryty (dane dla filtra z hero)
-    const isCrm = g.id === 'crmFilters'; // widoczny tylko dla planu Firmowego (steruje loadCrmStatuses)
+    const isCrm = g.id === 'crmFilters' || g.id === 'dupesGroup'; // widoczne tylko w widoku dla biur (steruje enableCrmUi)
     if (isMainType || isSubType || isRadiusSidebar || isCrm) return; // handled separately
     const titleText = title.textContent;
     const isHidden = hiddenTitles.some(h => titleText.includes(h));
@@ -2394,6 +2434,9 @@ function collectFilterState() {
            activeRooms, activeFloors, activeVerdicts,
            radiusCenter, radiusKm, radiusCityKey, autoRadius,
            crmStatuses: Array.from(document.querySelectorAll('.chip.active[data-crm]')).map(c => c.dataset.crm),
+           dupes2: !!document.getElementById('chipDupes2')?.classList.contains('active'),
+           dupes1: !!document.getElementById('chipDupes1')?.classList.contains('active'),
+           dupesOwner: !!document.getElementById('chipDupesOwner')?.classList.contains('active'),
            dateFromMs, dateToMs, sortMode };
 }
 
@@ -2446,6 +2489,10 @@ function applyAllFilters() {
     const sc = l.sources_count || 1;
     if (f.onlyUnique && !f.onlyMulti && sc > 1) return false;
     if (f.onlyMulti && !f.onlyUnique && sc < 2) return false;
+    // 🔁 duplikaty (widok dla biur)
+    if (f.dupes2 && (l.agents_count || 0) < 2) return false;
+    if (f.dupes1 && (l.dupes_count || 1) > 1) return false;
+    if (f.dupesOwner && !(l.has_owner_copy && (l.agents_count || 0) >= 1)) return false;
 
     // CRM filter (Firmowy) — OR match: show only offers with any of active CRM statuses
     if (f.crmStatuses && f.crmStatuses.length > 0) {
@@ -2722,6 +2769,19 @@ document.getElementById('chipMulti')?.addEventListener('click', (e) => {
   loadListings();  // filtr na backendzie (pełna baza) → refetch
 }, false);
 
+// 🔁 Duplikaty (widok dla biur) — filtr lokalny na załadowanej paczce (klastry liczone w przeglądarce), wzajemnie wykluczające się
+['chipDupes2', 'chipDupes1', 'chipDupesOwner'].forEach(id => {
+  document.getElementById(id)?.addEventListener('click', (e) => {
+    e.stopImmediatePropagation();
+    const c = e.currentTarget;
+    const wasActive = c.classList.contains('active');
+    ['chipDupes2', 'chipDupes1', 'chipDupesOwner'].forEach(o => document.getElementById(o)?.classList.remove('active'));
+    if (!wasActive) c.classList.add('active');
+    currentPage = 1;
+    applyFilters();
+  }, false);
+});
+
 // Inputy cena/powierzchnia/rok/promień — live
 ['fPpm2From','fPpm2To','fPriceFrom','fPriceTo','fAreaFrom','fAreaTo','fYearFrom','fYearTo'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', loadListingsDebounced);
@@ -2849,14 +2909,17 @@ document.getElementById('sortSelect')?.addEventListener('change', applyAllFilter
 <script>
 // Klik na badge "🌐 N portali" → modal z listą linków
 document.getElementById('grid')?.addEventListener('click', (e) => {
-  const b = e.target.closest('.card-multi-badge, .card-portal-multi');
+  const b = e.target.closest('.card-multi-badge, .card-portal-multi, .card-dupes[data-dupes-id]');
   if (!b) return;
   e.preventDefault();
   e.stopPropagation();
-  const id = b.dataset.multiId;
+  const id = b.dataset.multiId || b.dataset.dupesId;
   const listing = LISTINGS.find(l => l.id === id);
   if (!listing) return;
-  const sources = Array.isArray(listing.sources) ? listing.sources : [];
+  // 🔁 lista wszystkich kopii (portal + pośrednik/właściciel + cena) — klik w „N ogłoszeń · M pośredników”
+  const sources = b.dataset.dupesId && Array.isArray(listing.dupes_list) && listing.dupes_list.length
+    ? listing.dupes_list.map(d => ({ portal: d.portal, url: d.url, price: d.price, agency: d.agency || (d.seller === 'prywatna' ? '👤 właściciel' : d.seller === 'przetarg' ? '🔨 przetarg' : '🏢 pośrednik') }))
+    : (Array.isArray(listing.sources) ? listing.sources : []);
   document.getElementById('multiModalTitle').textContent = listing.title || 'Oferta';
   const listEl = document.getElementById('multiModalList');
   if (sources.length === 0) {
@@ -2868,7 +2931,7 @@ document.getElementById('grid')?.addEventListener('click', (e) => {
       const price = s.price ? (Number(s.price).toLocaleString('pl-PL').replace(/,/g, ' ') + ' zł') : '';
       return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="fd-modal-item">
         <span class="p-name">📌 ${portal}</span>
-        <span>${price ? `<span class="p-price">${price}</span>` : ''}<span class="p-open">↗</span></span>
+        <span>${s.agency ? `<span class="p-agency">${s.agency}</span>` : ''}${price ? `<span class="p-price">${price}</span>` : ''}<span class="p-open">↗</span></span>
       </a>`;
     }).join('');
   }

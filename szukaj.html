@@ -498,11 +498,11 @@ gtag('set', 'url_passthrough', false);
     </div>
 
     <div class="filter-group" id="archiveGroup">
-      <div class="filter-title">🗄️ Archiwum (dla biur)</div>
+      <div class="filter-title">🗄️ Archiwum — zadzwoń, zanim trafi do pośrednika</div>
       <div class="chip-group">
         <div class="chip" id="chipArchive" title="Wygasłe oferty właścicieli z ostatnich 90 dni — z telefonem">🗄️ Wygasłe oferty prywatne</div>
       </div>
-      <div style="font-size:11px;color:#8ba3d4;margin-top:6px;line-height:1.4">Właściciele, których ogłoszenie zniknęło z portalu — często wciąż sprzedają. Plany Biuro jednoosobowe / Firmowy.</div>
+      <div style="font-size:11px;color:#8ba3d4;margin-top:6px;line-height:1.4">Oferty właścicieli, które zniknęły z portali w ostatnich 90 dniach — z numerem telefonu. Właściciel często wciąż sprzedaje: zadzwoń, zanim nieruchomość trafi do pośrednika. Plan Osobisty (45 zł) oraz plany dla biur.</div>
     </div>
 
     <div class="filter-actions">
@@ -1704,7 +1704,7 @@ function renderPage() {
   const pager = document.getElementById('pager');
   if (CURRENT_FILTERED.length === 0) {
     if (window.ARCHIVE_MODE && window.__archiveLocked) {
-      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🗄️</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Archiwum wygasłych ofert prywatnych</div>Oferty właścicieli, które zniknęły z portali w ostatnich 90 dniach — z numerem telefonu. Dostępne w planach <b style="color:#FFB800">Biuro jednoosobowe (90 zł)</b> i <b style="color:#FFB800">Firmowy (199 zł)</b>.<br><br><a href="/dla-biur" class="paywall-btn" style="display:inline-block">🏢 Załóż konto firmowe — 7 dni za darmo →</a></div>';
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🗄️</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Archiwum wygasłych ofert prywatnych</div>Oferty właścicieli, które zniknęły z portali w ostatnich 90 dniach — <b style="color:#fff">z numerem telefonu właściciela</b>. Właściciel często wciąż sprzedaje, a ogłoszenie jeszcze nie trafiło do pośrednika — <b style="color:#fff">zadzwoń pierwszy/pierwsza</b>.<br><br>Dostępne w planie <b style="color:#FFB800">Osobistym (45 zł / 30 dni)</b> oraz planach dla biur <b style="color:#FFB800">Biuro jednoosobowe (90 zł)</b> i <b style="color:#FFB800">Firmowy (199 zł)</b>.<br><br><a href="/konto" class="paywall-btn" style="display:inline-block">👤 Plan Osobisty — 45 zł →</a> &nbsp; <a href="/dla-biur" class="paywall-btn" style="display:inline-block;background:transparent;border:1px solid rgba(255,184,0,.5)">🏢 Dla biur — 7 dni za darmo →</a></div>';
     } else {
       grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Brak wyników</div>' + (window.ARCHIVE_MODE ? 'W archiwum nie ma jeszcze wygasłych ofert prywatnych dla tych filtrów — zbieramy je od 5.11.2026' : 'Zmień filtry aby zobaczyć więcej ofert') + '</div>';
     }

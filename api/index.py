@@ -2209,11 +2209,13 @@ async def listings_scraped_endpoint(
         # Kto pyta: plan dla biur (Solo/Firmowy, także trial) widzi telefony właścicieli i archiwum wygasłych ofert prywatnych
         paid = await _paid_user_from_request(request)
         broker = paid is not None and ((paid.get("email") or "").lower() in ADMIN_EMAILS or await effective_tier_async(paid) in BUSINESS_TIERS)
+        # 🗄️ Archiwum (z telefonami właścicieli) także w planie Osobistym — „zadzwoń, zanim oferta trafi do pośrednika”
+        archive_ok = broker or (paid is not None and await effective_tier_async(paid) == "individual")
         if archive:
-            if not broker:
+            if not archive_ok:
                 return {"listings": [], "count": 0, "total_count": 0, "offset": 0, "limit": limit, "lite": bool(lite), "filtered": True,
                         "locked": True, "archive": True, "archive_locked": True,
-                        "message": "Archiwum wygasłych ofert prywatnych jest dostępne w planach Biuro jednoosobowe i Firmowy."}
+                        "message": "Archiwum wygasłych ofert prywatnych (z telefonami właścicieli) jest dostępne w planie Osobistym oraz planach Biuro jednoosobowe i Firmowy."}
             query = {"is_stale": True, "seller_type": "prywatna", "price": {"$gt": 1000}}
         elif city or type or transaction or (lat and lng and radius_km):
             query = {"scraped_via": {"$in": ["scrapingbee", "apify", "nol-direct", "portal-direct", "olx-direct"]}, "is_stale": {"$ne": True}, "price": {"$gt": 1000}}
@@ -2431,7 +2433,7 @@ async def listings_scraped_endpoint(
             digits = re.sub(r"\D", "", str(ph))
             if len(digits) < 9:
                 continue
-            if broker:
+            if broker or (archive and archive_ok):
                 d["phone"] = ph
             else:
                 d["phone_masked"] = f"+48 {digits[-9:-6]} ••• •••"
@@ -4108,6 +4110,7 @@ FAKTY O FINDERDOM.PL:
 - Kredyt: kalkulator raty i zdolności (/kredyt), partner główny Lendi (porównanie ofert banków).
 - Leady dla biur: osoby zamawiające wycenę mogą zostawić telefon — lead trafia do biur z regionu.
 - Kontakt: kontakt@finderdom.pl, odpowiedź do 24 h w dni robocze (pn–pt 9–18). Formularz: /kontakt. Pomoc: /pomoc. Dla biur: /dla-biur. Dla prywatnych: /dla-prywatnych.
+- Plan Osobisty ma też 🗄️ ARCHIWUM: oferty właścicieli, które zniknęły z portali w ostatnich 90 dniach, Z NUMEREM TELEFONU właściciela — można zadzwonić, zanim nieruchomość trafi do pośrednika (w wyszukiwarce przełącznik „Wygasłe oferty prywatne”). Numery telefonów przy AKTYWNYCH ofertach prywatnych widzą tylko plany dla biur (Solo/Firmowy).
 - Ogłoszenia pochodzą z portali — FinderDom nie jest pośrednikiem i nie publikuje własnych ogłoszeń; do kontaktu ze sprzedającym służy link do ogłoszenia na portalu źródłowym. FinderDom NIE ma ofert „na wyłączność” — te same ogłoszenia są na portalach źródłowych; wartość planu to wszystkie portale w jednym miejscu, łączenie duplikatów, analiza AI ceny, podobne oferty, filtry, ulubione/alerty i wyceny PDF. Tak jest opisane przed zakupem.
 
 PŁATNOŚCI, REZYGNACJA I ZWROTY (odpowiadasz na to SAM, uprzejmie i stanowczo, bez przekazywania sprawy zespołowi):

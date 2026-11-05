@@ -914,7 +914,13 @@ function detectPortalFromUrl(url) {
   if (u.includes('adresowo.pl')) return 'Adresowo';
   if (u.includes('domiporta.pl')) return 'Domiporta';
   if (u.includes('nieruchomosci-online')) return 'NOL';
-  return null;
+  if (u.includes('gethome.pl')) return 'Gethome';
+  if (u.includes('odwlasciciela.pl')) return 'OdWłaściciela';
+  if (u.includes('szybko.pl')) return 'Szybko';
+  if (u.includes('kupmieszkania.pl')) return 'KupMieszkania';
+  // nieznany portal: nazwa z domeny (np. „xyz.pl” → „Xyz”) zamiast ogólnego „Portal”
+  const m = u.match(/^https?:\/\/(?:www\.)?([a-z0-9-]+)\./);
+  return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1282,7 +1288,11 @@ function applyScrapedData(d) {
         if (u.includes('olx.pl')) return 'olx';
         if (u.includes('domiporta.pl')) return 'domiporta';
         if (u.includes('adresowo.pl')) return 'adresowo';
-        return '';
+        if (u.includes('nieruchomosci-online')) return 'nol';
+        if (u.includes('gethome.pl')) return 'gethome';
+        if (u.includes('odwlasciciela.pl')) return 'odwlasciciela';
+        const m = u.match(/^https?:\/\/(?:www\.)?([a-z0-9-]+)\./);
+        return m ? m[1] : '';
       }
       const clusteredList = [];
       // Odcisk oferty niezależny od tytułu/miejscowości: ta sama cena + metraż + liczba pokoi + typ + transakcja.

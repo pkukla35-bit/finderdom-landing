@@ -113,7 +113,20 @@ gtag('set', 'url_passthrough', false);
 
   h1{font-size:clamp(36px,7vw,72px);font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:24px}
   h1 .highlight{background:linear-gradient(120deg,#FFB800 0%,#FFA200 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .subtitle{font-size:clamp(16px,2.2vw,22px);color:#c5d0e6;line-height:1.5;margin-bottom:48px;max-width:640px;margin-left:auto;margin-right:auto}
+  .subtitle{font-size:clamp(16px,2.2vw,22px);color:#c5d0e6;line-height:1.5;margin-bottom:28px;max-width:640px;margin-left:auto;margin-right:auto}
+  /* 🤖 Wyszukiwanie AI na stronie głównej */
+  .ai-home{max-width:760px;margin:0 auto 36px;background:linear-gradient(135deg,rgba(124,58,237,0.2),rgba(255,184,0,0.08));border:1px solid rgba(167,139,250,0.45);border-radius:18px;padding:16px 18px;text-align:left;backdrop-filter:blur(10px)}
+  .ai-home-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:#fff;font-size:14px;margin-bottom:10px}
+  .ai-home-head span:last-child{color:#c5d0e6;font-size:12px}
+  .ai-home-badge{background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;font-size:10px;font-weight:900;letter-spacing:1px;padding:4px 8px;border-radius:100px}
+  .ai-home-row{display:flex;gap:8px}
+  .ai-home-row input{flex:1;min-width:0;min-height:50px;padding:12px 16px;border-radius:12px;border:1px solid rgba(167,139,250,0.5);background:rgba(0,0,0,0.4);color:#fff;font-size:15px;font-family:inherit;outline:none}
+  .ai-home-row input:focus{border-color:#a78bfa;box-shadow:0 0 0 3px rgba(167,139,250,0.25)}
+  .ai-home-btn{background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;font-weight:900;border:none;border-radius:12px;padding:12px 20px;font-size:14px;cursor:pointer;white-space:nowrap;min-height:50px;font-family:inherit}
+  .ai-home-ex{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .ai-home-ex a{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:#c5d0e6;font-size:11px;padding:6px 10px;border-radius:100px;text-decoration:none;min-height:28px;display:inline-flex;align-items:center}
+  .ai-home-ex a:hover{border-color:#a78bfa;color:#fff}
+  @media(max-width:640px){.ai-home-row{flex-direction:column}.ai-home-btn{width:100%}.ai-home-head span:last-child{display:none}}
 
   /* Stats */
   .stats{display:flex;gap:32px;justify-content:center;margin-bottom:64px;flex-wrap:wrap}
@@ -295,6 +308,20 @@ gtag('set', 'url_passthrough', false);
     <div class="badge"><span class="dot"></span>JUŻ DZIAŁAMY — OFERTY AKTUALIZOWANE 24/7</div>
     <h1>Wszystkie ogłoszenia<br><span class="highlight">nieruchomości</span><br>w jednym miejscu</h1>
     <p class="subtitle">Otodom, OLX, Morizon, Gratka i wszystkie pozostałe portale w Polsce — jedno wyszukiwanie. AI analiza cen sprawdzi czy oferta to okazja czy zawyżka.</p>
+
+    <!-- 🤖 Wyszukiwanie AI: opis → /szukaj?ai=… (filtry ustawiają się same) -->
+    <form class="ai-home" action="/szukaj" method="get" id="aiHomeForm">
+      <div class="ai-home-head"><span class="ai-home-badge">✨ NOWOŚĆ</span><b>Wyszukiwanie AI</b><span>— opisz nieruchomość własnymi słowami, filtry ustawią się same</span></div>
+      <div class="ai-home-row">
+        <input type="text" name="ai" id="aiHomeQuery" maxlength="500" autocomplete="off" placeholder="np. 3 pokoje do 700 tys. w Krakowie, nowe budownictwo, bez pośrednika" aria-label="Opisz nieruchomość, której szukasz" required>
+        <button type="submit" class="ai-home-btn">✨ Szukaj z AI</button>
+      </div>
+      <div class="ai-home-ex">
+        <a href="/szukaj?ai=dom+z+ogrodem+do+1%2C2+mln+w+promieniu+25+km+od+Warszawy">dom z ogrodem do 1,2 mln pod Warszawą</a>
+        <a href="/szukaj?ai=kawalerka+do+wynaj%C4%99cia+Gda%C5%84sk+do+2500+z%C5%82">kawalerka do wynajęcia Gdańsk do 2500 zł</a>
+        <a href="/szukaj?ai=dzia%C5%82ka+budowlana+min+10+ar%C3%B3w+30+km+od+Poznania%2C+okazje">działka budowlana 10 arów 30 km od Poznania</a>
+      </div>
+    </form>
 
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:40px">
       <a href="/szukaj" style="background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:16px 32px;border-radius:14px;text-decoration:none;font-size:14px;text-transform:uppercase;letter-spacing:0.5px;box-shadow:0 8px 24px rgba(255,184,0,0.35);transition:transform 0.15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">🔍 Otwórz wyszukiwarkę</a>

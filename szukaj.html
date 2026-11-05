@@ -78,6 +78,26 @@ gtag('set', 'url_passthrough', false);
   .search-input::placeholder{color:#5e7099}
   select.search-input{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238ba3d4' d='M6 8L0 0h12z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
   .search-btn{background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:14px 24px;border-radius:12px;border:none;font-size:13px;letter-spacing:0.5px;cursor:pointer;text-transform:uppercase;transition:all 0.15s}
+  /* 🤖 Wyszukiwanie AI */
+  .ai-search{max-width:1400px;margin:14px auto 0;background:linear-gradient(135deg,rgba(124,58,237,0.18),rgba(255,184,0,0.08));border:1px solid rgba(167,139,250,0.45);border-radius:16px;padding:14px 16px}
+  .ai-search-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;color:#fff;font-size:14px}
+  .ai-search-badge{background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;font-size:10px;font-weight:900;letter-spacing:1px;padding:4px 8px;border-radius:100px}
+  .ai-search-sub{color:#c5d0e6;font-size:12px}
+  .ai-search-row{display:flex;gap:8px;align-items:stretch}
+  .ai-search-row textarea{flex:1;min-height:48px;max-height:120px;resize:none;padding:13px 16px;border-radius:12px;border:1px solid rgba(167,139,250,0.5);background:rgba(0,0,0,0.4);color:#fff;font-size:14px;font-family:inherit;line-height:1.4;outline:none}
+  .ai-search-row textarea:focus{border-color:#a78bfa;box-shadow:0 0 0 3px rgba(167,139,250,0.25)}
+  .ai-search-btn{background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;white-space:nowrap;min-height:48px;text-transform:none;font-size:14px}
+  .ai-search-btn:disabled{opacity:0.6;cursor:wait}
+  .ai-search-examples{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  .ai-search-ex-label{color:#8ba3d4;font-size:11px;font-weight:700}
+  .ai-ex{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:#c5d0e6;font-size:11px;padding:6px 10px;border-radius:100px;cursor:pointer;min-height:28px;font-family:inherit}
+  .ai-ex:hover{border-color:#a78bfa;color:#fff}
+  .ai-search-result{margin-top:10px;background:rgba(0,0,0,0.3);border:1px solid rgba(167,139,250,0.35);border-radius:12px;padding:10px 14px;color:#e5e7eb;font-size:13px;line-height:1.5;display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+  .ai-search-result .ai-tags{display:flex;gap:6px;flex-wrap:wrap;width:100%}
+  .ai-search-result .ai-tag{background:rgba(167,139,250,0.18);border:1px solid rgba(167,139,250,0.4);color:#ddd6fe;font-size:11px;padding:3px 8px;border-radius:100px}
+  .ai-search-result .ai-tag.kw{background:rgba(255,184,0,0.12);border-color:rgba(255,184,0,0.4);color:#FFD166}
+  .ai-search-result .ai-clear{margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.2);color:#c5d0e6;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;min-height:28px;font-family:inherit}
+  @media(max-width:640px){.ai-search-row{flex-direction:column}.ai-search-btn{width:100%}.ai-search-sub{display:none}}
   .search-btn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(255,184,0,0.3)}
 
   .main-container{max-width:1400px;margin:0 auto;padding:24px;display:grid;grid-template-columns:280px 1fr;gap:24px}
@@ -384,6 +404,26 @@ gtag('set', 'url_passthrough', false);
       <option value="5000000">5 000 000 zł</option>
     </datalist>
     <button class="search-btn" id="heroSearchBtn">SZUKAJ</button>
+  </div>
+  <!-- 🤖 Wyszukiwanie AI — opis w języku naturalnym → filtry ustawiają się same -->
+  <div class="ai-search" id="aiSearchBox">
+    <div class="ai-search-head">
+      <span class="ai-search-badge">✨ NOWOŚĆ</span>
+      <b>Wyszukiwanie AI</b>
+      <span class="ai-search-sub">Opisz, czego szukasz — AI sama ustawi wszystkie filtry. Bez klikania.</span>
+    </div>
+    <div class="ai-search-row">
+      <textarea id="aiQuery" rows="1" maxlength="500" placeholder="np. dom z ogrodem do 1,2 mln w promieniu 25 km od Warszawy, od właściciela, bez zawyżonych cen" aria-label="Opisz nieruchomość, której szukasz"></textarea>
+      <button type="button" class="search-btn ai-search-btn" id="aiSearchBtn">✨ Szukaj z AI</button>
+    </div>
+    <div class="ai-search-examples" id="aiExamples">
+      <span class="ai-search-ex-label">Spróbuj:</span>
+      <button type="button" class="ai-ex">3 pokoje do 700 tys. w Krakowie, nowe budownictwo</button>
+      <button type="button" class="ai-ex">kawalerka do wynajęcia Gdańsk do 2500 zł</button>
+      <button type="button" class="ai-ex">działka budowlana min 10 arów 30 km od Poznania, okazje</button>
+      <button type="button" class="ai-ex">dom wolnostojący pod Wrocławiem bez pośrednika</button>
+    </div>
+    <div class="ai-search-result" id="aiSummary" style="display:none"></div>
   </div>
 </div>
 
@@ -2308,9 +2348,12 @@ document.querySelectorAll('#propertyType .chip').forEach(c => {
 document.querySelector('.btn-apply')?.addEventListener('click', () => {
   loadListings();  // filtry zakresowe/rynek/pokoje są na backendzie → refetch
 });
-document.querySelector('.btn-clear')?.addEventListener('click', () => {
+// Zeruje WSZYSTKIE pola/chipy filtrów (bez refetchu) — używane przez „Wyczyść” i przez Wyszukiwanie AI przed ustawieniem nowych filtrów
+function resetFiltersUi() {
   // Reset hero
   const q = document.getElementById('q'); if (q) q.value = '';
+  const hk = document.getElementById('heroRadiusKm'); if (hk) hk.value = '';
+  const fk = document.getElementById('fRadiusKm'); if (fk) fk.value = '';
   const ht = document.getElementById('heroType'); if (ht) ht.value = 'mieszkanie';
   const htr = document.getElementById('heroTrans'); if (htr) htr.value = 'sprzedaz';
   const hp = document.getElementById('heroPrice'); if (hp) hp.value = '';
@@ -2325,10 +2368,17 @@ document.querySelector('.btn-clear')?.addEventListener('click', () => {
   document.querySelectorAll('.chip[data-filter][data-value]').forEach(c => c.classList.remove('active'));
   // Reset chipów sub-typu
   document.querySelectorAll('#subTypeChips .chip').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.chip[data-rooms], .chip[data-verdict], .chip[data-floor]').forEach(c => c.classList.remove('active'));
   // Reset date chip → "Wszystkie"
   document.querySelectorAll('.date-chip').forEach(c => c.classList.remove('active'));
   document.querySelector('.date-chip[data-date="all"]')?.classList.add('active');
-  document.getElementById('dateCustom').style.display = 'none';
+  const dcEl = document.getElementById('dateCustom'); if (dcEl) dcEl.style.display = 'none';
+}
+document.querySelector('.btn-clear')?.addEventListener('click', () => {
+  resetFiltersUi();
+  // Typ „mieszkanie” także w sidebarze (chip + sekcje zależne od typu)
+  document.querySelectorAll('#propertyType .chip').forEach(x => x.classList.toggle('active', x.dataset.type === 'mieszkanie'));
+  updateSubType('mieszkanie');
   loadListings();  // wyczyszczone filtry backendowe → refetch pełnej listy
 });
 
@@ -2729,6 +2779,133 @@ document.getElementById('heroPrice')?.addEventListener('input', loadListingsDebo
 document.getElementById('heroPrice')?.addEventListener('change', applyAllFilters);
 document.getElementById('heroMarket')?.addEventListener('change', applyAllFilters);
 document.getElementById('heroSearchBtn')?.addEventListener('click', refetchFromApi);
+
+// ============================================================================
+// 🤖 WYSZUKIWANIE AI — opis → POST /api/ai-search → filtry → zwykłe loadListings() (pełna baza, te same reguły co filtry)
+// ============================================================================
+const AI_TAG_LABELS = {
+  type: { mieszkanie: '🏢 Mieszkanie', dom: '🏠 Dom', dzialka: '🌳 Działka', lokal: '🏪 Lokal', pokoj: '🚪 Pokój', '': '🏘️ Wszystkie typy' },
+  seller: { prywatna: '👤 Od właściciela', posrednik: '🏢 Od pośrednika', przetarg: '🔨 Przetargi' },
+  date: { today: '📅 Dziś', '3d': '📅 Ostatnie 3 dni', '7d': '📅 Ostatnie 7 dni', '30d': '📅 Ostatnie 30 dni' },
+  verdict: { deal: '🔥 Tylko okazje', 'hide-over': '🚫 Bez zawyżonych' },
+  portals: { unique: '🎯 Tylko unikalne', multi: '🌐 Multi-portal' },
+  sort: { newest: '🕐 Najnowsze', price_asc: '⬇️ Najtańsze', price_desc: '⬆️ Najdroższe', ppm2_asc: '⬇️ Najtańszy m²', ppm2_desc: '⬆️ Najdroższy m²', area_desc: '📐 Największe' },
+};
+const plnFmt = (n) => Number(n).toLocaleString('pl-PL') + ' zł';
+
+function applyAiFilters(f) {
+  resetFiltersUi();
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = (v === 0 || v == null) ? '' : String(v); };
+  set('q', f.city); set('fRadiusCity', f.city);
+  set('heroRadiusKm', f.radius_km); set('fRadiusKm', f.radius_km);
+  set('heroType', f.type);
+  document.querySelectorAll('#propertyType .chip').forEach(x => x.classList.toggle('active', !!f.type && x.dataset.type === f.type));
+  if (f.type && SUB_TYPES[f.type]) updateSubType(f.type);
+  set('heroTrans', f.transaction || 'sprzedaz');
+  set('heroPrice', f.price_max);
+  set('fPriceFrom', f.price_min); set('fPriceTo', f.price_max);
+  set('fAreaFrom', f.area_min); set('fAreaTo', f.area_max);
+  set('fPpm2From', f.ppm2_min); set('fPpm2To', f.ppm2_max);
+  set('fYearFrom', f.year_min); set('fYearTo', f.year_max);
+  (f.rooms || []).forEach(r => document.querySelector(`.chip[data-rooms="${r}"]`)?.classList.add('active'));
+  if (f.market) document.querySelector(`#marketOrPurposeChips .chip[data-filter="market_type"][data-value="${f.market}"]`)?.classList.add('active');
+  (f.building_type || []).forEach(b => document.querySelector(`#subTypeChips .chip[data-filter="building_type"][data-value="${b}"]`)?.classList.add('active'));
+  (f.land_purpose || []).forEach(p => document.querySelector(`#marketOrPurposeChips .chip[data-filter="land_purpose"][data-value="${p}"]`)?.classList.add('active'));
+  if (f.seller) document.querySelector(`.chip[data-seller="${f.seller}"]`)?.classList.add('active');
+  if (f.date && f.date !== 'all') {
+    document.querySelectorAll('.date-chip').forEach(c => c.classList.remove('active'));
+    document.querySelector(`.date-chip[data-date="${f.date}"]`)?.classList.add('active');
+  }
+  if (f.verdict) document.querySelector(`.chip[data-verdict="${f.verdict}"]`)?.classList.add('active');
+  if (f.portals === 'unique') document.getElementById('chipUnique')?.classList.add('active');
+  if (f.portals === 'multi') document.getElementById('chipMulti')?.classList.add('active');
+  const sortEl = document.getElementById('sortSelect');
+  if (sortEl) sortEl.value = f.sort || 'ai';  // applyAllFilters czyta sortSelect
+}
+
+function aiFilterTags(f) {
+  const t = [];
+  if (f.city) t.push('📍 ' + f.city + (f.radius_km ? ` +${f.radius_km} km` : ''));
+  t.push(AI_TAG_LABELS.type[f.type || ''] || '');
+  t.push(f.transaction === 'wynajem' ? '🔑 Wynajem' : '💰 Sprzedaż');
+  if (f.price_min && f.price_max) t.push(`${plnFmt(f.price_min)} – ${plnFmt(f.price_max)}`);
+  else if (f.price_max) t.push('do ' + plnFmt(f.price_max));
+  else if (f.price_min) t.push('od ' + plnFmt(f.price_min));
+  if (f.area_min || f.area_max) t.push('📐 ' + (f.area_min ? `od ${f.area_min}` : '') + (f.area_max ? ` do ${f.area_max}` : '') + ' m²');
+  if (f.ppm2_max) t.push(`do ${plnFmt(f.ppm2_max)}/m²`);
+  if (f.rooms?.length) t.push('🛏️ ' + f.rooms.join(', ') + (f.rooms.length === 1 ? ' pok.' : ' pokoi'));
+  if (f.year_min || f.year_max) t.push('🏗️ rok ' + (f.year_min ? `od ${f.year_min}` : '') + (f.year_max ? ` do ${f.year_max}` : ''));
+  if (f.market) t.push(f.market === 'pierwotny' ? '🏗️ Rynek pierwotny' : '🏘️ Rynek wtórny');
+  (f.building_type || []).forEach(b => t.push('🏠 ' + b));
+  (f.land_purpose || []).forEach(p => t.push('🌳 ' + p));
+  if (f.seller) t.push(AI_TAG_LABELS.seller[f.seller]);
+  if (f.date && f.date !== 'all') t.push(AI_TAG_LABELS.date[f.date]);
+  if (f.verdict) t.push(AI_TAG_LABELS.verdict[f.verdict]);
+  if (f.portals) t.push(AI_TAG_LABELS.portals[f.portals]);
+  if (f.sort && f.sort !== 'ai') t.push(AI_TAG_LABELS.sort[f.sort]);
+  return t.filter(Boolean);
+}
+
+function renderAiSummary(f, query) {
+  const box = document.getElementById('aiSummary'); if (!box) return;
+  const esc = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const tags = aiFilterTags(f).map(x => `<span class="ai-tag">${esc(x)}</span>`).join('');
+  const kws = (f.keywords || []).map(k => `<span class="ai-tag kw">📝 ${esc(k)}</span>`).join('');
+  box.innerHTML = `<div style="flex:1;min-width:200px">🤖 <b>Zrozumiałem:</b> ${esc(f.summary || query)}</div>` +
+    `<button type="button" class="ai-clear" id="aiClearBtn">✕ Wyczyść</button>` +
+    `<div class="ai-tags">${tags}${kws}</div>` +
+    (kws ? `<div style="width:100%;font-size:11px;color:#8ba3d4">📝 Cechy oznaczone na żółto nie są filtrem portali źródłowych — sprawdź je w opisie oferty. Resztę filtrów możesz dopasować ręcznie w panelu po lewej.</div>` : '');
+  box.style.display = '';
+  document.getElementById('aiClearBtn')?.addEventListener('click', () => {
+    box.style.display = 'none';
+    const ta = document.getElementById('aiQuery'); if (ta) ta.value = '';
+    const u = new URL(location.href); u.searchParams.delete('ai'); history.replaceState(null, '', u.pathname + (u.search || ''));
+    document.querySelector('.btn-clear')?.click();
+  });
+}
+
+async function runAiSearch(query) {
+  const q = String(query || '').trim();
+  const btn = document.getElementById('aiSearchBtn'), box = document.getElementById('aiSummary');
+  if (!q) { if (box) { box.style.display = ''; box.innerHTML = '🤖 Napisz, czego szukasz — np. „3 pokoje do 700 tys. w Krakowie”.'; } return; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analizuję…'; }
+  if (box) { box.style.display = ''; box.innerHTML = '🤖 Czytam Twój opis i ustawiam filtry…'; }
+  try {
+    const tok = localStorage.getItem('finderdom_token');
+    const r = await fetch('/api/ai-search', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(tok ? { 'Authorization': 'Bearer ' + tok } : {}) }, body: JSON.stringify({ query: q }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.filters) throw new Error(d.detail || 'Wyszukiwanie AI nie odpowiada');
+    const f = d.filters;
+    const understood = !!(f.city || f.type || f.price_max || f.price_min || f.rooms?.length || f.area_min || f.area_max || f.seller || f.market);
+    if (!understood) {
+      if (box) box.innerHTML = `🤖 ${f.summary || 'Nie rozumiem — opisz nieruchomość, np. „3 pokoje do 700 tys. w Krakowie”.'}`;
+      return;
+    }
+    applyAiFilters(f);
+    renderAiSummary(f, q);
+    const u = new URL(location.href); u.searchParams.set('ai', q); history.replaceState(null, '', u.pathname + '?' + u.searchParams.toString());
+    window.__fdLoadedOnce = true;  // pola są już ustawione — loadListings ma czytać UI, nie stare parametry URL
+    await loadListings();
+    document.getElementById('count')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    console.error('AI search:', e);
+    if (box) box.innerHTML = `❌ ${String(e.message || e).slice(0, 160)}. Użyj filtrów obok albo spróbuj za chwilę.`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✨ Szukaj z AI'; }
+  }
+}
+document.getElementById('aiSearchBtn')?.addEventListener('click', () => runAiSearch(document.getElementById('aiQuery')?.value));
+document.getElementById('aiQuery')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); runAiSearch(e.target.value); } });
+document.getElementById('aiQuery')?.addEventListener('input', (e) => { e.target.style.height = 'auto'; e.target.style.height = Math.min(120, e.target.scrollHeight) + 'px'; });
+document.querySelectorAll('#aiExamples .ai-ex').forEach(b => b.addEventListener('click', () => { const ta = document.getElementById('aiQuery'); if (ta) ta.value = b.textContent; runAiSearch(b.textContent); }));
+// Deep link ze strony głównej: /szukaj?ai=<opis>
+(function aiFromUrl() {
+  const aiQ = new URLSearchParams(location.search).get('ai');
+  if (!aiQ) return;
+  const ta = document.getElementById('aiQuery'); if (ta) ta.value = aiQ;
+  const go = () => runAiSearch(aiQ);
+  if (window.CITY_COORDS) go(); else window.addEventListener('load', go, { once: true });
+})();
 
 // Hero radius km — refetch z API zeby dostac oferty spoza wpisanego miasta (Krakow 50km -> Wieliczka)
 let radiusRefetchTimer = null;

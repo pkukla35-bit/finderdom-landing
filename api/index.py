@@ -4407,6 +4407,130 @@ def _search_link(spec: dict) -> str:
     return "/szukaj?" + urlencode(p)
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 🤖 WYSZUKIWANIE AI — opis w języku naturalnym → komplet filtrów wyszukiwarki (/szukaj)
+# Dostępne dla wszystkich (także gości), limit dzienny per IP/użytkownik, cache identycznych zapytań 7 dni.
+# ═══════════════════════════════════════════════════════════════════════════
+AI_SEARCH_SYSTEM_PROMPT = """Zamieniasz opis nieruchomości po polsku na filtry wyszukiwarki FinderDom.pl. Odpowiadasz WYŁĄCZNIE poprawnym JSON (bez markdown, bez komentarzy) o dokładnie takich kluczach:
+{"city":"","radius_km":0,"type":"","transaction":"sprzedaz","price_min":0,"price_max":0,"area_min":0,"area_max":0,"ppm2_min":0,"ppm2_max":0,"rooms":[],"year_min":0,"year_max":0,"market":"","building_type":[],"land_purpose":[],"seller":"","date":"all","verdict":"","portals":"","sort":"ai","keywords":[],"summary":""}
+ZASADY:
+- city: miejscowość w mianowniku z polskimi znakami ("Kraków", "Nowy Sącz"); dzielnica NIE jest miastem — dzielnicę wpisz do keywords. "pod Warszawą"/"okolice Poznania"/"w pobliżu X" = city X + radius_km 25 (jeśli nie podano km). "X km od Y" = city Y + radius_km X. Brak miasta → "".
+- type: "mieszkanie" | "dom" | "dzialka" | "lokal" | "pokoj" | "" (wszystkie). Kawalerka = mieszkanie + rooms [1]. Lokal usługowy/biuro/magazyn/hala = lokal. Grunt/parcela/ziemia = dzialka. Domyślnie "mieszkanie" gdy mowa o pokojach/piętrze, inaczej "" gdy nie da się ustalić.
+- transaction: "wynajem" tylko gdy mowa o wynajmie/najmie/do wynajęcia/miesięcznie; inaczej "sprzedaz".
+- Kwoty bez spacji: 700 tys. = 700000, 1,2 mln = 1200000, "do 3 tys. miesięcznie" przy wynajmie = price_max 3000. "ok. 500 tys." = price_min 425000, price_max 575000 (±15%). "cena do" = price_max; "od" = price_min. Cena za m² (np. "do 12 tys. za metr") → ppm2_max.
+- area: "min 60 m²" = area_min 60; "50-70 m²" = area_min 50, area_max 70. Dla działki powierzchnia w m² (1 ar = 100 m², 1 ha = 10000 m²).
+- rooms: lista z {"1","2","3","4","5+"}; "min 3 pokoje" = ["3","4","5+"]; "2-3 pokoje" = ["2","3"]; "co najmniej 2" = ["2","3","4","5+"].
+- year_min/year_max: rok budowy ("nowe budownictwo"/"po 2015" = year_min 2015; "przedwojenna kamienica" = year_max 1945 + building_type ["kamienica"]).
+- market: "pierwotny" (od dewelopera/nowe/stan deweloperski) | "wtorny" | "".
+- building_type: dla mieszkania z {"blok","kamienica","apartamentowiec","loft","wiezowiec"}; dla domu z {"wolnostojacy","blizniak","szeregowiec","siedliskowy","rezydencja","letniskowy"}. Pusta lista gdy nie podano.
+- land_purpose (tylko działka): z {"budowlana","rolna","rekreacyjna","lesna","inwestycyjna"}.
+- seller: "prywatna" (bez pośrednika/od właściciela/bez prowizji) | "posrednik" (od biura/agencji) | "przetarg" (przetarg/licytacja komornicza/syndyk) | "".
+- date: "today" (dzisiejsze/nowe dziś) | "3d" | "7d" (z tego tygodnia) | "30d" (z tego miesiąca) | "all".
+- verdict: "deal" (okazje/tanio/poniżej ceny rynkowej/atrakcyjna cena) | "hide-over" (bez zawyżonych) | "".
+- portals: "unique" (tylko na jednym portalu/mało konkurencji) | "multi" (na wielu portalach) | "".
+- sort: "price_asc" (najtańsze/od najtańszych) | "price_desc" (najdroższe) | "newest" (najnowsze) | "area_desc" (największe) | "ppm2_asc" (najtańszy metr) | "ai" (domyślnie).
+- keywords: pozostałe cechy, których nie ma w filtrach (dzielnica, balkon, ogród, garaż, winda, widok, blisko metra, do remontu, umeblowane, dla studentów…) — krótkie słowa/frazy po polsku, max 6.
+- summary: 1 zdanie po polsku, co zrozumiałeś (np. "Dom do 1,2 mln zł w promieniu 25 km od Warszawy, od właściciela."). Jeśli opis nie dotyczy nieruchomości lub jest pusty — summary: "Nie rozumiem — opisz nieruchomość, np. „3 pokoje do 700 tys. w Krakowie”." i resztę zostaw domyślną.
+Nigdy nie wymyślaj kryteriów, których użytkownik nie podał."""
+
+AI_SEARCH_GUEST_LIMIT = 40
+AI_SEARCH_USER_LIMIT = 300
+
+
+class AiSearchReq(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+
+
+def _ai_search_sanitize(f: dict) -> dict:
+    """Twarda walidacja odpowiedzi modelu → tylko dozwolone wartości (frontend ustawia pola bezpośrednio)."""
+    def num(v, lo=0, hi=10**10):
+        x = _num_or_zero(v)
+        return x if lo <= x <= hi else 0
+    def one_of(v, allowed, default=""):
+        s = str(v or "").strip().lower()
+        return s if s in allowed else default
+    def many(v, allowed):
+        if not isinstance(v, list):
+            return []
+        return [str(x).strip().lower() for x in v if str(x).strip().lower() in allowed][:8]
+    t = one_of(f.get("type"), {"mieszkanie", "dom", "dzialka", "lokal", "pokoj", ""})
+    bt_allowed = {"blok", "kamienica", "apartamentowiec", "loft", "wiezowiec"} if t == "mieszkanie" else \
+                 {"wolnostojacy", "blizniak", "szeregowiec", "siedliskowy", "rezydencja", "letniskowy"} if t == "dom" else set()
+    city = re.sub(r"[^\w\s\-ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]", "", str(f.get("city") or "")).strip()[:60]
+    kws = f.get("keywords") if isinstance(f.get("keywords"), list) else []
+    return {
+        "city": city,
+        "radius_km": int(num(f.get("radius_km"), 0, 200)) if city else 0,
+        "type": t,
+        "transaction": one_of(f.get("transaction"), {"sprzedaz", "wynajem"}, "sprzedaz"),
+        "price_min": int(num(f.get("price_min"))), "price_max": int(num(f.get("price_max"))),
+        "area_min": num(f.get("area_min"), 0, 10**7), "area_max": num(f.get("area_max"), 0, 10**7),
+        "ppm2_min": int(num(f.get("ppm2_min"), 0, 10**6)), "ppm2_max": int(num(f.get("ppm2_max"), 0, 10**6)),
+        "rooms": many(f.get("rooms"), {"1", "2", "3", "4", "5+"}),
+        "year_min": int(num(f.get("year_min"), 1500, 2100)), "year_max": int(num(f.get("year_max"), 1500, 2100)),
+        "market": one_of(f.get("market"), {"pierwotny", "wtorny", ""}),
+        "building_type": many(f.get("building_type"), bt_allowed),
+        "land_purpose": many(f.get("land_purpose"), {"budowlana", "rolna", "rekreacyjna", "lesna", "inwestycyjna"}) if t == "dzialka" else [],
+        "seller": one_of(f.get("seller"), {"prywatna", "posrednik", "przetarg", ""}),
+        "date": one_of(f.get("date"), {"all", "today", "3d", "7d", "30d"}, "all"),
+        "verdict": one_of(f.get("verdict"), {"deal", "hide-over", ""}),
+        "portals": one_of(f.get("portals"), {"unique", "multi", ""}),
+        "sort": one_of(f.get("sort"), {"ai", "newest", "price_asc", "price_desc", "ppm2_asc", "ppm2_desc", "area_desc"}, "ai"),
+        "keywords": [str(k).strip()[:40] for k in kws if str(k).strip()][:6],
+        "summary": str(f.get("summary") or "").strip()[:300],
+    }
+
+
+@app.post("/api/ai-search")
+async def ai_search(body: AiSearchReq, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Opis w języku naturalnym → filtry /szukaj. Frontend ustawia pola i odpala zwykłe wyszukiwanie (pełna baza, te same reguły)."""
+    import json as _json
+    cfg = await _ai_cfg()
+    if not cfg["enabled"] or not cfg["key"]:
+        raise HTTPException(503, "Wyszukiwanie AI jest chwilowo niedostępne.")
+    db = database()
+    q = re.sub(r"\s+", " ", body.query).strip()
+    qkey = re.sub(r"[^\w\s]", "", q.lower())[:300]
+    cached = await db.ai_search_cache.find_one({"_id": qkey})
+    if cached and cached.get("filters") and cached.get("at") and (datetime.now(timezone.utc) - cached["at"].replace(tzinfo=timezone.utc)).total_seconds() < 7 * 86400:
+        return {"ok": True, "filters": cached["filters"], "summary": cached["filters"].get("summary", ""), "cached": True}
+    # Limit dzienny (zalogowany: per user; gość: per IP)
+    user = None
+    if credentials and credentials.scheme.lower() == "bearer":
+        try:
+            user = await current_user(credentials)
+        except Exception:
+            user = None
+    ip = (request.headers.get("x-forwarded-for") or request.client.host or "").split(",")[0].strip()
+    who = f"u:{user['_id']}" if user else f"ip:{ip}"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    used = await db.ai_search_log.count_documents({"who": who, "day": today})
+    if used >= (AI_SEARCH_USER_LIMIT if user else AI_SEARCH_GUEST_LIMIT):
+        raise HTTPException(429, "Dzienny limit wyszukiwań AI wyczerpany. Użyj zwykłych filtrów lub zaloguj się." if not user else "Dzienny limit wyszukiwań AI wyczerpany — spróbuj jutro.")
+    try:
+        async with httpx.AsyncClient(timeout=25) as client:
+            r = await client.post(AI_PROXY_URL, headers={"Authorization": f"Bearer {cfg['key']}", "Content-Type": "application/json"},
+                                  json={"model": cfg["model"], "messages": [{"role": "system", "content": AI_SEARCH_SYSTEM_PROMPT}, {"role": "user", "content": q}],
+                                        "max_tokens": 500, "temperature": 0})
+        if r.status_code != 200:
+            logger.error("AI search proxy %s: %s", r.status_code, r.text[:300])
+            raise HTTPException(502, "Asystent AI nie odpowiada. Spróbuj za chwilę.")
+        raw = (r.json().get("choices") or [{}])[0].get("message", {}).get("content") or ""
+        m = re.search(r"\{.*\}", raw, flags=re.S)
+        parsed = _json.loads(m.group(0)) if m else {}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("AI search error: %s", str(e)[:200])
+        raise HTTPException(502, "Asystent AI nie odpowiada. Spróbuj za chwilę.")
+    filters = _ai_search_sanitize(parsed if isinstance(parsed, dict) else {})
+    await db.ai_search_log.insert_one({"who": who, "day": today, "q": q[:300], "filters": filters, "ts": datetime.now(timezone.utc)})
+    if filters["city"] or filters["type"] or filters["price_max"] or filters["rooms"] or filters["area_min"]:
+        await db.ai_search_cache.update_one({"_id": qkey}, {"$set": {"filters": filters, "at": datetime.now(timezone.utc)}}, upsert=True)
+    return {"ok": True, "filters": filters, "summary": filters["summary"], "cached": False}
+
+
+
 @app.get("/api/chat/history")
 async def chat_history(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
     cfg = await _ai_cfg()

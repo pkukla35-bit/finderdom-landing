@@ -976,7 +976,7 @@ function normalizeScrapedListing(raw) {
   }
   const locStr = raw.location || city || '';
   const sellerType = raw.seller_type || 'posrednik';
-  const sellerLabel = sellerType === 'prywatna' ? '👨‍👩‍👧 Prywatna' : sellerType === 'przetarg' ? (raw.auction_kind === 'licytacja' ? '🔨 Licytacja komornicza' : raw.auction_kind === 'syndyk' ? '🔨 Syndyk' : '🔨 Przetarg') : '🏢 Pośrednik';
+  const sellerLabel = sellerType === 'prywatna' ? '👨‍👩‍👧 Prywatna' : sellerType === 'deweloper' ? '🏗️ Deweloper' : sellerType === 'przetarg' ? (raw.auction_kind === 'licytacja' ? '🔨 Licytacja komornicza' : raw.auction_kind === 'syndyk' ? '🔨 Syndyk' : '🔨 Przetarg') : '🏢 Biuro nieruchomości';
   let h = 0;
   for (let i = 0; i < raw.external_id.length; i++) h = (h * 31 + raw.external_id.charCodeAt(i)) & 0xffff;
   const imgClass = IMG_CLASSES_OFF[h % IMG_CLASSES_OFF.length];
@@ -1565,6 +1565,7 @@ async function renderOffer(l, all) {
     const escT = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     contactTitle.innerHTML = l.seller_type === 'prywatna' ? '📞 Kontakt z właścicielem'
       : l.seller_type === 'przetarg' ? '📞 Kontakt z organizatorem przetargu'
+      : l.seller_type === 'deweloper' ? '🏗️ Kontakt z deweloperem'
       : l.agency_name ? `🏢 Kontakt z biurem<span style="display:block;text-transform:none;letter-spacing:0;color:#fff;font-size:13px;margin-top:4px">${escT(l.agency_name)}</span>`
       : '🏢 Kontakt z biurem nieruchomości';
   }

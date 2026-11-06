@@ -1115,7 +1115,7 @@ async function renderDupesBox(l) {
     const ago = (iso) => { if (!iso) return ''; const dd = (Date.now() - new Date(iso).getTime()) / 864e5; return dd < 1 ? 'dziś' : dd < 2 ? 'wczoraj' : `${Math.floor(dd)} dni temu`; };
     const head = items.length === 0
       ? `<div style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.35);border-radius:10px;padding:10px 12px;color:#4ade80;font-size:13px;font-weight:700">🎯 Tylko to jedno ogłoszenie — brak duplikatów na innych portalach</div>
-         <div style="color:#8ba3d4;font-size:11px;margin-top:8px;line-height:1.45">Porównujemy ogłoszenia z tego samego miasta: ta sama cena (±2%), metraż (±3%) i liczba pokoi.</div>`
+         <div style="color:#8ba3d4;font-size:11px;margin-top:8px;line-height:1.45">Szukamy tej samej nieruchomości na wszystkich portalach: ta sama lokalizacja (miejscowość lub GPS), cena (±2%), metraż (±3%), liczba pokoi, rok budowy i zgodne opisy.</div>`
       : `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
            <span style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);color:#bfdbfe;border-radius:100px;padding:5px 10px;font-size:12px;font-weight:800">🔁 ${d.count} ogłoszeń</span>
            <span style="background:rgba(255,184,0,0.12);border:1px solid rgba(255,184,0,0.4);color:#FFD166;border-radius:100px;padding:5px 10px;font-size:12px;font-weight:800">🏢 ${d.agents} ${d.agents === 1 ? 'pośrednik' : d.agents < 5 ? 'pośredników' : 'pośredników'}</span>

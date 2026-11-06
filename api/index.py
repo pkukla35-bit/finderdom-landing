@@ -2283,25 +2283,41 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
         return {"count": 1 + len(extra_this), "agents": 1 if this_copy["seller_type"] == "posrednik" else 0, "owner_too": this_copy["seller_type"] == "prywatna",
                 "agencies": [this_copy["agency"]] if this_copy["agency"].strip() else [], "items": extra_this, "this": this_copy, "timeline": tl, "reason": "brak danych do porównania"}
     base_type = str(doc.get("type") or "").lower().split()[0] if doc.get("type") else ""
+    # Lokalizacja: portale różnie wypełniają „miasto” (Otodom: wieś, Morizon/Gratka: powiat, NOL: województwo + miejscowość w dzielnicy).
+    # Kandydat pasuje, gdy: to samo miasto, LUB miasto/dzielnica jednego = miasto/dzielnica drugiego, LUB GPS w promieniu ~1 km.
+    district = str(doc.get("district") or "").strip()
+    place_names = [p for p in {city, district} if p and p.lower() not in ("małopolskie", "mazowieckie", "śląskie", "wielkopolskie", "dolnośląskie", "pomorskie", "łódzkie", "lubelskie", "podkarpackie", "kujawsko-pomorskie", "zachodniopomorskie", "warmińsko-mazurskie", "lubuskie", "opolskie", "świętokrzyskie", "podlaskie")]
+    loc_or: list = []
+    for p in place_names:
+        rx = {"$regex": "^" + _build_diacritic_regex(p) + "$", "$options": "i"}
+        loc_or.append({"city": rx}); loc_or.append({"district": rx})
+    try:
+        la, ln = float(doc.get("lat")), float(doc.get("lng"))
+        if la and ln:
+            loc_or.append({"lat": {"$gte": la - 0.01, "$lte": la + 0.01}, "lng": {"$gte": ln - 0.015, "$lte": ln + 0.015}})
+    except Exception:
+        pass
     q: dict = {
         "external_id": {"$ne": doc.get("external_id")},
-        "city": {"$regex": "^" + _build_diacritic_regex(city) + "$", "$options": "i"},
         "transaction_type": doc.get("transaction_type") or "sprzedaz",
         "price": {"$gte": price * 0.98, "$lte": price * 1.02},
         "area_m2": {"$gte": area * 0.97, "$lte": area * 1.03},
     }
+    and_parts = [{"$or": loc_or}]
     if base_type:
         q["type"] = {"$regex": "^" + _build_diacritic_regex(base_type), "$options": "i"}
     rooms = doc.get("rooms")
     if rooms not in (None, "", 0):
-        q["$or"] = [{"rooms": rooms}, {"rooms": {"$in": [None, "", 0]}}]
+        rooms_or = [{"rooms": rooms}, {"rooms": {"$in": [None, "", 0]}}]
         try:
-            q["$or"].append({"rooms": int(float(rooms))}); q["$or"].append({"rooms": str(int(float(rooms)))})
+            rooms_or.append({"rooms": int(float(rooms))}); rooms_or.append({"rooms": str(int(float(rooms)))})
         except Exception:
             pass
+        and_parts.append({"$or": rooms_or})
+    q["$and"] = and_parts
     proj = {"_id": 0, "external_id": 1, "source": 1, "url": 1, "price": 1, "area_m2": 1, "rooms": 1, "seller_type": 1, "agency_name": 1,
             "added_at": 1, "is_stale": 1, "stale_since": 1, "title": 1, "images": 1, "market_type": 1, "district": 1, "price_history": 1, "sources": 1,
-            "description": 1, "street": 1, "build_year": 1, "lat": 1, "lng": 1}
+            "description": 1, "street": 1, "build_year": 1, "lat": 1, "lng": 1, "city": 1}
     is_rental = (doc.get("transaction_type") or "sprzedaz") == "wynajem"
     _stop = {"mieszkanie", "mieszkania", "sprzedaz", "sprzedaż", "wynajem", "wynajęcia", "wynajecia", "kawalerka", "pokoje", "pokój", "pokoi", "metrów", "metrow",
              "centrum", "blisko", "nowe", "nowa", "super", "okazja", "piękne", "piekne", "przestronne", "komfortowe", "umeblowane", "balkonem", "garażem", "garazem"}
@@ -2338,11 +2354,28 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
         except Exception:
             return None
         return 2 * 6371 * math.asin(math.sqrt(math.sin(math.radians(la2 - la1) / 2) ** 2 + math.cos(math.radians(la1)) * math.cos(math.radians(la2)) * math.sin(math.radians(ln2 - ln1) / 2) ** 2))
+    def _digits_id(d: dict) -> str:
+        s = re.sub(r"\D", "", str(d.get("external_id") or ""))
+        return s if len(s) >= 6 else ""
+    def _ids_in(d: dict) -> set:
+        """Wszystkie identyfikatory rekordu: external_id + numery z url i sources[].url (Morizon mzn…, Gratka /ob/…)."""
+        out = set()
+        if _digits_id(d):
+            out.add(_digits_id(d))
+        for u in [d.get("url")] + [s.get("url") for s in (d.get("sources") or []) if isinstance(s, dict)]:
+            for m in re.findall(r"(\d{6,})", str(u or "")):
+                out.add(m)
+        return out
+    doc_ids = _ids_in(doc)
+    def _norm_title(t) -> str:
+        return re.sub(r"[^a-ząćęłńóśźż0-9]+", " ", str(t or "").lower()).strip()
+    doc_title = _norm_title(doc.get("title"))
+    doc_places = {_norm_d(city), _norm_d(district)} - {""}
     def _same_property(d: dict) -> bool:
-        dd = _norm_d(d.get("district"))
-        if d_dist and dd and d_dist != dd:
-            return False
-        # Twarde sprzeczności: inna ulica, inny rok budowy, GPS dalej niż 1 km
+        # 1) Ten sam identyfikator (rekord Apify „mzn2048…” = rekord Morizon „2048…”, link do tej samej strony) → na pewno ta sama oferta
+        if doc_ids & _ids_in(d):
+            return True
+        # 2) Twarde sprzeczności: inna ulica, inny rok budowy, GPS dalej niż 1 km, inna liczba pokoi
         if _same_street(doc, d) is False:
             return False
         y1, y2 = _num_or_zero(doc.get("build_year")), _num_or_zero(d.get("build_year"))
@@ -2357,45 +2390,70 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
                 return False
         except Exception:
             pass
+        dd = _norm_d(d.get("district"))
+        d_area = _num_or_zero(d.get("area_m2"))
+        # 3) Pewne potwierdzenia (ważniejsze niż różnie wpisana dzielnica/gmina): ta sama ulica, GPS < 300 m, identyczny tytuł,
+        #    identyczny metraż z ułamkiem (138,84 m²) + identyczna cena
+        if _same_street(doc, d) is True or (km is not None and km < 0.3):
+            return True
+        if len(doc_title) >= 15 and doc_title == _norm_title(d.get("title")):
+            return True
+        if abs(d_area - area) < 0.02 and abs(_num_or_zero(d.get("price")) - price) < 1 and abs(area - round(area)) > 0.01:
+            return True
+        # 4) Dzielnica/miejscowość: obie znane i różne → inna nieruchomość (chyba że miejscowość jednego = miasto drugiego: gmina vs wieś)
+        d_places = {_norm_d(d.get("city")), dd} - {""}
+        if d_dist and dd and d_dist != dd and not (doc_places & d_places):
+            return False
         if is_rental:
-            if abs(_num_or_zero(d.get("area_m2")) - area) > 0.6:
+            if abs(d_area - area) > 0.6:
                 return False
             if not (d_dist and dd and d_dist == dd) and not (d_tokens & _tokens(d.get("title"))):
                 return False
             return True
-        # Pewne potwierdzenia: ta sama ulica, GPS < 300 m
-        if _same_street(doc, d) is True or (km is not None and km < 0.3):
-            return True
-        # Opisy: ta sama nieruchomość opisywana przez różne biura dzieli nazwy własne / liczby (ulica, ary, rok, cechy).
-        # Dwa różne domy w tym samym mieście o podobnej cenie i metrażu — prawie nic wspólnego.
+        # 5) Opisy: ta sama nieruchomość opisywana przez różne biura dzieli nazwy własne / liczby (ulica, ary, rok, cechy).
+        #    Dwa różne domy w tym samym mieście o podobnej cenie i metrażu — prawie nic wspólnego.
         if doc_has_desc and len(str(d.get("description") or "")) >= 80:
             shared = doc_desc & _desc_tokens(d)
             smaller = max(1, min(len(doc_desc), len(_desc_tokens(d))))
             return len(shared) >= 4 or len(shared) / smaller >= 0.2
-        # Bez opisów: wymagamy tej samej dzielnicy (obie znane) lub wspólnego słowa w tytule; dom bez żadnego z tych sygnałów = nie łączymy
+        # 6) Bez opisów: ta sama dzielnica (obie znane) lub wspólne słowo w tytule; dom bez żadnego z tych sygnałów = nie łączymy
         if d_dist and dd and d_dist == dd:
             return True
         if d_tokens & _tokens(d.get("title")):
             return True
         return base_type not in ("dom", "działka", "dzialka") and not (d_dist or dd)
     items = []
-    async for d in coll.find(q, proj).sort("added_at", -1).limit(40):
+    known_portals = {this_copy["portal"]} | {c["portal"] for c in extra_this}
+    async for d in coll.find(q, proj).sort("added_at", -1).limit(60):
         if str(d.get("market_type") or "").lower() == "pierwotny" and str(doc.get("market_type") or "").lower() != "pierwotny":
             continue  # inwestycje deweloperskie: wiele identycznych mieszkań ≠ duplikat
         if not _same_property(d):
             continue
+        same_record = bool(doc_ids & _ids_in(d))  # ten sam rekord zaimportowany drugą ścieżką (Apify „mzn…” vs scraper Morizon) — nie dublujemy portalu
+        portal = _portal_of(d)
+        if same_record and portal in known_portals:
+            continue
         it = {
-            "id": str(d.get("external_id")), "portal": _portal_of(d), "price": _num_or_zero(d.get("price")), "area_m2": _num_or_zero(d.get("area_m2")),
+            "id": str(d.get("external_id")), "portal": portal, "price": _num_or_zero(d.get("price")), "area_m2": _num_or_zero(d.get("area_m2")),
             "rooms": d.get("rooms"), "seller_type": d.get("seller_type") or "posrednik", "agency": d.get("agency_name") or "",
             "added_at": d.get("added_at").isoformat() if isinstance(d.get("added_at"), datetime) else d.get("added_at"),
             "is_stale": bool(d.get("is_stale")), "title": (d.get("title") or "")[:90],
             "image": (d.get("images") or [None])[0] if isinstance(d.get("images"), list) else None,
             "price_history": d.get("price_history") or [],
         }
+        if same_record:
+            it["same_export"] = True
         if include_urls:
             it["url"] = d.get("url")
         items.append(it)
-        items.extend(_cluster_copies(d, it["portal"], include_urls))
+        if same_record:
+            known_portals.add(portal)
+        for c in _cluster_copies(d, portal, include_urls):
+            if same_record and c["portal"] in known_portals:
+                continue
+            items.append(c)
+            if same_record:
+                known_portals.add(c["portal"])
     # Ilu pośredników: pewne minimum — różne nazwy biur, a bez nazw: max kopii na jednym portalu (biura eksportują tę samą ofertę na kilka portali).
     # Kopie z `sources[]` tego samego rekordu (same_export) to ten sam eksport jednego biura — nie liczą się jako kolejny pośrednik.
     items.extend(extra_this)

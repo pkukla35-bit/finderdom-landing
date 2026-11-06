@@ -2900,7 +2900,7 @@ async function runAiSearch(query) {
     const u = new URL(location.href); u.searchParams.set('ai', q); history.replaceState(null, '', u.pathname + '?' + u.searchParams.toString());
     window.__fdLoadedOnce = true;  // pola są już ustawione — loadListings ma czytać UI, nie stare parametry URL
     await loadListings();
-    if ((window.__aiKeywords || []).length && !(window.LISTINGS || []).length) {
+    if ((window.__aiKeywords || []).length && !(window.__scrapedTotalCount || 0) && !(window.LISTINGS || []).length) {
       const hint = document.getElementById('aiKwHint');
       if (hint) hint.innerHTML = `⚠️ Brak ofert z wszystkimi cechami (${window.__aiKeywords.map(aiEsc).join(', ')}). <button type="button" class="ai-clear" id="aiNoKwBtn" style="margin-left:6px">Pokaż bez cech z opisu</button>`;
       document.getElementById('aiNoKwBtn')?.addEventListener('click', async () => { window.__aiKeywords = null; box.querySelectorAll('.ai-tag.kw').forEach(x => x.remove()); hint.textContent = '📝 Cechy z opisu pominięte — filtry podstawowe aktywne.'; await loadListings(); });

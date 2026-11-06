@@ -17,7 +17,7 @@ import requests
 from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from scrape_otodom import CITIES, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num  # noqa: E402
+from scrape_otodom import CITIES, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num, clean_agency, price_history_ops, with_price_history  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("olx")
@@ -167,6 +167,10 @@ def normalize(ad: dict, city_name: str, prop: str, trans: str) -> Optional[Dict[
         "posted_at": posted, "last_seen_at": now_iso, "scraped_via": "olx-direct",
     }
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype
+    # 🏢 Nazwa biura (OLX API: ad.user.name) — tylko konta firmowe
+    if is_business:
+        an = clean_agency((ad.get("user") or {}).get("name") if isinstance(ad.get("user"), dict) else None)
+        if an: doc["agency_name"] = an
     return doc
 
 
@@ -205,12 +209,12 @@ def main():
                 log.info("  DEBUG params: %s", [p.get("key") for p in ads[0].get("params") or []])
                 log.info("  DEBUG price=%s photos0=%s location=%s map=%s", json.dumps(ads[0].get("price"))[:200], json.dumps((ads[0].get("photos") or [None])[0])[:150], json.dumps(ads[0].get("location"))[:150], json.dumps(ads[0].get("map"))[:80])
             ops = []
-            for ad in ads:
-                d = normalize(ad, city["name"], a.property, a.transaction)
-                if not d or not d["price"]: continue
+            docs = [d for d in (normalize(ad, city["name"], a.property, a.transaction) for ad in ads) if d and d["price"]]
+            ph = price_history_ops(coll, "olx", docs)
+            for d in docs:
                 ops.append(UpdateOne({"source": "olx", "external_id": d["external_id"]},
-                                     {"$set": d, "$setOnInsert": {"added_at": d["posted_at"] or d["last_seen_at"]},
-                                      "$unset": {"is_stale": "", "stale_since": "", "stale_reason": ""}}, upsert=True))
+                                     with_price_history({"$set": d, "$setOnInsert": {"added_at": d["posted_at"] or d["last_seen_at"]},
+                                      "$unset": {"is_stale": "", "stale_since": "", "stale_reason": ""}}, ph.get(d["external_id"])), upsert=True))
             new = upd = 0
             if ops:
                 try:

@@ -367,6 +367,7 @@ gtag('set', 'url_passthrough', false);
         <button class="crm-btn" data-status="outdated" style="background:rgba(248,113,113,0.15);border:1px solid rgba(248,113,113,0.4);color:#f87171;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">🚫 Nieaktualna</button>
         <button class="crm-btn" data-status="bad_contact" style="background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.4);color:#c4b5fd;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">❌ Zły kontakt</button>
         <button class="crm-btn" data-status="later" style="background:rgba(251,146,60,0.15);border:1px solid rgba(251,146,60,0.4);color:#fdba74;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">⏰ Kontakt później</button>
+        <button class="crm-btn" data-status="own" title="Pilnujemy wyłączności: e-mail, gdy oferta pojawi się u innego pośrednika albo właściciel wystawi ją sam" style="background:rgba(250,204,21,0.15);border:1px solid rgba(250,204,21,0.5);color:#fde047;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">⭐ Moja oferta</button>
         <button class="crm-btn" data-status="" style="background:rgba(139,163,212,0.1);border:1px solid rgba(139,163,212,0.3);color:#8ba3d4;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">✕ Usuń</button>
       </div>
       <textarea id="crmNote" placeholder="📝 Notatka (opcjonalnie): np. 'Umówione na środę 14:00, klient bardzo zainteresowany'" style="width:100%;box-sizing:border-box;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;font-size:13px;font-family:inherit;min-height:60px;resize:vertical" maxlength="500"></textarea>
@@ -1116,7 +1117,7 @@ async function renderDupesBox(l) {
            <span style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);color:#bfdbfe;border-radius:100px;padding:5px 10px;font-size:12px;font-weight:800">🔁 ${d.count} ogłoszeń</span>
            <span style="background:rgba(255,184,0,0.12);border:1px solid rgba(255,184,0,0.4);color:#FFD166;border-radius:100px;padding:5px 10px;font-size:12px;font-weight:800">🏢 ${d.agents} ${d.agents === 1 ? 'pośrednik' : d.agents < 5 ? 'pośredników' : 'pośredników'}</span>
            ${d.owner_too ? `<span style="background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.4);color:#4ade80;border-radius:100px;padding:5px 10px;font-size:12px;font-weight:800">👤 właściciel ogłasza też sam</span>` : ''}
-         </div>`;
+         </div>${(d.agencies || []).length ? `<div style="font-size:11px;color:#c5d0e6;margin:-4px 0 8px">🏢 Biura: ${d.agencies.map(esc).join(' · ')}</div>` : ''}`;
     const rows = [{ portal: d.this?.portal || l.portal, price: thisPrice, seller_type: d.this?.seller_type, agency: d.this?.agency, current: true, added_at: l.added_at },
                   ...items].map(it => {
       const diff = thisPrice && it.price ? Math.round(it.price - thisPrice) : 0;
@@ -1135,8 +1136,27 @@ async function renderDupesBox(l) {
           <div>${diffTxt}${link ? ' · ' + link : ''}</div>
         </div></div>`;
     }).join('');
+    // 📈 Historia ceny na wszystkich portalach (z price_history każdej kopii)
+    const tl = Array.isArray(d.timeline) ? d.timeline : [];
+    const changes = tl.filter(e => e.kind === 'change');
+    const fmtD = (iso) => { const x = new Date(iso); return isNaN(x) ? '' : x.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
+    let histHtml = '';
+    if (tl.length) {
+      const first = tl[0], minP = Math.min(...tl.map(e => e.price)), maxP = Math.max(...tl.map(e => e.price));
+      const trend = changes.length ? (thisPrice - first.price) : 0;
+      const trendTxt = !changes.length ? `<span style="color:#8ba3d4">bez zmian od ${fmtD(first.at)} (${fmtD(first.at) ? 'pierwsze ogłoszenie' : ''})</span>`
+        : `<span style="color:${trend < 0 ? '#4ade80' : trend > 0 ? '#f87171' : '#8ba3d4'};font-weight:800">${trend < 0 ? '▼' : trend > 0 ? '▲' : '='} ${Math.abs(trend).toLocaleString('pl-PL')} zł</span> <span style="color:#8ba3d4">od ${fmtD(first.at)} (${changes.length} ${changes.length === 1 ? 'zmiana' : changes.length < 5 ? 'zmiany' : 'zmian'})</span>`;
+      const evRows = tl.slice(-8).reverse().map(e => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:4px 0;border-top:1px solid rgba(255,255,255,0.06)">
+          <span style="color:#8ba3d4;white-space:nowrap">${fmtD(e.at)}</span>
+          <span style="color:#c5d0e6;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.kind === 'change' ? '✏️ zmiana' : '🆕 start'} · ${esc(e.portal)}${e.agency ? ' · ' + esc(e.agency) : ''}</span>
+          <span style="color:#fff;font-weight:800;white-space:nowrap">${pln(e.price)}${e.kind === 'change' && e.from ? ` <span style="color:${e.price < e.from ? '#4ade80' : '#f87171'};font-weight:700">${e.price < e.from ? '▼' : '▲'}</span>` : ''}</span></div>`).join('');
+      histHtml = `<div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1)">
+        <div style="font-size:12px;font-weight:800;color:#c5d0e6;margin-bottom:4px">📈 Historia ceny (wszystkie portale)</div>
+        <div style="font-size:12px;margin-bottom:4px">${trendTxt}${minP !== maxP ? ` <span style="color:#8ba3d4">· zakres ${pln(minP)} – ${pln(maxP)}</span>` : ''}</div>
+        ${evRows}</div>`;
+    }
     box.innerHTML = `<div class="contact-title" style="color:#60a5fa">🔁 Duplikaty tej oferty</div>${head}
-      <div style="margin-top:${items.length ? '4px' : '10px'}">${items.length ? rows : ''}</div>
+      <div style="margin-top:${items.length ? '4px' : '10px'}">${items.length ? rows : ''}</div>${histHtml}
       ${items.length ? `<div style="color:#8ba3d4;font-size:11px;margin-top:10px;line-height:1.45">💡 Kilku pośredników = oferta bez wyłączności. Najniższa cena: <b style="color:#4ade80">${pln(Math.min(thisPrice, ...items.map(i => i.price || thisPrice)))}</b>.${d.locked ? ' Linki do ogłoszeń — w planie dla biur.' : ''}</div>` : ''}`;
   } catch (e) {
     console.warn('[dupes]', e);
@@ -1152,6 +1172,7 @@ const CRM_LABELS = {
   outdated: '🚫 Nieaktualna',
   bad_contact: '❌ Zły kontakt',
   later: '⏰ Kontakt później',
+  own: '⭐ Moja oferta (pilnujemy wyłączności)',
 };
 
 async function initCrmBar(offerId) {
@@ -1220,6 +1241,12 @@ async function initCrmBar(offerId) {
       if (res.ok) {
         updateCrmBadge(status ? { status, note, marked_by: user.email } : null);
         currentStatus = status || null;
+        const data = await res.json().catch(() => ({}));
+        if (status === 'own' && data.watch) {
+          const w = data.watch;
+          const badge = el('crmCurrentBadge');
+          if (badge) badge.insertAdjacentHTML('beforeend', `<div style="margin-top:6px;font-size:11px;color:#fde047;line-height:1.45">⭐ Pilnujemy wyłączności: dziś ${w.copies_now} ogłoszeń · ${w.agents_now} pośredników${w.owner_too ? ' · 👤 właściciel ogłasza też sam' : ''}. Gdy pojawi się nowa kopia — e-mail na <b>${w.email}</b>.</div>`);
+        }
         return true;
       }
       const err = await res.json().catch(() => ({}));

@@ -1060,7 +1060,7 @@ class OfferStatusUpdate(BaseModel):
     note: Optional[str] = None
 
 
-VALID_STATUSES = {"contacted", "scheduled", "outdated", "direct", "bad_contact", "later"}
+VALID_STATUSES = {"contacted", "scheduled", "outdated", "direct", "bad_contact", "later", "own"}  # own = ⭐ Moja oferta (pilnuj wyłączności)
 
 
 def _company_scope(user: dict) -> str:
@@ -1090,6 +1090,7 @@ async def set_offer_status(body: OfferStatusUpdate, user: dict = Depends(current
 
     if not body.status:
         await database().offer_statuses.delete_one({"offer_id": offer_id, "company_id": company_id})
+        await database().exclusivity_watch.delete_one({"offer_id": offer_id, "company_id": company_id})
         return {"success": True, "removed": True}
 
     if body.status not in VALID_STATUSES:
@@ -1103,7 +1104,73 @@ async def set_offer_status(body: OfferStatusUpdate, user: dict = Depends(current
          "$setOnInsert": {"created_at": now}},
         upsert=True,
     )
-    return {"success": True, "status": body.status}
+    out: dict = {"success": True, "status": body.status}
+    if body.status == "own":
+        # ⭐ Alert wyłączności: zapamiętaj obecne kopie — od teraz każda NOWA kopia u innego pośrednika / u właściciela = e-mail
+        doc = await _listing_by_any_id(offer_id)
+        dup = await _find_duplicates(doc, include_urls=False) if doc else {"items": [], "count": 1, "agents": 0, "owner_too": False}
+        known = [i["id"] for i in dup["items"]]
+        await database().exclusivity_watch.update_one(
+            {"offer_id": offer_id, "company_id": company_id},
+            {"$set": {"email": user["email"], "known_ids": known, "updated_at": now, "title": ((doc or {}).get("title") or "")[:120],
+                      "city": (doc or {}).get("city", ""), "price": (doc or {}).get("price")},
+             "$setOnInsert": {"created_at": now, "notified": 0}}, upsert=True)
+        out["watch"] = {"copies_now": dup["count"], "agents_now": dup["agents"], "owner_too": dup["owner_too"], "email": user["email"]}
+    else:
+        await database().exclusivity_watch.delete_one({"offer_id": offer_id, "company_id": company_id})
+    return out
+
+
+async def _exclusivity_check(limit: int = 200) -> dict:
+    """⭐ Dzienny alert wyłączności: dla ofert oznaczonych „Moja oferta” sprawdza duplikaty; nowe kopie (inny pośrednik / właściciel sam)
+    → e-mail do osoby, która oznaczyła. Wołany z _daily_jobs_if_due (GitHub Actions co ~6h → raz dziennie)."""
+    db = database()
+    out = {"checked": 0, "emails": 0, "new_copies": 0, "errors": 0}
+    async for w in db.exclusivity_watch.find({}).sort("updated_at", 1).limit(limit):
+        out["checked"] += 1
+        try:
+            doc = await _listing_by_any_id(w["offer_id"])
+            if not doc:
+                continue
+            dup = await _find_duplicates(doc, include_urls=True)
+            known = set(w.get("known_ids") or [])
+            fresh = [i for i in dup["items"] if i["id"] not in known]
+            if not fresh:
+                continue
+            out["new_copies"] += len(fresh)
+            this_price = dup["this"]["price"] or 0
+            pln = lambda v: f"{int(v or 0):,}".replace(",", " ") + " zł"
+            who = lambda i: "👤 właściciel sam" if i["seller_type"] == "prywatna" else ("🔨 przetarg" if i["seller_type"] == "przetarg" else ("🏢 " + i["agency"] if i["agency"] else "🏢 inny pośrednik"))
+            def diff_html(i):
+                if not this_price or i["price"] == this_price:
+                    return ""
+                down = i["price"] < this_price
+                return f'<br><span style="color:{"#16a34a" if down else "#dc2626"};font-size:12px">{"▼" if down else "▲"} {pln(abs(i["price"] - this_price))}</span>'
+            rows = "".join(
+                f'<tr><td style="padding:8px 10px;border-bottom:1px solid #e5e7eb"><b>{i["portal"]}</b><br><span style="color:#64748b;font-size:12px">{who(i)}</span></td>'
+                f'<td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap"><b>{pln(i["price"])}</b>{diff_html(i)}</td>'
+                f'<td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;text-align:right">' + (f'<a href="{i["url"]}" style="color:#2563eb">otwórz ↗</a>' if i.get("url") else "") + "</td></tr>"
+                for i in fresh)
+            owner = any(i["seller_type"] == "prywatna" for i in fresh)
+            subj = ("⚠️ Właściciel wystawił Twoją ofertę sam" if owner else f"⚠️ Twoja oferta pojawiła się u {'innego pośrednika' if len(fresh) == 1 else str(len(fresh)) + ' innych pośredników'}") + f" — {w.get('city') or ''} {pln(w.get('price'))}"
+            html = f"""<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#0f172a">
+  <div style="background:#0b1220;color:#fff;padding:20px 24px;border-radius:14px 14px 0 0"><div style="font-size:20px;font-weight:900">⭐ Alert wyłączności — FinderDom.pl</div>
+  <div style="color:#c5d0e6;font-size:13px;margin-top:4px">Oferta oznaczona jako „Moja oferta” ma nowe kopie na portalach</div></div>
+  <div style="border:1px solid #e5e7eb;border-top:none;padding:20px 24px;border-radius:0 0 14px 14px">
+    <p style="margin:0 0 6px"><b>{(w.get('title') or doc.get('title') or '')[:120]}</b></p>
+    <p style="margin:0 0 14px;color:#64748b">{doc.get('city') or ''} · {pln(this_price)} · łącznie {dup['count']} ogłoszeń, {dup['agents']} pośredników{' · 👤 właściciel ogłasza też sam' if dup['owner_too'] else ''}</p>
+    <p style="margin:0 0 8px;font-weight:800">Nowe kopie od ostatniego sprawdzenia ({len(fresh)}):</p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">{rows}</table>
+    <p style="margin:16px 0 0"><a href="https://www.finderdom.pl/oferta?id={w['offer_id']}&widok=biuro" style="display:inline-block;background:#FFB800;color:#0B1836;font-weight:900;padding:12px 18px;border-radius:10px;text-decoration:none">Zobacz wszystkie kopie i historię ceny →</a></p>
+    <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Alert wysyłamy raz dziennie, tylko gdy pojawi się nowa kopia. Żeby wyłączyć — zmień lub usuń status „⭐ Moja oferta” w CRM przy tej ofercie.</p>
+  </div></div>"""
+            await send_email(to=w["email"], subject=subj, html=html)
+            out["emails"] += 1
+            await db.exclusivity_watch.update_one({"_id": w["_id"]}, {"$set": {"known_ids": [i["id"] for i in dup["items"]], "last_alert_at": datetime.now(timezone.utc)}, "$inc": {"notified": 1}})
+        except Exception as e:
+            out["errors"] += 1
+            logger.warning("exclusivity_check %s: %s", w.get("offer_id"), str(e)[:200])
+    return out
 
 
 @app.get("/api/offer-status")
@@ -2128,27 +2195,38 @@ def _portal_of(doc: dict) -> str:
     return src.capitalize() or "Portal"
 
 
-@app.get("/api/listing/{listing_id}/duplicates")
-async def listing_duplicates(listing_id: str, request: Request, response: Response):
-    """🔁 Widok dla biur: wszystkie ogłoszenia TEJ SAMEJ nieruchomości (inne portale / inni pośrednicy / właściciel sam).
-    Klucz jak w wyszukiwarce: to samo miasto + typ + transakcja + cena ±2% + metraż ±3% (+ pokoje gdy oba znane).
-    Linki do ogłoszeń tylko dla planów płatnych (jak w /api/listing/{id})."""
+def _price_timeline(copies: list) -> list:
+    """📈 Oś czasu ceny nieruchomości na WSZYSTKICH portalach: z price_history każdej kopii (wpis = stara cena + moment zmiany)
+    odtwarzamy: cena startowa od added_at, każda zmiana → nowa cena. Wynik posortowany rosnąco po dacie."""
+    ev = []
+    for c in copies:
+        hist = [h for h in (c.get("price_history") or []) if isinstance(h, dict) and h.get("price")]
+        cur = c.get("price") or 0
+        start_price = hist[0]["price"] if hist else cur
+        if c.get("added_at") and start_price:
+            ev.append({"at": c["added_at"], "price": float(start_price), "portal": c["portal"], "agency": c.get("agency") or "", "kind": "start"})
+        for i, h in enumerate(hist):
+            new_price = hist[i + 1]["price"] if i + 1 < len(hist) else cur
+            if new_price and h.get("at"):
+                ev.append({"at": h["at"], "price": float(new_price), "portal": c["portal"], "agency": c.get("agency") or "", "kind": "change",
+                           "from": float(h["price"])})
+    ev.sort(key=lambda e: str(e["at"]))
+    return ev[-40:]
+
+
+async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
+    """🔁 Wszystkie ogłoszenia TEJ SAMEJ nieruchomości (inne portale / inni pośrednicy / właściciel sam).
+    Klucz: to samo miasto + typ + transakcja + cena ±2% + metraż ±3% (+ pokoje gdy oba znane); inna dzielnica = inna nieruchomość;
+    wynajem dodatkowo wymaga tej samej dzielnicy lub wspólnego słowa w tytule (okrągłe ceny)."""
     coll = database().listings
-    ext_id = listing_id.replace("otodom-", "", 1) if listing_id.startswith("otodom-") else listing_id
-    doc = await coll.find_one({"external_id": ext_id})
-    if not doc:
-        try:
-            doc = await coll.find_one({"external_id": int(ext_id)})
-        except Exception:
-            doc = None
-    if not doc:
-        response.status_code = 404
-        return {"error": "Listing not found"}
     price = _num_or_zero(doc.get("price"))
     area = _num_or_zero(doc.get("area_m2"))
     city = str(doc.get("city") or "").strip()
+    this_copy = {"id": str(doc.get("external_id")), "portal": _portal_of(doc), "price": price, "seller_type": doc.get("seller_type") or "posrednik",
+                 "agency": doc.get("agency_name") or "", "added_at": doc.get("added_at").isoformat() if isinstance(doc.get("added_at"), datetime) else doc.get("added_at"),
+                 "price_history": doc.get("price_history") or []}
     if price < 1000 or area < 5 or not city:
-        return {"count": 1, "agents": 0, "owner_too": False, "items": [], "reason": "brak danych do porównania"}
+        return {"count": 1, "agents": 0, "owner_too": False, "items": [], "this": this_copy, "timeline": _price_timeline([this_copy]), "reason": "brak danych do porównania"}
     base_type = str(doc.get("type") or "").lower().split()[0] if doc.get("type") else ""
     q: dict = {
         "external_id": {"$ne": doc.get("external_id")},
@@ -2166,9 +2244,8 @@ async def listing_duplicates(listing_id: str, request: Request, response: Respon
             q["$or"].append({"rooms": int(float(rooms))}); q["$or"].append({"rooms": str(int(float(rooms)))})
         except Exception:
             pass
-    paid = await _paid_user_from_request(request)
     proj = {"_id": 0, "external_id": 1, "source": 1, "url": 1, "price": 1, "area_m2": 1, "rooms": 1, "seller_type": 1, "agency_name": 1,
-            "added_at": 1, "is_stale": 1, "stale_since": 1, "title": 1, "images": 1, "market_type": 1, "district": 1}
+            "added_at": 1, "is_stale": 1, "stale_since": 1, "title": 1, "images": 1, "market_type": 1, "district": 1, "price_history": 1}
     is_rental = (doc.get("transaction_type") or "sprzedaz") == "wynajem"
     _stop = {"mieszkanie", "mieszkania", "sprzedaz", "sprzedaż", "wynajem", "wynajęcia", "wynajecia", "kawalerka", "pokoje", "pokój", "pokoi", "metrów", "metrow",
              "centrum", "blisko", "nowe", "nowa", "super", "okazja", "piękne", "piekne", "przestronne", "komfortowe", "umeblowane", "balkonem", "garażem", "garazem"}
@@ -2181,9 +2258,8 @@ async def listing_duplicates(listing_id: str, request: Request, response: Respon
     def _same_property(d: dict) -> bool:
         dd = _norm_d(d.get("district"))
         if d_dist and dd and d_dist != dd:
-            return False  # inna dzielnica = inna nieruchomość
+            return False
         if is_rental:
-            # Wynajem: okrągłe ceny (2500 zł) + popularne metraże dają fałszywe pary — wymagamy tej samej dzielnicy albo wspólnego słowa (ulica/osiedle) w tytule
             if abs(_num_or_zero(d.get("area_m2")) - area) > 0.6:
                 return False
             if not (d_dist and dd and d_dist == dd) and not (d_tokens & _tokens(d.get("title"))):
@@ -2201,12 +2277,13 @@ async def listing_duplicates(listing_id: str, request: Request, response: Respon
             "added_at": d.get("added_at").isoformat() if isinstance(d.get("added_at"), datetime) else d.get("added_at"),
             "is_stale": bool(d.get("is_stale")), "title": (d.get("title") or "")[:90],
             "image": (d.get("images") or [None])[0] if isinstance(d.get("images"), list) else None,
+            "price_history": d.get("price_history") or [],
         }
-        if paid is not None:
+        if include_urls:
             it["url"] = d.get("url")
         items.append(it)
     # Ilu pośredników: pewne minimum — różne nazwy biur, a bez nazw: max kopii na jednym portalu (biura eksportują tę samą ofertę na kilka portali)
-    all_copies = items + [{"portal": _portal_of(doc), "seller_type": doc.get("seller_type") or "posrednik", "agency": doc.get("agency_name") or ""}]
+    all_copies = items + [this_copy]
     agents_copies = [c for c in all_copies if c["seller_type"] == "posrednik"]
     named = {c["agency"].strip().lower() for c in agents_copies if c["agency"].strip()}
     per_portal: dict = {}
@@ -2214,11 +2291,38 @@ async def listing_duplicates(listing_id: str, request: Request, response: Respon
         if not c["agency"].strip():
             per_portal[c["portal"]] = per_portal.get(c["portal"], 0) + 1
     agents = max(len(named) + (max(per_portal.values()) if per_portal else 0), 1 if agents_copies else 0)
-    response.headers["Cache-Control"] = "private, max-age=120" if paid else "public, max-age=300, s-maxage=600"
+    timeline = _price_timeline(all_copies)
+    for c in all_copies:
+        c.pop("price_history", None)
     return {"count": len(items) + 1, "agents": agents, "owner_too": any(c["seller_type"] == "prywatna" for c in all_copies),
-            "this": {"portal": _portal_of(doc), "price": price, "seller_type": doc.get("seller_type") or "posrednik", "agency": doc.get("agency_name") or ""},
-            "items": items, "locked": paid is None}
+            "agencies": sorted({c["agency"] for c in agents_copies if c["agency"].strip()}),
+            "this": this_copy, "items": items, "timeline": timeline}
 
+
+async def _listing_by_any_id(listing_id: str):
+    coll = database().listings
+    ext_id = listing_id.replace("otodom-", "", 1) if listing_id.startswith("otodom-") else listing_id
+    doc = await coll.find_one({"external_id": ext_id})
+    if not doc:
+        try:
+            doc = await coll.find_one({"external_id": int(ext_id)})
+        except Exception:
+            doc = None
+    return doc
+
+
+@app.get("/api/listing/{listing_id}/duplicates")
+async def listing_duplicates(listing_id: str, request: Request, response: Response):
+    """🔁 Widok dla biur: duplikaty oferty + historia ceny na wszystkich portalach. Linki do ogłoszeń tylko dla planów płatnych."""
+    doc = await _listing_by_any_id(listing_id)
+    if not doc:
+        response.status_code = 404
+        return {"error": "Listing not found"}
+    paid = await _paid_user_from_request(request)
+    out = await _find_duplicates(doc, include_urls=paid is not None)
+    out["locked"] = paid is None
+    response.headers["Cache-Control"] = "private, max-age=120" if paid else "public, max-age=300, s-maxage=600"
+    return out
 
 
 @app.get("/api/admin/olx-probe")
@@ -2327,6 +2431,7 @@ async def listings_scraped_endpoint(
     lng: Optional[float] = None,
     radius_km: Optional[float] = None,
     archive: Optional[int] = None,  # 1 = ARCHIWUM: wygasłe oferty PRYWATNE (tylko plany Solo/Firmowy)
+    keywords: Optional[str] = None,  # 🤖 cechy z opisu (Wyszukiwanie AI): "ogród,balkon,garaż" — KAŻDE słowo musi wystąpić w tytule/opisie/lokalizacji
 ):
     """Returns listings scraped via ScrapingBee/Apify.
 
@@ -2502,6 +2607,16 @@ async def listings_scraped_endpoint(
         _range("area_m2", area_from, area_to)
         _range("price_pm2", ppm2_from, ppm2_to)
         has_range = any(v is not None and v > 0 for v in (year_from, year_to, price_from, price_to, area_from, area_to, ppm2_from, ppm2_to))
+        # 🤖 Słowa kluczowe z Wyszukiwania AI: każde słowo (po rdzeniu: „balkon” łapie „balkonem”, „ogród” → „ogrodem/ogródek”) w tytule/opisie/dzielnicy/lokalizacji
+        kw_list = [k.strip() for k in (keywords or "").split(",") if 2 <= len(k.strip()) <= 40][:6]
+        if kw_list:
+            for kw in kw_list:
+                words = [w for w in re.findall(r"[\wąćęłńóśźż]+", kw.lower()) if len(w) >= 3]
+                stem = max(words, key=len) if words else kw.lower()  # „do remontu” → „remontu”; „z ogrodem” → „ogrodem”
+                if len(stem) > 5:
+                    stem = stem[:-2] if stem[-2:] in ("em", "ie", "ów", "ow", "ki", "ka", "ek", "ny", "na", "ne", "ym") else stem[:-1]
+                rx = {"$regex": _build_diacritic_regex(stem), "$options": "i"}
+                query.setdefault("$and", []).append({"$or": [{"title": rx}, {"description": rx}, {"district": rx}, {"location": rx}]})
         # Filter po liczbie pokoi - "1,2,3" (multi-select) lub "5+"
         if rooms:
             room_vals = []
@@ -3989,6 +4104,14 @@ async def admin_alerts_run(request: Request, limit: int = 100):
     return out
 
 
+
+@app.post("/api/admin/exclusivity/run")
+async def admin_exclusivity_run(request: Request, limit: int = 200):
+    """⭐ Ręczne odpalenie alertu wyłączności (normalnie raz dziennie w _daily_jobs_if_due)."""
+    await _authorize_cron_or_admin(request)
+    return await _exclusivity_check(limit=max(1, min(500, limit)))
+
+
 IMPORT_WORKFLOWS = ["scrape-otodom-regions.yml", "scrape-olx.yml", "scrape-nol.yml", "scrape-portals.yml"]  # scrape-wynajem (ScrapingBee, płatny) wyłączony 2.11 na prośbę użytkownika
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "pkukla35-bit/finderdom-landing")
 
@@ -4169,6 +4292,10 @@ async def _daily_jobs_if_due() -> Optional[dict]:
             out["alerts"] = await _alerts_run(limit_alerts=300)
         except Exception as e:
             out["alerts"] = {"error": str(e)[:200]}
+        try:
+            out["exclusivity"] = await _exclusivity_check()
+        except Exception as e:
+            out["exclusivity"] = {"error": str(e)[:200]}
     else:
         out["mailing"] = out["alerts"] = {"skipped": "email_not_configured"}
     await db.settings.update_one({"_id": "daily_jobs"}, {"$set": {"last_result": out, "finished_at": datetime.now(timezone.utc).isoformat()}})

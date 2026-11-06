@@ -271,6 +271,7 @@ gtag('set', 'url_passthrough', false);
   .card-crm .crm-btn.o{border-color:#f87171;background:rgba(248,113,113,0.18);color:#fca5a5}
   .card-crm .crm-btn.b{border-color:#a78bfa;background:rgba(167,139,250,0.18);color:#c4b5fd}
   .card-crm .crm-btn.l{border-color:#fb923c;background:rgba(251,146,60,0.18);color:#fdba74}
+  .card-crm .crm-btn.w{border-color:#facc15;background:rgba(250,204,21,0.18);color:#fde047}
   .card-crm .crm-btn.x{opacity:.6}
   .card-crm .crm-note{margin-top:7px;font-size:11px;color:#a3b3d1;background:rgba(255,255,255,0.04);border-radius:8px;padding:6px 8px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 
@@ -569,6 +570,7 @@ gtag('set', 'url_passthrough', false);
         <div class="chip" data-crm="outdated">🚫 Nieaktualne</div>
         <div class="chip" data-crm="bad_contact">❌ Zły kontakt</div>
         <div class="chip" data-crm="later">⏰ Kontakt później</div>
+        <div class="chip" data-crm="own">⭐ Moje oferty</div>
         <div class="chip" data-crm="none">🆕 Nieoznaczone</div>
       </div>
     </div>
@@ -1337,6 +1339,8 @@ async function loadListings() {
     }
     // 🗄️ Archiwum wygasłych ofert prywatnych (plany Solo/Firmowy) — zamiast aktywnych ofert
     if (window.ARCHIVE_MODE) { apiParams.set('archive', '1'); apiParams.set('seller_type', 'prywatna'); }
+    // 🤖 Wyszukiwanie AI: cechy z opisu (ogród, balkon, garaż…) — backend szuka ich w tytule/opisie/lokalizacji
+    if (Array.isArray(window.__aiKeywords) && window.__aiKeywords.length) apiParams.set('keywords', window.__aiKeywords.join(','));
     const scrapedUrl = '/api/listings-scraped' + (apiParams.toString() ? '?' + apiParams.toString() : '');
     // 🔒 Zalogowani wysyłają token (opłacony plan = pełna lista); &p=1 rozdziela cache CDN od publicznego podglądu
     const __tok = localStorage.getItem('finderdom_token');
@@ -1711,6 +1715,7 @@ const CRM_MAP = {
   outdated:  {bg:'rgba(248,113,113,0.95)', t:'#3f1010', cls:'o', lbl:'🚫 Nieaktualna'},
   bad_contact: {bg:'rgba(167,139,250,0.95)', t:'#2e1065', cls:'b', lbl:'❌ Zły kontakt'},
   later:     {bg:'rgba(251,146,60,0.95)', t:'#431407', cls:'l', lbl:'⏰ Kontakt później'},
+  own:       {bg:'rgba(250,204,21,0.95)', t:'#422006', cls:'w', lbl:'⭐ Moja oferta'},
 };
 function escCrm(s) { return String(s || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 function crmPillHtml(st) {
@@ -2350,6 +2355,7 @@ document.querySelector('.btn-apply')?.addEventListener('click', () => {
 });
 // Zeruje WSZYSTKIE pola/chipy filtrów (bez refetchu) — używane przez „Wyczyść” i przez Wyszukiwanie AI przed ustawieniem nowych filtrów
 function resetFiltersUi() {
+  window.__aiKeywords = null;
   // Reset hero
   const q = document.getElementById('q'); if (q) q.value = '';
   const hk = document.getElementById('heroRadiusKm'); if (hk) hk.value = '';
@@ -2792,6 +2798,7 @@ const AI_TAG_LABELS = {
   sort: { newest: '🕐 Najnowsze', price_asc: '⬇️ Najtańsze', price_desc: '⬆️ Najdroższe', ppm2_asc: '⬇️ Najtańszy m²', ppm2_desc: '⬆️ Najdroższy m²', area_desc: '📐 Największe' },
 };
 const plnFmt = (n) => Number(n).toLocaleString('pl-PL') + ' zł';
+const aiEsc = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function applyAiFilters(f) {
   resetFiltersUi();
@@ -2821,6 +2828,7 @@ function applyAiFilters(f) {
   if (f.portals === 'multi') document.getElementById('chipMulti')?.classList.add('active');
   const sortEl = document.getElementById('sortSelect');
   if (sortEl) sortEl.value = f.sort || 'ai';  // applyAllFilters czyta sortSelect
+  window.__aiKeywords = (f.keywords || []).filter(Boolean).slice(0, 6);
 }
 
 function aiFilterTags(f) {
@@ -2850,12 +2858,18 @@ function renderAiSummary(f, query) {
   const box = document.getElementById('aiSummary'); if (!box) return;
   const esc = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const tags = aiFilterTags(f).map(x => `<span class="ai-tag">${esc(x)}</span>`).join('');
-  const kws = (f.keywords || []).map(k => `<span class="ai-tag kw">📝 ${esc(k)}</span>`).join('');
+  const kwList = (f.keywords || []).filter(Boolean);
+  const kws = kwList.map(k => `<span class="ai-tag kw" data-kw="${esc(k)}" title="Kliknij, żeby usunąć tę cechę z filtra">📝 ${esc(k)} ✕</span>`).join('');
   box.innerHTML = `<div style="flex:1;min-width:200px">🤖 <b>Zrozumiałem:</b> ${esc(f.summary || query)}</div>` +
     `<button type="button" class="ai-clear" id="aiClearBtn">✕ Wyczyść</button>` +
     `<div class="ai-tags">${tags}${kws}</div>` +
-    (kws ? `<div style="width:100%;font-size:11px;color:#8ba3d4">📝 Cechy oznaczone na żółto nie są filtrem portali źródłowych — sprawdź je w opisie oferty. Resztę filtrów możesz dopasować ręcznie w panelu po lewej.</div>` : '');
+    (kws ? `<div style="width:100%;font-size:11px;color:#8ba3d4" id="aiKwHint">📝 Cechy na żółto szukamy w tytule i opisie ogłoszenia (każda musi wystąpić). Za mało wyników? Kliknij cechę, żeby ją zdjąć.</div>` : '');
   box.style.display = '';
+  box.querySelectorAll('.ai-tag.kw').forEach(t => t.addEventListener('click', async () => {
+    window.__aiKeywords = (window.__aiKeywords || []).filter(k => k !== t.dataset.kw);
+    t.remove();
+    await loadListings();
+  }));
   document.getElementById('aiClearBtn')?.addEventListener('click', () => {
     box.style.display = 'none';
     const ta = document.getElementById('aiQuery'); if (ta) ta.value = '';
@@ -2886,6 +2900,11 @@ async function runAiSearch(query) {
     const u = new URL(location.href); u.searchParams.set('ai', q); history.replaceState(null, '', u.pathname + '?' + u.searchParams.toString());
     window.__fdLoadedOnce = true;  // pola są już ustawione — loadListings ma czytać UI, nie stare parametry URL
     await loadListings();
+    if ((window.__aiKeywords || []).length && !(window.LISTINGS || []).length) {
+      const hint = document.getElementById('aiKwHint');
+      if (hint) hint.innerHTML = `⚠️ Brak ofert z wszystkimi cechami (${window.__aiKeywords.map(aiEsc).join(', ')}). <button type="button" class="ai-clear" id="aiNoKwBtn" style="margin-left:6px">Pokaż bez cech z opisu</button>`;
+      document.getElementById('aiNoKwBtn')?.addEventListener('click', async () => { window.__aiKeywords = null; box.querySelectorAll('.ai-tag.kw').forEach(x => x.remove()); hint.textContent = '📝 Cechy z opisu pominięte — filtry podstawowe aktywne.'; await loadListings(); });
+    }
     document.getElementById('count')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) {
     console.error('AI search:', e);

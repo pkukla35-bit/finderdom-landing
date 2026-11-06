@@ -200,6 +200,46 @@ def _num(v) -> Optional[float]:
     except: return None
 
 
+
+# ───────────────────────── Wspólne dla wszystkich scraperów (importowane przez olx/nol/portals) ─────────────────────────
+_AGENCY_JUNK = re.compile(r"^(osoba prywatna|prywatny|private|właściciel|wlasciciel|brak|none|null|-+)$", re.I)
+
+
+def clean_agency(name) -> Optional[str]:
+    """Nazwa biura/dewelopera z portalu → krótki, czysty string albo None (żeby nie nadpisywać istniejącej wartości pustką)."""
+    if not name or not isinstance(name, str): return None
+    s = re.sub(r"\s+", " ", name).strip(" .,-–|")[:120]
+    if len(s) < 2 or _AGENCY_JUNK.match(s): return None
+    return s
+
+
+def price_history_ops(coll, source: str, docs: List[Dict[str, Any]]) -> Dict[Any, Dict[str, Any]]:
+    """📈 Historia cen: dla dokumentów, które już są w bazie i mają INNĄ cenę, zwraca {external_id: wpis do $push price_history}.
+    Wpis = {price: STARA cena, at: teraz} (aktualna cena zawsze w polu `price`). Jedno zapytanie na batch."""
+    ids = [d.get("external_id") for d in docs if d.get("external_id") is not None]
+    if not ids: return {}
+    out: Dict[Any, Dict[str, Any]] = {}
+    try:
+        old = {x["external_id"]: x.get("price") for x in coll.find({"source": source, "external_id": {"$in": ids}}, {"external_id": 1, "price": 1})}
+    except Exception:
+        return {}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for d in docs:
+        ext = d.get("external_id")
+        if ext not in old: continue
+        op, np_ = _num(old.get(ext)), _num(d.get("price"))
+        if op and np_ and abs(op - np_) >= 1:
+            out[ext] = {"price": op, "at": now_iso}
+    return out
+
+
+def with_price_history(update: Dict[str, Any], entry: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Dokleja $push price_history (max 30 wpisów) do gotowego dokumentu UpdateOne."""
+    if entry:
+        update["$push"] = {"price_history": {"$each": [entry], "$slice": -30}}
+    return update
+
+
 DZIALKA_SUBTYPES = [
     ("budowlana",    ["budowlan"]),
     ("rolna",        ["rolna", "rolne", "rolny"]),
@@ -377,6 +417,11 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
     }
     if subtype_field and subtype:
         doc[subtype_field] = subtype
+    # 🏢 Nazwa biura / dewelopera (lista wyników Otodom: item.agency.name) — tylko gdy nie-prywatna
+    if seller_type != "prywatna":
+        ag = item.get("agency") if isinstance(item.get("agency"), dict) else {}
+        an = clean_agency(ag.get("name"))
+        if an: doc["agency_name"] = an
     # Wielkość działki (domy, działki) — Otodom podaje ją już na liście wyników
     try:
         ta = item.get("terrainAreaInSquareMeters")
@@ -516,8 +561,11 @@ def main():
             if docs:
                 # added_at = zawsze prawdziwa data z Otodomu (posted_at) — pozwala poprawnie działać
                 # filtrom "dziś / 3 dni / 7 dni" nawet po wielokrotnych scrape'ach.
+                ph = price_history_ops(coll, docs[0]["source"], docs)
+                if ph or any(d.get("agency_name") for d in docs):
+                    log.info("  📈 zmiany cen: %d · 🏢 z nazwą biura: %d/%d", len(ph), sum(1 for d in docs if d.get("agency_name")), len(docs))
                 ops = [UpdateOne({"source": d["source"], "external_id": d["external_id"]},
-                                 {"$set": d}, upsert=True) for d in docs]
+                                 with_price_history({"$set": d}, ph.get(d["external_id"])), upsert=True) for d in docs]
                 try:
                     r = coll.bulk_write(ops, ordered=False)
                     batch_new = r.upserted_count

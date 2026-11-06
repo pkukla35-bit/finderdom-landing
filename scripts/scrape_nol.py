@@ -19,7 +19,7 @@ import requests
 from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from scrape_otodom import CITIES, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num  # noqa: E402
+from scrape_otodom import CITIES, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num, clean_agency, price_history_ops, with_price_history  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("nol")
@@ -110,6 +110,11 @@ def parse_detail(html: str) -> Dict[str, Any]:
     if m: d["offer_type"] = m.group(1)
     m = re.search(r"isArchive:\s*(true|false)", html)
     if m: d["archived"] = m.group(1) == "true"
+    # 🏢 Nazwa biura (strona oferty NOL: zmienne JS agencyName/companyName lub blok „Biuro nieruchomości”)
+    m = re.search(r'(?:agencyName|companyName|officeName|agency_name)\s*[:=]\s*["\']([^"\']{2,120})["\']', html)
+    if not m: m = re.search(r'"(?:agencyName|companyName|sellerName)"\s*:\s*"([^"]{2,120})"', html)
+    if not m: m = re.search(r'class="[^"]*(?:agency|office|company)[^"]*name[^"]*"[^>]*>\s*([^<]{2,120}?)\s*<', html, re.I)
+    if m: d["agency_name"] = m.group(1).strip()
     m = re.search(r'photos:\s*(\{.*?\})\s*,\s*\n', html, re.S)
     if m:
         try:
@@ -167,6 +172,8 @@ def normalize(it: Dict[str, Any], det: Dict[str, Any], city_name: str, prop: str
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype
     for k in ("images", "phone", "lat", "lng", "description"):
         if det.get(k) is not None: doc[k] = det[k]
+    an = clean_agency(det.get("agency_name")) if seller != "prywatna" else None
+    if an: doc["agency_name"] = an
     if det: doc["details_at"] = now_iso
     return doc
 
@@ -206,7 +213,7 @@ def main():
             if not items: log.info("  page %d: 0 ofert", page); break
             ids = [it["id"] for it in items]
             known = set(x["external_id"] for x in coll.find({"source": "nol", "external_id": {"$in": ids}}, {"external_id": 1}))
-            ops = []
+            ops = []; docs_batch = []
             for it in items:
                 det: Dict[str, Any] = {}
                 if it["id"] not in known and tot["details"] < a.max_details:
@@ -216,9 +223,12 @@ def main():
                         if det.get("archived"): continue
                     time.sleep(a.delay / 2)
                 doc = normalize(it, det, city["name"], a.property, a.transaction)
-                ops.append(UpdateOne({"source": "nol", "external_id": it["id"]},
-                                     {"$set": doc, "$setOnInsert": {"added_at": doc["last_seen_at"], "posted_at": None},
-                                      "$unset": {"is_stale": "", "stale_since": "", "stale_reason": ""}},
+                docs_batch.append(doc)
+            ph = price_history_ops(coll, "nol", docs_batch)
+            for doc in docs_batch:
+                ops.append(UpdateOne({"source": "nol", "external_id": doc["external_id"]},
+                                     with_price_history({"$set": doc, "$setOnInsert": {"added_at": doc["last_seen_at"], "posted_at": None},
+                                      "$unset": {"is_stale": "", "stale_since": "", "stale_reason": ""}}, ph.get(doc["external_id"])),
                                      upsert=True))
             new = upd = 0
             if ops:

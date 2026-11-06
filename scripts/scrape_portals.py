@@ -15,7 +15,7 @@ import requests
 from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from scrape_otodom import CITIES, REGIONS, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num, city_from_slug  # noqa: E402
+from scrape_otodom import CITIES, REGIONS, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num, city_from_slug, clean_agency, price_history_ops, with_price_history  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("portals")
@@ -127,9 +127,16 @@ def parse_ldjson_offers(html: str, id_re: str) -> List[Dict[str, Any]]:
                 "rooms": _num(it.get("numberOfRooms")), "floor": it.get("floorLevel"),
                 "image": o.get("image"), "district": addr.get("addressLocality"), "street": addr.get("streetAddress"),
                 "desc": it.get("description") or "", "seller": None,
+                "agency": _name_of(o.get("seller") or o.get("offeredBy") or it.get("seller") or d.get("brand")),
             })
         break
     return out
+
+
+def _name_of(v) -> Optional[str]:
+    """Nazwa z węzła ld+json/JSON (dict z name/legalName) albo string."""
+    if isinstance(v, dict): return v.get("name") or v.get("legalName") or None
+    return v if isinstance(v, str) else None
 
 
 def parse_gethome(html: str) -> List[Dict[str, Any]]:
@@ -160,6 +167,7 @@ def parse_gethome(html: str) -> List[Dict[str, Any]]:
             "seller": "prywatna" if o.get("is_private") else ("deweloper" if o.get("market_type") == "primary_market" else "posrednik"),
             "lat": coords.get("lat"), "lng": coords.get("lon"), "plot_area_m2": _num(prop.get("lot_size")),
             "posted_at": o.get("created_at"), "build_year": _num(prop.get("building_year")),
+            "agency": _name_of(o.get("agency") or o.get("agent") or o.get("company") or o.get("developer") or ((o.get("investment") or {}).get("developer") if isinstance(o.get("investment"), dict) else None)),
         })
     return out
 
@@ -397,6 +405,9 @@ def normalize(portal: str, it: Dict[str, Any], city_name: str, prop: str, trans:
     }
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype
     if portal == "adresowo": doc["seller_verified"] = True   # seller z etykiety karty („bez pośredników”)
+    # 🏢 Nazwa biura/dewelopera (gdy portal ją podaje w danych listy)
+    an = clean_agency(it.get("agency")) if seller != "prywatna" else None
+    if an: doc["agency_name"] = an
     for k in ("lat", "lng", "plot_area_m2", "phone", "build_year", "posted_at", "auction_kind", "auction_deadline", "auction_discount_pct"):
         if it.get(k) not in (None, "", 0): doc[k] = it[k]
     # 🌳 wielkość działki z opisu (Gratka/Morizon/Domiporta nie podają jej w danych listy)
@@ -453,13 +464,14 @@ def main():
                     if str(it["id"]) not in have_phone and tot.setdefault("phones", 0) < ODW_PHONE_LIMIT:
                         ph = enrich_odwlasciciela_phone(it["url"]); time.sleep(0.8)
                         if ph: it["phone"] = ph; tot["phones"] += 1
-            for it in items:
-                d = normalize(a.portal, it, city["name"], a.property, a.transaction)
-                if not d["price"]: continue
+            docs_batch = [d for d in (normalize(a.portal, it, city["name"], a.property, a.transaction) for it in items) if d["price"]]
+            ph = price_history_ops(coll, a.portal, docs_batch)
+            if ph: log.info("  📈 zmiany cen: %d", len(ph))
+            for d in docs_batch:
                 posted = d.pop("posted_at", None)
                 ops.append(UpdateOne({"source": a.portal, "external_id": d["external_id"]},
-                                     {"$set": d, "$setOnInsert": {"added_at": posted or d["last_seen_at"], "posted_at": posted},
-                                      "$unset": {"is_stale": "", "stale_since": "", "stale_reason": ""}}, upsert=True))
+                                     with_price_history({"$set": d, "$setOnInsert": {"added_at": posted or d["last_seen_at"], "posted_at": posted},
+                                      "$unset": {"is_stale": "", "stale_since": "", "stale_reason": ""}}, ph.get(d["external_id"])), upsert=True))
             new = upd = 0
             if ops:
                 try:
@@ -467,7 +479,7 @@ def main():
                 except Exception as e:
                     log.warning("  bulk_write: %s", str(e)[:200])
             tot["new"] += new; tot["updated"] += upd
-            log.info("  page %d: %d ofert → new=%d upd=%d", page, len(items), new, upd)
+            log.info("  page %d: %d ofert → new=%d upd=%d (🏢 z nazwą biura: %d)", page, len(items), new, upd, sum(1 for d in docs_batch if d.get("agency_name")))
             if new == 0 and page >= 2: log.info("  → brak nowych, następne miasto"); break
             time.sleep(a.delay)
     log.info("═══ DONE %s %s/%s: new=%d updated=%d pages=%d ═══", a.portal, a.transaction, a.property, tot["new"], tot["updated"], tot["pages"])

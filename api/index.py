@@ -2116,6 +2116,89 @@ async def listing_single(listing_id: str, request: Request, response: Response):
         return {"error": str(e)[:200]}
 
 
+def _portal_of(doc: dict) -> str:
+    src = str(doc.get("source") or "").lower()
+    url = str(doc.get("url") or "")
+    names = {"otodom": "Otodom", "olx": "OLX", "nol": "Nieruchomosci-online", "nieruchomosci-online": "Nieruchomosci-online", "morizon": "Morizon",
+             "gratka": "Gratka", "domiporta": "Domiporta", "adresowo": "Adresowo", "gethome": "Gethome", "odwlasciciela": "OdWłaściciela",
+             "listaprzetargow": "ListaPrzetargow", "apify": "Otodom"}
+    for k, v in names.items():
+        if k in src or k in url:
+            return v
+    return src.capitalize() or "Portal"
+
+
+@app.get("/api/listing/{listing_id}/duplicates")
+async def listing_duplicates(listing_id: str, request: Request, response: Response):
+    """🔁 Widok dla biur: wszystkie ogłoszenia TEJ SAMEJ nieruchomości (inne portale / inni pośrednicy / właściciel sam).
+    Klucz jak w wyszukiwarce: to samo miasto + typ + transakcja + cena ±2% + metraż ±3% (+ pokoje gdy oba znane).
+    Linki do ogłoszeń tylko dla planów płatnych (jak w /api/listing/{id})."""
+    coll = database().listings
+    ext_id = listing_id.replace("otodom-", "", 1) if listing_id.startswith("otodom-") else listing_id
+    doc = await coll.find_one({"external_id": ext_id})
+    if not doc:
+        try:
+            doc = await coll.find_one({"external_id": int(ext_id)})
+        except Exception:
+            doc = None
+    if not doc:
+        response.status_code = 404
+        return {"error": "Listing not found"}
+    price = _num_or_zero(doc.get("price"))
+    area = _num_or_zero(doc.get("area_m2"))
+    city = str(doc.get("city") or "").strip()
+    if price < 1000 or area < 5 or not city:
+        return {"count": 1, "agents": 0, "owner_too": False, "items": [], "reason": "brak danych do porównania"}
+    base_type = str(doc.get("type") or "").lower().split()[0] if doc.get("type") else ""
+    q: dict = {
+        "external_id": {"$ne": doc.get("external_id")},
+        "city": {"$regex": "^" + _build_diacritic_regex(city) + "$", "$options": "i"},
+        "transaction_type": doc.get("transaction_type") or "sprzedaz",
+        "price": {"$gte": price * 0.98, "$lte": price * 1.02},
+        "area_m2": {"$gte": area * 0.97, "$lte": area * 1.03},
+    }
+    if base_type:
+        q["type"] = {"$regex": "^" + _build_diacritic_regex(base_type), "$options": "i"}
+    rooms = doc.get("rooms")
+    if rooms not in (None, "", 0):
+        q["$or"] = [{"rooms": rooms}, {"rooms": {"$in": [None, "", 0]}}]
+        try:
+            q["$or"].append({"rooms": int(float(rooms))}); q["$or"].append({"rooms": str(int(float(rooms)))})
+        except Exception:
+            pass
+    paid = await _paid_user_from_request(request)
+    proj = {"_id": 0, "external_id": 1, "source": 1, "url": 1, "price": 1, "area_m2": 1, "rooms": 1, "seller_type": 1, "agency_name": 1,
+            "added_at": 1, "is_stale": 1, "stale_since": 1, "title": 1, "images": 1, "market_type": 1}
+    items = []
+    async for d in coll.find(q, proj).sort("added_at", -1).limit(30):
+        if str(d.get("market_type") or "").lower() == "pierwotny" and str(doc.get("market_type") or "").lower() != "pierwotny":
+            continue  # inwestycje deweloperskie: wiele identycznych mieszkań ≠ duplikat
+        it = {
+            "id": str(d.get("external_id")), "portal": _portal_of(d), "price": _num_or_zero(d.get("price")), "area_m2": _num_or_zero(d.get("area_m2")),
+            "rooms": d.get("rooms"), "seller_type": d.get("seller_type") or "posrednik", "agency": d.get("agency_name") or "",
+            "added_at": d.get("added_at").isoformat() if isinstance(d.get("added_at"), datetime) else d.get("added_at"),
+            "is_stale": bool(d.get("is_stale")), "title": (d.get("title") or "")[:90],
+            "image": (d.get("images") or [None])[0] if isinstance(d.get("images"), list) else None,
+        }
+        if paid is not None:
+            it["url"] = d.get("url")
+        items.append(it)
+    # Ilu pośredników: pewne minimum — różne nazwy biur, a bez nazw: max kopii na jednym portalu (biura eksportują tę samą ofertę na kilka portali)
+    all_copies = items + [{"portal": _portal_of(doc), "seller_type": doc.get("seller_type") or "posrednik", "agency": doc.get("agency_name") or ""}]
+    agents_copies = [c for c in all_copies if c["seller_type"] == "posrednik"]
+    named = {c["agency"].strip().lower() for c in agents_copies if c["agency"].strip()}
+    per_portal: dict = {}
+    for c in agents_copies:
+        if not c["agency"].strip():
+            per_portal[c["portal"]] = per_portal.get(c["portal"], 0) + 1
+    agents = max(len(named) + (max(per_portal.values()) if per_portal else 0), 1 if agents_copies else 0)
+    response.headers["Cache-Control"] = "private, max-age=120" if paid else "public, max-age=300, s-maxage=600"
+    return {"count": len(items) + 1, "agents": agents, "owner_too": any(c["seller_type"] == "prywatna" for c in all_copies),
+            "this": {"portal": _portal_of(doc), "price": price, "seller_type": doc.get("seller_type") or "posrednik", "agency": doc.get("agency_name") or ""},
+            "items": items, "locked": paid is None}
+
+
+
 @app.get("/api/admin/olx-probe")
 async def admin_olx_probe(id: str, admin: dict = Depends(require_admin)):
     """Diagnostyka: czy z Vercel da się odpytać publiczne API OLX o ofertę (status + świeże zdjęcia)."""

@@ -144,6 +144,10 @@
       "destination": "/api/index"
     },
     {
+      "source": "/api/listing/:id/duplicates",
+      "destination": "/api/index"
+    },
+    {
       "source": "/api/listing/:id",
       "destination": "/api/index"
     },

@@ -460,6 +460,9 @@ gtag('set', 'url_passthrough', false);
       </div>
     </div>
 
+    <!-- 🔁 Widok dla biur: duplikaty tej oferty (inne portale / inni pośrednicy / właściciel) — zamiast kalkulatora kredytu -->
+    <div id="dupesBox" class="contact-card" style="display:none;margin-bottom:16px"></div>
+
     <!-- Kalkulator raty kredytu (+ CTA afiliacyjne — link w /scripts/kredyt.js) -->
     <div id="kredytBox" style="margin-bottom:16px"></div>
 
@@ -1087,6 +1090,60 @@ function renderMultiPortalBox(l) {
 }
 
 
+// --- 🔁 Duplikaty oferty (widok dla biur): ile ogłoszeń tej nieruchomości, ilu pośredników, w jakich cenach ---
+async function renderDupesBox(l) {
+  const box = document.getElementById('dupesBox');
+  if (!box || box.dataset.done) return;
+  box.dataset.done = '1';
+  const idParam = new URLSearchParams(location.search).get('id') || l.id || l.external_id;
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const pln = (n) => Number(n || 0).toLocaleString('pl-PL') + ' zł';
+  box.style.display = 'block';
+  box.innerHTML = `<div class="contact-title" style="color:#60a5fa">🔁 Duplikaty tej oferty</div><div style="color:#8ba3d4;font-size:12px">Sprawdzam inne portale i pośredników…</div>`;
+  try {
+    const tok = localStorage.getItem('finderdom_token');
+    const r = await fetch('/api/listing/' + encodeURIComponent(idParam) + '/duplicates', tok ? { headers: { 'Authorization': 'Bearer ' + tok } } : {});
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || r.status);
+    const items = d.items || [];
+    const thisPrice = Number(d.this?.price || l.price || 0);
+    const sellerLabel = (it) => it.seller_type === 'prywatna' ? '👤 właściciel' : it.seller_type === 'przetarg' ? '🔨 przetarg' : (it.agency ? '🏢 ' + esc(it.agency) : '🏢 pośrednik');
+    const ago = (iso) => { if (!iso) return ''; const dd = (Date.now() - new Date(iso).getTime()) / 864e5; return dd < 1 ? 'dziś' : dd < 2 ? 'wczoraj' : `${Math.floor(dd)} dni temu`; };
+    const head = items.length === 0
+      ? `<div style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.35);border-radius:10px;padding:10px 12px;color:#4ade80;font-size:13px;font-weight:700">🎯 Tylko to jedno ogłoszenie — brak duplikatów na innych portalach</div>
+         <div style="color:#8ba3d4;font-size:11px;margin-top:8px;line-height:1.45">Porównujemy ogłoszenia z tego samego miasta: ta sama cena (±2%), metraż (±3%) i liczba pokoi.</div>`
+      : `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+           <span style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);color:#bfdbfe;border-radius:100px;padding:5px 10px;font-size:12px;font-weight:800">🔁 ${d.count} ogłoszeń</span>
+           <span style="background:rgba(255,184,0,0.12);border:1px solid rgba(255,184,0,0.4);color:#FFD166;border-radius:100px;padding:5px 10px;font-size:12px;font-weight:800">🏢 ${d.agents} ${d.agents === 1 ? 'pośrednik' : d.agents < 5 ? 'pośredników' : 'pośredników'}</span>
+           ${d.owner_too ? `<span style="background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.4);color:#4ade80;border-radius:100px;padding:5px 10px;font-size:12px;font-weight:800">👤 właściciel ogłasza też sam</span>` : ''}
+         </div>`;
+    const rows = [{ portal: d.this?.portal || l.portal, price: thisPrice, seller_type: d.this?.seller_type, agency: d.this?.agency, current: true, added_at: l.added_at },
+                  ...items].map(it => {
+      const diff = thisPrice && it.price ? Math.round(it.price - thisPrice) : 0;
+      const diffTxt = it.current ? '<span style="color:#FFB800;font-size:10px;font-weight:800">TA OFERTA</span>'
+        : diff === 0 ? '<span style="color:#8ba3d4;font-size:10px">ta sama cena</span>'
+        : `<span style="color:${diff < 0 ? '#4ade80' : '#f87171'};font-size:10px;font-weight:800">${diff < 0 ? '▼' : '▲'} ${Math.abs(diff).toLocaleString('pl-PL')} zł</span>`;
+      const link = it.current ? '' : it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;font-size:11px;font-weight:800;text-decoration:none;white-space:nowrap">otwórz ↗</a>`
+        : `<a href="${localStorage.getItem('finderdom_token') ? '/konto' : '/rejestracja?typ=firma'}" style="color:#8ba3d4;font-size:11px;text-decoration:none;white-space:nowrap" title="Link do ogłoszenia w planie dla biur">🔒 link</a>`;
+      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 0;border-top:1px solid rgba(255,255,255,0.07);${it.current ? 'opacity:0.85' : ''}">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;color:#fff">📌 ${esc(it.portal || 'Portal')} <span style="font-weight:600;color:#c5d0e6;font-size:12px">· ${sellerLabel(it)}</span>${it.is_stale ? ' <span style="color:#f87171;font-size:10px">· zniknęła</span>' : ''}</div>
+          <div style="font-size:11px;color:#8ba3d4;margin-top:2px">${it.added_at ? 'dodana ' + ago(it.added_at) : ''}</div>
+        </div>
+        <div style="text-align:right;white-space:nowrap">
+          <div style="font-size:14px;font-weight:900;color:#FFB800">${pln(it.price)}</div>
+          <div>${diffTxt}${link ? ' · ' + link : ''}</div>
+        </div></div>`;
+    }).join('');
+    box.innerHTML = `<div class="contact-title" style="color:#60a5fa">🔁 Duplikaty tej oferty</div>${head}
+      <div style="margin-top:${items.length ? '4px' : '10px'}">${items.length ? rows : ''}</div>
+      ${items.length ? `<div style="color:#8ba3d4;font-size:11px;margin-top:10px;line-height:1.45">💡 Kilku pośredników = oferta bez wyłączności. Najniższa cena: <b style="color:#4ade80">${pln(Math.min(thisPrice, ...items.map(i => i.price || thisPrice)))}</b>.${d.locked ? ' Linki do ogłoszeń — w planie dla biur.' : ''}</div>` : ''}`;
+  } catch (e) {
+    console.warn('[dupes]', e);
+    box.innerHTML = `<div class="contact-title" style="color:#60a5fa">🔁 Duplikaty tej oferty</div><div style="color:#8ba3d4;font-size:12px">Nie udało się pobrać duplikatów. Spróbuj odświeżyć stronę.</div>`;
+  }
+}
+
 // --- CRM Statuses (Firmowy) ---
 const CRM_LABELS = {
   contacted: '☎️ Był kontakt',
@@ -1133,6 +1190,12 @@ async function initCrmBar(offerId) {
     const bar = el('crmBar');
     if (!bar) return;
     bar.style.display = 'block';
+    // Realny plan dla biur (bez flagi podglądu): także duplikaty zamiast kalkulatora kredytu
+    if (real && !window.__isBiuroView) {
+      window.__isBiuroView = true;
+      const kb = el('kredytBox'); if (kb) kb.style.display = 'none';
+      if (window.__listingObj) renderDupesBox(window.__listingObj);
+    }
 
     let currentStatus = cur ? cur.status : null;
     updateCrmBadge(cur);
@@ -1444,10 +1507,13 @@ async function renderOffer(l, all) {
   el('offerLoc').textContent = l.location || `📍 ${l.city}${l.district ? ', ' + l.district : ''}`;
   el('priceMain').textContent = l.price_display;
   el('priceM2').textContent = l.price_pm2_display;
-  // Kalkulator raty — tylko dla sprzedaży z sensowną ceną
+  // Kalkulator raty — tylko dla sprzedaży z sensowną ceną; w WIDOKU DLA BIUR zamiast kalkulatora → duplikaty oferty
+  window.__isBiuroView = (() => { try { return localStorage.getItem("fd_biuro_demo") === "1" || new URLSearchParams(location.search).get('widok') === 'biuro'; } catch { return false; } })();
+  window.__listingObj = l;
   (function renderKredyt(){
     const box = document.getElementById('kredytBox');
     if (!box) return;
+    if (window.__isBiuroView) { box.style.display = 'none'; renderDupesBox(l); return; }
     const isSale = (l.transaction || 'sprzedaz') !== 'wynajem';
     if (!isSale || !l.price || l.price < 50000) { box.style.display = 'none'; return; }
     const go = () => window.FD_renderKredyt && window.FD_renderKredyt(box, l.price, { source: 'oferta' });

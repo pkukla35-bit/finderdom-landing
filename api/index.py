@@ -4583,6 +4583,7 @@ async def admin_mailing_settings(body: MailingSettingsReq, admin: dict = Depends
 
 class MailingTestReq(BaseModel):
     template: str
+    to: Optional[str] = None  # tylko adres z ADMIN_EMAILS (podgląd szablonu u właściciela)
 
 
 @app.post("/api/admin/mailing/test")
@@ -4591,7 +4592,7 @@ async def admin_mailing_test(body: MailingTestReq, admin: dict = Depends(require
         raise HTTPException(404, "Nieznany szablon")
     if not (await _smtp_cfg() or await _email_key()):
         raise HTTPException(503, "Wysyłka e-mail nie jest skonfigurowana — podaj dane skrzynki SMTP")
-    to = admin.get("email")  # test zawsze na adres zalogowanego admina
+    to = body.to.strip().lower() if body.to and body.to.strip().lower() in ADMIN_EMAILS else admin.get("email")  # tylko adresy adminów
     ok = await _mail_send_logged(to, body.template, "test")
     if not ok:
         raise HTTPException(502, f"Dostawca e-mail odrzucił wiadomość: {LAST_EMAIL_ERROR.get('error') or 'nieznany błąd'}")

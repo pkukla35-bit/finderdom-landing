@@ -2371,10 +2371,11 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
         return re.sub(r"[^a-ząćęłńóśźż0-9]+", " ", str(t or "").lower()).strip()
     doc_title = _norm_title(doc.get("title"))
     doc_places = {_norm_d(city), _norm_d(district)} - {""}
-    def _same_property(d: dict) -> bool:
+    def _same_property(d: dict):
+        """False = inna nieruchomość; True = prawdopodobnie ta sama; "strong" = na pewno ta sama (id / ulica / GPS / tytuł / metraż z ułamkiem + cena)"""
         # 1) Ten sam identyfikator (rekord Apify „mzn2048…” = rekord Morizon „2048…”, link do tej samej strony) → na pewno ta sama oferta
         if doc_ids & _ids_in(d):
-            return True
+            return "strong"
         # 2) Twarde sprzeczności: inna ulica, inny rok budowy, GPS dalej niż 1 km, inna liczba pokoi
         if _same_street(doc, d) is False:
             return False
@@ -2395,11 +2396,11 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
         # 3) Pewne potwierdzenia (ważniejsze niż różnie wpisana dzielnica/gmina): ta sama ulica, GPS < 300 m, identyczny tytuł,
         #    identyczny metraż z ułamkiem (138,84 m²) + identyczna cena
         if _same_street(doc, d) is True or (km is not None and km < 0.3):
-            return True
+            return "strong"
         if len(doc_title) >= 15 and doc_title == _norm_title(d.get("title")):
-            return True
+            return "strong"
         if abs(d_area - area) < 0.02 and abs(_num_or_zero(d.get("price")) - price) < 1 and abs(area - round(area)) > 0.01:
-            return True
+            return "strong"
         # 4) Dzielnica/miejscowość: obie znane i różne → inna nieruchomość (chyba że miejscowość jednego = miasto drugiego: gmina vs wieś)
         d_places = {_norm_d(d.get("city")), dd} - {""}
         if d_dist and dd and d_dist != dd and not (doc_places & d_places):
@@ -2425,10 +2426,11 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
     items = []
     known_portals = {this_copy["portal"]} | {c["portal"] for c in extra_this}
     async for d in coll.find(q, proj).sort("added_at", -1).limit(60):
-        if str(d.get("market_type") or "").lower() == "pierwotny" and str(doc.get("market_type") or "").lower() != "pierwotny":
-            continue  # inwestycje deweloperskie: wiele identycznych mieszkań ≠ duplikat
-        if not _same_property(d):
+        match = _same_property(d)
+        if not match:
             continue
+        if match != "strong" and str(d.get("market_type") or "").lower() == "pierwotny" and str(doc.get("market_type") or "").lower() != "pierwotny":
+            continue  # inwestycje deweloperskie: wiele identycznych mieszkań ≠ duplikat (chyba że pewne potwierdzenie: id/ulica/GPS/tytuł/metraż)
         same_record = bool(doc_ids & _ids_in(d))  # ten sam rekord zaimportowany drugą ścieżką (Apify „mzn…” vs scraper Morizon) — nie dublujemy portalu
         portal = _portal_of(d)
         if same_record and portal in known_portals:
@@ -2457,6 +2459,10 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
     # Ilu pośredników: pewne minimum — różne nazwy biur, a bez nazw: max kopii na jednym portalu (biura eksportują tę samą ofertę na kilka portali).
     # Kopie z `sources[]` tego samego rekordu (same_export) to ten sam eksport jednego biura — nie liczą się jako kolejny pośrednik.
     items.extend(extra_this)
+    # Ten sam portal + ta sama cena raz z `sources[]` (kopia eksportu), raz jako osobny rekord → zostaje osobny rekord (ma własny link i datę).
+    # Dwa osobne rekordy na tym samym portalu (dwóch pośredników) zostają oba.
+    real_pp = {(it["portal"], round(it["price"] or 0)) for it in items if not it.get("same_export")}
+    items = [it for it in items if not (it.get("same_export") and (it["portal"], round(it["price"] or 0)) in real_pp)]
     all_copies = items + [this_copy]
     agents_copies = [c for c in all_copies if c["seller_type"] == "posrednik" and not c.get("same_export")]
     named = {c["agency"].strip().lower() for c in agents_copies if c["agency"].strip()}

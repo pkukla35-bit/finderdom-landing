@@ -1891,8 +1891,9 @@ function renderPage() {
     let specs = `📐 ${areaTxt}`;
     if (l.rooms > 0) specs += ` · 🛏️ ${l.rooms} pok.`;
     if (l.floor > 0) specs += ` · 🏢 ${l.floor} piętro`;
-    if (l.type === 'dom') specs += ' · 🏡 Dom';
-    if (l.type === 'dzialka') specs += ' · 🌳 Działka';
+    if (l.type === 'dom') specs += ' · ' + subTypeLabel('dom', l.building_type, '🏡 Dom');
+    if (l.type === 'dzialka') specs += ' · ' + subTypeLabel('dzialka', l.land_purpose || l.dzialka_type, '🌳 Działka');
+    if (l.type === 'mieszkanie' && l.building_type) { const sl = subTypeLabel('mieszkanie', l.building_type, ''); if (sl) specs += ' · ' + sl; }
     if (l.plot_area_m2 > 0 && (l.type === 'dom' || l.type === 'dzialka')) specs += ` · 🌳 działka ${fmtPlot(l.plot_area_m2)}`;
     if (l.seller_type === 'przetarg' && l.auction_deadline) specs += ` · ⏰ do ${new Date(l.auction_deadline).toLocaleDateString('pl-PL')}`;
     // 📞 telefon właściciela — tylko oferty prywatne
@@ -2215,6 +2216,12 @@ document.querySelectorAll('.chip').forEach(c => {
 // (usunięto sekcję "Więcej filtrów" — te chipy nie były podpięte do żadnej logiki)
 
 // Property type = radio (single select) + dynamic sub-type
+// Etykieta podtypu na karcie: dom → „🏠 Wolnostojący / 🏘️ Bliźniak…”, działka → przeznaczenie, mieszkanie → typ budynku; fallback gdy brak danych
+function subTypeLabel(type, value, fallback) {
+  const cfg = SUB_TYPES[type]; const v = String(value || '').toLowerCase().replace(/ą/g,'a').replace(/ć/g,'c').replace(/ę/g,'e').replace(/ł/g,'l').replace(/ń/g,'n').replace(/ó/g,'o').replace(/ś/g,'s').replace(/[źż]/g,'z');
+  const o = cfg && v ? cfg.options.find(x => x.value === v) : null;
+  return o ? o.label : fallback;
+}
 const SUB_TYPES = {
   mieszkanie: {title:'🏗️ Typ budynku', filter:'building_type', options:[
     {label:'🏢 Blok', value:'blok'},

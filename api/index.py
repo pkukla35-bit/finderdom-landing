@@ -2552,8 +2552,11 @@ async def listings_scraped_endpoint(
             if bt_vals:
                 has_bt = True
                 title_pat = "|".join(bt_regex[b] for b in bt_vals)
+                # Darmowe scrapery zapisywały etykiety z ogonkami („wolnostojący”, „bliźniak”) — dopasowujemy oba warianty
+                bt_alias = {"wolnostojacy": ["wolnostojący"], "blizniak": ["bliźniak", "blizniak"], "szeregowiec": ["szeregowy"], "rezydencja": ["willa"]}
+                bt_all = list({v for b in bt_vals for v in [b] + bt_alias.get(b, [])})
                 bt_or = [
-                    {"building_type": {"$in": bt_vals}},
+                    {"building_type": {"$in": bt_all}},
                     {"building_type": {"$in": [None, ""]}, "title": {"$regex": title_pat, "$options": "i"}},
                 ]
                 query.setdefault("$and", []).append({"$or": bt_or})
@@ -4351,6 +4354,18 @@ async def admin_features_stats(admin: dict = Depends(require_admin)):
             "price_watch": {"total": pw_total, "users": pw_users, "drops_sent": pw_drops, "items": pw},
             "ai_search": {"today": ai_today, "d7": ai_7d, "total": ai_total, "recent": ai_recent},
             "agency_names": agency_cov, "price_history": {"listings_with_changes": ph_total, "changes_24h": ph_24h}}
+
+
+@app.post("/api/admin/normalize-building-type")
+async def admin_normalize_building_type(request: Request):
+    """Jednorazowo: building_type z ogonkami → ASCII jak w chipach (wolnostojący→wolnostojacy, bliźniak→blizniak)."""
+    await _authorize_cron_or_admin(request)
+    coll = database().listings
+    out = {}
+    for src, dst in (("wolnostojący", "wolnostojacy"), ("bliźniak", "blizniak"), ("Wolnostojący", "wolnostojacy"), ("Bliźniak", "blizniak"), ("szeregowy", "szeregowiec")):
+        r = await coll.update_many({"building_type": src}, {"$set": {"building_type": dst}})
+        out[src] = r.modified_count
+    return out
 
 
 @app.post("/api/admin/exclusivity/run")

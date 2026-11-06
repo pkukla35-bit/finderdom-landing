@@ -248,10 +248,13 @@ DZIALKA_SUBTYPES = [
     ("lesna",        ["leśn", "lesn"]),
     ("inwestycyjna", ["usługow", "uslugow", "komercyj", "inwestycyj"]),
 ]
-DOM_SUBTYPES = [
-    ("wolnostojący", ["wolnostoj"]),
-    ("bliźniak",     ["bliźn", "blizn"]),
-    ("szeregowiec",  ["szereg"]),
+DOM_SUBTYPES = [  # wartości ASCII = identyczne z chipami w szukaj.html (data-value) i filtrem API building_type
+    ("wolnostojacy", ["wolnostoj", "jednorodzinn"]),
+    ("blizniak",     ["bliźn", "blizn", "dwurodzin"]),
+    ("szeregowiec",  ["szereg", "segment"]),
+    ("siedliskowy",  ["siedlisk", "zagrod"]),
+    ("rezydencja",   ["rezydencj", "willa", "dworek"]),
+    ("letniskowy",   ["letnisk", "rekreacyjn"]),
     ("kamienica",    ["kamienic"]),
 ]
 

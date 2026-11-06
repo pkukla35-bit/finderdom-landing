@@ -1121,7 +1121,7 @@ async def set_offer_status(body: OfferStatusUpdate, user: dict = Depends(current
     return out
 
 
-async def _exclusivity_check(limit: int = 200) -> dict:
+async def _exclusivity_check(limit: int = 200, force_offer: Optional[str] = None) -> dict:
     """⭐ Dzienny alert wyłączności: dla ofert oznaczonych „Moja oferta” sprawdza duplikaty; nowe kopie (inny pośrednik / właściciel sam)
     → e-mail do osoby, która oznaczyła. Wołany z _daily_jobs_if_due (GitHub Actions co ~6h → raz dziennie)."""
     db = database()
@@ -1133,7 +1133,7 @@ async def _exclusivity_check(limit: int = 200) -> dict:
             if not doc:
                 continue
             dup = await _find_duplicates(doc, include_urls=True)
-            known = set(w.get("known_ids") or [])
+            known = set(w.get("known_ids") or []) if w["offer_id"] != force_offer else set()  # force_offer: test e-maila (admin)
             fresh = [i for i in dup["items"] if i["id"] not in known]
             if not fresh:
                 continue
@@ -4153,10 +4153,10 @@ async def admin_alerts_run(request: Request, limit: int = 100):
 
 
 @app.post("/api/admin/exclusivity/run")
-async def admin_exclusivity_run(request: Request, limit: int = 200):
-    """⭐ Ręczne odpalenie alertu wyłączności (normalnie raz dziennie w _daily_jobs_if_due)."""
+async def admin_exclusivity_run(request: Request, limit: int = 200, force_offer: Optional[str] = None):
+    """⭐ Ręczne odpalenie alertu wyłączności (normalnie raz dziennie w _daily_jobs_if_due). force_offer = wyślij mimo braku nowych kopii (test)."""
     await _authorize_cron_or_admin(request)
-    return await _exclusivity_check(limit=max(1, min(500, limit)))
+    return await _exclusivity_check(limit=max(1, min(500, limit)), force_offer=force_offer)
 
 
 IMPORT_WORKFLOWS = ["scrape-otodom-regions.yml", "scrape-olx.yml", "scrape-nol.yml", "scrape-portals.yml"]  # scrape-wynajem (ScrapingBee, płatny) wyłączony 2.11 na prośbę użytkownika

@@ -23,6 +23,21 @@ CO JEST W ŚRODKU (w obu planach):
 • OFERTY BEZPOŚREDNIE OD WŁAŚCICIELI
   Filtr „bez pośrednika” + „ostatnie 24 h” — dzwonią Państwo do właściciela, zanim zrobi to konkurencja.
 
+• NOWOŚĆ: DUPLIKATY OFERT I LICZBA POŚREDNIKÓW
+  Przy każdej ofercie: ile razy ta sama nieruchomość jest ogłoszona, na których portalach, w jakich cenach i ilu pośredników ją ma (z nazwami biur). Jeden pośrednik = szansa na wyłączność.
+
+• NOWOŚĆ: ALERT WYŁĄCZNOŚCI
+  Oznaczają Państwo ofertę „Moja oferta” w CRM i dostają e-mail, gdy pojawi się u innego pośrednika albo właściciel wystawi ją sam.
+
+• NOWOŚĆ: HISTORIA CENY NA WSZYSTKICH PORTALACH
+  Wykres najniższej ceny tej nieruchomości w czasie — kiedy i gdzie cena spadła lub wzrosła.
+
+• TELEFONY WŁAŚCICIELI I 90-DNIOWE ARCHIWUM
+  Pełne numery przy ofertach prywatnych oraz archiwum ogłoszeń od właścicieli, które zniknęły z portali — z numerem.
+
+• WYSZUKIWANIE AI
+  Opis nieruchomości własnymi słowami — filtry ustawiają się same, także cechy z opisu (ogród, garaż).
+
 • CRM NA LIŚCIE OFERT
   Statusy (był kontakt / umówione / bez pośrednika / nieaktualna) i notatki oznaczane jednym kliknięciem, w Planie Firmowym widoczne dla całego zespołu — koniec dzwonienia dwa razy do tego samego właściciela.
 

@@ -3711,6 +3711,9 @@ MAIL_TEMPLATES: Dict[str, dict] = {
         "title": "Masz 7 dni pełnego dostępu. Oto jak wykorzystać je w 100%",
         "intro": "Dziękujemy za rejestrację konta firmowego. Przez 7 dni masz wszystko, co daje Plan Firmowy — bez karty i bez zobowiązań. Trzy rzeczy, które warto zrobić dziś:",
         "bullets": [
+            "<b>🔁 Duplikaty i liczba pośredników (NOWOŚĆ)</b> — przy każdej ofercie: ile razy jest ogłoszona, na których portalach, w jakich cenach i ilu pośredników ją ma (z nazwami biur).",
+            "<b>⭐ Alert wyłączności (NOWOŚĆ)</b> — oznaczasz ofertę „Moja oferta”, dostajesz e-mail, gdy pojawi się u innego pośrednika albo właściciel wystawi ją sam.",
+            "<b>📈 Historia ceny na wszystkich portalach (NOWOŚĆ)</b> — wykres najniższej ceny w czasie; 📞 telefony właścicieli i 🗄️ 90-dniowe archiwum; 🤖 wyszukiwanie AI.",
             "<b>Dodaj agentów</b> — w cenie planu masz aż 4 loginy dla zespołu (zakładka „Zespół”).",
             "<b>Zamów wycenę PDF</b> z aktami notarialnymi RCN — w opłaconym planie bez limitu (w okresie próbnym 3 wyceny), idealne na spotkanie z właścicielem.",
             "<b>Ustaw statusy w CRM</b> przy ofertach (był kontakt, umówione, bez pośrednika) — cały zespół widzi to samo.",
@@ -3738,6 +3741,9 @@ MAIL_TEMPLATES: Dict[str, dict] = {
         "title": "Jedna wyszukiwarka zamiast wszystkich portali osobno — dla całego Twojego biura",
         "intro": "Dzień dobry, piszę z FinderDom.pl — polskiego agregatora ogłoszeń nieruchomości. Zbieramy oferty z Otodom, OLX, Morizon, Gratki i pozostałych portali z całej Polski w jednym miejscu i dodajemy narzędzia, których biura używają na co dzień. Pozwalam sobie przesłać krótką informację o ofercie dla biur:",
         "bullets": [
+            "<b>🔁 Duplikaty i liczba pośredników (NOWOŚĆ)</b> — przy każdej ofercie: ile razy jest ogłoszona, na których portalach, w jakich cenach i ilu pośredników ją ma (z nazwami biur).",
+            "<b>⭐ Alert wyłączności (NOWOŚĆ)</b> — oznaczasz ofertę „Moja oferta”, dostajesz e-mail, gdy pojawi się u innego pośrednika albo właściciel wystawi ją sam.",
+            "<b>📈 Historia ceny na wszystkich portalach (NOWOŚĆ)</b> — wykres najniższej ceny w czasie; 📞 telefony właścicieli i 🗄️ 90-dniowe archiwum; 🤖 wyszukiwanie AI.",
             "<b>Wszystkie województwa w cenie</b> — bez pakietów regionalnych i dopłat za kolejne miasto.",
             "<b>Aż 4 loginy dla agentów</b> w jednym abonamencie (każdy kolejny 55 zł/mies), wspólna baza i CRM statusów ofert.",
             "<b>Oferty bezpośrednie od właścicieli</b> z filtrem „ostatnie 24h” — zanim zadzwoni konkurencja.",

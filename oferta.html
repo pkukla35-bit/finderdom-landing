@@ -396,7 +396,7 @@ gtag('set', 'url_passthrough', false);
           <div class="comp-bar"><div class="comp-fill offers" id="barOffers"></div></div>
           <div class="comp-val" id="valOffers">…</div>
         </div>
-        <div class="comp-row">
+        <div class="comp-row" id="rowRcn">
           <div class="comp-label">⭐ RCN — realne transakcje</div>
           <div class="comp-bar"><div class="comp-fill rcn" id="barRcn"></div></div>
           <div class="comp-val" id="valRcn">…</div>
@@ -1638,11 +1638,14 @@ async function renderOffer(l, all) {
 
   // AI Analysis (only for premium users)
   if (window.__isPremium) {
-  let rcnPpm2 = l.ai_rcn_pm2 || 0;  // fallback (szacunek ~94% mediany ofertowej) — nadpisywany realnym RCN poniżej
+  // 🏠 WYNAJEM: RCN (akty notarialne) to wyłącznie ceny SPRZEDAŻY — dla najmu nie wolno ich pokazywać ani porównywać.
+  // Punktem odniesienia jest mediana ofert NAJMU w okolicy (zł/m²/mies.).
+  const isRental = l.transaction === 'wynajem';
+  let rcnPpm2 = isRental ? 0 : (l.ai_rcn_pm2 || 0);  // fallback (szacunek ~94% mediany ofertowej) — nadpisywany realnym RCN poniżej
   const thisPpm2 = l.price_pm2 || 0;
   // 🏛️ Realne ceny transakcyjne z Rejestru Cen Nieruchomości (GUGiK) — równolegle z analizą ofert
   let rcnReal = null;
-  const rcnPromise = (l.type === 'mieszkanie' || l.type === 'dzialka') ? (async () => {
+  const rcnPromise = (!isRental && (l.type === 'mieszkanie' || l.type === 'dzialka')) ? (async () => {
     try {
       const rp = new URLSearchParams({ city: l.city || '', type: l.type || '' });
       if (l.area_m2) rp.set('area', String(l.area_m2));
@@ -1698,7 +1701,7 @@ async function renderOffer(l, all) {
         offersPpm2 = median(localOffers.map(x => x.price_pm2));
         // 🎯 RCN też przeliczamy lokalnie — z tej samej próbki (ten sam promień + rynek + metraż).
         // RCN = ~94% mediany ofertowej (aproksymacja realnych transakcji, ~6% niżej).
-        rcnPpm2 = Math.round(offersPpm2 * 0.94);
+        if (!isRental) rcnPpm2 = Math.round(offersPpm2 * 0.94);
         usedRadiusKm = km;
         const marketLabel = l.market_type === 'pierwotny' ? ' (rynek pierwotny)'
                           : l.market_type === 'wtorny' ? ' (rynek wtórny)'
@@ -1734,7 +1737,7 @@ async function renderOffer(l, all) {
         const data = await resp.json();
         if (data.stats && data.stats.count >= 5) {
           offersPpm2 = data.stats.median_pm2;
-          rcnPpm2 = Math.round(offersPpm2 * 0.94);
+          if (!isRental) rcnPpm2 = Math.round(offersPpm2 * 0.94);
           localOffers = (data.offers || []).map(o => ({
             id: o.id, title: o.title, city: o.city, district: o.district,
             price: o.price, price_pm2: o.price_pm2, area_m2: o.area_m2, rooms: o.rooms,
@@ -1758,14 +1761,19 @@ async function renderOffer(l, all) {
   await rcnPromise;
   if (aiSeq !== window.__aiSeq) return;
   if (rcnReal) rcnPpm2 = rcnReal.median_pm2;
+  // Punkt odniesienia: sprzedaż → RCN (realne transakcje); wynajem → mediana ofert najmu w okolicy
+  const refPpm2 = isRental ? offersPpm2 : rcnPpm2;
+  const refName = isRental ? 'mediany ofert najmu' : 'realnych cen transakcyjnych (RCN)';
+  const rowRcn = document.getElementById('rowRcn');
+  if (rowRcn) rowRcn.style.display = isRental ? 'none' : '';
 
-  if (offersPpm2 && rcnPpm2) {
+  if (offersPpm2 && refPpm2) {
     // 🎯 Recompute verdict client-side jeśli używamy lokalnej analizy
     // (bo server-side verdict był liczony z miejskiej mediany — może być kompletnie odwrotny do lokalnej)
     let vBadge = l.verdict_badge || 'normal';
     let vText = l.verdict_full || v.text || 'W normie';
-    if (rcnPpm2 && thisPpm2) {
-      const deltaPct = ((thisPpm2 - rcnPpm2) / rcnPpm2) * 100;
+    if (refPpm2 && thisPpm2) {
+      const deltaPct = ((thisPpm2 - refPpm2) / refPpm2) * 100;
       if (deltaPct < -50 || deltaPct > 50) {
         vBadge = 'outlier';
         vText = '⚠️ Nietypowa cena';
@@ -1796,26 +1804,31 @@ async function renderOffer(l, all) {
     let subtitle = '';
     const scopeText = usedRadiusKm ? `w promieniu ${usedRadiusKm} km` : (backendScope || 'w tym mieście');
     if (l.verdict_badge === 'deal') {
-      const diff = rcnPpm2 - thisPpm2;
-      subtitle = `Ta oferta jest o <strong style="color:#4ade80">${fmt(diff)} zł/m²</strong> tańsza od realnych cen transakcyjnych (RCN) ${scopeText}.`;
+      const diff = refPpm2 - thisPpm2;
+      subtitle = `Ta oferta jest o <strong style="color:#4ade80">${fmt(diff)} zł/m²${isRental ? '/mies.' : ''}</strong> tańsza od ${refName} ${scopeText}.`;
     } else if (l.verdict_badge === 'over') {
-      const diff = thisPpm2 - rcnPpm2;
-      subtitle = `Ta oferta jest o <strong style="color:#f87171">${fmt(diff)} zł/m²</strong> droższa od realnych cen transakcyjnych (RCN) ${scopeText}.`;
+      const diff = thisPpm2 - refPpm2;
+      subtitle = `Ta oferta jest o <strong style="color:#f87171">${fmt(diff)} zł/m²${isRental ? '/mies.' : ''}</strong> droższa od ${refName} ${scopeText}.`;
     } else if (l.verdict_badge === 'outlier') {
-      subtitle = `Ta oferta ma nietypową cenę — zweryfikuj czy nie chodzi o udział we współwłasności, odstępne albo cena w innej walucie.`;
+      subtitle = isRental
+        ? `Ta oferta ma nietypową cenę najmu — zweryfikuj, czy to czynsz miesięczny, czy np. cena za pokój, dobę albo z kaucją.`
+        : `Ta oferta ma nietypową cenę — zweryfikuj czy nie chodzi o udział we współwłasności, odstępne albo cena w innej walucie.`;
     } else {
-      subtitle = `Cena w tej ofercie jest zgodna z medianą ofert i realnych transakcji ${scopeText}.`;
+      subtitle = isRental
+        ? `Czynsz w tej ofercie jest zgodny z medianą ofert najmu ${scopeText}.`
+        : `Cena w tej ofercie jest zgodna z medianą ofert i realnych transakcji ${scopeText}.`;
     }
     el('aiSubtitle').innerHTML = subtitle;
 
-    // Bar widths (skala do maksimum z 3 wartości)
+    // Bar widths (skala do maksimum z 3 wartości; wynajem — bez RCN)
+    const unit = isRental ? ' zł/m²/mies.' : ' zł/m²';
     const maxV = Math.max(thisPpm2, offersPpm2, rcnPpm2);
     el('barThis').style.width   = (thisPpm2   / maxV * 100) + '%';
     el('barOffers').style.width = (offersPpm2 / maxV * 100) + '%';
     el('barRcn').style.width    = (rcnPpm2    / maxV * 100) + '%';
-    el('valThis').textContent   = fmt(thisPpm2)   + ' zł/m²';
-    el('valOffers').textContent = fmt(offersPpm2) + ' zł/m²';
-    el('valRcn').textContent    = fmt(rcnPpm2)    + ' zł/m²';
+    el('valThis').textContent   = fmt(thisPpm2)   + unit;
+    el('valOffers').textContent = fmt(offersPpm2) + unit;
+    el('valRcn').textContent    = fmt(rcnPpm2)    + unit;
 
     // Sample size
     let sampleN, scopeMsg;
@@ -1833,7 +1846,9 @@ async function renderOffer(l, all) {
       scopeMsg = `w mieście <strong>${l.city}</strong>`;
     }
     let rcnLine;
-    if (rcnReal) {
+    if (isRental) {
+      rcnLine = `🏛️ RCN (akty notarialne) obejmuje wyłącznie <strong>sprzedaż</strong> — dla najmu porównujemy czynsz z ofertami najmu tego samego typu w okolicy (zł/m²/mies.).`;
+    } else if (rcnReal) {
       const rScope = rcnReal.radius_km ? `w promieniu <strong>${rcnReal.radius_km} km</strong>` : `<strong>${rcnReal.scope || 'w tym mieście'}</strong>`;
       const last = rcnReal.last_date ? ` · ostatnia transakcja ${rcnReal.last_date}` : '';
       const trend = (rcnReal.trend_pct != null) ? ` · trend 6 mies.: <strong>${rcnReal.trend_pct > 0 ? '+' : ''}${rcnReal.trend_pct}%</strong>` : '';

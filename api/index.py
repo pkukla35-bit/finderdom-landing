@@ -2168,11 +2168,33 @@ async def listing_duplicates(listing_id: str, request: Request, response: Respon
             pass
     paid = await _paid_user_from_request(request)
     proj = {"_id": 0, "external_id": 1, "source": 1, "url": 1, "price": 1, "area_m2": 1, "rooms": 1, "seller_type": 1, "agency_name": 1,
-            "added_at": 1, "is_stale": 1, "stale_since": 1, "title": 1, "images": 1, "market_type": 1}
+            "added_at": 1, "is_stale": 1, "stale_since": 1, "title": 1, "images": 1, "market_type": 1, "district": 1}
+    is_rental = (doc.get("transaction_type") or "sprzedaz") == "wynajem"
+    _stop = {"mieszkanie", "mieszkania", "sprzedaz", "sprzedaż", "wynajem", "wynajęcia", "wynajecia", "kawalerka", "pokoje", "pokój", "pokoi", "metrów", "metrow",
+             "centrum", "blisko", "nowe", "nowa", "super", "okazja", "piękne", "piekne", "przestronne", "komfortowe", "umeblowane", "balkonem", "garażem", "garazem"}
+    def _tokens(t: str) -> set:
+        return {w for w in re.findall(r"[a-ząćęłńóśźż]{5,}", str(t or "").lower()) if w not in _stop}
+    def _norm_d(v) -> str:
+        s = str(v or "").strip().lower()
+        return "" if s in ("", "none", "null") else s
+    d_dist, d_tokens = _norm_d(doc.get("district")), _tokens(doc.get("title"))
+    def _same_property(d: dict) -> bool:
+        dd = _norm_d(d.get("district"))
+        if d_dist and dd and d_dist != dd:
+            return False  # inna dzielnica = inna nieruchomość
+        if is_rental:
+            # Wynajem: okrągłe ceny (2500 zł) + popularne metraże dają fałszywe pary — wymagamy tej samej dzielnicy albo wspólnego słowa (ulica/osiedle) w tytule
+            if abs(_num_or_zero(d.get("area_m2")) - area) > 0.6:
+                return False
+            if not (d_dist and dd and d_dist == dd) and not (d_tokens & _tokens(d.get("title"))):
+                return False
+        return True
     items = []
-    async for d in coll.find(q, proj).sort("added_at", -1).limit(30):
+    async for d in coll.find(q, proj).sort("added_at", -1).limit(40):
         if str(d.get("market_type") or "").lower() == "pierwotny" and str(doc.get("market_type") or "").lower() != "pierwotny":
             continue  # inwestycje deweloperskie: wiele identycznych mieszkań ≠ duplikat
+        if not _same_property(d):
+            continue
         it = {
             "id": str(d.get("external_id")), "portal": _portal_of(d), "price": _num_or_zero(d.get("price")), "area_m2": _num_or_zero(d.get("area_m2")),
             "rooms": d.get("rooms"), "seller_type": d.get("seller_type") or "posrednik", "agency": d.get("agency_name") or "",

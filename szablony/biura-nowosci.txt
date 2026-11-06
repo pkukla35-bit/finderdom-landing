@@ -1,0 +1,21 @@
+Temat: Ilu pośredników ma tę samą ofertę? Nowości w widoku dla biur — FinderDom.pl
+
+Dzień dobry,
+
+pisałem wcześniej o FinderDom.pl — jednej wyszukiwarce ogłoszeń ze wszystkich portali. Przez ostatnie tygodnie dodaliśmy pięć rzeczy, o które biura prosiły najczęściej. Wszystko działa w widoku „Dla biur” i na stronie każdej oferty — bez logowania:
+
+• 🔁 Duplikaty ofert — ile razy ta sama nieruchomość jest ogłoszona, na których portalach i w jakich cenach.
+• 🏢 Ilu pośredników ją ma — liczba biur przy każdej ofercie i ich nazwy. Jeden pośrednik = szansa na wyłączność.
+• ⭐ Alert wyłączności — oznaczacie ofertę „Moja oferta”, a dostajecie e-mail, gdy pojawi się u innego pośrednika albo właściciel wystawi ją sam.
+• 📈 Historia ceny na wszystkich portalach — kiedy i gdzie cena spadła lub wzrosła.
+• 🤖 Wyszukiwanie AI — opisz nieruchomość własnymi słowami, filtry ustawią się same. Do tego telefony właścicieli i 90-dniowe archiwum wygasłych ofert prywatnych.
+
+Widok dla biur: https://www.finderdom.pl/szukaj?widok=biuro
+Plany: Biuro jednoosobowe 90 zł/mies, Firmowy 199 zł/mies (4 loginy) — 7 dni za darmo dla firm z NIP, bez karty: https://www.finderdom.pl/dla-biur
+
+Chętnie pokażę to na 15-minutowej prezentacji online — wystarczy odpowiedzieć na tę wiadomość.
+Jeśli nie życzą sobie Państwo kolejnych informacji, wystarczy odpowiedzieć „nie” — więcej nie napiszę.
+
+Pozdrawiam,
+Paweł Kukla
+FinderDom.pl · kontakt@finderdom.pl

@@ -2204,12 +2204,12 @@ def _price_timeline(copies: list) -> list:
         cur = c.get("price") or 0
         start_price = hist[0]["price"] if hist else cur
         if c.get("added_at") and start_price:
-            ev.append({"at": c["added_at"], "price": float(start_price), "portal": c["portal"], "agency": c.get("agency") or "", "kind": "start"})
+            ev.append({"at": c["added_at"], "price": float(start_price), "portal": c["portal"], "agency": c.get("agency") or "", "kind": "start", "cid": c.get("id")})
         for i, h in enumerate(hist):
             new_price = hist[i + 1]["price"] if i + 1 < len(hist) else cur
             if new_price and h.get("at"):
                 ev.append({"at": h["at"], "price": float(new_price), "portal": c["portal"], "agency": c.get("agency") or "", "kind": "change",
-                           "from": float(h["price"])})
+                           "from": float(h["price"]), "cid": c.get("id")})
     ev.sort(key=lambda e: str(e["at"]))
     return ev[-40:]
 
@@ -4152,6 +4152,122 @@ async def admin_alerts_run(request: Request, limit: int = 100):
 
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 🔔 OBSERWUJ CENĘ — klient (każdy zalogowany) dostaje e-mail, gdy cena obserwowanej oferty spadnie na DOWOLNYM portalu
+# ═══════════════════════════════════════════════════════════════════════════
+class PriceWatchReq(BaseModel):
+    offer_id: str = Field(min_length=1, max_length=200)
+
+
+def _min_price_across(doc: dict, dup: dict) -> Tuple[float, str]:
+    """Najniższa aktualna cena tej nieruchomości (ta oferta + wszystkie kopie) i portal, który ją ma."""
+    best = (_num_or_zero(doc.get("price")), _portal_of(doc))
+    for i in dup.get("items") or []:
+        if i.get("price") and (not best[0] or i["price"] < best[0]) and not i.get("is_stale"):
+            best = (i["price"], i["portal"])
+    return best
+
+
+@app.get("/api/price-watch")
+async def price_watch_list(user: dict = Depends(current_user)):
+    db = database()
+    out = []
+    async for w in db.price_watch.find({"user_id": str(user["_id"])}).sort("created_at", -1).limit(100):
+        out.append({"offer_id": w["offer_id"], "title": w.get("title", ""), "city": w.get("city", ""), "image": w.get("image"),
+                    "price_start": w.get("price_start"), "price_last": w.get("price_last"), "portal_last": w.get("portal_last", ""),
+                    "created_at": w["created_at"].isoformat() if isinstance(w.get("created_at"), datetime) else w.get("created_at"),
+                    "last_alert_at": w["last_alert_at"].isoformat() if isinstance(w.get("last_alert_at"), datetime) else None,
+                    "drops": w.get("drops", 0), "is_stale": w.get("is_stale", False)})
+    return {"watches": out}
+
+
+@app.post("/api/price-watch")
+async def price_watch_add(body: PriceWatchReq, user: dict = Depends(current_user)):
+    doc = await _listing_by_any_id(body.offer_id.strip())
+    if not doc:
+        raise HTTPException(404, "Nie ma takiej oferty")
+    dup = await _find_duplicates(doc, include_urls=False)
+    price, portal = _min_price_across(doc, dup)
+    now = datetime.now(timezone.utc)
+    imgs = doc.get("images") if isinstance(doc.get("images"), list) else []
+    await database().price_watch.update_one(
+        {"user_id": str(user["_id"]), "offer_id": body.offer_id.strip()},
+        {"$set": {"email": user["email"], "title": (doc.get("title") or "")[:120], "city": doc.get("city") or "", "image": doc.get("image") or (imgs[0] if imgs else None),
+                  "price_last": price, "portal_last": portal, "updated_at": now},
+         "$setOnInsert": {"created_at": now, "price_start": price, "drops": 0}}, upsert=True)
+    n = await database().price_watch.count_documents({"user_id": str(user["_id"])})
+    return {"ok": True, "watching": True, "price_now": price, "portal": portal, "copies": dup["count"], "count": n, "email": user["email"]}
+
+
+@app.delete("/api/price-watch/{offer_id}")
+async def price_watch_remove(offer_id: str, user: dict = Depends(current_user)):
+    r = await database().price_watch.delete_one({"user_id": str(user["_id"]), "offer_id": offer_id})
+    return {"ok": True, "removed": r.deleted_count}
+
+
+async def _price_watch_check(limit: int = 500, force_offer: Optional[str] = None) -> dict:
+    """🔔 Dzienny: dla każdej obserwowanej oferty — najniższa cena na wszystkich portalach; spadek ≥ 0,5% (min. 500 zł) vs ostatnio znana → e-mail."""
+    db = database()
+    out = {"checked": 0, "emails": 0, "drops": 0, "stale": 0, "errors": 0}
+    async for w in db.price_watch.find({}).sort("updated_at", 1).limit(limit):
+        out["checked"] += 1
+        try:
+            doc = await _listing_by_any_id(w["offer_id"])
+            if not doc:
+                continue
+            dup = await _find_duplicates(doc, include_urls=True)
+            price, portal = _min_price_across(doc, dup)
+            last = _num_or_zero(w.get("price_last")) or price
+            is_stale = bool(doc.get("is_stale")) and not any(not i.get("is_stale") for i in dup["items"])
+            upd = {"price_last": price, "portal_last": portal, "updated_at": datetime.now(timezone.utc), "is_stale": is_stale}
+            if is_stale:
+                out["stale"] += 1
+            dropped = price and last and (last - price) >= max(500.0, last * 0.005)
+            if dropped or (force_offer and w["offer_id"] == force_offer):
+                out["drops"] += 1
+                pln = lambda v: f"{int(v or 0):,}".replace(",", " ") + " zł"
+                diff = last - price
+                pct = (diff / last * 100) if last else 0
+                low_url = next((i.get("url") for i in dup["items"] if i.get("price") == price and i.get("url")), None) or doc.get("url")
+                paid = await users_collection()
+                u = await paid.find_one({"_id": ObjectId(w["user_id"])}) if ObjectId.is_valid(w["user_id"]) else None
+                has_plan = bool(u) and (await effective_tier_async(u) in (set(BUSINESS_TIERS) | {"individual"}) or (u.get("email") or "").lower() in ADMIN_EMAILS)
+                area = _num_or_zero(doc.get("area_m2"))
+                html = f"""<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#0f172a">
+  <div style="background:#0b1220;color:#fff;padding:20px 24px;border-radius:14px 14px 0 0"><div style="font-size:20px;font-weight:900">📉 Cena spadła — FinderDom.pl</div>
+  <div style="color:#c5d0e6;font-size:13px;margin-top:4px">Obserwowana oferta jest teraz tańsza</div></div>
+  <div style="border:1px solid #e5e7eb;border-top:none;padding:20px 24px;border-radius:0 0 14px 14px">
+    {f'<img src="{w.get("image")}" alt="" style="width:100%;max-height:260px;object-fit:cover;border-radius:10px;margin-bottom:14px">' if w.get("image") else ''}
+    <p style="margin:0 0 4px;font-size:17px"><b>{(w.get('title') or doc.get('title') or '')[:120]}</b></p>
+    <p style="margin:0 0 14px;color:#64748b">{doc.get('city') or ''}{f' · {int(area)} m²' if area else ''}{f' · {doc.get("rooms")} pok.' if doc.get('rooms') else ''}</p>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px 16px;margin-bottom:14px">
+      <div style="font-size:13px;color:#166534">Najniższa cena na portalach ({portal})</div>
+      <div style="font-size:28px;font-weight:900;color:#15803d">{pln(price)} <span style="font-size:14px;color:#16a34a">▼ {pln(diff)} ({pct:.1f}%)</span></div>
+      <div style="font-size:12px;color:#64748b">poprzednio {pln(last)}{f' · od początku obserwacji: {pln(w.get("price_start"))}' if w.get('price_start') and w.get('price_start') != last else ''}</div>
+    </div>
+    {f'<p style="margin:0 0 10px;font-size:13px;color:#64748b">Ta nieruchomość jest ogłoszona {dup["count"]} razy — pokazujemy najniższą cenę ze wszystkich portali.</p>' if dup['count'] > 1 else ''}
+    <p style="margin:0"><a href="https://www.finderdom.pl/oferta?id={w['offer_id']}" style="display:inline-block;background:#FFB800;color:#0B1836;font-weight:900;padding:12px 18px;border-radius:10px;text-decoration:none">Zobacz ofertę i historię ceny →</a>
+    {f'&nbsp; <a href="{low_url}" style="display:inline-block;color:#2563eb;font-weight:800;padding:12px 6px;text-decoration:none">Otwórz na {portal} ↗</a>' if (low_url and has_plan) else ''}</p>
+    <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Obserwujesz tę ofertę w FinderDom (Moje konto → ❤️ Obserwowane). Piszemy tylko, gdy cena spadnie.</p>
+  </div></div>"""
+                await send_email(to=w["email"], subject=f"📉 Cena spadła o {pln(diff)}: {(w.get('title') or '')[:60]} — teraz {pln(price)}", html=html)
+                out["emails"] += 1
+                upd["last_alert_at"] = datetime.now(timezone.utc)
+                await db.price_watch.update_one({"_id": w["_id"]}, {"$set": upd, "$inc": {"drops": 1}})
+            else:
+                await db.price_watch.update_one({"_id": w["_id"]}, {"$set": upd})
+        except Exception as e:
+            out["errors"] += 1
+            logger.warning("price_watch_check %s: %s", w.get("offer_id"), str(e)[:200])
+    return out
+
+
+@app.post("/api/admin/price-watch/run")
+async def admin_price_watch_run(request: Request, limit: int = 500, force_offer: Optional[str] = None):
+    await _authorize_cron_or_admin(request)
+    return await _price_watch_check(limit=max(1, min(2000, limit)), force_offer=force_offer)
+
+
 @app.post("/api/admin/exclusivity/run")
 async def admin_exclusivity_run(request: Request, limit: int = 200, force_offer: Optional[str] = None):
     """⭐ Ręczne odpalenie alertu wyłączności (normalnie raz dziennie w _daily_jobs_if_due). force_offer = wyślij mimo braku nowych kopii (test)."""
@@ -4343,6 +4459,10 @@ async def _daily_jobs_if_due() -> Optional[dict]:
             out["exclusivity"] = await _exclusivity_check()
         except Exception as e:
             out["exclusivity"] = {"error": str(e)[:200]}
+        try:
+            out["price_watch"] = await _price_watch_check()
+        except Exception as e:
+            out["price_watch"] = {"error": str(e)[:200]}
     else:
         out["mailing"] = out["alerts"] = {"skipped": "email_not_configured"}
     await db.settings.update_one({"_id": "daily_jobs"}, {"$set": {"last_result": out, "finished_at": datetime.now(timezone.utc).isoformat()}})

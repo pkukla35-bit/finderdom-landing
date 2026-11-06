@@ -68,6 +68,14 @@
       "destination": "/api/index"
     },
     {
+      "source": "/api/price-watch",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/price-watch/:id",
+      "destination": "/api/index"
+    },
+    {
       "source": "/api/offer-status",
       "destination": "/api/index"
     },

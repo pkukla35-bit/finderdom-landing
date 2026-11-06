@@ -456,6 +456,8 @@ gtag('set', 'url_passthrough', false);
       <div class="contact-title">📞 Kontakt ze sprzedającym</div>
       <a id="ctaOtodom" href="#" target="_blank" rel="noopener" class="contact-btn">🔗 Otwórz w Otodom</a>
       <a href="/szukaj" class="contact-btn secondary">🔍 Zobacz podobne oferty</a>
+      <button type="button" id="watchPriceBtn" class="contact-btn secondary" style="width:100%;cursor:pointer;font-family:inherit" title="E-mail, gdy cena tej nieruchomości spadnie na dowolnym portalu">🔔 Obserwuj cenę</button>
+      <div id="watchPriceInfo" style="display:none;font-size:12px;color:#4ade80;margin-top:6px;line-height:1.45"></div>
       <div class="contact-mini" id="ctaHint">
         <strong>💡 Wskazówka:</strong> Kliknij „Otwórz w Otodom" żeby zobaczyć numer telefonu, pełny opis i wszystkie zdjęcia.
       </div>
@@ -1136,24 +1138,42 @@ async function renderDupesBox(l) {
           <div>${diffTxt}${link ? ' · ' + link : ''}</div>
         </div></div>`;
     }).join('');
-    // 📈 Historia ceny na wszystkich portalach (z price_history każdej kopii)
+    // 📈 Historia ceny na wszystkich portalach — wykres schodkowy NAJNIŻSZEJ ceny w czasie (z price_history każdej kopii)
     const tl = Array.isArray(d.timeline) ? d.timeline : [];
     const changes = tl.filter(e => e.kind === 'change');
-    const fmtD = (iso) => { const x = new Date(iso); return isNaN(x) ? '' : x.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
+    const fmtD = (iso) => { const x = new Date(iso); return isNaN(x) ? '' : x.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' }); };
     let histHtml = '';
     if (tl.length) {
-      const first = tl[0], minP = Math.min(...tl.map(e => e.price)), maxP = Math.max(...tl.map(e => e.price));
-      const trend = changes.length ? (thisPrice - first.price) : 0;
-      const trendTxt = !changes.length ? `<span style="color:#8ba3d4">bez zmian od ${fmtD(first.at)} (${fmtD(first.at) ? 'pierwsze ogłoszenie' : ''})</span>`
-        : `<span style="color:${trend < 0 ? '#4ade80' : trend > 0 ? '#f87171' : '#8ba3d4'};font-weight:800">${trend < 0 ? '▼' : trend > 0 ? '▲' : '='} ${Math.abs(trend).toLocaleString('pl-PL')} zł</span> <span style="color:#8ba3d4">od ${fmtD(first.at)} (${changes.length} ${changes.length === 1 ? 'zmiana' : changes.length < 5 ? 'zmiany' : 'zmian'})</span>`;
-      const evRows = tl.slice(-8).reverse().map(e => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:4px 0;border-top:1px solid rgba(255,255,255,0.06)">
-          <span style="color:#8ba3d4;white-space:nowrap">${fmtD(e.at)}</span>
-          <span style="color:#c5d0e6;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.kind === 'change' ? '✏️ zmiana' : '🆕 start'} · ${esc(e.portal)}${e.agency ? ' · ' + esc(e.agency) : ''}</span>
-          <span style="color:#fff;font-weight:800;white-space:nowrap">${pln(e.price)}${e.kind === 'change' && e.from ? ` <span style="color:${e.price < e.from ? '#4ade80' : '#f87171'};font-weight:700">${e.price < e.from ? '▼' : '▲'}</span>` : ''}</span></div>`).join('');
+      // stan ceny każdej kopii po kolejnych zdarzeniach → min w danym momencie
+      const state = new Map(); const pts = [];
+      for (const e of tl) { state.set(e.cid || e.portal, e.price); pts.push({ t: new Date(e.at).getTime(), p: Math.min(...state.values()), e }); }
+      pts.push({ t: Date.now(), p: pts[pts.length - 1].p, e: null });  // „dziś”
+      const W = 300, H = 92, PL = 6, PR = 6, PT = 14, PB = 18;
+      const t0 = pts[0].t, t1 = pts[pts.length - 1].t, span = Math.max(1, t1 - t0);
+      const allP = pts.map(q => q.p), minP = Math.min(...allP), maxP = Math.max(...allP), pr = Math.max(1, maxP - minP);
+      const X = (t) => PL + (t - t0) / span * (W - PL - PR);
+      const Y = (p) => pr === 1 ? (PT + (H - PT - PB) / 2) : PT + (1 - (p - minP) / pr) * (H - PT - PB);
+      let path = `M ${X(pts[0].t).toFixed(1)} ${Y(pts[0].p).toFixed(1)}`;
+      for (let i = 1; i < pts.length; i++) path += ` H ${X(pts[i].t).toFixed(1)} V ${Y(pts[i].p).toFixed(1)}`;
+      const first = pts[0].p, last = pts[pts.length - 1].p, trend = last - first;
+      const dots = pts.slice(0, -1).filter(q => q.e && q.e.kind === 'change').map(q => `<circle cx="${X(q.t).toFixed(1)}" cy="${Y(q.p).toFixed(1)}" r="3.2" fill="${q.e.price < (q.e.from || q.e.price) ? '#4ade80' : '#f87171'}" stroke="#0b1220" stroke-width="1.2"><title>${fmtD(q.e.at)} · ${esc(q.e.portal)}: ${pln(q.e.from)} → ${pln(q.e.price)}</title></circle>`).join('');
+      const starts = pts.slice(0, -1).filter(q => q.e && q.e.kind === 'start').map(q => `<circle cx="${X(q.t).toFixed(1)}" cy="${Y(q.p).toFixed(1)}" r="2.4" fill="#60a5fa" opacity="0.9"><title>${fmtD(q.e.at)} · nowe ogłoszenie na ${esc(q.e.portal)}: ${pln(q.e.price)}</title></circle>`).join('');
+      const color = trend < 0 ? '#4ade80' : trend > 0 ? '#f87171' : '#60a5fa';
+      const trendTxt = !changes.length ? `<span style="color:#8ba3d4">bez zmian ceny od ${fmtD(tl[0].at)}</span>`
+        : `<span style="color:${color};font-weight:800">${trend < 0 ? '▼' : trend > 0 ? '▲' : '='} ${Math.abs(trend).toLocaleString('pl-PL')} zł</span> <span style="color:#8ba3d4">od ${fmtD(tl[0].at)} · ${changes.length} ${changes.length === 1 ? 'zmiana' : changes.length < 5 ? 'zmiany' : 'zmian'}</span>`;
       histHtml = `<div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1)">
-        <div style="font-size:12px;font-weight:800;color:#c5d0e6;margin-bottom:4px">📈 Historia ceny (wszystkie portale)</div>
-        <div style="font-size:12px;margin-bottom:4px">${trendTxt}${minP !== maxP ? ` <span style="color:#8ba3d4">· zakres ${pln(minP)} – ${pln(maxP)}</span>` : ''}</div>
-        ${evRows}</div>`;
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><div style="font-size:12px;font-weight:800;color:#c5d0e6">📈 Historia ceny (wszystkie portale)</div><div style="font-size:12px">${trendTxt}</div></div>
+        <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;margin-top:6px;overflow:visible" role="img" aria-label="Wykres najniższej ceny w czasie">
+          <defs><linearGradient id="pwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity="0.28"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+          <path d="${path} V ${H - PB} H ${X(pts[0].t).toFixed(1)} Z" fill="url(#pwg)"/>
+          <path d="${path}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linejoin="round"/>
+          ${starts}${dots}
+          <text x="${PL}" y="${PT - 4}" font-size="9" fill="#8ba3d4">max ${pln(maxP)}</text>
+          <text x="${W - PR}" y="${PT - 4}" font-size="9" fill="#8ba3d4" text-anchor="end">min ${pln(minP)}</text>
+          <text x="${PL}" y="${H - 4}" font-size="9" fill="#8ba3d4">${fmtD(tl[0].at)}</text>
+          <text x="${W - PR}" y="${H - 4}" font-size="9" fill="#8ba3d4" text-anchor="end">dziś · ${pln(last)}</text>
+        </svg>
+        <div style="font-size:10px;color:#8ba3d4;margin-top:2px">Linia = najniższa cena tej nieruchomości ze wszystkich portali. 🔵 nowe ogłoszenie · 🟢 obniżka · 🔴 podwyżka (najedź, by zobaczyć szczegóły).</div></div>`;
     }
     box.innerHTML = `<div class="contact-title" style="color:#60a5fa">🔁 Duplikaty tej oferty</div>${head}
       <div style="margin-top:${items.length ? '4px' : '10px'}">${items.length ? rows : ''}</div>${histHtml}
@@ -1162,6 +1182,42 @@ async function renderDupesBox(l) {
     console.warn('[dupes]', e);
     box.innerHTML = `<div class="contact-title" style="color:#60a5fa">🔁 Duplikaty tej oferty</div><div style="color:#8ba3d4;font-size:12px">Nie udało się pobrać duplikatów. Spróbuj odświeżyć stronę.</div>`;
   }
+}
+
+// --- 🔔 Obserwuj cenę: e-mail, gdy cena spadnie na dowolnym portalu (każdy zalogowany) ---
+async function initPriceWatch(l) {
+  const btn = document.getElementById('watchPriceBtn'), info = document.getElementById('watchPriceInfo');
+  if (!btn) return;
+  const idParam = new URLSearchParams(location.search).get('id') || l.id || l.external_id;
+  const tok = () => localStorage.getItem('finderdom_token');
+  const hdr = () => ({ 'Authorization': 'Bearer ' + tok(), 'Content-Type': 'application/json' });
+  const pln = (n) => Number(n || 0).toLocaleString('pl-PL') + ' zł';
+  let watching = false;
+  const paint = () => { btn.textContent = watching ? '🔕 Przestań obserwować cenę' : '🔔 Obserwuj cenę'; btn.style.borderColor = watching ? 'rgba(74,222,128,0.5)' : ''; };
+  if (tok()) {
+    try {
+      const r = await fetch('/api/price-watch', { headers: hdr() });
+      if (r.ok) { const d = await r.json(); const w = (d.watches || []).find(x => String(x.offer_id) === String(idParam)); if (w) { watching = true; info.style.display = 'block'; info.textContent = `✓ Obserwujesz: najniższa cena ${pln(w.price_last)} (${w.portal_last}). Napiszemy, gdy spadnie.`; } }
+    } catch {}
+  }
+  paint();
+  btn.addEventListener('click', async () => {
+    if (!tok()) { location.href = '/logowanie?next=' + encodeURIComponent(location.pathname + location.search); return; }
+    btn.disabled = true;
+    try {
+      if (!watching) {
+        const r = await fetch('/api/price-watch', { method: 'POST', headers: hdr(), body: JSON.stringify({ offer_id: String(idParam) }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.detail || r.status);
+        watching = true; info.style.display = 'block';
+        info.innerHTML = `✓ Obserwujesz tę ofertę. Dziś najniższa cena: <b>${pln(d.price_now)}</b> (${d.portal}${d.copies > 1 ? `, ${d.copies} ogłoszeń` : ''}). Gdy spadnie — e-mail na <b>${d.email}</b>. Lista: <a href="/konto#favorites" style="color:#4ade80">Moje konto → Obserwowane</a>.`;
+      } else {
+        await fetch('/api/price-watch/' + encodeURIComponent(idParam), { method: 'DELETE', headers: hdr() });
+        watching = false; info.style.display = 'none';
+      }
+    } catch (e) { alert('Nie udało się: ' + (e.message || e)); }
+    btn.disabled = false; paint();
+  });
 }
 
 // --- CRM Statuses (Firmowy) ---
@@ -1537,6 +1593,7 @@ async function renderOffer(l, all) {
   // Kalkulator raty — tylko dla sprzedaży z sensowną ceną; w WIDOKU DLA BIUR zamiast kalkulatora → duplikaty oferty
   window.__isBiuroView = (() => { try { return localStorage.getItem("fd_biuro_demo") === "1" || new URLSearchParams(location.search).get('widok') === 'biuro'; } catch { return false; } })();
   window.__listingObj = l;
+  initPriceWatch(l);
   (function renderKredyt(){
     const box = document.getElementById('kredytBox');
     if (!box) return;

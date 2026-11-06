@@ -2197,16 +2197,51 @@ async def listing_single(listing_id: str, request: Request, response: Response):
         return {"error": str(e)[:200]}
 
 
+_PORTAL_NAMES = {"otodom": "Otodom", "olx": "OLX", "nol": "Nieruchomosci-online", "nieruchomosci-online": "Nieruchomosci-online", "morizon": "Morizon",
+                 "gratka": "Gratka", "domiporta": "Domiporta", "adresowo": "Adresowo", "gethome": "Gethome", "odwlasciciela": "OdWłaściciela",
+                 "listaprzetargow": "ListaPrzetargow", "apify": "Otodom"}
+
+
+def _portal_name(key: str) -> str:
+    k = str(key or "").lower()
+    for n, v in _PORTAL_NAMES.items():
+        if n in k:
+            return v
+    return k.capitalize() or "Portal"
+
+
 def _portal_of(doc: dict) -> str:
     src = str(doc.get("source") or "").lower()
     url = str(doc.get("url") or "")
-    names = {"otodom": "Otodom", "olx": "OLX", "nol": "Nieruchomosci-online", "nieruchomosci-online": "Nieruchomosci-online", "morizon": "Morizon",
-             "gratka": "Gratka", "domiporta": "Domiporta", "adresowo": "Adresowo", "gethome": "Gethome", "odwlasciciela": "OdWłaściciela",
-             "listaprzetargow": "ListaPrzetargow", "apify": "Otodom"}
-    for k, v in names.items():
+    srcs = doc.get("sources") if isinstance(doc.get("sources"), list) else []
+    # Rekord scalony z kilku portali (import Apify: Morizon+Gratka+…): portal główny = pierwszy wpis `sources`, nie „apify”
+    if srcs and (src in ("", "apify") or not url) and isinstance(srcs[0], dict) and srcs[0].get("portal"):
+        return _portal_name(srcs[0]["portal"])
+    for k, v in _PORTAL_NAMES.items():
         if k in src or k in url:
             return v
     return src.capitalize() or "Portal"
+
+
+def _cluster_copies(d: dict, main_portal: str, include_urls: bool) -> list:
+    """Ten sam rekord znaleziony na kilku portalach (`sources[]`, np. Morizon + Gratka): każdy dodatkowy portal = osobna kopia ogłoszenia
+    (ten sam pośrednik/eksport, więc nie zwiększa liczby pośredników)."""
+    out, seen = [], {main_portal}
+    for s in (d.get("sources") if isinstance(d.get("sources"), list) else []):
+        if not isinstance(s, dict) or not s.get("portal"):
+            continue
+        p = _portal_name(s["portal"])
+        if p in seen:
+            continue
+        seen.add(p)
+        it = {"id": f"{d.get('external_id')}@{p.lower()}", "portal": p, "price": _num_or_zero(s.get("price")) or _num_or_zero(d.get("price")),
+              "area_m2": _num_or_zero(d.get("area_m2")), "rooms": d.get("rooms"), "seller_type": d.get("seller_type") or "posrednik",
+              "agency": d.get("agency_name") or "", "added_at": d.get("added_at").isoformat() if isinstance(d.get("added_at"), datetime) else d.get("added_at"),
+              "is_stale": bool(d.get("is_stale")), "title": (d.get("title") or "")[:90], "image": None, "price_history": [], "same_export": True}
+        if include_urls and s.get("url"):
+            it["url"] = s["url"]
+        out.append(it)
+    return out
 
 
 def _price_timeline(copies: list) -> list:
@@ -2239,8 +2274,14 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
     this_copy = {"id": str(doc.get("external_id")), "portal": _portal_of(doc), "price": price, "seller_type": doc.get("seller_type") or "posrednik",
                  "agency": doc.get("agency_name") or "", "added_at": doc.get("added_at").isoformat() if isinstance(doc.get("added_at"), datetime) else doc.get("added_at"),
                  "price_history": doc.get("price_history") or []}
+    # Rekord scalony z kilku portali (sources[]: Morizon+Gratka itp.) — każdy dodatkowy portal to kopia ogłoszenia
+    extra_this = _cluster_copies(doc, this_copy["portal"], include_urls)
     if price < 1000 or area < 5 or not city:
-        return {"count": 1, "agents": 0, "owner_too": False, "items": [], "this": this_copy, "timeline": _price_timeline([this_copy]), "reason": "brak danych do porównania"}
+        tl = _price_timeline([this_copy] + extra_this)
+        for c in [this_copy] + extra_this:
+            c.pop("price_history", None)
+        return {"count": 1 + len(extra_this), "agents": 1 if this_copy["seller_type"] == "posrednik" else 0, "owner_too": this_copy["seller_type"] == "prywatna",
+                "agencies": [this_copy["agency"]] if this_copy["agency"].strip() else [], "items": extra_this, "this": this_copy, "timeline": tl, "reason": "brak danych do porównania"}
     base_type = str(doc.get("type") or "").lower().split()[0] if doc.get("type") else ""
     q: dict = {
         "external_id": {"$ne": doc.get("external_id")},
@@ -2259,7 +2300,7 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
         except Exception:
             pass
     proj = {"_id": 0, "external_id": 1, "source": 1, "url": 1, "price": 1, "area_m2": 1, "rooms": 1, "seller_type": 1, "agency_name": 1,
-            "added_at": 1, "is_stale": 1, "stale_since": 1, "title": 1, "images": 1, "market_type": 1, "district": 1, "price_history": 1}
+            "added_at": 1, "is_stale": 1, "stale_since": 1, "title": 1, "images": 1, "market_type": 1, "district": 1, "price_history": 1, "sources": 1}
     is_rental = (doc.get("transaction_type") or "sprzedaz") == "wynajem"
     _stop = {"mieszkanie", "mieszkania", "sprzedaz", "sprzedaż", "wynajem", "wynajęcia", "wynajecia", "kawalerka", "pokoje", "pokój", "pokoi", "metrów", "metrow",
              "centrum", "blisko", "nowe", "nowa", "super", "okazja", "piękne", "piekne", "przestronne", "komfortowe", "umeblowane", "balkonem", "garażem", "garazem"}
@@ -2296,9 +2337,12 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
         if include_urls:
             it["url"] = d.get("url")
         items.append(it)
-    # Ilu pośredników: pewne minimum — różne nazwy biur, a bez nazw: max kopii na jednym portalu (biura eksportują tę samą ofertę na kilka portali)
+        items.extend(_cluster_copies(d, it["portal"], include_urls))
+    # Ilu pośredników: pewne minimum — różne nazwy biur, a bez nazw: max kopii na jednym portalu (biura eksportują tę samą ofertę na kilka portali).
+    # Kopie z `sources[]` tego samego rekordu (same_export) to ten sam eksport jednego biura — nie liczą się jako kolejny pośrednik.
+    items.extend(extra_this)
     all_copies = items + [this_copy]
-    agents_copies = [c for c in all_copies if c["seller_type"] == "posrednik"]
+    agents_copies = [c for c in all_copies if c["seller_type"] == "posrednik" and not c.get("same_export")]
     named = {c["agency"].strip().lower() for c in agents_copies if c["agency"].strip()}
     per_portal: dict = {}
     for c in agents_copies:

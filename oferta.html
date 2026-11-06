@@ -1130,7 +1130,7 @@ async function renderDupesBox(l) {
         : `<a href="${localStorage.getItem('finderdom_token') ? '/konto' : '/rejestracja?typ=firma'}" style="color:#8ba3d4;font-size:11px;text-decoration:none;white-space:nowrap" title="Link do ogłoszenia w planie dla biur">🔒 link</a>`;
       return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 0;border-top:1px solid rgba(255,255,255,0.07);${it.current ? 'opacity:0.85' : ''}">
         <div style="min-width:0">
-          <div style="font-size:13px;font-weight:800;color:#fff">📌 ${esc(it.portal || 'Portal')} <span style="font-weight:600;color:#c5d0e6;font-size:12px">· ${sellerLabel(it)}</span>${it.is_stale ? ' <span style="color:#f87171;font-size:10px">· zniknęła</span>' : ''}</div>
+          <div style="font-size:13px;font-weight:800;color:#fff">📌 ${esc(it.portal || 'Portal')} <span style="font-weight:600;color:#c5d0e6;font-size:12px">· ${sellerLabel(it)}</span>${it.same_export ? ' <span style="color:#8ba3d4;font-size:10px" title="To samo ogłoszenie wyeksportowane przez tego samego pośrednika na kolejny portal">· ten sam eksport</span>' : ''}${it.is_stale ? ' <span style="color:#f87171;font-size:10px">· zniknęła</span>' : ''}</div>
           <div style="font-size:11px;color:#8ba3d4;margin-top:2px">${it.added_at ? 'dodana ' + ago(it.added_at) : ''}</div>
         </div>
         <div style="text-align:right;white-space:nowrap">
@@ -1177,7 +1177,7 @@ async function renderDupesBox(l) {
     }
     box.innerHTML = `<div class="contact-title" style="color:#60a5fa">🔁 Duplikaty tej oferty</div>${head}
       <div style="margin-top:${items.length ? '4px' : '10px'}">${items.length ? rows : ''}</div>${histHtml}
-      ${items.length ? `<div style="color:#8ba3d4;font-size:11px;margin-top:10px;line-height:1.45">💡 Kilku pośredników = oferta bez wyłączności. Najniższa cena: <b style="color:#4ade80">${pln(Math.min(thisPrice, ...items.map(i => i.price || thisPrice)))}</b>.${d.locked ? ' Linki do ogłoszeń — w planie dla biur.' : ''}</div>` : ''}`;
+      ${items.length ? `<div style="color:#8ba3d4;font-size:11px;margin-top:10px;line-height:1.45">${d.agents > 1 ? '💡 Kilku pośredników = oferta bez wyłączności.' : d.owner_too ? '💡 Właściciel ogłasza też sam — oferta bez wyłączności.' : '💡 Jeden pośrednik — to samo ogłoszenie na ' + d.count + ' portalach (ten sam eksport).'} Najniższa cena: <b style="color:#4ade80">${pln(Math.min(thisPrice, ...items.map(i => i.price || thisPrice)))}</b>.${d.locked ? ' Linki do ogłoszeń — w planie dla biur.' : ''}</div>` : ''}`;
   } catch (e) {
     console.warn('[dupes]', e);
     box.innerHTML = `<div class="contact-title" style="color:#60a5fa">🔁 Duplikaty tej oferty</div><div style="color:#8ba3d4;font-size:12px">Nie udało się pobrać duplikatów. Spróbuj odświeżyć stronę.</div>`;

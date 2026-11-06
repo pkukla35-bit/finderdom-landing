@@ -945,8 +945,9 @@ function normalizeScrapedListing(raw) {
     // Multi-portal: Apify klaster - ta sama oferta wystawiona na kilku serwisach
     // Liczymy UNIKATOWE portale (nie relistings tego samego portalu)
     sources: Array.isArray(raw.sources) ? raw.sources : [],
-    // 🔁 Duplikaty (widok dla biur): ile kopii tego ogłoszenia i ilu różnych pośredników je ma
-    dupes_count: Array.isArray(raw.dupes) ? raw.dupes.length : 1,
+    // 🔁 Duplikaty (widok dla biur): ile kopii tego ogłoszenia i ilu różnych pośredników je ma.
+    // Rekord scalony z kilku portali (sources[]: Morizon+Gratka) = tyle kopii, ile portali — spójnie ze stroną oferty.
+    dupes_count: (Array.isArray(raw.dupes) ? raw.dupes : [raw]).reduce((n, d) => n + Math.max(1, new Set((Array.isArray(d.sources) ? d.sources : []).map(s => String((s && s.portal) || '').toLowerCase()).filter(Boolean)).size), 0),
     agents_count: (() => {
       // Ilu RÓŻNYCH pośredników ma tę nieruchomość. Scrapery nie zapisują nazwy biura, więc: ta sama oferta na Gratce i Morizonie
       // to zwykle JEDNO biuro (eksport), ale 2 kopie na TYM SAMYM portalu to na pewno 2 biura → liczymy max kopii per portal
@@ -963,7 +964,15 @@ function normalizeScrapedListing(raw) {
       return Math.max(names.size, byPortal);
     })(),
     has_owner_copy: (Array.isArray(raw.dupes) ? raw.dupes : [raw]).some(d => d.seller_type === 'prywatna'),
-    dupes_list: (Array.isArray(raw.dupes) ? raw.dupes : [raw]).map(d => ({ portal: detectPortalFromUrl(d.url) || portalFromSource(d.source) || 'Portal', url: d.url, price: d.price, seller: d.seller_type || 'posrednik', agency: d.agency_name || '', added_at: d.added_at })),
+    dupes_list: (Array.isArray(raw.dupes) ? raw.dupes : [raw]).flatMap(d => {
+      const base = { portal: detectPortalFromUrl(d.url) || portalFromSource(d.source) || 'Portal', url: d.url, price: d.price, seller: d.seller_type || 'posrednik', agency: d.agency_name || '', added_at: d.added_at };
+      const srcs = (Array.isArray(d.sources) ? d.sources : []).filter(s => s && s.portal);
+      if (srcs.length < 2) return [base];
+      // ten sam rekord na kilku portalach → osobny wiersz na każdy portal (ten sam eksport jednego biura)
+      const seen = new Set();
+      return srcs.filter(s => { const k = String(s.portal).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; })
+        .map((s, i) => ({ ...base, portal: portalFromSource(s.portal) || base.portal, url: s.url || d.url, price: s.price || d.price, same_export: i > 0 }));
+    }),
     sources_count: (() => {
       const src = Array.isArray(raw.sources) ? raw.sources : [];
       if (src.length > 0) {
@@ -3153,7 +3162,7 @@ document.getElementById('grid')?.addEventListener('click', (e) => {
   if (!listing) return;
   // 🔁 lista wszystkich kopii (portal + pośrednik/właściciel + cena) — klik w „N ogłoszeń · M pośredników”
   const sources = b.dataset.dupesId && Array.isArray(listing.dupes_list) && listing.dupes_list.length
-    ? listing.dupes_list.map(d => ({ portal: d.portal, url: d.url, price: d.price, agency: d.agency || (d.seller === 'prywatna' ? '👤 właściciel' : d.seller === 'przetarg' ? '🔨 przetarg' : '🏢 pośrednik') }))
+    ? listing.dupes_list.map(d => ({ portal: d.portal, url: d.url, price: d.price, agency: (d.agency || (d.seller === 'prywatna' ? '👤 właściciel' : d.seller === 'przetarg' ? '🔨 przetarg' : '🏢 pośrednik')) + (d.same_export ? ' · ten sam eksport' : '') }))
     : (Array.isArray(listing.sources) ? listing.sources : []);
   document.getElementById('multiModalTitle').textContent = listing.title || 'Oferta';
   const listEl = document.getElementById('multiModalList');

@@ -2300,7 +2300,8 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
         except Exception:
             pass
     proj = {"_id": 0, "external_id": 1, "source": 1, "url": 1, "price": 1, "area_m2": 1, "rooms": 1, "seller_type": 1, "agency_name": 1,
-            "added_at": 1, "is_stale": 1, "stale_since": 1, "title": 1, "images": 1, "market_type": 1, "district": 1, "price_history": 1, "sources": 1}
+            "added_at": 1, "is_stale": 1, "stale_since": 1, "title": 1, "images": 1, "market_type": 1, "district": 1, "price_history": 1, "sources": 1,
+            "description": 1, "street": 1, "build_year": 1, "lat": 1, "lng": 1}
     is_rental = (doc.get("transaction_type") or "sprzedaz") == "wynajem"
     _stop = {"mieszkanie", "mieszkania", "sprzedaz", "sprzedaż", "wynajem", "wynajęcia", "wynajecia", "kawalerka", "pokoje", "pokój", "pokoi", "metrów", "metrow",
              "centrum", "blisko", "nowe", "nowa", "super", "okazja", "piękne", "piekne", "przestronne", "komfortowe", "umeblowane", "balkonem", "garażem", "garazem"}
@@ -2310,16 +2311,73 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
         s = str(v or "").strip().lower()
         return "" if s in ("", "none", "null") else s
     d_dist, d_tokens = _norm_d(doc.get("district")), _tokens(doc.get("title"))
+    _stop_desc = _stop | {"nieruchomość", "nieruchomosci", "nieruchomości", "oferta", "oferty", "sprzedaży", "sprzedazy", "zapraszam", "zapraszamy", "kontakt",
+                          "działka", "dzialka", "działce", "dzialce", "budynek", "budynku", "kuchnia", "łazienka", "lazienka", "salon", "sypialnie", "sypialnia",
+                          "piętro", "pietro", "parter", "parterze", "garaż", "garaz", "ogród", "ogrod", "ogrodem", "taras", "tarasem", "balkon", "okolica", "okolicy",
+                          "cichej", "spokojnej", "zielonej", "idealne", "idealny", "świetna", "swietna", "lokalizacja", "lokalizacji", "komunikacja", "dojazd",
+                          "możliwość", "mozliwosc", "również", "rowniez", "został", "zostal", "został", "która", "które", "który", "których", "którym", "bardzo",
+                          "wszystkie", "wszystkich", "stanie", "dobrym", "wysokim", "standard", "standardzie", "wykończenia", "wykonczenia", "ogrzewanie", "ogrzewania",
+                          "gazowe", "miejsce", "miejsca", "parkingowe", "jednorodzinny", "jednorodzinnych", "wolnostojący", "wolnostojacy", "szeregowy", "bliźniak",
+                          "kraków", "krakow", "krakowa", "krakowie", "warszawa", "warszawy", "warszawie", "wrocław", "wroclaw", "wrocławia", "wrocławiu", "poznań", "poznan",
+                          "poznania", "poznaniu", "gdańsk", "gdansk", "gdańska", "gdańsku", "łódź", "lodz", "łodzi", "lodzi"}
+    def _desc_tokens(d: dict) -> set:
+        t = (str(d.get("title") or "") + " " + str(d.get("description") or "")).lower()
+        words = {w for w in re.findall(r"[a-ząćęłńóśźż]{5,}", t) if w not in _stop_desc}
+        nums = {n for n in re.findall(r"\b\d{2,4}(?:[.,]\d{1,2})?\b", t)}  # rok budowy, ary, numer ulicy
+        return words | nums
+    doc_desc = _desc_tokens(doc); doc_has_desc = len(str(doc.get("description") or "")) >= 80
+    def _same_street(a: dict, b: dict) -> Optional[bool]:
+        sa, sb = _norm_d(a.get("street")), _norm_d(b.get("street"))
+        if not sa or not sb:
+            return None
+        sa = re.sub(r"^(ul\.?|al\.?|os\.?|pl\.?)\s*", "", sa); sb = re.sub(r"^(ul\.?|al\.?|os\.?|pl\.?)\s*", "", sb)
+        return sa.split()[0][:6] == sb.split()[0][:6]
+    def _gps_km(a: dict, b: dict) -> Optional[float]:
+        try:
+            la1, ln1, la2, ln2 = float(a["lat"]), float(a["lng"]), float(b["lat"]), float(b["lng"])
+        except Exception:
+            return None
+        return 2 * 6371 * math.asin(math.sqrt(math.sin(math.radians(la2 - la1) / 2) ** 2 + math.cos(math.radians(la1)) * math.cos(math.radians(la2)) * math.sin(math.radians(ln2 - ln1) / 2) ** 2))
     def _same_property(d: dict) -> bool:
         dd = _norm_d(d.get("district"))
         if d_dist and dd and d_dist != dd:
             return False
+        # Twarde sprzeczności: inna ulica, inny rok budowy, GPS dalej niż 1 km
+        if _same_street(doc, d) is False:
+            return False
+        y1, y2 = _num_or_zero(doc.get("build_year")), _num_or_zero(d.get("build_year"))
+        if y1 and y2 and abs(y1 - y2) > 1:
+            return False
+        km = _gps_km(doc, d)
+        if km is not None and km > 1.0:
+            return False
+        r1, r2 = doc.get("rooms"), d.get("rooms")
+        try:
+            if r1 not in (None, "", 0) and r2 not in (None, "", 0) and int(float(r1)) != int(float(r2)):
+                return False
+        except Exception:
+            pass
         if is_rental:
             if abs(_num_or_zero(d.get("area_m2")) - area) > 0.6:
                 return False
             if not (d_dist and dd and d_dist == dd) and not (d_tokens & _tokens(d.get("title"))):
                 return False
-        return True
+            return True
+        # Pewne potwierdzenia: ta sama ulica, GPS < 300 m
+        if _same_street(doc, d) is True or (km is not None and km < 0.3):
+            return True
+        # Opisy: ta sama nieruchomość opisywana przez różne biura dzieli nazwy własne / liczby (ulica, ary, rok, cechy).
+        # Dwa różne domy w tym samym mieście o podobnej cenie i metrażu — prawie nic wspólnego.
+        if doc_has_desc and len(str(d.get("description") or "")) >= 80:
+            shared = doc_desc & _desc_tokens(d)
+            smaller = max(1, min(len(doc_desc), len(_desc_tokens(d))))
+            return len(shared) >= 4 or len(shared) / smaller >= 0.2
+        # Bez opisów: wymagamy tej samej dzielnicy (obie znane) lub wspólnego słowa w tytule; dom bez żadnego z tych sygnałów = nie łączymy
+        if d_dist and dd and d_dist == dd:
+            return True
+        if d_tokens & _tokens(d.get("title")):
+            return True
+        return base_type not in ("dom", "działka", "dzialka") and not (d_dist or dd)
     items = []
     async for d in coll.find(q, proj).sort("added_at", -1).limit(40):
         if str(d.get("market_type") or "").lower() == "pierwotny" and str(doc.get("market_type") or "").lower() != "pierwotny":

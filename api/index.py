@@ -5468,8 +5468,20 @@ async def _followup_recipients(db, key: str, since: Optional[datetime] = None, r
     if retry_failed:
         got_q["ok"] = True
     got_this = set(await db.manual_mail_log.distinct("email", got_q))  # także nieudane — nie ponawiamy w pętli (chyba że retry_failed)
+    failed_once: set = set()
+    if retry_failed:
+        # nieudane: ponawiamy, ale najpierw adresy jeszcze nie próbowane; po 3 nieudanych próbach odpuszczamy (zła skrzynka)
+        fq = {"template": key, "ok": False}
+        if since:
+            fq["sent_at"] = {"$gte": since}
+        async for r in db.manual_mail_log.aggregate([{"$match": fq}, {"$group": {"_id": "$email", "n": {"$sum": 1}}}]):
+            if r["n"] >= 3:
+                got_this.add(r["_id"])
+            else:
+                failed_once.add(r["_id"])
     users_out = set(await db.users.distinct("email", {"marketing_opt_out": True}))
-    return sorted(e for e in sent_all if e not in optout and e not in replied and e not in got_this and e not in users_out)
+    return sorted((e for e in sent_all if e not in optout and e not in replied and e not in got_this and e not in users_out),
+                  key=lambda e: (e in failed_once, e))
 
 
 @app.post("/api/admin/mailing/send-followup")

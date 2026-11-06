@@ -5392,11 +5392,12 @@ class FollowupReq(BaseModel):
     limit: int = Field(default=8, ge=1, le=15)
     dry_run: bool = True
     since: Optional[str] = None  # ISO: wyślij ponownie także tym, którzy dostali ten szablon PRZED tą datą (nowa kampania)
+    retry_failed: bool = False   # ponów adresy, dla których wysyłka tego szablonu się NIE udała (np. SMTP 450 „too quickly”)
 
 
-async def _followup_recipients(db, key: str, since: Optional[datetime] = None) -> List[str]:
+async def _followup_recipients(db, key: str, since: Optional[datetime] = None, retry_failed: bool = False) -> List[str]:
     """Adresy, które dostały wcześniej dowolny szablon (ok), minus: lista „nie”, wypisani, ci którzy odpisali (nie auto-odpowiedź),
-    i ci którzy już dostali ten szablon (lub próba wysyłki się nie udała — nie ponawiamy automatycznie)."""
+    i ci którzy już dostali ten szablon (lub próba wysyłki się nie udała — nie ponawiamy automatycznie, chyba że retry_failed)."""
     sent_all = await db.manual_mail_log.distinct("email", {"ok": True})
     if not sent_all:
         return []
@@ -5406,7 +5407,9 @@ async def _followup_recipients(db, key: str, since: Optional[datetime] = None) -
     got_q: dict = {"template": key}
     if since:
         got_q["sent_at"] = {"$gte": since}
-    got_this = set(await db.manual_mail_log.distinct("email", got_q))  # także nieudane — nie ponawiamy w pętli
+    if retry_failed:
+        got_q["ok"] = True
+    got_this = set(await db.manual_mail_log.distinct("email", got_q))  # także nieudane — nie ponawiamy w pętli (chyba że retry_failed)
     users_out = set(await db.users.distinct("email", {"marketing_opt_out": True}))
     return sorted(e for e in sent_all if e not in optout and e not in replied and e not in got_this and e not in users_out)
 
@@ -5428,7 +5431,7 @@ async def admin_send_followup(body: FollowupReq, admin: dict = Depends(require_a
                 since_dt = since_dt.replace(tzinfo=timezone.utc)
         except Exception:
             raise HTTPException(400, "since: zły format daty (ISO)")
-    recipients = await _followup_recipients(db, key, since_dt)
+    recipients = await _followup_recipients(db, key, since_dt, body.retry_failed)
     if body.dry_run:
         return {"dry_run": True, "remaining": len(recipients), "sample": recipients[:10]}
     if not (await _smtp_cfg() or await _email_key()):

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FinderDomBot — informacje dla właścicieli serwisów · FinderDom.pl</title>
+<meta name="description" content="FinderDomBot to robot agregatora FinderDom.pl. Co pobiera, jak często, jak go rozpoznać i jak ograniczyć lub zablokować.">
+<link rel="canonical" href="https://www.finderdom.pl/bot">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#0B1836;color:#e6e9f2;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.65}
+  .topnav{background:rgba(11,24,54,0.95);border-bottom:1px solid rgba(255,255,255,0.08);position:sticky;top:0;z-index:100;padding:14px 20px}
+  .nav-inner{max-width:1200px;margin:auto;display:flex;align-items:center;gap:24px}
+  .logo{font-size:18px;font-weight:900;color:#FFB800;text-decoration:none}
+  .nav-links{display:flex;gap:18px;align-items:center;flex:1;font-size:14px;flex-wrap:wrap}
+  .nav-links a{color:#c5d0e6;text-decoration:none;font-weight:600}
+  .nav-links a:hover{color:#FFB800}
+  main{max-width:900px;margin:auto;padding:40px 20px 80px}
+  .hero{background:linear-gradient(135deg,rgba(255,184,0,0.08),rgba(96,165,250,0.05));border:1px solid rgba(255,184,0,0.2);border-radius:20px;padding:40px 28px;margin-bottom:36px;text-align:center}
+  h1{font-size:clamp(28px,4.5vw,44px);font-weight:900;line-height:1.15;margin:0 0 14px;color:#FFB800}
+  .sub{color:#c5d0e6;font-size:17px;max-width:640px;margin:0 auto;line-height:1.6}
+  h2{font-size:24px;font-weight:900;margin:40px 0 14px;color:#FFB800;line-height:1.3}
+  p{margin:0 0 16px;font-size:16px}
+  ul{padding-left:24px;margin:0 0 20px}
+  ul li{margin-bottom:8px}
+  strong{color:#FFDC80}
+  code{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:2px 7px;font-size:14px;color:#fff}
+  pre{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px 18px;overflow:auto;font-size:14px;color:#fff}
+  .box{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:22px 24px;margin:24px 0}
+  .box dt{color:#8ba3d4;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-top:14px}
+  .box dt:first-child{margin-top:0}
+  .box dd{margin:2px 0 0;color:#fff;font-size:15px;font-weight:700}
+  footer{max-width:900px;margin:40px auto 24px;padding:24px 20px 0;border-top:1px solid rgba(255,255,255,0.08);display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;color:#8ba3d4;font-size:13px}
+  footer a{color:#a3b3d1;text-decoration:none}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="nav-inner">
+    <a href="/" class="logo">🏠 FinderDom.pl</a>
+    <div class="nav-links">
+      <a href="/szukaj">Wyszukiwarka</a>
+      <a href="/dla-biur">Dla biur</a>
+      <a href="/o-nas">O nas</a>
+      <a href="/kontakt">Kontakt</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <div class="hero">
+    <h1>🤖 FinderDomBot</h1>
+    <div class="sub">Robot agregatora ofert nieruchomości FinderDom.pl. Ta strona jest dla właścicieli i administratorów serwisów, którzy zobaczyli go w swoich logach.</div>
+  </div>
+
+  <h2>Czym jest FinderDom.pl</h2>
+  <p>FinderDom.pl to <strong>polska wyszukiwarka ofert nieruchomości</strong> — zbiera ogłoszenia z wielu portali, łączy duplikaty i pokazuje je w jednym miejscu. <strong>Każda oferta prowadzi do źródła</strong>: użytkownik, który chce zobaczyć pełny opis, wszystkie zdjęcia czy numer telefonu, przechodzi na stronę portalu, z którego pochodzi ogłoszenie. Przynosimy więc portalom ruch i zainteresowanych kupujących, a biurom nieruchomości — kontakty.</p>
+
+  <h2>Jak rozpoznać robota</h2>
+  <div class="box">
+    <dl>
+      <dt>User-Agent</dt>
+      <dd><code>FinderDomBot/1.0 (+https://www.finderdom.pl/bot; kontakt@finderdom.pl)</code></dd>
+      <dt>Kontakt</dt>
+      <dd><a href="mailto:kontakt@finderdom.pl" style="color:#FFB800">kontakt@finderdom.pl</a></dd>
+      <dt>Operator</dt>
+      <dd>FinderDom.pl — <a href="/o-nas" style="color:#FFB800">o nas</a></dd>
+    </dl>
+  </div>
+
+  <h2>Co i jak pobieramy</h2>
+  <ul>
+    <li><strong>Tylko publiczne strony list i ofert</strong> — tytuł, cena, metraż, liczba pokoi, lokalizacja, typ sprzedającego, miniatura, link do źródła. Nie pobieramy danych wymagających logowania ani numerów telefonów ukrytych za przyciskiem.</li>
+    <li><strong>Szanujemy <code>robots.txt</code></strong> — dyrektywy <code>Disallow</code> i <code>Crawl-delay</code>.</li>
+    <li><strong>Łagodne tempo</strong> — kilka zapytań na minutę na serwis, z przerwami; pobieranie odbywa się w zaplanowanych porach (zwykle wcześnie rano), nie w sposób ciągły.</li>
+    <li><strong>Pamięć</strong> — oferta już zaimportowana nie jest pobierana ponownie; odświeżamy jedynie cenę i dostępność.</li>
+    <li><strong>Zawsze podajemy źródło</strong> — każda karta oferty zawiera nazwę portalu i odnośnik do oryginału.</li>
+  </ul>
+
+  <h2>Jak ograniczyć lub zablokować</h2>
+  <p>Wystarczy wpis w <code>robots.txt</code> — zastosujemy się do niego przy kolejnym przebiegu:</p>
+<pre>User-agent: FinderDomBot
+Disallow: /</pre>
+  <p>Aby tylko spowolnić robota:</p>
+<pre>User-agent: FinderDomBot
+Crawl-delay: 10</pre>
+  <p>Jeśli wolisz inną formę współpracy — np. udostępnienie <strong>feedu XML/JSON lub eksportu ofert</strong> (preferujemy to zamiast pobierania stron) — napisz na <a href="mailto:kontakt@finderdom.pl" style="color:#FFB800">kontakt@finderdom.pl</a>. Usuniemy też z bazy każdą ofertę lub cały serwis na życzenie właściciela.</p>
+
+  <h2>Dla portali: dodanie do białej listy</h2>
+  <p>Jeżeli Twój serwis używa ochrony przed botami, prosimy o dopisanie powyższego <code>User-Agent</code> do białej listy. W zamian: ruch kierowany bezpośrednio na Twoje strony ofert, oznaczenie źródła przy każdym ogłoszeniu i pełna kontrola przez <code>robots.txt</code>.</p>
+</main>
+
+<footer>
+  <div>© 2026 FinderDom.pl</div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px">
+    <a href="/">Strona główna</a>
+    <a href="/o-nas">O nas</a>
+    <a href="/kontakt">Kontakt</a>
+    <a href="/regulamin">Regulamin</a>
+    <a href="/polityka-prywatnosci">Polityka prywatności</a>
+  </div>
+</footer>
+</body>
+</html>

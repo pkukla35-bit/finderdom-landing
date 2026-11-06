@@ -1110,12 +1110,14 @@ async def set_offer_status(body: OfferStatusUpdate, user: dict = Depends(current
         doc = await _listing_by_any_id(offer_id)
         dup = await _find_duplicates(doc, include_urls=False) if doc else {"items": [], "count": 1, "agents": 0, "owner_too": False}
         known = [i["id"] for i in dup["items"]]
+        summ = _watch_summary(dup)
         await database().exclusivity_watch.update_one(
             {"offer_id": offer_id, "company_id": company_id},
             {"$set": {"email": user["email"], "known_ids": known, "updated_at": now, "title": ((doc or {}).get("title") or "")[:120],
-                      "city": (doc or {}).get("city", ""), "price": (doc or {}).get("price")},
+                      "city": (doc or {}).get("city", ""), "price": (doc or {}).get("price"), "summary": summ},
              "$setOnInsert": {"created_at": now, "notified": 0}}, upsert=True)
-        out["watch"] = {"copies_now": dup["count"], "agents_now": dup["agents"], "owner_too": dup["owner_too"], "email": user["email"]}
+        out["watch"] = {"copies_now": dup["count"], "agents_now": dup["agents"], "owner_too": dup["owner_too"], "email": user["email"],
+                        "price_min": summ["price_min"], "price_max": summ["price_max"], "agencies": summ["agencies"], "portals": summ["portals"]}
     else:
         await database().exclusivity_watch.delete_one({"offer_id": offer_id, "company_id": company_id})
     return out
@@ -1133,6 +1135,7 @@ async def _exclusivity_check(limit: int = 200, force_offer: Optional[str] = None
             if not doc:
                 continue
             dup = await _find_duplicates(doc, include_urls=True)
+            await db.exclusivity_watch.update_one({"_id": w["_id"]}, {"$set": {"summary": _watch_summary(dup)}})
             known = set(w.get("known_ids") or []) if w["offer_id"] != force_offer else set()  # force_offer: test e-maila (admin)
             fresh = [i for i in dup["items"] if i["id"] not in known]
             if not fresh:
@@ -1191,6 +1194,17 @@ async def get_offer_statuses(ids: str = "", user: dict = Depends(current_user)):
             "marked_by": s.get("marked_by", ""),
             "updated_at": s["updated_at"].isoformat() if isinstance(s.get("updated_at"), datetime) else s.get("updated_at"),
         }
+    own_ids = [k for k, v in out.items() if v["status"] == "own"]
+    if own_ids:
+        async for w in database().exclusivity_watch.find({"company_id": company_id, "offer_id": {"$in": own_ids}}, {"offer_id": 1, "summary": 1, "notified": 1, "last_alert_at": 1, "email": 1}):
+            summ = dict(w.get("summary") or {})
+            if isinstance(summ.get("checked_at"), datetime):
+                summ["checked_at"] = summ["checked_at"].isoformat()
+            summ["notified"] = w.get("notified", 0)
+            summ["last_alert_at"] = w["last_alert_at"].isoformat() if isinstance(w.get("last_alert_at"), datetime) else None
+            summ["email"] = w.get("email", "")
+            if w["offer_id"] in out:
+                out[w["offer_id"]]["watch"] = summ
     return {"statuses": out, "crm": True}
 
 
@@ -2297,6 +2311,15 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
     return {"count": len(items) + 1, "agents": agents, "owner_too": any(c["seller_type"] == "prywatna" for c in all_copies),
             "agencies": sorted({c["agency"] for c in agents_copies if c["agency"].strip()}),
             "this": this_copy, "items": items, "timeline": timeline}
+
+
+def _watch_summary(dup: dict) -> dict:
+    """⭐ Podsumowanie duplikatów do zapisania przy ofercie „Moja oferta” (pokazywane na karcie / stronie oferty / w CRM)."""
+    prices = [c["price"] for c in (dup.get("items") or []) + [dup.get("this") or {}] if c.get("price")]
+    return {"copies": dup.get("count", 1), "agents": dup.get("agents", 0), "owner_too": bool(dup.get("owner_too")),
+            "agencies": (dup.get("agencies") or [])[:8], "price_min": min(prices) if prices else None, "price_max": max(prices) if prices else None,
+            "portals": sorted({c["portal"] for c in (dup.get("items") or []) + [dup.get("this") or {}] if c.get("portal")}),
+            "checked_at": datetime.now(timezone.utc)}
 
 
 async def _listing_by_any_id(listing_id: str):
@@ -4266,6 +4289,62 @@ async def _price_watch_check(limit: int = 500, force_offer: Optional[str] = None
 async def admin_price_watch_run(request: Request, limit: int = 500, force_offer: Optional[str] = None):
     await _authorize_cron_or_admin(request)
     return await _price_watch_check(limit=max(1, min(2000, limit)), force_offer=force_offer)
+
+
+@app.get("/api/admin/features-stats")
+async def admin_features_stats(admin: dict = Depends(require_admin)):
+    """📊 Panel admina → „Nowości”: wyłączność, obserwowane ceny, wyszukiwanie AI, nazwy biur, historia cen."""
+    db = database()
+    now = datetime.now(timezone.utc)
+    d7 = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    today = now.strftime("%Y-%m-%d")
+    # ⭐ wyłączność
+    excl = []
+    async for w in db.exclusivity_watch.find({}, {"offer_id": 1, "email": 1, "title": 1, "city": 1, "price": 1, "summary": 1, "notified": 1, "last_alert_at": 1, "created_at": 1}).sort("created_at", -1).limit(50):
+        sm = w.get("summary") or {}
+        excl.append({"offer_id": w["offer_id"], "email": w.get("email"), "title": (w.get("title") or "")[:70], "city": w.get("city"), "price": w.get("price"),
+                     "copies": sm.get("copies"), "agents": sm.get("agents"), "owner_too": sm.get("owner_too"), "price_min": sm.get("price_min"), "price_max": sm.get("price_max"),
+                     "agencies": sm.get("agencies") or [], "notified": w.get("notified", 0),
+                     "last_alert_at": w["last_alert_at"].isoformat() if isinstance(w.get("last_alert_at"), datetime) else None,
+                     "created_at": w["created_at"].isoformat() if isinstance(w.get("created_at"), datetime) else None})
+    excl_total = await db.exclusivity_watch.count_documents({})
+    excl_alerts = 0
+    async for x in db.exclusivity_watch.aggregate([{"$group": {"_id": None, "n": {"$sum": "$notified"}}}]):
+        excl_alerts = x["n"]
+    # 🔔 obserwowane ceny
+    pw = []
+    async for w in db.price_watch.find({}, {"offer_id": 1, "email": 1, "title": 1, "city": 1, "price_start": 1, "price_last": 1, "portal_last": 1, "drops": 1, "created_at": 1, "is_stale": 1}).sort("created_at", -1).limit(50):
+        pw.append({"offer_id": w["offer_id"], "email": w.get("email"), "title": (w.get("title") or "")[:70], "city": w.get("city"), "price_start": w.get("price_start"),
+                   "price_last": w.get("price_last"), "portal_last": w.get("portal_last"), "drops": w.get("drops", 0), "is_stale": w.get("is_stale", False),
+                   "created_at": w["created_at"].isoformat() if isinstance(w.get("created_at"), datetime) else None})
+    pw_total = await db.price_watch.count_documents({})
+    pw_users = len(await db.price_watch.distinct("user_id"))
+    pw_drops = 0
+    async for x in db.price_watch.aggregate([{"$group": {"_id": None, "n": {"$sum": "$drops"}}}]):
+        pw_drops = x["n"]
+    # 🤖 wyszukiwanie AI
+    ai_today = await db.ai_search_log.count_documents({"day": today})
+    ai_7d = await db.ai_search_log.count_documents({"day": {"$gte": d7}})
+    ai_total = await db.ai_search_log.count_documents({})
+    ai_recent = []
+    async for x in db.ai_search_log.find({}, {"q": 1, "filters": 1, "ts": 1, "who": 1}).sort("ts", -1).limit(25):
+        f = x.get("filters") or {}
+        ai_recent.append({"q": x.get("q"), "city": f.get("city"), "type": f.get("type"), "price_max": f.get("price_max"), "keywords": f.get("keywords") or [],
+                          "who": "zalogowany" if str(x.get("who", "")).startswith("u:") else "gość",
+                          "ts": x["ts"].isoformat() if isinstance(x.get("ts"), datetime) else None})
+    # 🏢 nazwy biur per źródło + 📈 historia cen
+    agency_cov = []
+    async for x in db.listings.aggregate([
+        {"$match": {"seller_type": "posrednik", "is_stale": {"$ne": True}}},
+        {"$group": {"_id": "$source", "total": {"$sum": 1}, "named": {"$sum": {"$cond": [{"$gt": [{"$strLenCP": {"$ifNull": ["$agency_name", ""]}}, 0]}, 1, 0]}}}},
+        {"$sort": {"total": -1}}]):
+        agency_cov.append({"source": x["_id"], "total": x["total"], "named": x["named"]})
+    ph_total = await db.listings.count_documents({"price_history.0": {"$exists": True}})
+    ph_24h = await db.listings.count_documents({"price_history": {"$elemMatch": {"at": {"$gte": (now - timedelta(days=1)).isoformat()}}}})
+    return {"exclusivity": {"total": excl_total, "alerts_sent": excl_alerts, "items": excl},
+            "price_watch": {"total": pw_total, "users": pw_users, "drops_sent": pw_drops, "items": pw},
+            "ai_search": {"today": ai_today, "d7": ai_7d, "total": ai_total, "recent": ai_recent},
+            "agency_names": agency_cov, "price_history": {"listings_with_changes": ph_total, "changes_24h": ph_24h}}
 
 
 @app.post("/api/admin/exclusivity/run")

@@ -108,7 +108,7 @@
 
   <div class="tabs">
     <button class="tab active" data-tab="overview">📊 Przegląd</button>
-    <button class="tab" data-tab="users">👥 Użytkownicy</button>
+    <button class="tab" data-tab="features">✨ Nowości</button><button class="tab" data-tab="users">👥 Użytkownicy</button>
     <button class="tab" data-tab="payments">💳 Płatności</button>
     <button class="tab" data-tab="leads">📩 Leady</button>
     <button class="tab" data-tab="scrapers">🕷️ Scrapery</button>
@@ -152,6 +152,25 @@
         <div style="position:relative;height:220px"><canvas id="chartRevenue"></canvas></div>
       </div>
     </div>
+  </section>
+
+  <!-- NOWOŚCI: wyłączność / obserwowane ceny / AI / nazwy biur / historia cen -->
+  <section data-panel="features">
+    <div class="row-actions">
+      <button class="refresh-btn" onclick="loadFeatures()">↻ Odśwież</button>
+      <button class="refresh-btn" onclick="runJob('/admin/exclusivity/run','⭐ alert wyłączności')">▶ Sprawdź wyłączność teraz</button>
+      <button class="refresh-btn" onclick="runJob('/admin/price-watch/run','🔔 obserwowane ceny')">▶ Sprawdź ceny teraz</button>
+      <span id="featMsg" class="mono" style="color:#8ba3d4;font-size:12px;margin-left:auto"></span>
+    </div>
+    <div class="stats-grid" id="featCards"></div>
+    <div class="section-title" style="margin-top:28px">⭐ Oferty z alertem wyłączności (biura)</div>
+    <div class="table-wrap"><table><thead><tr><th>Biuro (e-mail)</th><th>Oferta</th><th>Cena</th><th>Ogłoszeń</th><th>Pośredników</th><th>Ceny kopii</th><th>Biura</th><th>Alerty</th></tr></thead><tbody id="featExcl"></tbody></table></div>
+    <div class="section-title" style="margin-top:28px">🔔 Obserwowane ceny (klienci)</div>
+    <div class="table-wrap"><table><thead><tr><th>Użytkownik</th><th>Oferta</th><th>Cena start</th><th>Teraz (portal)</th><th>Obniżki</th><th>Od</th></tr></thead><tbody id="featPw"></tbody></table></div>
+    <div class="section-title" style="margin-top:28px">🤖 Ostatnie zapytania Wyszukiwania AI</div>
+    <div class="table-wrap"><table><thead><tr><th>Kiedy</th><th>Kto</th><th>Zapytanie</th><th>Zrozumiane</th></tr></thead><tbody id="featAi"></tbody></table></div>
+    <div class="section-title" style="margin-top:28px">🏢 Nazwy biur w bazie (oferty pośredników, aktywne)</div>
+    <div class="table-wrap"><table><thead><tr><th>Źródło</th><th>Ofert pośredników</th><th>Z nazwą biura</th><th>%</th></tr></thead><tbody id="featAg"></tbody></table></div>
   </section>
 
   <!-- USERS -->
@@ -356,6 +375,7 @@ function initTabs(){
       if (panel) panel.classList.add('active');
       // Lazy load
       if (t.dataset.tab === 'users' && !window._loadedUsers) { window._loadedUsers = true; loadUsers(); }
+      if (t.dataset.tab === 'features') loadFeatures();
       if (t.dataset.tab === 'payments' && !window._loadedPayments) { window._loadedPayments = true; loadPayments(); }
       if (t.dataset.tab === 'leads' && !window._loadedLeads) { window._loadedLeads = true; loadLeads(); }
       if (t.dataset.tab === 'scrapers' && !window._loadedScrapers) { window._loadedScrapers = true; loadScrapers(); }
@@ -366,6 +386,37 @@ function initTabs(){
   });
 }
 
+async function loadFeatures(){
+  const pln = n => (n == null ? '—' : Number(n).toLocaleString('pl-PL') + ' zł');
+  const when = iso => iso ? escapeHtml(iso.slice(0,16).replace('T',' ')) : '—';
+  try {
+    const d = await api('/admin/features-stats');
+    document.getElementById('featCards').innerHTML = `
+      <div class="card"><div class="card-title">⭐ Wyłączność — pilnowane oferty</div><div class="card-value amber">${d.exclusivity.total}</div><div class="card-sub">wysłanych alertów: ${d.exclusivity.alerts_sent}</div></div>
+      <div class="card"><div class="card-title">🔔 Obserwowane ceny</div><div class="card-value">${d.price_watch.total}</div><div class="card-sub">${d.price_watch.users} użytkowników · ${d.price_watch.drops_sent} maili o spadku</div></div>
+      <div class="card"><div class="card-title">🤖 Wyszukiwanie AI</div><div class="card-value">${d.ai_search.today}</div><div class="card-sub">dziś · ${d.ai_search.d7} w 7 dni · ${d.ai_search.total} łącznie</div></div>
+      <div class="card"><div class="card-title">📈 Historia cen</div><div class="card-value">${d.price_history.listings_with_changes.toLocaleString('pl-PL')}</div><div class="card-sub">ofert ze zmianą ceny · ${d.price_history.changes_24h} zmian w 24 h</div></div>`;
+    document.getElementById('featExcl').innerHTML = d.exclusivity.items.map(w => `<tr>
+      <td>${escapeHtml(w.email || '')}</td><td><a href="/oferta?id=${encodeURIComponent(w.offer_id)}&widok=biuro" target="_blank" style="color:#FFB800">${escapeHtml(w.title || w.offer_id)}</a><br><small style="color:#8ba3d4">${escapeHtml(w.city || '')}</small></td>
+      <td>${pln(w.price)}</td><td>${w.copies ?? '…'}</td><td>${w.agents ?? '…'}${w.owner_too ? ' <span title="właściciel ogłasza sam">👤</span>' : ''}</td>
+      <td>${w.price_min ? (w.price_min === w.price_max ? pln(w.price_min) : pln(w.price_min) + ' – ' + pln(w.price_max)) : '—'}</td>
+      <td>${(w.agencies || []).map(escapeHtml).join(', ') || '—'}</td><td>${w.notified}${w.last_alert_at ? '<br><small style="color:#8ba3d4">' + when(w.last_alert_at) + '</small>' : ''}</td></tr>`).join('') || '<tr><td colspan="8" style="color:#8ba3d4">Żadne biuro nie oznaczyło jeszcze „⭐ Moja oferta”.</td></tr>';
+    document.getElementById('featPw').innerHTML = d.price_watch.items.map(w => `<tr>
+      <td>${escapeHtml(w.email || '')}</td><td><a href="/oferta?id=${encodeURIComponent(w.offer_id)}" target="_blank" style="color:#FFB800">${escapeHtml(w.title || w.offer_id)}</a><br><small style="color:#8ba3d4">${escapeHtml(w.city || '')}${w.is_stale ? ' · <span style="color:#f87171">zniknęła</span>' : ''}</small></td>
+      <td>${pln(w.price_start)}</td><td>${pln(w.price_last)} <small style="color:#8ba3d4">${escapeHtml(w.portal_last || '')}</small></td><td>${w.drops}</td><td>${when(w.created_at)}</td></tr>`).join('') || '<tr><td colspan="6" style="color:#8ba3d4">Nikt jeszcze nie obserwuje ceny.</td></tr>';
+    document.getElementById('featAi').innerHTML = d.ai_search.recent.map(x => `<tr><td>${when(x.ts)}</td><td>${x.who}</td><td>${escapeHtml(x.q || '')}</td>
+      <td><small>${[x.city, x.type, x.price_max ? 'do ' + pln(x.price_max) : '', (x.keywords || []).length ? '📝 ' + x.keywords.join(', ') : ''].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</small></td></tr>`).join('') || '<tr><td colspan="4" style="color:#8ba3d4">Brak zapytań.</td></tr>';
+    document.getElementById('featAg').innerHTML = d.agency_names.map(a => `<tr><td>${escapeHtml(a.source)}</td><td>${a.total.toLocaleString('pl-PL')}</td><td>${a.named.toLocaleString('pl-PL')}</td><td>${a.total ? Math.round(a.named / a.total * 100) : 0}%</td></tr>`).join('');
+  } catch (e) { document.getElementById('featMsg').textContent = 'Błąd: ' + (e.message || e); }
+}
+async function runJob(path, label){
+  const m = document.getElementById('featMsg'); m.textContent = '⏳ ' + label + '…';
+  try {
+    const r = await fetch(API_BASE + path, { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken() } });
+    const d = await r.json();
+    m.textContent = `✅ ${label}: ${JSON.stringify(d)}`; loadFeatures();
+  } catch (e) { m.textContent = '❌ ' + (e.message || e); }
+}
 async function loadStats(){
   try {
     const s = await api('/admin/stats');

@@ -1300,8 +1300,7 @@ async function initCrmBar(offerId) {
         const data = await res.json().catch(() => ({}));
         if (status === 'own' && data.watch) {
           const w = data.watch;
-          const badge = el('crmCurrentBadge');
-          if (badge) badge.insertAdjacentHTML('beforeend', `<div style="margin-top:6px;font-size:11px;color:#fde047;line-height:1.45">⭐ Pilnujemy wyłączności: dziś ${w.copies_now} ogłoszeń · ${w.agents_now} pośredników${w.owner_too ? ' · 👤 właściciel ogłasza też sam' : ''}. Gdy pojawi się nowa kopia — e-mail na <b>${w.email}</b>.</div>`);
+          updateCrmBadge({ status, note, marked_by: user.email, watch: { copies: w.copies_now, agents: w.agents_now, owner_too: w.owner_too, email: w.email, price_min: w.price_min, price_max: w.price_max, agencies: w.agencies, portals: w.portals, notified: 0 } });
         }
         return true;
       }
@@ -1350,7 +1349,21 @@ function updateCrmBadge(cur) {
   const lab = CRM_LABELS[cur.status] || cur.status;
   const who = cur.marked_by ? ` · przez ${cur.marked_by}` : '';
   const noteHtml = cur.note ? `<div style="margin-top:4px;font-size:11px;color:#c5d0e6;font-style:italic">📝 ${cur.note.replace(/</g,'&lt;')}</div>` : '';
-  badge.innerHTML = `<span style="color:#FFB800;font-weight:800">${lab}</span><span style="color:#8ba3d4">${who}</span>${noteHtml}`;
+  badge.innerHTML = `<span style="color:#FFB800;font-weight:800">${lab}</span><span style="color:#8ba3d4">${who}</span>${noteHtml}${crmWatchHtml(cur)}`;
+}
+// ⭐ Moja oferta → dane wyłączności: ile ogłoszeń, ilu pośredników, ceny, biura, alerty
+function crmWatchHtml(cur) {
+  if (!cur || cur.status !== 'own') return '';
+  const w = cur.watch;
+  const esc = (x) => String(x || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const pln = (n) => Number(n || 0).toLocaleString('pl-PL') + ' zł';
+  if (!w) return `<div style="margin-top:6px;font-size:11px;color:#fde047;line-height:1.45">⭐ Pilnujemy wyłączności — dane o kopiach pojawią się po pierwszym przeliczeniu (do 24 h). Szczegóły w bloku „🔁 Duplikaty tej oferty” obok.</div>`;
+  const solo = (w.copies || 1) <= 1;
+  const price = w.price_min && w.price_max ? (w.price_min === w.price_max ? pln(w.price_min) : `${pln(w.price_min)} – ${pln(w.price_max)}`) : '';
+  return `<div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;line-height:1.5;background:${solo ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)'};border:1px solid ${solo ? 'rgba(74,222,128,0.4)' : 'rgba(248,113,113,0.4)'};color:${solo ? '#bbf7d0' : '#fecaca'}">
+    ⭐ <b>${solo ? 'Wyłączność OK — tylko Twoje ogłoszenie' : 'Wyłączność zagrożona'}</b> · 🔁 ${w.copies || 1} ${(w.copies || 1) === 1 ? 'ogłoszenie' : 'ogłoszeń'} · 🏢 ${w.agents || 0} ${w.agents === 1 ? 'pośrednik' : 'pośredników'}${w.owner_too ? ' · 👤 właściciel ogłasza też sam' : ''}${price ? ' · 💰 ' + price : ''}
+    ${(w.agencies || []).length ? `<div>🏢 Biura: ${w.agencies.map(esc).join(', ')}</div>` : ''}${(w.portals || []).length ? `<div>📌 Portale: ${w.portals.map(esc).join(', ')}</div>` : ''}
+    <div style="color:#8ba3d4;font-size:10px;margin-top:2px">${w.notified ? `📧 wysłano ${w.notified} ${w.notified === 1 ? 'alert' : 'alerty'} · ` : ''}e-mail gdy pojawi się nowa kopia → ${esc(w.email || '')}</div></div>`;
 }
 
 function showError() {

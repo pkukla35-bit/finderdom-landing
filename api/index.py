@@ -5332,9 +5332,10 @@ class FollowupReq(BaseModel):
     subject: str = Field(min_length=3, max_length=200)
     limit: int = Field(default=8, ge=1, le=15)
     dry_run: bool = True
+    since: Optional[str] = None  # ISO: wyślij ponownie także tym, którzy dostali ten szablon PRZED tą datą (nowa kampania)
 
 
-async def _followup_recipients(db, key: str) -> List[str]:
+async def _followup_recipients(db, key: str, since: Optional[datetime] = None) -> List[str]:
     """Adresy, które dostały wcześniej dowolny szablon (ok), minus: lista „nie”, wypisani, ci którzy odpisali (nie auto-odpowiedź),
     i ci którzy już dostali ten szablon (lub próba wysyłki się nie udała — nie ponawiamy automatycznie)."""
     sent_all = await db.manual_mail_log.distinct("email", {"ok": True})
@@ -5342,7 +5343,11 @@ async def _followup_recipients(db, key: str) -> List[str]:
         return []
     optout = set(await db.manual_mail_optout.distinct("email"))
     replied = set(await db.manual_mail_log.distinct("email", {"replied_at": {"$ne": None}, "reply_auto": {"$ne": True}}))
-    got_this = set(await db.manual_mail_log.distinct("email", {"template": key}))  # także nieudane — nie ponawiamy w pętli
+    # since = ponowna kampania tym samym szablonem: liczą się tylko wysyłki od tego momentu (wcześniejsze NIE wykluczają)
+    got_q: dict = {"template": key}
+    if since:
+        got_q["sent_at"] = {"$gte": since}
+    got_this = set(await db.manual_mail_log.distinct("email", got_q))  # także nieudane — nie ponawiamy w pętli
     users_out = set(await db.users.distinct("email", {"marketing_opt_out": True}))
     return sorted(e for e in sent_all if e not in optout and e not in replied and e not in got_this and e not in users_out)
 
@@ -5356,7 +5361,15 @@ async def admin_send_followup(body: FollowupReq, admin: dict = Depends(require_a
     if not path.exists() or key == "index":
         raise HTTPException(404, "Nie ma takiego szablonu")
     db = database()
-    recipients = await _followup_recipients(db, key)
+    since_dt = None
+    if body.since:
+        try:
+            since_dt = datetime.fromisoformat(body.since.replace("Z", "+00:00"))
+            if since_dt.tzinfo is None:
+                since_dt = since_dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            raise HTTPException(400, "since: zły format daty (ISO)")
+    recipients = await _followup_recipients(db, key, since_dt)
     if body.dry_run:
         return {"dry_run": True, "remaining": len(recipients), "sample": recipients[:10]}
     if not (await _smtp_cfg() or await _email_key()):

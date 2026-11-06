@@ -1969,7 +1969,7 @@ function renderPage() {
             <span class="pm2">${l.price_pm2_display}</span>
           </div>
           ${l.variants_count ? `<div style="font-size:11px;color:#8ba3d4;margin-top:2px">🔁 +${l.variants_count} ${l.variants_count === 1 ? 'podobna oferta' : (l.variants_count < 5 ? 'podobne oferty' : 'podobnych ofert')} (ta sama inwestycja / ogłoszenie)</div>` : ''}
-          ${(l.transaction !== 'wynajem' && window.FD_rataOd && FD_rataOd(l.price)) ? `<div class="card-rata">💳 rata od ~${Math.round(FD_rataOd(l.price)).toLocaleString('pl-PL')} zł/mies.</div>` : ''}
+          ${(l.transaction !== 'wynajem' && !window.CRM_ENABLED && !window.CRM_DEMO && window.FD_rataOd && FD_rataOd(l.price)) ? `<div class="card-rata">💳 rata od ~${Math.round(FD_rataOd(l.price)).toLocaleString('pl-PL')} zł/mies.</div>` : ''}
           ${phoneHtml}
           ${(window.CRM_DEMO || window.CRM_REAL) ? ((l.dupes_count || 1) > 1
             ? `<div class="card-dupes" data-dupes-id="${l.id}" title="Kliknij — lista wszystkich ogłoszeń tej nieruchomości">🔁 ${l.dupes_count} ogłoszeń · <b>${l.agents_count} ${l.agents_count === 1 ? 'pośrednik' : (l.agents_count >= 2 && l.agents_count <= 4 ? 'pośredników' : 'pośredników')}</b>${l.has_owner_copy ? ' · <span style="color:#86efac">👤 właściciel ogłasza też sam</span>' : ''}</div>`

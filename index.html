@@ -135,7 +135,22 @@ gtag('set', 'url_passthrough', false);
   .stat .lbl{font-size:11px;color:#8ba3d4;text-transform:uppercase;letter-spacing:1.5px;font-weight:700}
 
   /* Features */
-  .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;max-width:1000px;width:100%;margin-bottom:72px;animation:fadeIn 1s ease 0.4s both}
+  .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;max-width:1000px;width:100%;margin-bottom:48px;animation:fadeIn 1s ease 0.4s both}
+  /* 🏢 Dla biur — nowości */
+  .biura-strip{max-width:1000px;width:100%;margin:0 auto 72px;background:linear-gradient(135deg,rgba(96,165,250,0.12),rgba(250,204,21,0.08));border:1px solid rgba(96,165,250,0.35);border-radius:28px;padding:36px 32px;text-align:left}
+  .biura-head{text-align:center;margin-bottom:26px}
+  .biura-tag{display:inline-block;background:rgba(96,165,250,0.18);border:1px solid rgba(96,165,250,0.45);color:#93c5fd;font-size:11px;font-weight:900;letter-spacing:1px;padding:6px 12px;border-radius:100px;margin-bottom:12px}
+  .biura-head h2{font-size:clamp(22px,3.2vw,32px);font-weight:900;color:#fff;margin:0 0 8px;line-height:1.2}
+  .biura-head p{color:#c5d0e6;font-size:15px;margin:0}
+  .biura-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}
+  .biura-item{background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:18px 16px}
+  .biura-ico{font-size:26px;margin-bottom:8px}
+  .biura-item h4{color:#fff;font-size:15px;font-weight:800;margin:0 0 6px}
+  .biura-item p{color:#c5d0e6;font-size:13px;line-height:1.5;margin:0}
+  .biura-cta{display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:24px}
+  .biura-btn{background:linear-gradient(135deg,#60a5fa,#3b82f6);color:#fff;font-weight:900;padding:14px 24px;border-radius:12px;text-decoration:none;font-size:14px;min-height:48px;display:inline-flex;align-items:center}
+  .biura-link{color:#FFB800;font-weight:800;font-size:14px;text-decoration:none}
+  @media(max-width:640px){.biura-strip{padding:24px 18px}}
   .feat{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);padding:28px 24px;border-radius:20px;text-align:left;transition:all 0.3s ease;backdrop-filter:blur(10px)}
   .feat:hover{transform:translateY(-4px);border-color:rgba(255,184,0,0.3);background:rgba(255,255,255,0.06)}
   .feat .icon-wrap{width:52px;height:52px;background:linear-gradient(135deg,rgba(255,184,0,0.2),rgba(255,184,0,0.05));border-radius:14px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;font-size:26px}
@@ -354,19 +369,43 @@ gtag('set', 'url_passthrough', false);
       <p>Na każdej ofercie — karuzela podobnych mieszkań w wybranym przez Ciebie promieniu (1-100 km). Ty ustawiasz zasięg, my znajdujemy oferty.</p>
     </div>
     <div class="feat">
-      <div class="icon-wrap">🔔</div>
-      <h3>Powiadomienia w czasie rzeczywistym</h3>
-      <p>Ustaw kryteria i dostawaj e-mail lub push gdy pojawi się pasująca oferta. Zanim inni zdążą zareagować.</p>
+      <div class="icon-wrap">🤖</div>
+      <h3>Wyszukiwanie AI — bez klikania filtrów</h3>
+      <p>Napisz „3 pokoje do 700 tys. pod Krakowem, z balkonem, od właściciela” — AI sama ustawi miasto, promień, cenę, pokoje i cechy z opisu. Wyniki od razu.</p>
     </div>
     <div class="feat">
       <div class="icon-wrap">📊</div>
-      <h3>Historia cen — złap obniżkę</h3>
-      <p>Widzisz każdą zmianę ceny oferty. Sprzedawca zszedł z ceny? Wiesz o tym natychmiast — czas negocjować.</p>
+      <h3>Historia ceny na wszystkich portalach</h3>
+      <p>Jedna nieruchomość, kilka ogłoszeń — pokazujemy, jak jej cena zmieniała się w czasie na każdym portalu. Sprzedający zszedł z ceny? Czas negocjować.</p>
     </div>
     <div class="feat">
-      <div class="icon-wrap">🎯</div>
-      <h3>Zaawansowane filtry</h3>
-      <p>Powierzchnia, cena, dzielnica, piętro, rok budowy, balkon — precyzyjne filtry we wszystkich portalach naraz.</p>
+      <div class="icon-wrap">🗄️</div>
+      <h3>Archiwum ofert prywatnych + telefony</h3>
+      <p>Oferty od właścicieli, które zniknęły z portali, zostają u nas 90 dni — z numerem telefonu. Zadzwoń, zanim właściciel trafi do pośrednika.</p>
+    </div>
+    <div class="feat">
+      <div class="icon-wrap">🔔</div>
+      <h3>Alerty e-mail o nowych ofertach</h3>
+      <p>Ustaw kryteria i dostawaj e-mail, gdy pojawi się pasująca oferta. Zanim inni zdążą zareagować.</p>
+    </div>
+  </div>
+
+  <!-- 🏢 Dla biur nieruchomości — nowości -->
+  <div class="biura-strip">
+    <div class="biura-head">
+      <span class="biura-tag">🏢 DLA BIUR NIERUCHOMOŚCI · NOWOŚCI</span>
+      <h2>Widok dla biur: duplikaty, konkurencja i wyłączność pod kontrolą</h2>
+      <p>Przełącz wyszukiwarkę na „Dla biur” i zobacz to, czego nie pokaże żaden portal.</p>
+    </div>
+    <div class="biura-grid">
+      <div class="biura-item"><div class="biura-ico">🔁</div><h4>Duplikaty ofert</h4><p>Na karcie i na stronie oferty: ile razy ta sama nieruchomość jest ogłoszona, na których portalach i w jakich cenach.</p></div>
+      <div class="biura-item"><div class="biura-ico">🏢</div><h4>Ilu pośredników ją ma</h4><p>Liczymy biura przy każdej ofercie i pokazujemy ich nazwy. Jeden pośrednik = szansa na wyłączność; pięciu = nie trać czasu.</p></div>
+      <div class="biura-item"><div class="biura-ico">⭐</div><h4>Alert wyłączności</h4><p>Oznacz ofertę „Moja oferta” w CRM — dostaniesz e-mail, gdy pojawi się u innego pośrednika albo właściciel wystawi ją sam.</p></div>
+      <div class="biura-item"><div class="biura-ico">📞</div><h4>Telefony właścicieli</h4><p>Pełne numery przy ofertach prywatnych i w 90-dniowym archiwum wygasłych ogłoszeń — tylko w planach dla biur.</p></div>
+    </div>
+    <div class="biura-cta">
+      <a href="/szukaj?widok=biuro" class="biura-btn">🏢 Otwórz widok dla biur</a>
+      <a href="/dla-biur" class="biura-link">Plany od 90 zł/mies · 7 dni za darmo dla firm z NIP →</a>
     </div>
   </div>
 
@@ -704,7 +743,7 @@ gtag('set', 'url_passthrough', false);
     <div class="gift">🎁</div>
     <div class="promo">Bonus dla firm</div>
     <h2>Firmy z NIP: 7 dni Premium Firmowy za darmo</h2>
-    <p>Zakładasz konto firmowe? Automatycznie dostajesz <strong>7 dni pełnego dostępu do Premium Firmowy</strong> (wartość 199 zł) — z CRM, TeamMode dla agentów, dystrybucją leadów i eksportem klientów. Bez karty, bez zobowiązań.</p>
+    <p>Zakładasz konto firmowe? Automatycznie dostajesz <strong>7 dni pełnego dostępu do Premium Firmowy</strong> (wartość 199 zł) — duplikaty ofert i liczba pośredników, alert wyłączności, telefony właścicieli z archiwum, CRM dla zespołu i wyceny PDF bez limitu. Bez karty, bez zobowiązań.</p>
     <form class="form" id="newsletterForm">
       <input type="email" name="email" required placeholder="twoj@email.pl" autocomplete="email">
       <button type="submit" id="submitBtn">ZAPISZ MNIE</button>
@@ -722,17 +761,11 @@ gtag('set', 'url_passthrough', false);
       <span class="portal-chip">Morizon</span>
       <span class="portal-chip">Gratka</span>
       <span class="portal-chip">Nieruchomosci-online</span>
-      <span class="portal-chip">Domy.pl</span>
-      <span class="portal-chip">Szybko.pl</span>
-      <span class="portal-chip">Oferty-dom</span>
-      <span class="portal-chip">Lento</span>
-      <span class="portal-chip">Oferty.net</span>
+      <span class="portal-chip">Domiporta</span>
       <span class="portal-chip">Adresowo</span>
-      <span class="portal-chip">Sprzedajemy.pl</span>
-      <span class="portal-chip">Trovit</span>
-      <span class="portal-chip">Mitula</span>
-      <span class="portal-chip">Allegro</span>
-      <span class="portal-chip">+ wiele innych</span>
+      <span class="portal-chip">Gethome</span>
+      <span class="portal-chip">OdWłaściciela.pl</span>
+      <span class="portal-chip">🔨 ListaPrzetargow (przetargi, licytacje, syndyk)</span>
     </div>
   </div>
 

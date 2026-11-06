@@ -3744,6 +3744,53 @@ Pozdrawiam,
 Paweł Kukla
 FinderDom.pl · kontakt@finderdom.pl""",
     },
+    "bnew": {
+        "audience": "business", "day": 0, "auto": False, "name": "Marketing — NOWOŚCI dla biur: duplikaty, ilu pośredników, alert wyłączności, historia cen",
+        "subject": "Ilu pośredników ma tę samą ofertę? Nowy widok dla biur w FinderDom",
+        "title": "Duplikaty, konkurencja i wyłączność — teraz widać to przy każdej ofercie",
+        "intro": "Dzień dobry, piszę z FinderDom.pl. Przez ostatnie tygodnie dodaliśmy do wyszukiwarki pięć rzeczy, o które biura prosiły najczęściej. Wszystko działa w widoku „Dla biur” (przełącznik nad listą ofert) i na stronie każdej oferty:",
+        "bullets": [
+            "<b>🔁 Duplikaty ofert</b> — ile razy ta sama nieruchomość jest ogłoszona, na których portalach i w jakich cenach (z różnicą do najniższej).",
+            "<b>🏢 Ilu pośredników ją ma</b> — liczba biur przy każdej ofercie i ich nazwy. Jeden pośrednik = szansa na wyłączność; pięciu = szkoda czasu.",
+            "<b>⭐ Alert wyłączności</b> — oznacz ofertę „Moja oferta” w CRM, a dostaniesz e-mail, gdy pojawi się u innego pośrednika albo właściciel wystawi ją sam.",
+            "<b>📈 Historia ceny na wszystkich portalach</b> — kiedy i na którym portalu cena spadła lub wzrosła. Argument na spotkaniu z właścicielem.",
+            "<b>🤖 Wyszukiwanie AI</b> — wpisz „dom do 1,2 mln 25 km od Warszawy, od właściciela, bez zawyżonych” i filtry ustawią się same. Do tego <b>📞 telefony właścicieli</b> i <b>🗄️ 90-dniowe archiwum</b> wygasłych ofert prywatnych.",
+        ],
+        "cta": "🏢 Zobacz widok dla biur", "url": "/szukaj?widok=biuro",
+        "ps": "Biuro jednoosobowe 90 zł/mies, Plan Firmowy 199 zł/mies za 4 loginy — 7 dni za darmo dla firm z NIP, bez karty. Jeśli nie życzą sobie Państwo kolejnych wiadomości, wystarczy odpowiedzieć „nie”. Pozdrawiam, Paweł Kukla, FinderDom.pl",
+        "text": """Dzień dobry,
+
+piszę z FinderDom.pl — wyszukiwarki ogłoszeń nieruchomości ze wszystkich portali. Dodaliśmy pięć rzeczy, o które biura prosiły najczęściej — wszystko w widoku „Dla biur” i na stronie każdej oferty:
+
+• 🔁 Duplikaty ofert — ile razy ta sama nieruchomość jest ogłoszona, na których portalach i w jakich cenach.
+• 🏢 Ilu pośredników ją ma — liczba biur przy każdej ofercie i ich nazwy.
+• ⭐ Alert wyłączności — oznacz ofertę „Moja oferta”, a dostaniesz e-mail, gdy pojawi się u innego pośrednika albo właściciel wystawi ją sam.
+• 📈 Historia ceny na wszystkich portalach — kiedy i gdzie cena spadła lub wzrosła.
+• 🤖 Wyszukiwanie AI — opisz nieruchomość własnymi słowami, filtry ustawią się same. Do tego telefony właścicieli i 90-dniowe archiwum wygasłych ofert prywatnych.
+
+Widok dla biur: https://www.finderdom.pl/szukaj?widok=biuro
+Plany: Biuro jednoosobowe 90 zł/mies, Firmowy 199 zł/mies (4 loginy) — 7 dni za darmo dla firm z NIP, bez karty: https://www.finderdom.pl/dla-biur
+
+Jeśli nie życzą sobie Państwo kolejnych wiadomości, wystarczy odpowiedzieć „nie”.
+
+Pozdrawiam,
+Paweł Kukla
+FinderDom.pl · kontakt@finderdom.pl""",
+    },
+    "pnew": {
+        "audience": "personal", "day": 0, "auto": False, "name": "Marketing — NOWOŚCI: Wyszukiwanie AI, historia cen, archiwum prywatne",
+        "subject": "Nowość: opisz mieszkanie własnymi słowami — AI ustawi filtry za Ciebie",
+        "title": "Trzy nowości, które skracają szukanie do jednego zdania",
+        "intro": "W FinderDom pojawiło się kilka rzeczy, które warto znać, jeśli szukasz mieszkania, domu lub działki:",
+        "bullets": [
+            "<b>🤖 Wyszukiwanie AI</b> — wpisz np. „3 pokoje do 700 tys. w Krakowie, z balkonem, od właściciela”, a miasto, cena, pokoje i cechy z opisu ustawią się same. Bez klikania filtrów.",
+            "<b>📈 Historia ceny</b> — ta sama nieruchomość bywa na kilku portalach w różnych cenach. Pokazujemy najniższą i to, jak cena zmieniała się w czasie.",
+            "<b>🗄️ Archiwum ofert prywatnych</b> — ogłoszenia od właścicieli, które zniknęły z portali, zostają u nas 90 dni (w planie Osobistym — z numerem telefonu).",
+            "<b>🔨 Przetargi i licytacje</b> — oferty komornicze, syndyka i przetargi gmin z ceną wywoławczą i terminem, w tej samej wyszukiwarce.",
+        ],
+        "cta": "✨ Wypróbuj Wyszukiwanie AI", "url": "/szukaj",
+        "ps": "Plan Osobisty 45 zł za 30 dni: pełne wyniki, linki do ogłoszeń, analiza AI ceny, archiwum z telefonami i wyceny PDF bez limitu. Bez umowy, anulujesz kiedy chcesz.",
+    },
     "b3": {
         "audience": "business", "day": 12, "auto": False, "name": "Marketing — Po trialu: wróć do nas",
         "subject": "Konkurencja już widzi oferty bezpośrednie z ostatnich 24h. A Ty?",

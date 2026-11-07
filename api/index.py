@@ -4696,10 +4696,11 @@ def _derive_city_from_record(doc: dict, ascii_map: dict, sorted_names: list) -> 
         if ms:
             slug = ms.group(1)
         tokens = [t for t in slug.split("-") if t and not t.isdigit()]
-        for n in (3, 2, 1):
-            for i in range(len(tokens) - n + 1):
+        # slug Gratki: {typ}-{miasto|powiat}-{dzielnica/gmina}-{ulica} → pierwsze (najbardziej z lewej) znane miasto = miasto oferty
+        for i in range(len(tokens)):
+            for n in (3, 2, 1):
                 cand = "-".join(tokens[i:i + n])
-                if cand in ascii_map and len(cand) >= 4:
+                if n <= len(tokens) - i and cand in ascii_map and len(cand) >= 4:
                     cty = ascii_map[cand]
                     dist = place if _is_place(place) and _normalize_city_name(place) != cand else (district if _is_place(district) and district != cty else None)
                     return cty, dist
@@ -4739,7 +4740,9 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
     async for r in coll.aggregate([{"$match": {"city": {"$type": "string", "$nin": sorted(_VOIVODESHIPS)}}}, {"$group": {"_id": "$city", "n": {"$sum": 1}}},
                                    {"$match": {"n": {"$gte": 15}}}, {"$limit": 5000}]):
         name = str(r["_id"]).strip()
-        if name and name[:1].isupper() and name.lower() not in _VOIVODESHIPS:
+        # pomijamy „miasta”, które są nazwami powiatów z importów Morizon/Gratka (Krakowski, Wroclawski, Klodzki) i dzielnice typu „Stare Miasto”
+        if name and name[:1].isupper() and name.lower() not in _VOIVODESHIPS and not re.search(r"(?:ski|cki|zki)$", name, re.I) \
+                and name.lower() not in ("stare miasto", "śródmieście", "srodmiescie", "centrum", "nowe miasto", "osiedle"):
             ascii_map.setdefault(_normalize_city_name(name), name)
     sorted_names = sorted(ascii_map.values(), key=len, reverse=True)
     q: dict = {"city": {"$in": sorted(_VOIVODESHIPS)}, "city_unresolved": {"$ne": True}}

@@ -2364,6 +2364,13 @@ def _dup_match(doc: dict, d: dict):
     d_places = {_dup_norm(d.get("city")), dd} - {""} - _VOIVODESHIPS
     if d_dist and dd and d_dist != dd and not (doc_places & d_places):
         return False
+    # Rekord bez miejscowości (city = województwo): bez pewnego potwierdzenia łączymy tylko przez zgodne opisy — nigdy „na oko” po cenie i metrażu
+    if not doc_places or not d_places:
+        if len(str(doc.get("description") or "")) >= 80 and len(str(d.get("description") or "")) >= 80:
+            a_t, b_t = _dup_desc_tokens(doc), _dup_desc_tokens(d)
+            shared = a_t & b_t
+            return len(shared) >= 5 and len(shared) / max(1, min(len(a_t), len(b_t))) >= 0.25
+        return False
     if is_rental:
         if abs(d_area - area) > 0.6:
             return False
@@ -2381,7 +2388,11 @@ def _dup_match(doc: dict, d: dict):
         return True
     if d_tokens & _dup_tokens(d.get("title")):
         return True
-    return base_type not in ("dom", "działka", "dzialka") and not (d_dist or dd)
+    # Mieszkanie, obie strony bez dzielnicy i bez opisów: tylko identyczna cena albo identyczny metraż przy znanej, zgodnej liczbie pokoi
+    if base_type not in ("dom", "działka", "dzialka") and not (d_dist or dd):
+        rooms_known = r1 not in (None, "", 0) and r2 not in (None, "", 0)
+        return abs(_num_or_zero(d.get("price")) - price) < 1 or (rooms_known and abs(d_area - area) < 0.02)
+    return False
 
 
 

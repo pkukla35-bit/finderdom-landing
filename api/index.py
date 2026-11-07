@@ -4675,6 +4675,10 @@ async def admin_github_job_log(job_id: int, tail: int = 12000, admin: dict = Dep
     return {"job_id": job_id, "length": len(txt), "tail": txt[-max(1000, min(tail, 60000)):]}
 
 
+_GRATKA_TYPE_TOKENS = {"przemysl", "obiekt", "biuro", "dom", "mieszkanie", "dzialka", "lokal", "handel", "uslugi", "hale", "magazyny", "garaz", "pokoj",
+                       "kawalerka", "inwestycja", "hala", "magazyn", "biurowiec", "centrum", "pensjonat", "hotel", "kamienica", "gospodarstwo"}
+
+
 def _derive_city_from_record(doc: dict, ascii_map: dict, sorted_names: list) -> Optional[tuple]:
     """Stare importy zapisały `city` = województwo („małopolskie”) — oferta znika z wyszukiwania po mieście i z duplikatów.
     Odzyskujemy miejscowość z danych, które rekord ma: NOL → district (tam jest miejscowość); Gratka/Morizon → slug URL (znane miasto)
@@ -4700,7 +4704,7 @@ def _derive_city_from_record(doc: dict, ascii_map: dict, sorted_names: list) -> 
         for i in range(len(tokens)):
             for n in (3, 2, 1):
                 cand = "-".join(tokens[i:i + n])
-                if n <= len(tokens) - i and cand in ascii_map and len(cand) >= 4:
+                if n <= len(tokens) - i and cand in ascii_map and len(cand) >= 4 and cand not in _GRATKA_TYPE_TOKENS:
                     cty = ascii_map[cand]
                     dist = place if _is_place(place) and _normalize_city_name(place) != cand else (district if _is_place(district) and district != cty else None)
                     return cty, dist
@@ -4741,7 +4745,7 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
                                    {"$match": {"n": {"$gte": 15}}}, {"$limit": 5000}]):
         name = str(r["_id"]).strip()
         # pomijamy „miasta”, które są nazwami powiatów z importów Morizon/Gratka (Krakowski, Wroclawski, Klodzki) i dzielnice typu „Stare Miasto”
-        if name and name[:1].isupper() and name.lower() not in _VOIVODESHIPS and not re.search(r"(?:ski|cki|zki)$", name, re.I) \
+        if name and name[:1].isupper() and name.lower() not in _VOIVODESHIPS and not re.search(r"(?:ski|cki|zki)$", name, re.I) and not re.search(r"-[a-z]", name) \
                 and name.lower() not in ("stare miasto", "śródmieście", "srodmiescie", "centrum", "nowe miasto", "osiedle"):
             ascii_map.setdefault(_normalize_city_name(name), name)
     sorted_names = sorted(ascii_map.values(), key=len, reverse=True)

@@ -41,7 +41,7 @@ from fastapi.responses import StreamingResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
-from pymongo import ReturnDocument
+from pymongo import ReturnDocument, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
 # --- Config ---
@@ -2437,7 +2437,7 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
         "price": {"$gte": price * 0.98, "$lte": price * 1.02},
         "area_m2": {"$gte": area * 0.97, "$lte": area * 1.03},
     }
-    and_parts = [{"$or": loc_or}]
+    and_parts = [{"$or": loc_or}] if place_names or len(loc_or) > 1 else []  # oferta bez miejscowości i GPS: szukamy po całej bazie (decyduje _dup_match: tylko pewne potwierdzenia)
     if base_type:
         q["type"] = {"$regex": "^" + _build_diacritic_regex(base_type), "$options": "i"}
     rooms = doc.get("rooms")
@@ -4673,6 +4673,107 @@ async def admin_github_job_log(job_id: int, tail: int = 12000, admin: dict = Dep
         raise HTTPException(502, f"GitHub {r.status_code}")
     txt = r.text
     return {"job_id": job_id, "length": len(txt), "tail": txt[-max(1000, min(tail, 60000)):]}
+
+
+def _derive_city_from_record(doc: dict, ascii_map: dict, sorted_names: list) -> Optional[tuple]:
+    """Stare importy zapisały `city` = województwo („małopolskie”) — oferta znika z wyszukiwania po mieście i z duplikatów.
+    Odzyskujemy miejscowość z danych, które rekord ma: NOL → district (tam jest miejscowość); Gratka/Morizon → slug URL (znane miasto)
+    + tytuł „…, 139 m² Dojazdów, Żonkilowa”; ListaPrzetargów → tytuł „Przetarg: Działka Radocza, małopolskie”;
+    GPS → najbliższe znane miasto (≤ 7 km); na końcu nazwa znanego miasta w tytule. Zwraca (city, district) albo None."""
+    src = str(doc.get("source") or "").lower()
+    title = str(doc.get("title") or "").strip()
+    district = str(doc.get("district") or "").strip()
+    url = str(doc.get("url") or "")
+    def _is_place(v: str) -> bool:
+        return bool(v) and v.lower() not in _VOIVODESHIPS and v[:1].isupper() and len(v) >= 3
+    if src == "nol" and _is_place(district):
+        return district, None
+    if src in ("gratka", "morizon") or "gratka.pl" in url or "morizon.pl" in url:
+        m = re.search(r"m²\s+([^,|]+?)(?:,\s*([^,|]+))?\s*$", title)
+        place = m.group(1).strip() if m else ""
+        slug = ""
+        ms = re.search(r"gratka\.pl/nieruchomosci/([^/]+)/", url) or re.search(r"morizon\.pl/oferta/([^/?#]+)", url)
+        if ms:
+            slug = ms.group(1)
+        tokens = [t for t in slug.split("-") if t and not t.isdigit()]
+        for n in (3, 2, 1):
+            for i in range(len(tokens) - n + 1):
+                cand = "-".join(tokens[i:i + n])
+                if cand in ascii_map and len(cand) >= 4:
+                    cty = ascii_map[cand]
+                    dist = place if _is_place(place) and _normalize_city_name(place) != cand else (district if _is_place(district) and district != cty else None)
+                    return cty, dist
+        if _is_place(place):
+            return place, None
+        if _is_place(district):
+            return district, None
+    if src == "listaprzetargow":
+        m = re.match(r"^[^:]+:\s*\S+\s+(.+?),\s*", title)
+        if m and _is_place(m.group(1).strip()):
+            return m.group(1).strip(), None
+    try:
+        la, ln = float(doc.get("lat")), float(doc.get("lng"))
+        best, best_d = None, 7.0
+        for key, (clat, clng) in CITY_COORDS.items():
+            dkm = 2 * 6371 * math.asin(math.sqrt(math.sin(math.radians(clat - la) / 2) ** 2 + math.cos(math.radians(la)) * math.cos(math.radians(clat)) * math.sin(math.radians(clng - ln) / 2) ** 2))
+            if dkm < best_d and key in ascii_map:
+                best, best_d = ascii_map[key], dkm
+        if best:
+            return best, (district if _is_place(district) and district != best else None)
+    except Exception:
+        pass
+    low = title.lower()
+    for name in sorted_names:
+        if len(name) >= 4 and re.search(r"(?<![a-ząćęłńóśźż])" + re.escape(name.lower()) + r"(?![a-ząćęłńóśźż])", low):
+            return name, (district if _is_place(district) and district != name else None)
+    return None
+
+
+@app.post("/api/admin/backfill/city")
+async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "", admin: dict = Depends(require_admin)):
+    """Napraw `city` = województwo (stare importy). Paczkami (Vercel: 30 s). apply=1 zapisuje; inaczej tylko liczy i pokazuje próbki.
+    Rekordy, których nie da się rozpoznać, dostają `city_unresolved: true` (żeby nie wracać do nich w kolejnych paczkach)."""
+    db = database(); coll = db.listings
+    # słownik znanych miast: nazwy `city` z ≥ 15 ofertami (bez województw), klucz = ascii-slug
+    ascii_map: dict = {}
+    async for r in coll.aggregate([{"$match": {"city": {"$type": "string", "$nin": sorted(_VOIVODESHIPS)}}}, {"$group": {"_id": "$city", "n": {"$sum": 1}}},
+                                   {"$match": {"n": {"$gte": 15}}}, {"$limit": 5000}]):
+        name = str(r["_id"]).strip()
+        if name and name[:1].isupper() and name.lower() not in _VOIVODESHIPS:
+            ascii_map.setdefault(_normalize_city_name(name), name)
+    sorted_names = sorted(ascii_map.values(), key=len, reverse=True)
+    q: dict = {"city": {"$in": sorted(_VOIVODESHIPS)}, "city_unresolved": {"$ne": True}}
+    if source:
+        q["source"] = source
+    proj = {"_id": 1, "source": 1, "title": 1, "district": 1, "url": 1, "lat": 1, "lng": 1, "city": 1}
+    docs = [d async for d in coll.find(q, proj).limit(max(1, min(limit, 5000)))]
+    remaining = await coll.count_documents(q)
+    ups, unresolved, samples, by_src = [], [], [], {}
+    for d in docs:
+        res = _derive_city_from_record(d, ascii_map, sorted_names)
+        if res:
+            cty, dist = res
+            upd = {"$set": {"city": cty, "voivodeship": d.get("city")}}
+            if dist:
+                upd["$set"]["district"] = dist
+            elif str(d.get("source") or "") == "nol":
+                upd["$unset"] = {"district": ""}
+            ups.append(UpdateOne({"_id": d["_id"]}, upd))
+            by_src[d.get("source")] = by_src.get(d.get("source"), 0) + 1
+            if len(samples) < 40:
+                samples.append({"src": d.get("source"), "title": (d.get("title") or "")[:70], "district_was": d.get("district"), "city": cty, "district": dist})
+        else:
+            unresolved.append(d["_id"])
+    out = {"scanned": len(docs), "remaining_before": remaining, "resolved": len(ups), "unresolved": len(unresolved), "by_source": by_src,
+           "known_cities": len(ascii_map), "samples": samples, "applied": bool(apply)}
+    if apply:
+        if ups:
+            for i in range(0, len(ups), 500):
+                await coll.bulk_write(ups[i:i + 500], ordered=False)
+        if unresolved:
+            await coll.update_many({"_id": {"$in": unresolved}}, {"$set": {"city_unresolved": True}})
+    return out
+
 
 
 class GithubDispatchReq(BaseModel):

@@ -2263,6 +2263,128 @@ def _price_timeline(copies: list) -> list:
     return ev[-40:]
 
 
+_VOIVODESHIPS = {"małopolskie", "mazowieckie", "śląskie", "wielkopolskie", "dolnośląskie", "pomorskie", "łódzkie", "lubelskie", "podkarpackie",
+                 "kujawsko-pomorskie", "zachodniopomorskie", "warmińsko-mazurskie", "lubuskie", "opolskie", "świętokrzyskie", "podlaskie"}
+_DUP_STOP = {"mieszkanie", "mieszkania", "sprzedaz", "sprzedaż", "wynajem", "wynajęcia", "wynajecia", "kawalerka", "pokoje", "pokój", "pokoi", "metrów", "metrow",
+             "centrum", "blisko", "nowe", "nowa", "super", "okazja", "piękne", "piekne", "przestronne", "komfortowe", "umeblowane", "balkonem", "garażem", "garazem"}
+_DUP_STOP_DESC = _DUP_STOP | {"nieruchomość", "nieruchomosci", "nieruchomości", "oferta", "oferty", "sprzedaży", "sprzedazy", "zapraszam", "zapraszamy", "kontakt",
+                              "działka", "dzialka", "działce", "dzialce", "budynek", "budynku", "kuchnia", "łazienka", "lazienka", "salon", "sypialnie", "sypialnia",
+                              "piętro", "pietro", "parter", "parterze", "garaż", "garaz", "ogród", "ogrod", "ogrodem", "taras", "tarasem", "balkon", "okolica", "okolicy",
+                              "cichej", "spokojnej", "zielonej", "idealne", "idealny", "świetna", "swietna", "lokalizacja", "lokalizacji", "komunikacja", "dojazd",
+                              "możliwość", "mozliwosc", "również", "rowniez", "został", "zostal", "która", "które", "który", "których", "którym", "bardzo",
+                              "wszystkie", "wszystkich", "stanie", "dobrym", "wysokim", "standard", "standardzie", "wykończenia", "wykonczenia", "ogrzewanie", "ogrzewania",
+                              "gazowe", "miejsce", "miejsca", "parkingowe", "jednorodzinny", "jednorodzinnych", "wolnostojący", "wolnostojacy", "szeregowy", "bliźniak",
+                              "kraków", "krakow", "krakowa", "krakowie", "warszawa", "warszawy", "warszawie", "wrocław", "wroclaw", "wrocławia", "wrocławiu", "poznań", "poznan",
+                              "poznania", "poznaniu", "gdańsk", "gdansk", "gdańska", "gdańsku", "łódź", "lodz", "łodzi", "lodzi"}
+
+
+def _dup_tokens(t) -> set:
+    return {w for w in re.findall(r"[a-ząćęłńóśźż]{5,}", str(t or "").lower()) if w not in _DUP_STOP}
+
+
+def _dup_norm(v) -> str:
+    s = str(v or "").strip().lower()
+    return "" if s in ("", "none", "null") else s
+
+
+def _dup_desc_tokens(d: dict) -> set:
+    t = (str(d.get("title") or "") + " " + str(d.get("description") or "")).lower()
+    words = {w for w in re.findall(r"[a-ząćęłńóśźż]{5,}", t) if w not in _DUP_STOP_DESC}
+    nums = {n for n in re.findall(r"\b\d{2,4}(?:[.,]\d{1,2})?\b", t)}  # rok budowy, ary, numer ulicy
+    return words | nums
+
+
+def _dup_ids(d: dict) -> set:
+    """Wszystkie identyfikatory rekordu: external_id + numery z url i sources[].url (Morizon mzn…, Gratka /ob/…)."""
+    out = set()
+    s = re.sub(r"\D", "", str(d.get("external_id") or ""))
+    if len(s) >= 6:
+        out.add(s)
+    for u in [d.get("url")] + [x.get("url") for x in (d.get("sources") or []) if isinstance(x, dict)]:
+        for m in re.findall(r"(\d{6,})", str(u or "")):
+            out.add(m)
+    return out
+
+
+def _dup_same_street(a: dict, b: dict) -> Optional[bool]:
+    sa, sb = _dup_norm(a.get("street")), _dup_norm(b.get("street"))
+    if not sa or not sb:
+        return None
+    sa = re.sub(r"^(ul\.?|al\.?|os\.?|pl\.?)\s*", "", sa); sb = re.sub(r"^(ul\.?|al\.?|os\.?|pl\.?)\s*", "", sb)
+    return sa.split()[0][:6] == sb.split()[0][:6]
+
+
+def _dup_gps_km(a: dict, b: dict) -> Optional[float]:
+    try:
+        la1, ln1, la2, ln2 = float(a["lat"]), float(a["lng"]), float(b["lat"]), float(b["lng"])
+    except Exception:
+        return None
+    return 2 * 6371 * math.asin(math.sqrt(math.sin(math.radians(la2 - la1) / 2) ** 2 + math.cos(math.radians(la1)) * math.cos(math.radians(la2)) * math.sin(math.radians(ln2 - ln1) / 2) ** 2))
+
+
+def _dup_match(doc: dict, d: dict):
+    """Czy `d` to ta sama nieruchomość co `doc`? False = inna; True = prawdopodobnie ta sama;
+    "strong" = na pewno ta sama (ten sam identyfikator / ulica / GPS < 300 m / identyczny tytuł / metraż z ułamkiem + cena)."""
+    price, area = _num_or_zero(doc.get("price")), _num_or_zero(doc.get("area_m2"))
+    is_rental = (doc.get("transaction_type") or "sprzedaz") == "wynajem"
+    base_type = str(doc.get("type") or "").lower().split()[0] if doc.get("type") else ""
+    d_dist, d_tokens = _dup_norm(doc.get("district")), _dup_tokens(doc.get("title"))
+    doc_places = {_dup_norm(doc.get("city")), d_dist} - {""} - _VOIVODESHIPS
+    # 1) Ten sam identyfikator (rekord Apify „mzn2048…” = rekord Morizon „2048…”, link do tej samej strony) → na pewno ta sama oferta
+    if _dup_ids(doc) & _dup_ids(d):
+        return "strong"
+    # 2) Twarde sprzeczności: inna ulica, inny rok budowy, GPS dalej niż 1 km, inna liczba pokoi
+    if _dup_same_street(doc, d) is False:
+        return False
+    y1, y2 = _num_or_zero(doc.get("build_year")), _num_or_zero(d.get("build_year"))
+    if y1 and y2 and abs(y1 - y2) > 1:
+        return False
+    km = _dup_gps_km(doc, d)
+    if km is not None and km > 1.0:
+        return False
+    r1, r2 = doc.get("rooms"), d.get("rooms")
+    try:
+        if r1 not in (None, "", 0) and r2 not in (None, "", 0) and int(float(r1)) != int(float(r2)):
+            return False
+    except Exception:
+        pass
+    dd = _dup_norm(d.get("district"))
+    d_area = _num_or_zero(d.get("area_m2"))
+    # 3) Pewne potwierdzenia (ważniejsze niż różnie wpisana dzielnica/gmina): ta sama ulica, GPS < 300 m, identyczny tytuł,
+    #    identyczny metraż z ułamkiem (138,84 m²) + identyczna cena
+    if _dup_same_street(doc, d) is True or (km is not None and km < 0.3):
+        return "strong"
+    nt = lambda t: re.sub(r"[^a-ząćęłńóśźż0-9]+", " ", str(t or "").lower()).strip()
+    doc_title = nt(doc.get("title"))
+    if len(doc_title) >= 15 and doc_title == nt(d.get("title")):
+        return "strong"
+    if abs(d_area - area) < 0.02 and abs(_num_or_zero(d.get("price")) - price) < 1 and abs(area - round(area)) > 0.01:
+        return "strong"
+    # 4) Dzielnica/miejscowość: obie znane i różne → inna nieruchomość (chyba że miejscowość jednego = miasto drugiego: gmina vs wieś)
+    d_places = {_dup_norm(d.get("city")), dd} - {""} - _VOIVODESHIPS
+    if d_dist and dd and d_dist != dd and not (doc_places & d_places):
+        return False
+    if is_rental:
+        if abs(d_area - area) > 0.6:
+            return False
+        if not (d_dist and dd and d_dist == dd) and not (d_tokens & _dup_tokens(d.get("title"))):
+            return False
+        return True
+    # 5) Opisy: ta sama nieruchomość opisywana przez różne biura dzieli nazwy własne / liczby (ulica, ary, rok, cechy).
+    #    Dwa różne domy w tym samym mieście o podobnej cenie i metrażu — prawie nic wspólnego.
+    if len(str(doc.get("description") or "")) >= 80 and len(str(d.get("description") or "")) >= 80:
+        a_t, b_t = _dup_desc_tokens(doc), _dup_desc_tokens(d)
+        shared = a_t & b_t
+        return len(shared) >= 4 or len(shared) / max(1, min(len(a_t), len(b_t))) >= 0.2
+    # 6) Bez opisów: ta sama dzielnica (obie znane) lub wspólne słowo w tytule; dom bez żadnego z tych sygnałów = nie łączymy
+    if d_dist and dd and d_dist == dd:
+        return True
+    if d_tokens & _dup_tokens(d.get("title")):
+        return True
+    return base_type not in ("dom", "działka", "dzialka") and not (d_dist or dd)
+
+
+
 async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
     """🔁 Wszystkie ogłoszenia TEJ SAMEJ nieruchomości (inne portale / inni pośrednicy / właściciel sam).
     Klucz: to samo miasto + typ + transakcja + cena ±2% + metraż ±3% (+ pokoje gdy oba znane); inna dzielnica = inna nieruchomość;
@@ -2286,8 +2408,9 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
     # Lokalizacja: portale różnie wypełniają „miasto” (Otodom: wieś, Morizon/Gratka: powiat, NOL: województwo + miejscowość w dzielnicy).
     # Kandydat pasuje, gdy: to samo miasto, LUB miasto/dzielnica jednego = miasto/dzielnica drugiego, LUB GPS w promieniu ~1 km.
     district = str(doc.get("district") or "").strip()
-    place_names = [p for p in {city, district} if p and p.lower() not in ("małopolskie", "mazowieckie", "śląskie", "wielkopolskie", "dolnośląskie", "pomorskie", "łódzkie", "lubelskie", "podkarpackie", "kujawsko-pomorskie", "zachodniopomorskie", "warmińsko-mazurskie", "lubuskie", "opolskie", "świętokrzyskie", "podlaskie")]
-    loc_or: list = []
+    place_names = [p for p in {city, district} if p and p.lower() not in _VOIVODESHIPS]
+    # Rekordy bez miejscowości (city = województwo, stare importy Otodom/Gratka/NOL) też są kandydatami — o dopasowaniu decyduje _dup_match
+    loc_or: list = [{"city": {"$in": sorted(_VOIVODESHIPS)}}]
     for p in place_names:
         rx = {"$regex": "^" + _build_diacritic_regex(p) + "$", "$options": "i"}
         loc_or.append({"city": rx}); loc_or.append({"district": rx})
@@ -2318,120 +2441,26 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
     proj = {"_id": 0, "external_id": 1, "source": 1, "url": 1, "price": 1, "area_m2": 1, "rooms": 1, "seller_type": 1, "agency_name": 1,
             "added_at": 1, "is_stale": 1, "stale_since": 1, "title": 1, "images": 1, "market_type": 1, "district": 1, "price_history": 1, "sources": 1,
             "description": 1, "street": 1, "build_year": 1, "lat": 1, "lng": 1, "city": 1}
-    is_rental = (doc.get("transaction_type") or "sprzedaz") == "wynajem"
-    _stop = {"mieszkanie", "mieszkania", "sprzedaz", "sprzedaż", "wynajem", "wynajęcia", "wynajecia", "kawalerka", "pokoje", "pokój", "pokoi", "metrów", "metrow",
-             "centrum", "blisko", "nowe", "nowa", "super", "okazja", "piękne", "piekne", "przestronne", "komfortowe", "umeblowane", "balkonem", "garażem", "garazem"}
-    def _tokens(t: str) -> set:
-        return {w for w in re.findall(r"[a-ząćęłńóśźż]{5,}", str(t or "").lower()) if w not in _stop}
-    def _norm_d(v) -> str:
-        s = str(v or "").strip().lower()
-        return "" if s in ("", "none", "null") else s
-    d_dist, d_tokens = _norm_d(doc.get("district")), _tokens(doc.get("title"))
-    _stop_desc = _stop | {"nieruchomość", "nieruchomosci", "nieruchomości", "oferta", "oferty", "sprzedaży", "sprzedazy", "zapraszam", "zapraszamy", "kontakt",
-                          "działka", "dzialka", "działce", "dzialce", "budynek", "budynku", "kuchnia", "łazienka", "lazienka", "salon", "sypialnie", "sypialnia",
-                          "piętro", "pietro", "parter", "parterze", "garaż", "garaz", "ogród", "ogrod", "ogrodem", "taras", "tarasem", "balkon", "okolica", "okolicy",
-                          "cichej", "spokojnej", "zielonej", "idealne", "idealny", "świetna", "swietna", "lokalizacja", "lokalizacji", "komunikacja", "dojazd",
-                          "możliwość", "mozliwosc", "również", "rowniez", "został", "zostal", "został", "która", "które", "który", "których", "którym", "bardzo",
-                          "wszystkie", "wszystkich", "stanie", "dobrym", "wysokim", "standard", "standardzie", "wykończenia", "wykonczenia", "ogrzewanie", "ogrzewania",
-                          "gazowe", "miejsce", "miejsca", "parkingowe", "jednorodzinny", "jednorodzinnych", "wolnostojący", "wolnostojacy", "szeregowy", "bliźniak",
-                          "kraków", "krakow", "krakowa", "krakowie", "warszawa", "warszawy", "warszawie", "wrocław", "wroclaw", "wrocławia", "wrocławiu", "poznań", "poznan",
-                          "poznania", "poznaniu", "gdańsk", "gdansk", "gdańska", "gdańsku", "łódź", "lodz", "łodzi", "lodzi"}
-    def _desc_tokens(d: dict) -> set:
-        t = (str(d.get("title") or "") + " " + str(d.get("description") or "")).lower()
-        words = {w for w in re.findall(r"[a-ząćęłńóśźż]{5,}", t) if w not in _stop_desc}
-        nums = {n for n in re.findall(r"\b\d{2,4}(?:[.,]\d{1,2})?\b", t)}  # rok budowy, ary, numer ulicy
-        return words | nums
-    doc_desc = _desc_tokens(doc); doc_has_desc = len(str(doc.get("description") or "")) >= 80
-    def _same_street(a: dict, b: dict) -> Optional[bool]:
-        sa, sb = _norm_d(a.get("street")), _norm_d(b.get("street"))
-        if not sa or not sb:
-            return None
-        sa = re.sub(r"^(ul\.?|al\.?|os\.?|pl\.?)\s*", "", sa); sb = re.sub(r"^(ul\.?|al\.?|os\.?|pl\.?)\s*", "", sb)
-        return sa.split()[0][:6] == sb.split()[0][:6]
-    def _gps_km(a: dict, b: dict) -> Optional[float]:
-        try:
-            la1, ln1, la2, ln2 = float(a["lat"]), float(a["lng"]), float(b["lat"]), float(b["lng"])
-        except Exception:
-            return None
-        return 2 * 6371 * math.asin(math.sqrt(math.sin(math.radians(la2 - la1) / 2) ** 2 + math.cos(math.radians(la1)) * math.cos(math.radians(la2)) * math.sin(math.radians(ln2 - ln1) / 2) ** 2))
-    def _digits_id(d: dict) -> str:
-        s = re.sub(r"\D", "", str(d.get("external_id") or ""))
-        return s if len(s) >= 6 else ""
-    def _ids_in(d: dict) -> set:
-        """Wszystkie identyfikatory rekordu: external_id + numery z url i sources[].url (Morizon mzn…, Gratka /ob/…)."""
-        out = set()
-        if _digits_id(d):
-            out.add(_digits_id(d))
-        for u in [d.get("url")] + [s.get("url") for s in (d.get("sources") or []) if isinstance(s, dict)]:
-            for m in re.findall(r"(\d{6,})", str(u or "")):
-                out.add(m)
-        return out
-    doc_ids = _ids_in(doc)
-    def _norm_title(t) -> str:
-        return re.sub(r"[^a-ząćęłńóśźż0-9]+", " ", str(t or "").lower()).strip()
-    doc_title = _norm_title(doc.get("title"))
-    doc_places = {_norm_d(city), _norm_d(district)} - {""}
-    def _same_property(d: dict):
-        """False = inna nieruchomość; True = prawdopodobnie ta sama; "strong" = na pewno ta sama (id / ulica / GPS / tytuł / metraż z ułamkiem + cena)"""
-        # 1) Ten sam identyfikator (rekord Apify „mzn2048…” = rekord Morizon „2048…”, link do tej samej strony) → na pewno ta sama oferta
-        if doc_ids & _ids_in(d):
-            return "strong"
-        # 2) Twarde sprzeczności: inna ulica, inny rok budowy, GPS dalej niż 1 km, inna liczba pokoi
-        if _same_street(doc, d) is False:
-            return False
-        y1, y2 = _num_or_zero(doc.get("build_year")), _num_or_zero(d.get("build_year"))
-        if y1 and y2 and abs(y1 - y2) > 1:
-            return False
-        km = _gps_km(doc, d)
-        if km is not None and km > 1.0:
-            return False
-        r1, r2 = doc.get("rooms"), d.get("rooms")
-        try:
-            if r1 not in (None, "", 0) and r2 not in (None, "", 0) and int(float(r1)) != int(float(r2)):
-                return False
-        except Exception:
-            pass
-        dd = _norm_d(d.get("district"))
-        d_area = _num_or_zero(d.get("area_m2"))
-        # 3) Pewne potwierdzenia (ważniejsze niż różnie wpisana dzielnica/gmina): ta sama ulica, GPS < 300 m, identyczny tytuł,
-        #    identyczny metraż z ułamkiem (138,84 m²) + identyczna cena
-        if _same_street(doc, d) is True or (km is not None and km < 0.3):
-            return "strong"
-        if len(doc_title) >= 15 and doc_title == _norm_title(d.get("title")):
-            return "strong"
-        if abs(d_area - area) < 0.02 and abs(_num_or_zero(d.get("price")) - price) < 1 and abs(area - round(area)) > 0.01:
-            return "strong"
-        # 4) Dzielnica/miejscowość: obie znane i różne → inna nieruchomość (chyba że miejscowość jednego = miasto drugiego: gmina vs wieś)
-        d_places = {_norm_d(d.get("city")), dd} - {""}
-        if d_dist and dd and d_dist != dd and not (doc_places & d_places):
-            return False
-        if is_rental:
-            if abs(d_area - area) > 0.6:
-                return False
-            if not (d_dist and dd and d_dist == dd) and not (d_tokens & _tokens(d.get("title"))):
-                return False
-            return True
-        # 5) Opisy: ta sama nieruchomość opisywana przez różne biura dzieli nazwy własne / liczby (ulica, ary, rok, cechy).
-        #    Dwa różne domy w tym samym mieście o podobnej cenie i metrażu — prawie nic wspólnego.
-        if doc_has_desc and len(str(d.get("description") or "")) >= 80:
-            shared = doc_desc & _desc_tokens(d)
-            smaller = max(1, min(len(doc_desc), len(_desc_tokens(d))))
-            return len(shared) >= 4 or len(shared) / smaller >= 0.2
-        # 6) Bez opisów: ta sama dzielnica (obie znane) lub wspólne słowo w tytule; dom bez żadnego z tych sygnałów = nie łączymy
-        if d_dist and dd and d_dist == dd:
-            return True
-        if d_tokens & _tokens(d.get("title")):
-            return True
-        return base_type not in ("dom", "działka", "dzialka") and not (d_dist or dd)
     items = []
     known_portals = {this_copy["portal"]} | {c["portal"] for c in extra_this}
-    async for d in coll.find(q, proj).sort("added_at", -1).limit(60):
-        match = _same_property(d)
+    cands = [d async for d in coll.find(q, proj).sort("added_at", -1).limit(80)]
+    matches = {id(d): _dup_match(doc, d) for d in cands}
+    # Przechodniość (1 poziom): oferta bez lokalizacji/opisu (np. Otodom z city=województwo) może pasować „na pewno” do znalezionej kopii
+    # (identyczny tytuł), choć do oferty wyjściowej już nie — dołączamy ją przez tę kopię.
+    strong_found = [d for d in cands if matches[id(d)] == "strong"][:4]
+    for d in cands:
+        if not matches[id(d)]:
+            for f in strong_found:
+                if _dup_match(f, d) == "strong":
+                    matches[id(d)] = "strong"
+                    break
+    for d in cands:
+        match = matches[id(d)]
         if not match:
             continue
         if match != "strong" and str(d.get("market_type") or "").lower() == "pierwotny" and str(doc.get("market_type") or "").lower() != "pierwotny":
             continue  # inwestycje deweloperskie: wiele identycznych mieszkań ≠ duplikat (chyba że pewne potwierdzenie: id/ulica/GPS/tytuł/metraż)
-        same_record = bool(doc_ids & _ids_in(d))  # ten sam rekord zaimportowany drugą ścieżką (Apify „mzn…” vs scraper Morizon) — nie dublujemy portalu
+        same_record = bool(_dup_ids(doc) & _dup_ids(d))  # ten sam rekord zaimportowany drugą ścieżką (Apify „mzn…” vs scraper Morizon) — nie dublujemy portalu
         portal = _portal_of(d)
         if same_record and portal in known_portals:
             continue
@@ -2696,12 +2725,14 @@ async def listings_scraped_endpoint(
             elif st in ("przetarg", "licytacja"):   # 🔨 listaprzetargow.pl — przetargi, licytacje komornicze, syndyk
                 query["seller_type"] = "przetarg"
         # Filter po rynku (pierwotny / wtorny) — na pełnej bazie, nie tylko na batchu 1000
+        # ~90% ofert (OLX, Adresowo, OdWłaściciela, Otodom z list) nie ma market_type w DB — brak oznaczenia = rynek wtórny
+        # (pierwotny rozpoznajemy pozytywnie: deweloper / stan deweloperski / rok budowy). „Wtórny” = wszystko poza pierwotnym.
         if market_type:
-            mt_vals = [m.strip().lower() for m in market_type.split(",") if m.strip().lower() in ("pierwotny", "wtorny")]
-            if len(mt_vals) == 1:
-                query["market_type"] = mt_vals[0]
-            elif len(mt_vals) > 1:
-                query["market_type"] = {"$in": mt_vals}
+            mt_vals = {m.strip().lower() for m in market_type.split(",") if m.strip().lower() in ("pierwotny", "wtorny")}
+            if mt_vals == {"pierwotny"}:
+                query["market_type"] = "pierwotny"
+            elif mt_vals == {"wtorny"}:
+                query["market_type"] = {"$ne": "pierwotny"}
         # Typ domu (wolnostojący / bliźniak / szeregowiec / ...) — na pełnej bazie.
         # ~25% domów nie ma building_type w DB → dla nich fallback: regex po tytule (spójny z detekcją na froncie).
         has_bt = False
@@ -3046,7 +3077,7 @@ async def similar_offers_endpoint(
             q["lng"] = {"$gte": lon - dlng, "$lte": lon + dlng}
             q["area_m2"] = {"$gte": area * 0.7, "$lte": area * 1.3}
             if market_type:
-                q["market_type"] = market_type
+                q["market_type"] = "pierwotny" if market_type == "pierwotny" else {"$ne": "pierwotny"}
             q = _combine_and(q, [])
             cand = await run_query(q, 400)
             cand = [d for d in cand if d.get("lat") is not None and d.get("lng") is not None
@@ -3064,7 +3095,7 @@ async def similar_offers_endpoint(
         q = _combine_and(q, [{"$or": [{"city": city_re}, {"district": city_re}]}])
         q["area_m2"] = {"$gte": area * 0.7, "$lte": area * 1.3}
         if market_type:
-            q["market_type"] = market_type
+            q["market_type"] = "pierwotny" if market_type == "pierwotny" else {"$ne": "pierwotny"}
         docs = await run_query(q)
         step_used = "city+area±30%+market"
 

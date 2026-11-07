@@ -2574,7 +2574,8 @@ function applyAllFilters() {
     // Transaction filter: permisywny - większość Apify ofert nie ma pola transaction (traktuj jako match dla sprzedaz)
     if (f.trans && l.transaction && l.transaction !== f.trans) return false;
     if (f.priceMax && l.price > f.priceMax) return false;
-    if (f.heroMarket && l.market_type !== f.heroMarket) return false;
+    // brak oznaczenia rynku (większość OLX/Adresowo/OdWłaściciela) = wtórny; pierwotny rozpoznajemy pozytywnie
+    if (f.heroMarket && (l.market_type || 'wtorny') !== f.heroMarket) return false;
     if (f.priceFrom && l.price < f.priceFrom) return false;
     if (f.priceTo   && l.price > f.priceTo)   return false;
     if (f.q) {

@@ -2625,9 +2625,13 @@ function applyAllFilters() {
       if (key === 'building_type' || key === 'land_purpose') continue;
       // Rynek: brak oznaczenia = wtórny (spójnie z API); „Bez określenia” = tylko oferty bez oznaczenia
       if (key === 'market_type') {
+        // Pierwotny/Wtórny filtruje backend na pełnej bazie — nie odrzucaj ponownie (lokalna autodetekcja z tytułu bywa inna niż pole w DB,
+        // a podwójne filtrowanie zaniżało licznik). Client-side tylko „Bez określenia”.
+        if (!allowed.has('__unknown__')) continue;
         const mv = l.market_type || '';
-        if (allowed.has('__unknown__') && !mv) continue;
-        if (allowed.has(mv || 'wtorny')) continue;
+        if (!mv) continue;
+        const other = new Set([...allowed].filter(x => x !== '__unknown__'));
+        if (other.has(mv)) continue;
         return false;
       }
       const v = l[key];
@@ -3027,7 +3031,7 @@ document.getElementById('chipMulti')?.addEventListener('click', (e) => {
     ['chipDupes2', 'chipDupes1', 'chipDupesOwner'].forEach(o => document.getElementById(o)?.classList.remove('active'));
     if (!wasActive) c.classList.add('active');
     currentPage = 1;
-    applyFilters();
+    applyAllFilters();  // pełny pipeline filtrów (applyFilters() filtrowało tylko po typie — chipy „nic nie robiły”)
   }, false);
 });
 

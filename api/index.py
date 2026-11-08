@@ -4805,7 +4805,8 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
                     and name.lower() not in ("stare miasto", "śródmieście", "srodmiescie", "centrum", "nowe miasto", "osiedle"):
                 ascii_map.setdefault(_normalize_city_name(name), name)
         await db.settings.update_one({"_id": "city_names_cache"}, {"$set": {"map": ascii_map, "at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
-    _names = [n for n in sorted(ascii_map.values(), key=len, reverse=True) if len(n) >= 4]
+    # do rozpoznawania miasta w TYTULE (Otodom) tylko prawdziwe miasta z CITY_COORDS — nie dzielnice („Krzyki”) ani słowa jak „Nowe”
+    _names = [n for n in sorted(ascii_map.values(), key=len, reverse=True) if len(n) >= 4 and _normalize_city_name(n) in CITY_COORDS]
     names_rx = re.compile(r"(?<![a-ząćęłńóśźż])(" + "|".join(re.escape(n.lower()) for n in _names) + r")(?![a-ząćęłńóśźż])") if _names else None
     sorted_names = (names_rx, {n.lower(): n for n in _names})
     timings["names"] = round(time.time() - _t0, 2)

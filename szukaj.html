@@ -1399,6 +1399,7 @@ function applyScrapedData(d) {
     {
       const raw = d.listings || [];
       scrapedTotalCount = Number(d.total_count) || 0;
+      window.__countExact = d.count_exact !== false;  // false = licznik w bazie nie zdążył → pokazujemy „N+”
       window.__locked = !!d.locked;
       window.__previewLimit = Number(d.preview_limit) || 5;
       window.__archiveLocked = !!d.archive_locked;
@@ -1582,12 +1583,8 @@ function applyScrapedData(d) {
     console.log(`Loaded: ${scrapedList.length} scraped (baza: ${scrapedTotalCount}, ${d.limit ? 'limit ' + d.limit : ''})`);
     window.__scrapedTotalCount = scrapedTotalCount;
     // NATYCHMIAST ustaw count na total_count z bazy — nie czekaj na applyAllFilters
-    if (scrapedTotalCount > 0) {
-      const cEl = document.getElementById('count');
-      if (cEl) cEl.textContent = scrapedTotalCount;
-    }
-    // Pokazuj total_count z bazy jeśli większy niż załadowane (paginacja)
-    count.textContent = Math.max(LISTINGS.length, scrapedTotalCount || 0);
+    // Pokazuj total_count z bazy jeśli większy niż załadowane (paginacja); „N+” gdy licznik nie był dokładny
+    count.textContent = Math.max(LISTINGS.length, scrapedTotalCount || 0) + (window.__countExact === false ? '+' : '');
 
     // ── AI ANALYSIS: oblicz verdict_badge dla każdej oferty (mediana ppm² per typ+miasto) ──
     try { computeAiVerdicts(LISTINGS); } catch(e) { console.error('AI verdicts:', e); }
@@ -1856,7 +1853,7 @@ function renderListings(list) {
   // Pokazuj total_count z bazy (2640 dla Warszawa mieszkania, 35540 bez filtrów) — realny numer
   const totalFromBase = window.__scrapedTotalCount || 0;
   const displayCount = totalFromBase > 0 ? totalFromBase : CURRENT_FILTERED.length;
-  document.getElementById('count').textContent = displayCount;
+  document.getElementById('count').textContent = displayCount + (totalFromBase > 0 && window.__countExact === false ? '+' : '');
   renderPage();
 }
 

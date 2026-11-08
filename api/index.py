@@ -2265,6 +2265,25 @@ def _price_timeline(copies: list) -> list:
 
 _VOIVODESHIPS = {"małopolskie", "mazowieckie", "śląskie", "wielkopolskie", "dolnośląskie", "pomorskie", "łódzkie", "lubelskie", "podkarpackie",
                  "kujawsko-pomorskie", "zachodniopomorskie", "warmińsko-mazurskie", "lubuskie", "opolskie", "świętokrzyskie", "podlaskie"}
+_BT_REGEX = {
+    "wolnostojacy": r"wolno.?stoj|jednorodzinn|parterow|pi[eę]trow|kanadyjs|szkieletow|dom.z.bali|pasywn",
+    "blizniak": r"bli[zź]niak|bli[zź]niacz|dwurodzin|duplex|dwupak",
+    "szeregowiec": r"szereg(?:ow|owc|owk)|w szeregu|segment|townhouse",
+    "siedliskowy": r"siedlisk|zagrod|gospodarstw",
+    "rezydencja": r"rezydencj|\bwilla\b|willow|dw[oó]r(?:ek|ku|em|u|a)|pa[lł]ac|posiad[lł]o[sś][cć]",
+    "letniskowy": r"letnisk|rekreac|\brod\b|weekendow",
+}
+_BT_ALIAS = {"wolnostojacy": ["wolnostojący"], "blizniak": ["bliźniak", "blizniak"], "szeregowiec": ["szeregowy"], "rezydencja": ["willa"]}
+_DT_ALIAS = {"budowlana": ["budowlana"], "rolna": ["rolna"], "rekreacyjna": ["rekreacyjna"],
+             "lesna": ["lesna", "leśna"], "inwestycyjna": ["inwestycyjna", "usługowa", "uslugowa", "komercyjna"]}
+_DT_REGEX = {
+    "budowlana": r"budowlan|pod zabudow|pod dom|pod budow",
+    "rolna": r"roln[aey]|orn[aey]|uprawn|gospodarstw|ł[aą]k",
+    "rekreacyjna": r"rekreac|letnisk|weekend|rod|ogrodow|nad jezior",
+    "lesna": r"le[sś]n[aey]|lasu|w lesie|zalesion",
+    "inwestycyjna": r"inwestyc|komercyj|us[lł]ugow|przemys[lł]ow|pod rozw[oó]j firm|magazyn|produkcyj",
+}
+
 _DUP_STOP = {"mieszkanie", "mieszkania", "sprzedaz", "sprzedaż", "wynajem", "wynajęcia", "wynajecia", "kawalerka", "pokoje", "pokój", "pokoi", "metrów", "metrow",
              "centrum", "blisko", "nowe", "nowa", "super", "okazja", "piękne", "piekne", "przestronne", "komfortowe", "umeblowane", "balkonem", "garażem", "garazem"}
 _DUP_STOP_DESC = _DUP_STOP | {"nieruchomość", "nieruchomosci", "nieruchomości", "oferta", "oferty", "sprzedaży", "sprzedazy", "zapraszam", "zapraszamy", "kontakt",
@@ -2748,20 +2767,13 @@ async def listings_scraped_endpoint(
         # ~25% domów nie ma building_type w DB → dla nich fallback: regex po tytule (spójny z detekcją na froncie).
         has_bt = False
         if building_type:
-            bt_regex = {
-                "wolnostojacy": r"wolno.?stoj|jednorodzinn|parterow|pi[eę]trow|kanadyjs|szkieletow|dom.z.bali|pasywn",
-                "blizniak": r"bli[zź]niak|bli[zź]niacz|dwurodzin|duplex|dwupak",
-                "szeregowiec": r"szereg(?:ow|owc|owk)|w szeregu|segment|townhouse",
-                "siedliskowy": r"siedlisk|zagrod|gospodarstw",
-                "rezydencja": r"rezydencj|\bwilla\b|willow|dw[oó]r(?:ek|ku|em|u|a)|pa[lł]ac|posiad[lł]o[sś][cć]",
-                "letniskowy": r"letnisk|rekreac|\brod\b|weekendow",
-            }
+            bt_regex = _BT_REGEX
             bt_vals = [b.strip().lower() for b in building_type.split(",") if b.strip().lower() in bt_regex]
             if bt_vals:
                 has_bt = True
                 title_pat = "|".join(bt_regex[b] for b in bt_vals)
                 # Darmowe scrapery zapisywały etykiety z ogonkami („wolnostojący”, „bliźniak”) — dopasowujemy oba warianty
-                bt_alias = {"wolnostojacy": ["wolnostojący"], "blizniak": ["bliźniak", "blizniak"], "szeregowiec": ["szeregowy"], "rezydencja": ["willa"]}
+                bt_alias = _BT_ALIAS
                 bt_all = list({v for b in bt_vals for v in [b] + bt_alias.get(b, [])})
                 bt_or = [
                     {"building_type": {"$in": bt_all}},
@@ -2771,15 +2783,7 @@ async def listings_scraped_endpoint(
         # Przeznaczenie działki — na pełnej bazie. ~15% działek nie ma dzialka_type → fallback regex po tytule.
         has_dt = False
         if dzialka_type:
-            dt_alias = {"budowlana": ["budowlana"], "rolna": ["rolna"], "rekreacyjna": ["rekreacyjna"],
-                        "lesna": ["lesna", "leśna"], "inwestycyjna": ["inwestycyjna", "usługowa", "uslugowa", "komercyjna"]}
-            dt_regex = {
-                "budowlana": r"budowlan|pod zabudow|pod dom|pod budow",
-                "rolna": r"roln[aey]|orn[aey]|uprawn|gospodarstw|ł[aą]k",
-                "rekreacyjna": r"rekreac|letnisk|weekend|rod|ogrodow|nad jezior",
-                "lesna": r"le[sś]n[aey]|lasu|w lesie|zalesion",
-                "inwestycyjna": r"inwestyc|komercyj|us[lł]ugow|przemys[lł]ow|pod rozw[oó]j firm|magazyn|produkcyj",
-            }
+            dt_alias, dt_regex = _DT_ALIAS, _DT_REGEX
             dt_vals = [x.strip().lower() for x in dzialka_type.split(",") if x.strip().lower() in dt_alias]
             if dt_vals:
                 has_dt = True
@@ -2907,14 +2911,16 @@ async def listings_scraped_endpoint(
                 if not (archive or city or type or transaction or seller_type or rooms or market_type or has_bt or has_dt or has_verdict or use_geo or has_range or portals or has_date):
                     # Cała baza — estimated_document_count jest instant (używa metadata)
                     return await coll.estimated_document_count()
-                return await coll.count_documents(query, maxTimeMS=3000)
+                # 7 s: filtry z regexem po tytule (typ domu / przeznaczenie działki) liczą się wolniej; find idzie równolegle, limit funkcji 10 s
+                return await coll.count_documents(query, maxTimeMS=7000)
             except Exception:
                 return None
 
         # find + count równolegle (zamiast sekwencyjnie) — ~40% szybciej na zimnym cache
         docs, total_count = await asyncio.gather(cursor.to_list(length=limit), _count())
+        count_exact = total_count is not None
         if total_count is None:
-            total_count = len(docs)
+            total_count = offset + len(docs)  # licznik nie zdążył — front pokazuje „N+”
         # Slice images do 3 pierwszych (w lite mode) — karuzela na karcie działa, payload mniejszy o ~20%
         if lite:
             for d in docs:
@@ -2950,7 +2956,7 @@ async def listings_scraped_endpoint(
         for d in docs:
             if isinstance(d.get("stale_since"), datetime):
                 d["stale_since"] = d["stale_since"].isoformat()
-        return {"listings": docs, "count": len(docs), "total_count": total_count, "offset": offset, "limit": limit, "lite": bool(lite),
+        return {"listings": docs, "count": len(docs), "total_count": total_count, "count_exact": count_exact, "offset": offset, "limit": limit, "lite": bool(lite),
                 "filtered": bool(city or type), "locked": locked, "preview_limit": FREE_PREVIEW_LIMIT if locked else None,
                 "archive": bool(archive), "broker": broker, "nearby_cities": nearby_cities if use_geo else None}
     except Exception as e:
@@ -4733,6 +4739,35 @@ def _derive_city_from_record(doc: dict, ascii_map: dict, sorted_names: list) -> 
             return name, (district if _is_place(district) and district != name else None)
     return None
 
+
+
+@app.post("/api/admin/backfill/subtypes")
+async def admin_backfill_subtypes(limit: int = 2000, apply: int = 0, admin: dict = Depends(require_admin)):
+    """Uzupełnij building_type (domy) i dzialka_type (działki) z tytułu+opisu tam, gdzie portal ich nie podał — tym samym regexem,
+    którego używa filtr. Nierozpoznane dostają „inny”, żeby filtr nie musiał już skanować tytułów regexem (licznik wyników liczy się wtedy szybko).
+    Zakłada też indeksy na polach filtrów."""
+    db = database(); coll = db.listings
+    for f in ("building_type", "dzialka_type", "market_type", "seller_type"):
+        try:
+            await coll.create_index([(f, 1)], background=True)
+        except Exception:
+            pass
+    out = {"applied": bool(apply)}
+    for kind, field, rx in (("dom", "building_type", _BT_REGEX), ("dzialka", "dzialka_type", _DT_REGEX)):
+        q = {"type": {"$regex": "^" + kind, "$options": "i"}, field: {"$in": [None, ""]}}
+        docs = [d async for d in coll.find(q, {"_id": 1, "title": 1, "description": 1}).limit(max(1, min(limit, 5000)))]
+        remaining = await coll.count_documents(q)
+        ups, by_val = [], {}
+        for d in docs:
+            text = (str(d.get("title") or "") + " " + str(d.get("description") or "")[:600]).lower()
+            val = next((k for k, pat in rx.items() if re.search(pat, text, re.I)), "inny")
+            by_val[val] = by_val.get(val, 0) + 1
+            ups.append(UpdateOne({"_id": d["_id"]}, {"$set": {field: val}}))
+        if apply and ups:
+            for i in range(0, len(ups), 500):
+                await coll.bulk_write(ups[i:i + 500], ordered=False)
+        out[kind] = {"scanned": len(docs), "remaining_before": remaining, "by_value": by_val}
+    return out
 
 @app.post("/api/admin/backfill/city")
 async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "", admin: dict = Depends(require_admin)):

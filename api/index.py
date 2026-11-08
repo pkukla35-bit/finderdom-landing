@@ -4804,12 +4804,13 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
     if source:
         q["source"] = source
     proj = {"_id": 1, "source": 1, "title": 1, "district": 1, "url": 1, "lat": 1, "lng": 1, "city": 1}
-    docs = [d async for d in coll.find(q, proj).limit(max(1, min(limit, 5000)))]
+    # hint: bez tego planner potrafi wybrać indeks city_unresolved ($ne → skan całej bazy, 20+ s)
+    docs = [d async for d in coll.find(q, proj).hint([("city", 1)]).limit(max(1, min(limit, 5000)))]
     try:
-        remaining = await coll.count_documents(q, maxTimeMS=2500)
+        remaining = await coll.count_documents(q, maxTimeMS=2500, hint=[("city", 1)])
     except Exception:
         remaining = -1
-    ups, unresolved, samples, by_src = [], [], [], {}
+    ups, unresolved, samples, by_src, unres_src = [], [], [], {}, {}
     for d in docs:
         res = _derive_city_from_record(d, ascii_map, sorted_names)
         if res:
@@ -4825,7 +4826,8 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
                 samples.append({"src": d.get("source"), "title": (d.get("title") or "")[:70], "district_was": d.get("district"), "city": cty, "district": dist})
         else:
             unresolved.append(d["_id"])
-    out = {"scanned": len(docs), "remaining_before": remaining, "resolved": len(ups), "unresolved": len(unresolved), "by_source": by_src,
+            unres_src[d.get("source")] = unres_src.get(d.get("source"), 0) + 1
+    out = {"scanned": len(docs), "remaining_before": remaining, "resolved": len(ups), "unresolved": len(unresolved), "by_source": by_src, "unresolved_by_source": unres_src,
            "known_cities": len(ascii_map), "samples": samples, "applied": bool(apply)}
     if apply:
         if ups:

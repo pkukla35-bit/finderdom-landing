@@ -4780,22 +4780,30 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
     """Napraw `city` = województwo (stare importy). Paczkami (Vercel: 30 s). apply=1 zapisuje; inaczej tylko liczy i pokazuje próbki.
     Rekordy, których nie da się rozpoznać, dostają `city_unresolved: true` (żeby nie wracać do nich w kolejnych paczkach)."""
     db = database(); coll = db.listings
-    # słownik znanych miast: nazwy `city` z ≥ 15 ofertami (bez województw), klucz = ascii-slug
+    # słownik znanych miast: nazwy `city` z ≥ 15 ofertami (bez województw), klucz = ascii-slug — cache 12 h (agregacja po całej bazie jest wolna)
+    cache = await db.settings.find_one({"_id": "city_names_cache"}) or {}
     ascii_map: dict = {}
-    async for r in coll.aggregate([{"$match": {"city": {"$type": "string", "$nin": sorted(_VOIVODESHIPS)}}}, {"$group": {"_id": "$city", "n": {"$sum": 1}}},
-                                   {"$match": {"n": {"$gte": 15}}}, {"$limit": 5000}]):
-        name = str(r["_id"]).strip()
-        # pomijamy „miasta”, które są nazwami powiatów z importów Morizon/Gratka (Krakowski, Wroclawski, Klodzki) i dzielnice typu „Stare Miasto”
-        if name and name[:1].isupper() and name.lower() not in _VOIVODESHIPS and not re.search(r"(?:ski|cki|zki)$", name, re.I) and not re.search(r"-[a-z]", name) \
-                and name.lower() not in ("stare miasto", "śródmieście", "srodmiescie", "centrum", "nowe miasto", "osiedle"):
-            ascii_map.setdefault(_normalize_city_name(name), name)
+    if cache.get("map") and (datetime.now(timezone.utc) - datetime.fromisoformat(cache["at"])).total_seconds() < 12 * 3600:
+        ascii_map = cache["map"]
+    else:
+        async for r in coll.aggregate([{"$match": {"city": {"$type": "string", "$nin": sorted(_VOIVODESHIPS)}}}, {"$group": {"_id": "$city", "n": {"$sum": 1}}},
+                                       {"$match": {"n": {"$gte": 15}}}, {"$limit": 5000}], maxTimeMS=8000):
+            name = str(r["_id"]).strip()
+            # pomijamy „miasta”, które są nazwami powiatów z importów Morizon/Gratka (Krakowski, Wroclawski, Klodzki) i dzielnice typu „Stare Miasto”
+            if name and name[:1].isupper() and name.lower() not in _VOIVODESHIPS and not re.search(r"(?:ski|cki|zki)$", name, re.I) and not re.search(r"-[a-z]", name) \
+                    and name.lower() not in ("stare miasto", "śródmieście", "srodmiescie", "centrum", "nowe miasto", "osiedle"):
+                ascii_map.setdefault(_normalize_city_name(name), name)
+        await db.settings.update_one({"_id": "city_names_cache"}, {"$set": {"map": ascii_map, "at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
     sorted_names = sorted(ascii_map.values(), key=len, reverse=True)
     q: dict = {"city": {"$in": sorted(_VOIVODESHIPS)}, "city_unresolved": {"$ne": True}}
     if source:
         q["source"] = source
     proj = {"_id": 1, "source": 1, "title": 1, "district": 1, "url": 1, "lat": 1, "lng": 1, "city": 1}
     docs = [d async for d in coll.find(q, proj).limit(max(1, min(limit, 5000)))]
-    remaining = await coll.count_documents(q)
+    try:
+        remaining = await coll.count_documents(q, maxTimeMS=2500)
+    except Exception:
+        remaining = -1
     ups, unresolved, samples, by_src = [], [], [], {}
     for d in docs:
         res = _derive_city_from_record(d, ascii_map, sorted_names)

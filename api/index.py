@@ -4779,6 +4779,55 @@ async def admin_backfill_subtypes(limit: int = 2000, apply: int = 0, admin: dict
         out[kind] = {"scanned": len(docs), "remaining_before": remaining, "by_value": by_val}
     return out
 
+
+_MT_PIERWOTNY = re.compile(r"dewelopers?k|od\s+dewelopera|rynek\s+pierwotn|rynku\s+pierwotn|stan\s+deweloper|nowa\s+inwestycj|now(?:ej|ą)\s+inwestycj|oddani[ea]\s+(?:w\s+)?(?:20\d\d|[ivx]+\s*kw)|termin\s+oddania|prognoza\s+oddania|odbi[oó]r\s+kluczy|budowa\s+w\s+toku|w\s+budowie|nowobudowan|stan\s+surow|bez\s+(?:pcc|podatku\s+pcc)|0\s*%\s*pcc|bez\s+prowizji\s+i\s+pcc", re.I)
+_MT_WTORNY = re.compile(r"rynek\s+wt[oó]rn|rynku\s+wt[oó]rn|\bwt[oó]rn|do\s+remontu|po\s+remoncie|po\s+generalnym|kamienic|wielk(?:a|iej)\s+p[łl]yt|z\s+lat\s+(?:[5-9]0|dwutysięcznych)|peerel|przedwojenn|blok\s+z\s+lat", re.I)
+
+
+@app.post("/api/admin/backfill/market")
+async def admin_backfill_market(limit: int = 2000, apply: int = 0, admin: dict = Depends(require_admin)):
+    """Uzupełnij market_type (pierwotny/wtorny) tam, gdzie portal go nie podał (~90% ofert: OLX, Adresowo, Otodom z list).
+    Pierwotny rozpoznajemy pozytywnie: słowa (deweloper, stan deweloperski, odbiór kluczy, 0% PCC…) albo rok budowy ≥ bieżący−1.
+    Jawne „wtórny” (do remontu, kamienica, z lat 70…) → wtorny. Reszta zostaje pusta (= wtórny w filtrze), dostaje market_scanned."""
+    db = database(); coll = db.listings
+    q = {"market_type": {"$in": [None, ""]}, "market_scanned": {"$ne": True}}
+    docs = [d async for d in coll.find(q, {"_id": 1, "title": 1, "description": 1, "build_year": 1, "seller_type": 1}).hint([("market_type", 1)]).limit(max(1, min(limit, 5000)))]
+    try:
+        remaining = await coll.count_documents(q, maxTimeMS=2500, hint=[("market_type", 1)])
+    except Exception:
+        remaining = -1
+    year_now = datetime.now(timezone.utc).year
+    ups, scanned_only, by_val, samples = [], [], {}, []
+    for d in docs:
+        text = str(d.get("title") or "") + " " + str(d.get("description") or "")[:1500]
+        val = None
+        if d.get("seller_type") == "deweloper" or _MT_PIERWOTNY.search(text):
+            val = "pierwotny"
+        elif _MT_WTORNY.search(text):
+            val = "wtorny"
+        else:
+            try:
+                y = int(float(d.get("build_year") or 0))
+                if y >= year_now - 1:
+                    val = "pierwotny"
+                elif 1800 < y <= year_now - 4:
+                    val = "wtorny"
+            except Exception:
+                pass
+        by_val[val or "puste"] = by_val.get(val or "puste", 0) + 1
+        if val:
+            ups.append(UpdateOne({"_id": d["_id"]}, {"$set": {"market_type": val, "market_scanned": True}}))
+            if val == "pierwotny" and len(samples) < 25:
+                samples.append((d.get("title") or "")[:80])
+        else:
+            scanned_only.append(d["_id"])
+    if apply:
+        for i in range(0, len(ups), 500):
+            await coll.bulk_write(ups[i:i + 500], ordered=False)
+        if scanned_only:
+            await coll.update_many({"_id": {"$in": scanned_only}}, {"$set": {"market_scanned": True}})
+    return {"applied": bool(apply), "scanned": len(docs), "remaining_before": remaining, "by_value": by_val, "samples_pierwotny": samples}
+
 @app.post("/api/admin/backfill/city")
 async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "", retry_unresolved: int = 0, admin: dict = Depends(require_admin)):
     """Napraw `city` = województwo (stare importy). Paczkami (Vercel: 30 s). apply=1 zapisuje; inaczej tylko liczy i pokazuje próbki.

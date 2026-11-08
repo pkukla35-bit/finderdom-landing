@@ -2468,7 +2468,8 @@ async def _find_duplicates(doc: dict, include_urls: bool) -> dict:
         except Exception:
             pass
         and_parts.append({"$or": rooms_or})
-    q["$and"] = and_parts
+    if and_parts:
+        q["$and"] = and_parts
     proj = {"_id": 0, "external_id": 1, "source": 1, "url": 1, "price": 1, "area_m2": 1, "rooms": 1, "seller_type": 1, "agency_name": 1,
             "added_at": 1, "is_stale": 1, "stale_since": 1, "title": 1, "images": 1, "market_type": 1, "district": 1, "price_history": 1, "sources": 1,
             "description": 1, "street": 1, "build_year": 1, "lat": 1, "lng": 1, "city": 1}
@@ -4779,7 +4780,7 @@ async def admin_backfill_subtypes(limit: int = 2000, apply: int = 0, admin: dict
     return out
 
 @app.post("/api/admin/backfill/city")
-async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "", admin: dict = Depends(require_admin)):
+async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "", retry_unresolved: int = 0, admin: dict = Depends(require_admin)):
     """Napraw `city` = województwo (stare importy). Paczkami (Vercel: 30 s). apply=1 zapisuje; inaczej tylko liczy i pokazuje próbki.
     Rekordy, których nie da się rozpoznać, dostają `city_unresolved: true` (żeby nie wracać do nich w kolejnych paczkach)."""
     db = database(); coll = db.listings
@@ -4810,7 +4811,9 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
     names_rx = re.compile(r"(?<![a-ząćęłńóśźż])(" + "|".join(re.escape(n.lower()) for n in _names) + r")(?![a-ząćęłńóśźż])") if _names else None
     sorted_names = (names_rx, {n.lower(): n for n in _names})
     timings["names"] = round(time.time() - _t0, 2)
-    q: dict = {"city": {"$in": sorted(_VOIVODESHIPS)}, "city_unresolved": {"$ne": True}}
+    q: dict = {"city": {"$in": sorted(_VOIVODESHIPS)}}
+    if not retry_unresolved:
+        q["city_unresolved"] = {"$ne": True}
     if source:
         q["source"] = source
     proj = {"_id": 1, "source": 1, "title": 1, "district": 1, "url": 1, "lat": 1, "lng": 1, "city": 1}
@@ -4827,11 +4830,11 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
         res = _derive_city_from_record(d, ascii_map, sorted_names)
         if res:
             cty, dist = res
-            upd = {"$set": {"city": cty, "voivodeship": d.get("city")}}
+            upd = {"$set": {"city": cty, "voivodeship": d.get("city")}, "$unset": {"city_unresolved": ""}}
             if dist:
                 upd["$set"]["district"] = dist
             elif str(d.get("source") or "") == "nol":
-                upd["$unset"] = {"district": ""}
+                upd["$unset"]["district"] = ""
             ups.append(UpdateOne({"_id": d["_id"]}, upd))
             by_src[d.get("source")] = by_src.get(d.get("source"), 0) + 1
             if len(samples) < 40:

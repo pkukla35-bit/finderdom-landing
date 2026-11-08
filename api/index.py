@@ -4754,18 +4754,24 @@ async def admin_backfill_subtypes(limit: int = 2000, apply: int = 0, admin: dict
             pass
     out = {"applied": bool(apply)}
     for kind, field, rx in (("dom", "building_type", _BT_REGEX), ("dzialka", "dzialka_type", _DT_REGEX)):
-        q = {"type": {"$regex": "^" + kind, "$options": "i"}, field: {"$in": [None, ""]}}
+        # nierozpoznane zostają puste (filtr ma dla nich regex-fallback), ale dostają subtype_scanned, żeby nie skanować ich ponownie
+        q = {"type": {"$regex": "^" + kind, "$options": "i"}, field: {"$in": [None, ""]}, "subtype_scanned": {"$ne": True}}
         docs = [d async for d in coll.find(q, {"_id": 1, "title": 1, "description": 1}).limit(max(1, min(limit, 5000)))]
         remaining = await coll.count_documents(q)
-        ups, by_val = [], {}
+        ups, unknown, by_val = [], [], {}
         for d in docs:
-            text = (str(d.get("title") or "") + " " + str(d.get("description") or "")[:600]).lower()
-            val = next((k for k, pat in rx.items() if re.search(pat, text, re.I)), "inny")
-            by_val[val] = by_val.get(val, 0) + 1
-            ups.append(UpdateOne({"_id": d["_id"]}, {"$set": {field: val}}))
-        if apply and ups:
+            text = (str(d.get("title") or "") + " " + str(d.get("description") or "")[:800]).lower()
+            val = next((k for k, pat in rx.items() if re.search(pat, text, re.I)), None)
+            by_val[val or "nierozpoznane"] = by_val.get(val or "nierozpoznane", 0) + 1
+            if val:
+                ups.append(UpdateOne({"_id": d["_id"]}, {"$set": {field: val, "subtype_scanned": True}}))
+            else:
+                unknown.append(d["_id"])
+        if apply:
             for i in range(0, len(ups), 500):
                 await coll.bulk_write(ups[i:i + 500], ordered=False)
+            if unknown:
+                await coll.update_many({"_id": {"$in": unknown}}, {"$set": {"subtype_scanned": True}})
         out[kind] = {"scanned": len(docs), "remaining_before": remaining, "by_value": by_val}
     return out
 

@@ -2213,7 +2213,7 @@ document.querySelector('.sort-select')?.addEventListener('change', (e) => {
 document.querySelectorAll('.chip').forEach(c => {
   if (c.hasAttribute('data-seller')) return;
   if (c.hasAttribute('data-filter')) return;
-  if (c.id === 'chipUnique' || c.id === 'chipMulti') return;
+  if (c.id === 'chipUnique' || c.id === 'chipMulti' || c.id === 'chipDupes2' || c.id === 'chipDupes1' || c.id === 'chipDupesOwner') return;  // własne handlery niżej
   if (c.closest('#propertyType')) return;
   if (c.dataset.crm) {
     c.addEventListener('click', () => { c.classList.toggle('active'); applyAllFilters(); });
@@ -2626,6 +2626,13 @@ function applyAllFilters() {
       // building_type (typ domu) filtruje backend na pełnej bazie — nie odrzucaj ponownie client-side
       // (fallback z tytułu po stronie API może dać inny podtyp niż lokalna detekcja)
       if (key === 'building_type' || key === 'land_purpose') continue;
+      // Rynek: brak oznaczenia = wtórny (spójnie z API); „Bez określenia” = tylko oferty bez oznaczenia
+      if (key === 'market_type') {
+        const mv = l.market_type || '';
+        if (allowed.has('__unknown__') && !mv) continue;
+        if (allowed.has(mv || 'wtorny')) continue;
+        return false;
+      }
       const v = l[key];
       // Boolean features: chip "true" matches when listing is truthy
       if (allowed.has("true")) {

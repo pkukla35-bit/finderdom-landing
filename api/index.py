@@ -4780,6 +4780,11 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
     """Napraw `city` = województwo (stare importy). Paczkami (Vercel: 30 s). apply=1 zapisuje; inaczej tylko liczy i pokazuje próbki.
     Rekordy, których nie da się rozpoznać, dostają `city_unresolved: true` (żeby nie wracać do nich w kolejnych paczkach)."""
     db = database(); coll = db.listings
+    for f in ("city", "city_unresolved"):
+        try:
+            await coll.create_index([(f, 1)], background=True)
+        except Exception:
+            pass
     # słownik znanych miast: nazwy `city` z ≥ 15 ofertami (bez województw), klucz = ascii-slug — cache 12 h (agregacja po całej bazie jest wolna)
     cache = await db.settings.find_one({"_id": "city_names_cache"}) or {}
     ascii_map: dict = {}

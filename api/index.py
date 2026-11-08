@@ -4780,11 +4780,14 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
     """Napraw `city` = województwo (stare importy). Paczkami (Vercel: 30 s). apply=1 zapisuje; inaczej tylko liczy i pokazuje próbki.
     Rekordy, których nie da się rozpoznać, dostają `city_unresolved: true` (żeby nie wracać do nich w kolejnych paczkach)."""
     db = database(); coll = db.listings
-    for f in ("city", "city_unresolved"):
-        try:
-            await coll.create_index([(f, 1)], background=True)
-        except Exception:
-            pass
+    _t0 = time.time(); timings: dict = {}
+    if apply == 2:  # tylko przy jawnym żądaniu — createIndexes na współdzielonym Atlasie potrafi czekać na trwającą budowę
+        for f in ("city", "city_unresolved"):
+            try:
+                await coll.create_index([(f, 1)], background=True)
+            except Exception:
+                pass
+    timings["index"] = round(time.time() - _t0, 2)
     # słownik znanych miast: nazwy `city` z ≥ 15 ofertami (bez województw), klucz = ascii-slug — cache 12 h (agregacja po całej bazie jest wolna)
     cache = await db.settings.find_one({"_id": "city_names_cache"}) or {}
     ascii_map: dict = {}
@@ -4800,16 +4803,19 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
                 ascii_map.setdefault(_normalize_city_name(name), name)
         await db.settings.update_one({"_id": "city_names_cache"}, {"$set": {"map": ascii_map, "at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
     sorted_names = sorted(ascii_map.values(), key=len, reverse=True)
+    timings["names"] = round(time.time() - _t0, 2)
     q: dict = {"city": {"$in": sorted(_VOIVODESHIPS)}, "city_unresolved": {"$ne": True}}
     if source:
         q["source"] = source
     proj = {"_id": 1, "source": 1, "title": 1, "district": 1, "url": 1, "lat": 1, "lng": 1, "city": 1}
     # hint: bez tego planner potrafi wybrać indeks city_unresolved ($ne → skan całej bazy, 20+ s)
     docs = [d async for d in coll.find(q, proj).hint([("city", 1)]).limit(max(1, min(limit, 5000)))]
+    timings["find"] = round(time.time() - _t0, 2)
     try:
         remaining = await coll.count_documents(q, maxTimeMS=2500, hint=[("city", 1)])
     except Exception:
         remaining = -1
+    timings["count"] = round(time.time() - _t0, 2)
     ups, unresolved, samples, by_src, unres_src = [], [], [], {}, {}
     for d in docs:
         res = _derive_city_from_record(d, ascii_map, sorted_names)
@@ -4827,7 +4833,8 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
         else:
             unresolved.append(d["_id"])
             unres_src[d.get("source")] = unres_src.get(d.get("source"), 0) + 1
-    out = {"scanned": len(docs), "remaining_before": remaining, "resolved": len(ups), "unresolved": len(unresolved), "by_source": by_src, "unresolved_by_source": unres_src,
+    timings["derive"] = round(time.time() - _t0, 2)
+    out = {"timings": timings, "scanned": len(docs), "remaining_before": remaining, "resolved": len(ups), "unresolved": len(unresolved), "by_source": by_src, "unresolved_by_source": unres_src,
            "known_cities": len(ascii_map), "samples": samples, "applied": bool(apply)}
     if apply:
         if ups:

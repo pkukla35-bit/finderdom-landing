@@ -4734,10 +4734,12 @@ def _derive_city_from_record(doc: dict, ascii_map: dict, sorted_names: list) -> 
             return best, (district if _is_place(district) and district != best else None)
     except Exception:
         pass
-    low = title.lower()
-    for name in sorted_names:
-        if len(name) >= 4 and re.search(r"(?<![a-ząćęłńóśźż])" + re.escape(name.lower()) + r"(?![a-ząćęłńóśźż])", low):
-            return name, (district if _is_place(district) and district != name else None)
+    # sorted_names = (skompilowany regex wszystkich znanych miast, {nazwa_lower: Nazwa}) — jeden regex zamiast 1300 kompilacji na rekord
+    names_rx, names_map = sorted_names
+    m = names_rx.search(title.lower()) if names_rx else None
+    if m:
+        name = names_map.get(m.group(1), m.group(1))
+        return name, (district if _is_place(district) and district != name else None)
     return None
 
 
@@ -4803,7 +4805,9 @@ async def admin_backfill_city(limit: int = 1500, apply: int = 0, source: str = "
                     and name.lower() not in ("stare miasto", "śródmieście", "srodmiescie", "centrum", "nowe miasto", "osiedle"):
                 ascii_map.setdefault(_normalize_city_name(name), name)
         await db.settings.update_one({"_id": "city_names_cache"}, {"$set": {"map": ascii_map, "at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
-    sorted_names = sorted(ascii_map.values(), key=len, reverse=True)
+    _names = [n for n in sorted(ascii_map.values(), key=len, reverse=True) if len(n) >= 4]
+    names_rx = re.compile(r"(?<![a-ząćęłńóśźż])(" + "|".join(re.escape(n.lower()) for n in _names) + r")(?![a-ząćęłńóśźż])") if _names else None
+    sorted_names = (names_rx, {n.lower(): n for n in _names})
     timings["names"] = round(time.time() - _t0, 2)
     q: dict = {"city": {"$in": sorted(_VOIVODESHIPS)}, "city_unresolved": {"$ne": True}}
     if source:

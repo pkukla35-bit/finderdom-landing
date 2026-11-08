@@ -4971,14 +4971,49 @@ async def _authorize_cron_or_admin(request: Request) -> None:
 @app.get("/api/admin/mailing/auto-run")
 @app.post("/api/admin/mailing/auto-run")
 async def admin_mailing_auto_run(request: Request, limit: int = 60):
-    """Codzienny cron (Vercel) — wysyła należne kroki sekwencji do niezdecydowanych."""
+    """Codzienny cron (Vercel, 08:00 UTC) — wysyła należne kroki sekwencji do niezdecydowanych.
+    Przy okazji odpala codzienny raport zdrowia importów (GitHub: health-check.yml) — harmonogram GitHub Actions
+    startował z wielogodzinnym opóźnieniem i tylko pn–pt; dispatch z Vercel idzie od razu, 7 dni w tygodniu."""
     await _authorize_cron_or_admin(request)
+    report = await _trigger_daily_report_if_due()
     settings = await _mailing_settings()
     if not settings["auto_enabled"]:
-        return {"skipped": True, "reason": "auto_disabled"}
+        return {"skipped": True, "reason": "auto_disabled", "daily_report": report}
     if not (await _smtp_cfg() or await _email_key()):
-        return {"skipped": True, "reason": "email_not_configured"}
-    return await _mailing_auto_run(limit=max(1, min(200, limit)))
+        return {"skipped": True, "reason": "email_not_configured", "daily_report": report}
+    out = await _mailing_auto_run(limit=max(1, min(200, limit)))
+    if isinstance(out, dict):
+        out["daily_report"] = report
+    return out
+
+
+async def _trigger_daily_report_if_due(force: bool = False) -> dict:
+    """Raz dziennie uruchamia workflow raportu zdrowia (scripts/health_check.py → e-mail do admina)."""
+    db = database()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    st = await db.settings.find_one({"_id": "daily_report"}) or {}
+    if not force and st.get("last_triggered_day") == today:
+        return {"skipped": True, "reason": "already_today"}
+    tok = await _github_token()
+    if not tok:
+        return {"skipped": True, "reason": "no_github_token"}
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.post(f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/health-check.yml/dispatches",
+                                  headers={"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json"}, json={"ref": "main"})
+        code = r.status_code
+    except Exception as e:
+        code = str(e)[:80]
+    ok = code == 204
+    await db.settings.update_one({"_id": "daily_report"}, {"$set": {"last_triggered_day": today if ok else st.get("last_triggered_day"),
+                                                                   "last_attempt_at": datetime.now(timezone.utc).isoformat(), "last_result": code}}, upsert=True)
+    return {"triggered": ok, "result": code}
+
+
+@app.post("/api/admin/daily-report/run")
+async def admin_daily_report_run(admin: dict = Depends(require_admin)):
+    """Ręczne wysłanie raportu dziennego (odpala workflow health-check.yml teraz)."""
+    return await _trigger_daily_report_if_due(force=True)
 
 
 @app.get("/api/admin/mailing")

@@ -4791,7 +4791,8 @@ async def admin_backfill_market(limit: int = 2000, apply: int = 0, admin: dict =
     Jawne „wtórny” (do remontu, kamienica, z lat 70…) → wtorny. Reszta zostaje pusta (= wtórny w filtrze), dostaje market_scanned."""
     db = database(); coll = db.listings
     # tylko mieszkania / domy / lokale — działki i garaże nie mają rynku pierwotnego/wtórnego
-    q = {"market_type": {"$in": [None, ""]}, "market_scanned": {"$ne": True}, "type": {"$regex": "^(mieszkanie|dom|lokal)", "$options": "i"}}
+    q = {"market_type": {"$in": [None, ""]}, "market_scanned": {"$ne": True}, "type": {"$regex": "^(mieszkanie|dom|lokal)", "$options": "i"},
+         "transaction_type": {"$ne": "wynajem"}}
     docs = [d async for d in coll.find(q, {"_id": 1, "title": 1, "description": 1, "build_year": 1, "seller_type": 1}).hint([("market_type", 1)]).limit(max(1, min(limit, 5000)))]
     try:
         remaining = await coll.count_documents(q, maxTimeMS=2500, hint=[("market_type", 1)])

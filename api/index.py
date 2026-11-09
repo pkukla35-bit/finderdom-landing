@@ -4997,6 +4997,11 @@ async def _daily_jobs_if_due() -> Optional[dict]:
         out["imports"] = await _trigger_imports_if_due()
     except Exception as e:
         out["imports"] = {"error": str(e)[:200]}
+    # Raport dzienny (health-check.yml) — także stąd, bo cron mailing/auto-run na Vercel nie odpala się każdego dnia (idempotentne: raz dziennie)
+    try:
+        out["daily_report"] = await _trigger_daily_report_if_due()
+    except Exception as e:
+        out["daily_report"] = {"error": str(e)[:200]}
     email_ok = bool(await _smtp_cfg() or await _email_key())
     if email_ok:
         try:

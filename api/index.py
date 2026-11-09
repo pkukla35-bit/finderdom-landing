@@ -6118,6 +6118,24 @@ async def admin_manual_optout(body: ManualOptoutReq, admin: dict = Depends(requi
     return {"ok": True, "email": e}
 
 
+@app.get("/api/admin/mailing/campaign-stats")
+async def admin_campaign_stats(template: str, since: str, admin: dict = Depends(require_admin)):
+    """Podsumowanie kampanii ręcznej: unikalni odbiorcy, którym mail doszedł (ok), i tacy, u których wszystkie próby się nie udały."""
+    db = database()
+    since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+    if since_dt.tzinfo is None:
+        since_dt = since_dt.replace(tzinfo=timezone.utc)
+    q = {"template": template, "sent_at": {"$gte": since_dt}}
+    ok = set(await db.manual_mail_log.distinct("email", {**q, "ok": True}))
+    failed_any = set(await db.manual_mail_log.distinct("email", {**q, "ok": False}))
+    rows = await db.manual_mail_log.count_documents(q)
+    errors: dict = {}
+    async for r in db.manual_mail_log.aggregate([{"$match": {**q, "ok": False}}, {"$group": {"_id": {"$substrCP": [{"$ifNull": ["$error", ""]}, 0, 70]}, "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 6}]):
+        errors[r["_id"]] = r["n"]
+    return {"template": template, "since": since_dt.isoformat(), "rows": rows, "delivered_unique": len(ok), "failed_only_unique": len(failed_any - ok),
+            "retried_then_ok": len(failed_any & ok), "errors": errors}
+
+
 @app.get("/api/admin/mailing/manual-log")
 async def admin_manual_log(admin: dict = Depends(require_admin), limit: int = 50):
     db = database()

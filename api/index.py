@@ -4278,6 +4278,10 @@ async def _trigger_imports_if_due(force: bool = False) -> dict:
     tok = await _github_token()
     if not tok:
         return {"skipped": True, "reason": "no_github_token"}
+    if not force:   # atomowe zajęcie dnia (równoległe ticki: cron + ruch)
+        claimed = await db.settings.find_one_and_update({"_id": "imports", "last_triggered_day": {"$ne": today}}, {"$set": {"last_triggered_day": today}})
+        if claimed is None and st:
+            return {"skipped": True, "reason": "already_today"}
     results = {}
     async with httpx.AsyncClient(timeout=20) as client:
         for wf in IMPORT_WORKFLOWS:
@@ -4810,20 +4814,31 @@ async def _dispatch_daily(key: str, workflow: str, min_hour_pl: int, force: bool
     tok = await _github_token()
     if not tok:
         return {"skipped": True, "reason": "no_github_token"}
+    # Atomowe „zajęcie” dnia — 10.11 dwa równoległe ticki (cron + ruch) wysłały compute-ai-verdicts 2× w tej samej sekundzie.
+    prev_day = st.get("last_triggered_day")
+    if not force:
+        claimed = await db.settings.find_one_and_update({"_id": key, "last_triggered_day": {"$ne": today}}, {"$set": {"last_triggered_day": today}})
+        if claimed is None and st:
+            return {"skipped": True, "reason": "already_today"}
+        if claimed is None:
+            await db.settings.update_one({"_id": key}, {"$setOnInsert": {"last_triggered_day": today}}, upsert=True)
+    code: object = None
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             hdr = {"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json"}
             rr = await client.get(f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{workflow}/runs",
                                   params={"status": "in_progress", "per_page": 1}, headers=hdr)
             if rr.status_code == 200 and (rr.json().get("total_count") or 0) > 0:
-                return {"skipped": True, "reason": "already_running"}   # nie dublujemy (np. ręczny run w toku) — dzień nie jest oznaczony
+                if not force:   # oddaj dzień — następny tick spróbuje ponownie, gdy run się skończy
+                    await db.settings.update_one({"_id": key}, {"$set": {"last_triggered_day": prev_day}})
+                return {"skipped": True, "reason": "already_running"}
             r = await client.post(f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{workflow}/dispatches",
                                   headers=hdr, json={"ref": "main", **({"inputs": inputs} if inputs else {})})
         code = r.status_code
     except Exception as e:
         code = str(e)[:80]
     ok = code == 204
-    await db.settings.update_one({"_id": key}, {"$set": {"last_triggered_day": today if ok else st.get("last_triggered_day"),
+    await db.settings.update_one({"_id": key}, {"$set": {"last_triggered_day": today if ok else prev_day,
                                                          "last_attempt_at": datetime.now(timezone.utc).isoformat(), "last_result": code}}, upsert=True)
     return {"triggered": ok, "result": code}
 

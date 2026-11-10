@@ -2697,7 +2697,7 @@ function applyAllFilters() {
     for (const [key, allowed] of Object.entries(f.dynamic)) {
       // building_type (typ domu) filtruje backend na pełnej bazie — nie odrzucaj ponownie client-side
       // (fallback z tytułu po stronie API może dać inny podtyp niż lokalna detekcja)
-      if (key === 'building_type' || key === 'land_purpose') continue;
+      if (key === 'building_type' || key === 'land_purpose' || key === 'lokal_type') continue;   // lokal_type: backend (regex tytuł+opis)
       // Rynek: brak oznaczenia = wtórny (spójnie z API); „Bez określenia” = tylko oferty bez oznaczenia
       if (key === 'market_type') {
         // Pierwotny/Wtórny filtruje backend na pełnej bazie — nie odrzucaj ponownie (lokalna autodetekcja z tytułu bywa inna niż pole w DB,

@@ -608,7 +608,7 @@ gtag('set', 'url_passthrough', false);
     </div>
 
     <div class="results-head">
-      <div class="results-count">Znaleziono <strong id="count">…</strong> ofert</div>
+      <div class="results-count">Znaleziono <strong id="count">…</strong> <span id="countUnit">ofert</span> <span id="countSub" style="font-size:12px;color:#8ba3d4;font-weight:500"></span></div>
       <div class="view-switch" id="viewSwitch" title="Przełącz widok wyszukiwarki">
         <a href="?widok=prywatny" id="viewPrivate">👤 Prywatny</a><a href="?widok=biuro" id="viewBiuro">🏢 Dla biur</a>
       </div>
@@ -1271,6 +1271,8 @@ async function loadListings() {
   const count = document.getElementById('count');
   try {
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8ba3d4">⏳ Wczytuję oferty...</div>';
+    count.textContent = '…'; const _cs = document.getElementById('countSub'); if (_cs) _cs.textContent = '';
+    const _pg = document.getElementById('pager'); if (_pg) _pg.innerHTML = '';
     // ── Server-side prefiltr: użyj URL params LUB aktualnych wartości UI (heroType/heroTrans defaultują na mieszkanie/sprzedaz)
     //    Zamiast ładować 36k ofert, backend zwraca ~500-2000 pasujących do zapytania
     const urlParams = new URLSearchParams(location.search);
@@ -1370,6 +1372,7 @@ async function loadListings() {
     // 🤖 Wyszukiwanie AI: cechy z opisu (ogród, balkon, garaż…) — backend szuka ich w tytule/opisie/lokalizacji
     if (Array.isArray(window.__aiKeywords) && window.__aiKeywords.length) apiParams.set('keywords', window.__aiKeywords.join(','));
     const scrapedUrl = '/api/listings-scraped' + (apiParams.toString() ? '?' + apiParams.toString() : '');
+    window.__lastScrapedUrl = scrapedUrl;   // „załaduj kolejne” (offset) — patrz loadMoreListings()
     // 🔒 Zalogowani wysyłają token (opłacony plan = pełna lista); &p=1 rozdziela cache CDN od publicznego podglądu
     const __tok = localStorage.getItem('finderdom_token');
     const fetchJson = (u) => fetch(__tok ? u + (u.includes('?') ? '&' : '?') + 'p=1' : u, __tok ? { headers: { 'Authorization': 'Bearer ' + __tok } } : {})
@@ -1408,12 +1411,14 @@ async function loadListings() {
 }
 
 // Przetwarza odpowiedź /api/listings-scraped: dedup → cluster cross-portal → normalize → AI verdicts → render
-function applyScrapedData(d) {
+function applyScrapedData(d, append) {
     const count = document.getElementById('count');
     let scrapedList = [];
     let scrapedTotalCount = 0;  // total ofert w bazie (przed limit) — dla count display
     {
-      const raw = d.listings || [];
+      // append=true: „załaduj kolejne” — dokładamy następną paczkę (offset) do już załadowanych surowych rekordów
+      const raw = append ? (window.__rawAll || []).concat(d.listings || []) : (d.listings || []);
+      window.__rawAll = raw; window.__rawLoaded = raw.length;
       scrapedTotalCount = Number(d.total_count) || 0;
       window.__countExact = d.count_exact !== false;  // false = licznik w bazie nie zdążył → pokazujemy „N+”
       window.__locked = !!d.locked;
@@ -1621,7 +1626,7 @@ function applyScrapedData(d) {
     window.__scrapedTotalCount = scrapedTotalCount;
     // NATYCHMIAST ustaw count na total_count z bazy — nie czekaj na applyAllFilters
     // Pokazuj total_count z bazy jeśli większy niż załadowane (paginacja); „N+” gdy licznik nie był dokładny
-    count.textContent = Math.max(LISTINGS.length, scrapedTotalCount || 0) + (window.__countExact === false ? '+' : '');
+    updateCountDisplay(LISTINGS.length);
 
     // ── AI ANALYSIS: oblicz verdict_badge dla każdej oferty (mediana ppm² per typ+miasto) ──
     try { computeAiVerdicts(LISTINGS); } catch(e) { console.error('AI verdicts:', e); }
@@ -1887,11 +1892,46 @@ function renderListings(list) {
     CURRENT_FILTERED = list;
   }
   currentPage = 1;
-  // Pokazuj total_count z bazy (2640 dla Warszawa mieszkania, 35540 bez filtrów) — realny numer
-  const totalFromBase = window.__scrapedTotalCount || 0;
-  const displayCount = totalFromBase > 0 ? totalFromBase : CURRENT_FILTERED.length;
-  document.getElementById('count').textContent = displayCount + (totalFromBase > 0 && window.__countExact === false ? '+' : '');
+  updateCountDisplay(CURRENT_FILTERED.length);
   renderPage();
+}
+
+// 🔢 Jedno miejsce dla licznika: „ogłoszeń” (surowe rekordy w bazie, z duplikatami) vs „nieruchomości” (karty po scaleniu kopii
+// z różnych portali). Wcześniej nagłówek pokazywał 1241 (baza), a stopka stron 600 (karty) — wyglądało, jakby filtry „gubiły” połowę.
+function updateCountDisplay(shown) {
+  const el = document.getElementById('count'), unit = document.getElementById('countUnit'), sub = document.getElementById('countSub');
+  if (!el) return;
+  const total = window.__scrapedTotalCount || 0, loaded = window.__rawLoaded || 0;
+  const plus = window.__countExact === false ? '+' : '';
+  const fmt = (n) => Number(n).toLocaleString('pl-PL');
+  if (window.__locked) { el.textContent = fmt(total || shown) + plus; if (unit) unit.textContent = 'ofert'; if (sub) sub.textContent = ''; return; }
+  const partial = total > loaded && loaded > 0;
+  const more = partial ? ` · <a href="#" id="loadMoreLink" style="color:#fbbf24;font-weight:700">załaduj kolejne ${fmt(Math.min(1000, total - loaded))} →</a>` : '';
+  if (partial && shown >= LISTINGS.length) {
+    el.textContent = fmt(total) + plus; if (unit) unit.textContent = 'ogłoszeń';
+    if (sub) sub.innerHTML = `(${fmt(shown)} nieruchomości po scaleniu duplikatów · załadowano ${fmt(loaded)} z ${fmt(total)})${more}`;
+  } else if (partial) {
+    el.textContent = fmt(shown); if (unit) unit.textContent = 'nieruchomości';
+    if (sub) sub.innerHTML = `(po filtrach, z załadowanych ${fmt(loaded)} z ${fmt(total)} ogłoszeń)${more}`;
+  } else {
+    el.textContent = fmt(shown); if (unit) unit.textContent = 'nieruchomości';
+    if (sub) sub.innerHTML = total > shown ? `(${fmt(total)} ogłoszeń — kopie z kilku portali scalone w jedną kartę)` : '';
+  }
+  document.getElementById('loadMoreLink')?.addEventListener('click', (e) => { e.preventDefault(); loadMoreListings(); });
+}
+
+// ➕ Dokłada następną paczkę (offset = już załadowane surowe rekordy) i przelicza karty — dostęp do WSZYSTKICH ogłoszeń, nie tylko pierwszych 1000
+async function loadMoreListings() {
+  const base = window.__lastScrapedUrl; if (!base || window.__loadingMore) return;
+  window.__loadingMore = true;
+  const link = document.getElementById('loadMoreLink'); if (link) link.textContent = '⏳ wczytuję…';
+  try {
+    const u = new URL(base, location.origin); u.searchParams.set('offset', String(window.__rawLoaded || 0)); u.searchParams.set('limit', '1000');
+    const tok = localStorage.getItem('finderdom_token');
+    const d = await fetch(u.pathname + u.search + (tok ? '&p=1' : ''), tok ? { headers: { 'Authorization': 'Bearer ' + tok } } : {}).then(r => r.ok ? r.json() : null);
+    if (d) applyScrapedData(d, true);
+  } catch (e) { console.error('loadMore:', e); }
+  window.__loadingMore = false;
 }
 
 
@@ -2202,7 +2242,7 @@ function renderPager(totalPages) {
     prev = n;
   }
   html += `<button type="button" class="pg-btn pg-arrow" data-page="${c + 1}" ${c === totalPages ? 'disabled' : ''} aria-label="Następna strona">›</button>`;
-  html += `<span class="pg-info">Strona ${c} z ${totalPages} · ${CURRENT_FILTERED.length.toLocaleString('pl-PL')} ofert</span>`;
+  html += `<span class="pg-info">Strona ${c} z ${totalPages} · ${CURRENT_FILTERED.length.toLocaleString('pl-PL')} nieruchomości</span>`;
   pager.innerHTML = html;
   pager.querySelectorAll('.pg-btn:not([disabled])').forEach(b => b.addEventListener('click', () => {
     const n = parseInt(b.dataset.page, 10);
@@ -2806,9 +2846,7 @@ function applyAllFilters() {
   currentPage = 1;
   // Count display: gdy client-side filtry nic nie odrzuciły — pokaż realny total z bazy (35k, 15k etc.)
   //                 gdy odrzuciły — pokaż liczbę pozostałych po filtrach
-  const backendTotal = window.__scrapedTotalCount || 0;
-  const noNarrowing = filtered.length === LISTINGS.length && LISTINGS.length > 0;
-  document.getElementById('count').textContent = noNarrowing && backendTotal > 0 ? backendTotal : filtered.length;
+  updateCountDisplay(filtered.length);
   // Info label o aktywnym auto-radius (żeby user wiedział czemu ma dużo ofert wokół miasta)
   const infoEl = document.getElementById('radiusInfo');
   if (infoEl) {

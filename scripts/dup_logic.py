@@ -2,6 +2,7 @@
 (scripts/compute_duplicates.py), który raz dziennie zapisuje przy każdej ofercie gotowe podsumowanie `dup` (kopie, pośrednicy, portale)."""
 import math
 import re
+import unicodedata
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -151,6 +152,19 @@ def _dup_tokens(t) -> set:
     return {w for w in re.findall(r"[a-ząćęłńóśźż]{5,}", str(t or "").lower()) if w not in _DUP_STOP}
 
 
+_URL_STOP = {"oferta", "nieruchomosci", "sprzedam", "sprzedaz", "wynajme", "wynajem", "mieszkanie", "mieszkania", "dzialka", "dzialki", "lokal",
+             "pokoje", "pokoi", "dom", "domy", "otodom", "morizon", "gratka", "domiporta", "adresowo", "gethome", "https", "www"}
+
+
+def _dup_place_tokens(d: dict) -> set:
+    """Nazwy własne z tytułu ORAZ ze sluga URL (Domiporta: tytuł „dom na sprzedaż 320m2”, ale URL „…-zywiec-zaslocie-zablocie-320m2”)."""
+    toks = _dup_tokens(d.get("title"))
+    slug = re.sub(r"https?://[^/]+/", "", str(d.get("url") or "").lower())
+    toks |= {w for w in re.findall(r"[a-z]{5,}", slug) if w not in _URL_STOP and w not in _DUP_STOP}
+    # bez polskich znaków, żeby „Zabłocie” (tytuł) = „zablocie” (URL)
+    return {unicodedata.normalize("NFKD", w.replace("ł", "l")).encode("ascii", "ignore").decode() for w in toks}
+
+
 def _dup_norm(v) -> str:
     s = str(v or "").strip().lower()
     return "" if s in ("", "none", "null") else s
@@ -233,6 +247,25 @@ def _dup_match(doc: dict, d: dict):
     # 2c) Inny metraż (≥ 0,5 m², więc nie zaokrąglenie 48,43 → 48) I inna cena → inne mieszkanie (sąsiedni lokal w tej samej inwestycji,
     #     ten sam opis dewelopera). Ta sama nieruchomość na dwóch portalach ma identyczny metraż albo identyczną cenę.
     if area and d_area and abs(d_area - area) >= 0.5 and abs(p2 - price) >= 1:
+        return False
+    # 2d) DOM z innym metrażem na portalach (Otodom 227,4 m² użytkowej vs Domiporta 319,8 m² całkowitej — Żywiec Zabłocie, 749 000 zł):
+    #     dopuszczamy tylko przy IDENTYCZNEJ cenie i dodatkowym dowodzie: ta sama ulica/GPS, wspólna nazwa własna (tytuł/URL: „zablocie”),
+    #     to samo biuro albo zgodne opisy. Dla mieszkań metraż się nie rozjeżdża → bez zmian (±3% w zapytaniu).
+    area_mismatch = bool(area and d_area and abs(d_area - area) / max(area, d_area) > 0.03)
+    if area_mismatch:
+        if base_type not in ("dom",) or abs(p2 - price) >= 1:
+            return False
+        if _dup_same_street(doc, d) is True or (km is not None and km < 0.3):
+            return "strong"
+        ag1, ag2 = _dup_norm(doc.get("agency_name")), _dup_norm(d.get("agency_name"))
+        if ag1 and ag2 and ag1[:12] == ag2[:12]:
+            return True
+        city_toks = {unicodedata.normalize("NFKD", _dup_norm(x).replace("ł", "l")).encode("ascii", "ignore").decode() for x in (doc.get("city"), d.get("city"))}
+        if (_dup_place_tokens(doc) & _dup_place_tokens(d)) - city_toks:   # wspólna nazwa własna poza samą nazwą miasta (dzielnica, ulica)
+            return True
+        if len(str(doc.get("description") or "")) >= 80 and len(str(d.get("description") or "")) >= 80:
+            shared = _dup_desc_tokens(doc) & _dup_desc_tokens(d)
+            return len(shared) >= 4
         return False
     # 3) Pewne potwierdzenia (ważniejsze niż różnie wpisana dzielnica/gmina): ta sama ulica, GPS < 300 m, identyczny tytuł,
     #    identyczny metraż z ułamkiem (138,84 m²) + identyczna cena
@@ -326,6 +359,11 @@ def dup_prepare(doc: dict, include_urls: bool):
         "area_m2": {"$gte": area * 0.97, "$lte": area * 1.03},
     }
     and_parts = [{"$or": loc_or}] if place_names or len(loc_or) > 1 else []  # oferta bez miejscowości i GPS: szukamy po całej bazie (decyduje _dup_match: tylko pewne potwierdzenia)
+    if base_type == "dom":
+        # domy: portale podają różne metraże (użytkowa / całkowita / z garażem) → przy identycznej cenie szukamy też 0,5×–2× metrażu (reguła 2d)
+        del q["area_m2"]
+        and_parts.append({"$or": [{"area_m2": {"$gte": area * 0.97, "$lte": area * 1.03}},
+                                  {"price": {"$gte": price - 0.5, "$lte": price + 0.5}, "area_m2": {"$gte": area * 0.5, "$lte": area * 2.0}}]})
     if base_type:
         q["type"] = {"$regex": "^" + _build_diacritic_regex(base_type), "$options": "i"}
     rooms = doc.get("rooms")

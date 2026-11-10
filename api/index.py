@@ -2212,7 +2212,7 @@ async def listing_duplicates(listing_id: str, request: Request, response: Respon
     return out
 
 
-LIVE_COPY_PORTALS = ("morizon", "gratka", "adresowo", "gethome")   # listy renderowane serwerowo, odpowiadają z Vercel w <1 s
+LIVE_COPY_PORTALS = ("morizon", "gratka", "domiporta", "adresowo", "gethome")   # listy renderowane serwerowo, odpowiadają z Vercel w <1 s
 LIVE_COPY_TTL_H = 12
 
 
@@ -2240,7 +2240,11 @@ async def _live_fetch_copies(doc: dict) -> dict:
 
     async def one(client, portal, page):
         try:
-            u = sp.PORTALS[portal]["url"](prop, trans, city, page)
+            if portal == "domiporta":   # działa bez województwa: /dom/sprzedam/zywiec (url_domiporta wymaga voi)
+                seg = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "dzialke", "lokal": "lokal-uzytkowy"}[prop]
+                u = f"https://www.domiporta.pl/{seg}/{'wynajme' if trans == 'wynajem' else 'sprzedam'}/{city['slug']}" + (f"?PageNumber={page}" if page > 1 else "")
+            else:
+                u = sp.PORTALS[portal]["url"](prop, trans, city, page)
             if not u:
                 return portal, page, []
             r = await client.get(u, headers={"User-Agent": ua, "Accept-Language": "pl-PL,pl;q=0.9", "Accept": "text/html,*/*;q=0.8"})

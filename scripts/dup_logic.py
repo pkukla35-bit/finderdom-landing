@@ -230,6 +230,10 @@ def _dup_match(doc: dict, d: dict):
             return abs(ppm - round(ppm)) < 0.005 and round(ppm) % 50 == 0
         if _dev_price(price, area) and _dev_price(p2, d_area):
             return False
+    # 2c) Inny metraż (≥ 0,5 m², więc nie zaokrąglenie 48,43 → 48) I inna cena → inne mieszkanie (sąsiedni lokal w tej samej inwestycji,
+    #     ten sam opis dewelopera). Ta sama nieruchomość na dwóch portalach ma identyczny metraż albo identyczną cenę.
+    if area and d_area and abs(d_area - area) >= 0.5 and abs(p2 - price) >= 1:
+        return False
     # 3) Pewne potwierdzenia (ważniejsze niż różnie wpisana dzielnica/gmina): ta sama ulica, GPS < 300 m, identyczny tytuł,
     #    identyczny metraż z ułamkiem (138,84 m²) + identyczna cena
     if _dup_same_street(doc, d) is True or (km is not None and km < 0.3):

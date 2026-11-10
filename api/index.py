@@ -1878,16 +1878,7 @@ async def admin_cleanup_stale(
             daily = await _daily_jobs_if_due()
         except Exception as e:
             logger.error("daily jobs failed: %s", str(e)[:200])
-        try:
-            fs = await _fresh_sweep_backstop()
-            if fs:
-                logger.info("fresh sweep backstop: %s", fs)
-        except Exception as e:
-            logger.error("fresh sweep backstop failed: %s", str(e)[:200])
-        try:
-            await _trigger_daily_report_if_due()   # idempotentne, ≥ 9:00 PL — backstop gdy cron auto-run na Vercel nie odpali
-        except Exception as e:
-            logger.error("daily report trigger failed: %s", str(e)[:200])
+        await _scheduler_tick("cleanup-stale", force=True)
 
     limit = max(1, min(limit, 1000))
     concurrency = max(1, min(concurrency, 50))
@@ -2975,6 +2966,10 @@ async def listings_scraped_endpoint(
         for d in docs:
             if isinstance(d.get("stale_since"), datetime):
                 d["stale_since"] = d["stale_since"].isoformat()
+        try:   # ⏱️ zegar zadań cyklicznych napędzany ruchem (raz na 10 min; zwykle tylko odczyt settings) — patrz _scheduler_tick
+            await _scheduler_tick("traffic")
+        except Exception as e:
+            logger.warning("scheduler tick failed: %s", str(e)[:120])
         return {"listings": docs, "count": len(docs), "total_count": total_count, "count_exact": count_exact, "offset": offset, "limit": limit, "lite": bool(lite),
                 "filtered": bool(city or type), "locked": locked, "preview_limit": FREE_PREVIEW_LIMIT if locked else None,
                 "archive": bool(archive), "broker": broker, "nearby_cities": nearby_cities if use_geo else None}
@@ -4407,7 +4402,7 @@ async def admin_alerts_run(request: Request, limit: int = 100):
     Przy okazji (ten sam cron, 06:30 UTC codziennie) odpala importy ofert na GitHub — bo harmonogramy GitHub Actions
     potrafią startować z 6–7 h opóźnieniem, a workflow_dispatch rusza od razu."""
     await _authorize_cron_or_admin(request)
-    imports = await _trigger_imports_if_due()
+    imports = (await _scheduler_tick("alerts/run", force=True)).get("imports")
     if not (await _smtp_cfg() or await _email_key()):
         return {"skipped": True, "reason": "email_not_configured", "imports": imports}
     out = await _alerts_run(limit_alerts=max(1, min(500, limit)))
@@ -4618,12 +4613,17 @@ async def _github_token() -> str:
 
 
 async def _trigger_imports_if_due(force: bool = False) -> dict:
-    """Raz dziennie (7 dni w tygodniu) uruchamia workflowy importów przez GitHub API (workflow_dispatch)."""
+    """Raz dziennie (7 dni w tygodniu) uruchamia workflowy importów przez GitHub API (workflow_dispatch).
+    Nie wcześniej niż 6:00 PL: pełny import o 2:00 w nocy (10.11) zużywał dzienny „slot”, a zbierał tylko kilkadziesiąt ofert
+    (nocą nic nowego nie przybywa) — potem do wieczora baza stała, bo harmonogram GitHub Actions nie odpalił."""
     db = database()
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    now_pl = datetime.now(ZoneInfo("Europe/Warsaw"))
+    today = now_pl.strftime("%Y-%m-%d")
     st = await db.settings.find_one({"_id": "imports"}) or {}
     if not force and st.get("last_triggered_day") == today:
         return {"skipped": True, "reason": "already_today"}
+    if not force and now_pl.hour < 6:
+        return {"skipped": True, "reason": "too_early", "hour_pl": now_pl.hour}
     tok = await _github_token()
     if not tok:
         return {"skipped": True, "reason": "no_github_token"}
@@ -5062,8 +5062,55 @@ async def _fresh_sweep_backstop() -> Optional[dict]:
     return out
 
 
+SCHEDULER_TICK_MIN = 10
+
+
+async def _scheduler_tick(source: str, force: bool = False) -> dict:
+    """⏱️ Jeden „zegar” dla zadań cyklicznych, niezależny od harmonogramów GitHub Actions (10.11: żaden scheduled run nie odpalił
+    do 11:30 PL; 9.11: 9–10 h opóźnienia) i od cronów Vercel (brak dowodu, że trafiają). Wołany z cronów (force) ORAZ z ruchu
+    użytkowników (/api/listings-scraped) — najwyżej raz na SCHEDULER_TICK_MIN minut (atomowa blokada w settings).
+    Każde zadanie jest idempotentne i samo pilnuje swojej pory: pełny import ≥ 6:00 PL raz dziennie, lekkie tury 9–19 PL co ~1 h,
+    raport dzienny ≥ 9:00 PL raz dziennie. Lekkie: tylko odczyty settings + ewentualny dispatch do GitHub (≤ ~4 s)."""
+    db = database()
+    now = datetime.now(timezone.utc)
+    if not force:
+        cutoff = (now - timedelta(minutes=SCHEDULER_TICK_MIN)).isoformat()
+        got = await db.settings.find_one_and_update(
+            {"_id": "scheduler_tick", "$or": [{"last_at": {"$lt": cutoff}}, {"last_at": {"$exists": False}}]},
+            {"$set": {"last_at": now.isoformat(), "source": source}})
+        if got is None:
+            if await db.settings.find_one({"_id": "scheduler_tick"}):
+                return {"skipped": True}
+            await db.settings.update_one({"_id": "scheduler_tick"}, {"$setOnInsert": {"last_at": now.isoformat(), "source": source}}, upsert=True)
+    out: dict = {"source": source, "at": now.isoformat()}
+    for key, fn in (("imports", _trigger_imports_if_due), ("fresh_sweep", _fresh_sweep_backstop), ("daily_report", _trigger_daily_report_if_due)):
+        try:
+            out[key] = await fn()
+        except Exception as e:
+            out[key] = {"error": str(e)[:160]}
+    await db.settings.update_one({"_id": "scheduler_tick"}, {"$set": {"last_at": now.isoformat(), "source": source, "last_result": out}}, upsert=True)
+    return out
+
+
+@app.get("/api/admin/cron/status")
+async def admin_cron_status(admin: dict = Depends(require_admin)):
+    """Diagnostyka harmonogramów: kiedy ostatnio trafiły crony (Vercel/GitHub), ostatni tick zegara, importy, lekkie tury, raport."""
+    db = database()
+    out = {}
+    for key in ("cron_hits", "scheduler_tick", "imports", "fresh_sweep", "daily_report", "daily_jobs"):
+        d = await db.settings.find_one({"_id": key}, {"_id": 0}) or {}
+        d.pop("token", None)
+        out[key] = d
+    out["now_pl"] = datetime.now(ZoneInfo("Europe/Warsaw")).isoformat()
+    return out
+
+
 async def _authorize_cron_or_admin(request: Request) -> None:
     if _is_cron_request(request):
+        try:   # log trafień cronów (Vercel / GitHub) — do diagnozy, czy harmonogramy w ogóle odpalają
+            await database().settings.update_one({"_id": "cron_hits"}, {"$set": {request.url.path: datetime.now(timezone.utc).isoformat()}}, upsert=True)
+        except Exception:
+            pass
         return
     auth_header = (request.headers.get("authorization") or "").replace("Bearer ", "").strip()
     if not auth_header:
@@ -5085,7 +5132,7 @@ async def admin_mailing_auto_run(request: Request, limit: int = 60):
     Przy okazji odpala codzienny raport zdrowia importów (GitHub: health-check.yml) — harmonogram GitHub Actions
     startował z wielogodzinnym opóźnieniem i tylko pn–pt; dispatch z Vercel idzie od razu, 7 dni w tygodniu."""
     await _authorize_cron_or_admin(request)
-    report = await _trigger_daily_report_if_due()
+    report = (await _scheduler_tick("mailing/auto-run", force=True)).get("daily_report")
     settings = await _mailing_settings()
     if not settings["auto_enabled"]:
         return {"skipped": True, "reason": "auto_disabled", "daily_report": report}

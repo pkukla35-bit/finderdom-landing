@@ -200,6 +200,9 @@ def main():
     for city in cities:
         slug = city["slug"].split("/")[0]
         log.info("── %s ──", city["name"])
+        # 🔎 tryb głęboki (max_pages ≥ 30 — jedyny parametr dostępny z workflow_dispatch): nie przerywaj po 1 stronie bez nowych —
+# listy „od najnowszych” mają w środku strony już zaimportowane, a za nimi starsze oferty, których nigdy nie pobraliśmy (brak duplikatów).
+        deep = a.max_pages >= 300; zero_streak = 0   # OLX: lista ogólnopolska, domyślnie 120 stron
         for page in range(1, a.max_pages + 1):
             html = fetch(list_url(a.property, a.transaction, slug, page)); tot["pages"] += 1
             if not html: log.info("  page %d: brak HTML", page); break
@@ -225,7 +228,8 @@ def main():
                     log.warning("  bulk_write: %s", str(e)[:200])
             tot["new"] += new; tot["updated"] += upd
             log.info("  page %d: %d ogłoszeń → new=%d upd=%d", page, len(ads), new, upd)
-            if new == 0 and page >= 2: log.info("  → brak nowych, następne miasto"); break
+            zero_streak = zero_streak + 1 if new == 0 else 0
+            if new == 0 and page >= 2 and zero_streak >= (4 if deep else 2): log.info("  → brak nowych, następne miasto"); break
             time.sleep(a.delay)
     log.info("═══ DONE olx %s/%s: new=%d updated=%d pages=%d ═══", a.transaction, a.property, tot["new"], tot["updated"], tot["pages"])
 

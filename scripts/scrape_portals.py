@@ -455,6 +455,9 @@ def main():
     tot = {"new": 0, "updated": 0, "pages": 0}
     for city in cities:
         log.info("── %s ──", city["name"])
+        # 🔎 tryb głęboki (max_pages ≥ 30 — jedyny parametr dostępny z workflow_dispatch): nie przerywaj po 1 stronie bez nowych —
+# listy „od najnowszych” mają w środku strony już zaimportowane, a za nimi starsze oferty, których nigdy nie pobraliśmy (brak duplikatów).
+        deep = a.max_pages >= 30; zero_streak = 0
         for page in range(1, a.max_pages + 1):
             u = P["url"](a.property, a.transaction, city, page)
             if not u: log.info("  %s: portal nie ma kategorii %s", a.portal, a.property); break
@@ -485,7 +488,8 @@ def main():
                     log.warning("  bulk_write: %s", str(e)[:200])
             tot["new"] += new; tot["updated"] += upd
             log.info("  page %d: %d ofert → new=%d upd=%d (🏢 z nazwą biura: %d)", page, len(items), new, upd, sum(1 for d in docs_batch if d.get("agency_name")))
-            if new == 0 and page >= 2: log.info("  → brak nowych, następne miasto"); break
+            zero_streak = zero_streak + 1 if new == 0 else 0
+            if new == 0 and page >= 2 and zero_streak >= (4 if deep else 2): log.info("  → brak nowych, następne miasto"); break
             time.sleep(a.delay)
     log.info("═══ DONE %s %s/%s: new=%d updated=%d pages=%d ═══", a.portal, a.transaction, a.property, tot["new"], tot["updated"], tot["pages"])
     if a.portal == "adresowo":

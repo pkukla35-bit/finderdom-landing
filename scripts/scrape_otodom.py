@@ -549,6 +549,9 @@ def main():
     for city in cities:
         log.info("── %s ──", city["name"])
         empty_streak = 0
+        # 🔎 tryb głęboki (max_pages ≥ 30 — jedyny parametr dostępny z workflow_dispatch): nie przerywaj po 1 stronie bez nowych —
+# listy „od najnowszych” mają w środku strony już zaimportowane, a za nimi starsze oferty, których nigdy nie pobraliśmy (brak duplikatów).
+        deep = args.max_pages >= 30
         for page in range(1, args.max_pages + 1):
             url = otodom_url(args.property, city, page)
             html = fetch_page(url, api_key)
@@ -587,8 +590,8 @@ def main():
                      page, len(items), batch_new, batch_upd, total["new"])
             if batch_new == 0 and batch_upd == 0:
                 empty_streak += 1
-                if empty_streak >= 2:
-                    log.info("  → 2 empty pages, next city"); break
+                if empty_streak >= (5 if deep else 2):
+                    log.info("  → %d empty pages, next city", empty_streak); break
             else:
                 empty_streak = 0
             time.sleep(1.0)

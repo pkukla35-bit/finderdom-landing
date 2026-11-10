@@ -2214,6 +2214,7 @@ async def listing_duplicates(listing_id: str, request: Request, response: Respon
 
 LIVE_COPY_PORTALS = ("morizon", "gratka", "domiporta", "adresowo", "gethome")   # listy renderowane serwerowo, odpowiadają z Vercel w <1 s
 LIVE_COPY_TTL_H = 12
+LIVE_COPY_V = 2   # podbij po zmianie listy portali/algorytmu → oferty sprawdzone starszą wersją sprawdzą się ponownie
 
 
 def _city_slug_pl(name: str) -> str:
@@ -2286,7 +2287,7 @@ async def _live_fetch_copies(doc: dict) -> dict:
     if ops:
         r = await coll.bulk_write(ops, ordered=False)
         out["new"], out["updated"] = r.upserted_count, r.modified_count
-    await coll.update_one({"_id": doc["_id"]}, {"$set": {"copies_checked_at": datetime.now(timezone.utc).isoformat()}, "$unset": {"dup.v": ""}})
+    await coll.update_one({"_id": doc["_id"]}, {"$set": {"copies_checked_at": datetime.now(timezone.utc).isoformat(), "copies_checked_v": LIVE_COPY_V}, "$unset": {"dup.v": ""}})
     return out
 
 
@@ -2324,7 +2325,7 @@ async def listing_find_copies(listing_id: str, request: Request, response: Respo
         return {"error": "Listing not found"}
     paid = await _paid_user_from_request(request)
     last = doc.get("copies_checked_at") or ""
-    fresh = last and last > (datetime.now(timezone.utc) - timedelta(hours=LIVE_COPY_TTL_H)).isoformat()
+    fresh = last and last > (datetime.now(timezone.utc) - timedelta(hours=LIVE_COPY_TTL_H)).isoformat() and doc.get("copies_checked_v") == LIVE_COPY_V
     live = {"skipped": True, "reason": "checked_recently", "checked_at": last} if fresh else await _live_fetch_copies(doc)
     out = await _find_duplicates(doc, include_urls=paid is not None)
     out["locked"] = paid is None

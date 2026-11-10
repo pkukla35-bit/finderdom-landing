@@ -4734,7 +4734,8 @@ async def _scheduler_tick(source: str, force: bool = False) -> dict:
                 return {"skipped": True}
             await db.settings.update_one({"_id": "scheduler_tick"}, {"$setOnInsert": {"last_at": now.isoformat(), "source": source}}, upsert=True)
     out: dict = {"source": source, "at": now.isoformat()}
-    for key, fn in (("imports", _trigger_imports_if_due), ("fresh_sweep", _fresh_sweep_backstop), ("daily_report", _trigger_daily_report_if_due)):
+    for key, fn in (("imports", _trigger_imports_if_due), ("fresh_sweep", _fresh_sweep_backstop), ("daily_report", _trigger_daily_report_if_due),
+                    ("dup_compute", _trigger_dup_compute_if_due)):
         try:
             out[key] = await fn()
         except Exception as e:
@@ -4748,7 +4749,7 @@ async def admin_cron_status(admin: dict = Depends(require_admin)):
     """Diagnostyka harmonogramów: kiedy ostatnio trafiły crony (Vercel/GitHub), ostatni tick zegara, importy, lekkie tury, raport."""
     db = database()
     out = {}
-    for key in ("cron_hits", "scheduler_tick", "imports", "fresh_sweep", "daily_report", "daily_jobs"):
+    for key in ("cron_hits", "scheduler_tick", "imports", "fresh_sweep", "daily_report", "dup_compute", "daily_jobs"):
         d = await db.settings.find_one({"_id": key}, {"_id": 0}) or {}
         d.pop("token", None)
         out[key] = d
@@ -4795,32 +4796,48 @@ async def admin_mailing_auto_run(request: Request, limit: int = 60):
     return out
 
 
-async def _trigger_daily_report_if_due(force: bool = False) -> dict:
-    """Raz dziennie uruchamia workflow raportu zdrowia (scripts/health_check.py → e-mail do admina).
-    Nie wcześniej niż 09:00 PL — 10.11 raport poszedł o 02:05 razem z dispatchem importów i pokazał „0 ofert dziś”, bo importy
-    dopiero startowały. Wołany idempotentnie z kilku cronów (auto-run 09:00 PL, cleanup-stale co 6 h) — pierwszy po 9:00 wysyła."""
+async def _dispatch_daily(key: str, workflow: str, min_hour_pl: int, force: bool = False, inputs: Optional[dict] = None) -> dict:
+    """Raz dziennie (klucz w settings), nie wcześniej niż o min_hour_pl, odpala workflow GitHub (workflow_dispatch). Idempotentne —
+    wołane z _scheduler_tick przy każdym ticku; pierwszy tick po godzinie granicznej wysyła."""
     db = database()
     now_pl = datetime.now(ZoneInfo("Europe/Warsaw"))
     today = now_pl.strftime("%Y-%m-%d")
-    st = await db.settings.find_one({"_id": "daily_report"}) or {}
+    st = await db.settings.find_one({"_id": key}) or {}
     if not force and st.get("last_triggered_day") == today:
         return {"skipped": True, "reason": "already_today"}
-    if not force and now_pl.hour < 9:
+    if not force and now_pl.hour < min_hour_pl:
         return {"skipped": True, "reason": "too_early", "hour_pl": now_pl.hour}
     tok = await _github_token()
     if not tok:
         return {"skipped": True, "reason": "no_github_token"}
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            r = await client.post(f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/health-check.yml/dispatches",
-                                  headers={"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json"}, json={"ref": "main"})
+            hdr = {"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json"}
+            rr = await client.get(f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{workflow}/runs",
+                                  params={"status": "in_progress", "per_page": 1}, headers=hdr)
+            if rr.status_code == 200 and (rr.json().get("total_count") or 0) > 0:
+                return {"skipped": True, "reason": "already_running"}   # nie dublujemy (np. ręczny run w toku) — dzień nie jest oznaczony
+            r = await client.post(f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{workflow}/dispatches",
+                                  headers=hdr, json={"ref": "main", **({"inputs": inputs} if inputs else {})})
         code = r.status_code
     except Exception as e:
         code = str(e)[:80]
     ok = code == 204
-    await db.settings.update_one({"_id": "daily_report"}, {"$set": {"last_triggered_day": today if ok else st.get("last_triggered_day"),
-                                                                   "last_attempt_at": datetime.now(timezone.utc).isoformat(), "last_result": code}}, upsert=True)
+    await db.settings.update_one({"_id": key}, {"$set": {"last_triggered_day": today if ok else st.get("last_triggered_day"),
+                                                         "last_attempt_at": datetime.now(timezone.utc).isoformat(), "last_result": code}}, upsert=True)
     return {"triggered": ok, "result": code}
+
+
+async def _trigger_daily_report_if_due(force: bool = False) -> dict:
+    """Raport zdrowia (scripts/health_check.py → e-mail do admina) raz dziennie, nie wcześniej niż 09:00 PL — 10.11 raport poszedł
+    o 02:05 razem z dispatchem importów i pokazał „0 ofert dziś”, bo importy dopiero startowały."""
+    return await _dispatch_daily("daily_report", "health-check.yml", 9, force)
+
+
+async def _trigger_dup_compute_if_due(force: bool = False) -> dict:
+    """🔁 Duplikaty/konkurencja + AI verdicts na całej bazie (compute-ai-verdicts.yml → scripts/compute_duplicates.py) raz dziennie
+    ≥ 13:00 PL — po porannych importach, żeby świeżo doimportowane kopie (inne portale) od razu trafiły na karty w /szukaj."""
+    return await _dispatch_daily("dup_compute", "compute-ai-verdicts.yml", 13, force, {"dry_run": "no"})
 
 
 @app.post("/api/admin/daily-report/run")

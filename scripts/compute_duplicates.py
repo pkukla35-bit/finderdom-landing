@@ -73,6 +73,12 @@ def run(minutes: float = 240, threads: int = 8, limit: int = 0, dry_run: bool = 
             d = summarize_doc(coll, doc)
             if not dry_run:
                 coll.update_one({"_id": doc["_id"]}, {"$set": {"dup": d}})
+                # 🔄 Kopie policzone ZANIM ta oferta trafiła do bazy nie wiedzą o niej (np. Otodom z 10.11 vs Morizon doimportowany 11.11)
+                #    → oznacz do przeliczenia (dup.v=0 ⇒ trafiają do fazy „nowe” w tym samym przebiegu).
+                ids = [it["id"] for it in d["items"] if it.get("id")]
+                if ids:
+                    coll.update_many({"external_id": {"$in": ids}, "dup.checked_at": {"$lt": str(doc.get("added_at") or "")}, "dup.v": {"$gt": 0}},
+                                     {"$set": {"dup.v": 0}})
             return d
         except Exception as e:
             stats["errors"] += 1
@@ -85,6 +91,7 @@ def run(minutes: float = 240, threads: int = 8, limit: int = 0, dry_run: bool = 
             break
         print(f"== faza: {name}")
         last_id = None
+        passes = 0
         while time.time() < deadline and not (limit and stats["scanned"] >= limit):
             qq = dict(q)
             if last_id is not None and name.startswith("nowe"):
@@ -92,6 +99,8 @@ def run(minutes: float = 240, threads: int = 8, limit: int = 0, dry_run: bool = 
             batch_sort = sort if not name.startswith("nowe") else [("_id", DESCENDING)]
             batch = list(coll.find(qq, SELECT_PROJ).sort(batch_sort).limit(400))
             if not batch:
+                if name.startswith("nowe") and last_id is not None and passes < 3:
+                    passes += 1; last_id = None; continue   # kolejny przebieg: oferty oznaczone dup.v=0 w trakcie (mogły być już „za kursorem”)
                 break
             if name.startswith("nowe"):
                 last_id = batch[-1]["_id"]

@@ -6,7 +6,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 30,
-      "includeFiles": "{api/fonts/**,szablony/*.html,szablony/*.txt}"
+      "includeFiles": "{api/fonts/**,szablony/*.html,szablony/*.txt,scripts/dup_logic.py}"
     },
     "api/subscribe.js": {
       "maxDuration": 10

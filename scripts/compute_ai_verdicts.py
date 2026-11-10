@@ -198,6 +198,11 @@ def main():
         db.listings.create_index([("ai_verdict", 1), ("type", 1), ("transaction_type", 1)], background=True)
     except Exception as e:
         print("index:", e)
+    # 🔁 Duplikaty / konkurencja na całej bazie — ten sam codzienny workflow (token GitHub nie pozwala dodać osobnego workflow).
+    if not os.environ.get("SKIP_DUPLICATES"):
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from compute_duplicates import run as run_duplicates
+        run_duplicates(minutes=float(os.environ.get("DUP_MINUTES", "240")))
 
 
 if __name__ == "__main__":

@@ -946,13 +946,42 @@ function normalizeScrapedListing(raw) {
     // Liczymy UNIKATOWE portale (nie relistings tego samego portalu)
     sources: Array.isArray(raw.sources) ? raw.sources : [],
     // 🔁 Duplikaty (widok dla biur): ile kopii tego ogłoszenia i ilu różnych pośredników je ma.
-    // Rekord scalony z kilku portali (sources[]: Morizon+Gratka) = tyle kopii, ile portali — spójnie ze stroną oferty.
-    dupes_count: (Array.isArray(raw.dupes) ? raw.dupes : [raw]).reduce((n, d) => n + Math.max(1, new Set((Array.isArray(d.sources) ? d.sources : []).map(s => String((s && s.portal) || '').toLowerCase()).filter(Boolean)).size), 0),
-    agents_count: (() => {
-      // Ilu RÓŻNYCH pośredników ma tę nieruchomość. Scrapery nie zapisują nazwy biura, więc: ta sama oferta na Gratce i Morizonie
-      // to zwykle JEDNO biuro (eksport), ale 2 kopie na TYM SAMYM portalu to na pewno 2 biura → liczymy max kopii per portal
-      // (dolne, pewne oszacowanie). Gdy agency_name będzie dostępne — liczymy po nazwach.
+    // Źródło #1: `dup` policzone na serwerze dla CAŁEJ bazy (scripts/compute_duplicates.py, ten sam algorytm co strona oferty).
+    // Źródło #2 (gdy job jeszcze nie doszedł do oferty): klaster z załadowanej paczki (cena+metraż+tytuł) — przybliżenie.
+    ...(function () {
+      const dup = raw.dup && typeof raw.dup === 'object' && raw.dup.copies ? raw.dup : null;
       const ds = Array.isArray(raw.dupes) ? raw.dupes : [raw];
+      const portalOf = (d) => detectPortalFromUrl(d.url) || portalFromSource(d.source) || 'Portal';
+      const localList = ds.flatMap(d => {
+        const base = { portal: portalOf(d), url: d.url, price: d.price, seller: d.seller_type || 'posrednik', agency: d.agency_name || '', added_at: d.added_at };
+        const srcs = (Array.isArray(d.sources) ? d.sources : []).filter(s => s && s.portal);
+        if (srcs.length < 2) return [base];
+        // ten sam rekord na kilku portalach → osobny wiersz na każdy portal (ten sam eksport jednego biura)
+        const seen = new Set();
+        return srcs.filter(s => { const k = String(s.portal).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; })
+          .map((s, i) => ({ ...base, portal: portalFromSource(s.portal) || base.portal, url: s.url || d.url, price: s.price || d.price, same_export: i > 0 }));
+      });
+      const localPortals = new Set();
+      const addSrc = (r) => {
+        (Array.isArray(r.sources) ? r.sources : []).forEach(s => { if (s && s.portal) localPortals.add(String(s.portal).toLowerCase()); });
+        (Array.isArray(r.portals) ? r.portals : []).forEach(p => { if (p) localPortals.add(String(p).toLowerCase()); });
+        const own = detectPortalFromUrl(r.url) || portalFromSource(r.source);
+        if (own) localPortals.add(String(own).toLowerCase());
+      };
+      addSrc(raw); (Array.isArray(raw.dupes) ? raw.dupes : []).forEach(addSrc);
+      if (dup) {
+        const items = Array.isArray(dup.items) ? dup.items : [];
+        const widok = (window.CRM_DEMO && !window.CRM_REAL) ? '&widok=biuro' : '';
+        const serverList = items.map(it => ({ portal: portalFromSource(it.portal) || it.portal || 'Portal', url: `/oferta?id=otodom-${it.id}${widok}`, internal: true,
+          price: it.price, seller: it.seller_type || 'posrednik', agency: it.agency || '', same_export: !!it.same_export }));
+        return {
+          dupes_count: Math.max(dup.copies || 1, localList.length),
+          agents_count: dup.agents || 0,
+          has_owner_copy: !!dup.owner_too || ds.some(d => d.seller_type === 'prywatna'),
+          dupes_list: [localList[0]].concat(serverList),
+          sources_count: Math.max(dup.portal_count || 1, localPortals.size, 1),
+        };
+      }
       const names = new Set(); const perPortal = {};
       for (const d of ds) {
         if ((d.seller_type || 'posrednik') !== 'posrednik') continue;
@@ -960,31 +989,13 @@ function normalizeScrapedListing(raw) {
         const p = String(d.source || detectPortalFromUrl(d.url) || 'x').toLowerCase();
         perPortal[p] = (perPortal[p] || 0) + 1;
       }
-      const byPortal = Math.max(0, ...Object.values(perPortal));
-      return Math.max(names.size, byPortal);
-    })(),
-    has_owner_copy: (Array.isArray(raw.dupes) ? raw.dupes : [raw]).some(d => d.seller_type === 'prywatna'),
-    dupes_list: (Array.isArray(raw.dupes) ? raw.dupes : [raw]).flatMap(d => {
-      const base = { portal: detectPortalFromUrl(d.url) || portalFromSource(d.source) || 'Portal', url: d.url, price: d.price, seller: d.seller_type || 'posrednik', agency: d.agency_name || '', added_at: d.added_at };
-      const srcs = (Array.isArray(d.sources) ? d.sources : []).filter(s => s && s.portal);
-      if (srcs.length < 2) return [base];
-      // ten sam rekord na kilku portalach → osobny wiersz na każdy portal (ten sam eksport jednego biura)
-      const seen = new Set();
-      return srcs.filter(s => { const k = String(s.portal).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; })
-        .map((s, i) => ({ ...base, portal: portalFromSource(s.portal) || base.portal, url: s.url || d.url, price: s.price || d.price, same_export: i > 0 }));
-    }),
-    sources_count: (() => {
-      // Na ilu portalach jest ta nieruchomość: portale z sources[]/portals[] tego rekordu + portale wszystkich kopii (dupes) — spójnie z „🔁 N ogłoszeń”
-      const uniq = new Set();
-      const addSrc = (r) => {
-        (Array.isArray(r.sources) ? r.sources : []).forEach(s => { if (s && s.portal) uniq.add(String(s.portal).toLowerCase()); });
-        (Array.isArray(r.portals) ? r.portals : []).forEach(p => { if (p) uniq.add(String(p).toLowerCase()); });
-        const own = detectPortalFromUrl(r.url) || portalFromSource(r.source);
-        if (own) uniq.add(String(own).toLowerCase());
+      return {
+        dupes_count: ds.reduce((n, d) => n + Math.max(1, new Set((Array.isArray(d.sources) ? d.sources : []).map(s => String((s && s.portal) || '').toLowerCase()).filter(Boolean)).size), 0),
+        agents_count: Math.max(names.size, Math.max(0, ...Object.values(perPortal))),
+        has_owner_copy: ds.some(d => d.seller_type === 'prywatna'),
+        dupes_list: localList,
+        sources_count: Math.max(localPortals.size, 1),
       };
-      addSrc(raw);
-      (Array.isArray(raw.dupes) ? raw.dupes : []).forEach(addSrc);
-      return Math.max(uniq.size, 1);
     })(),
   };
 }
@@ -1313,8 +1324,13 @@ async function loadListings() {
       if (fromMs) apiParams.set('added_from', new Date(fromMs).toISOString());
       if (toMs) apiParams.set('added_to', new Date(toMs).toISOString());
     })();
-    // Obecność na portalach (unikalne / multi-portal): liczone w przeglądarce z kopii (dupes) na załadowanej paczce —
-    // backendowe `portals` opierało się tylko na sources[] z importu Apify (Kraków: 40 ofert) i „nic nie pokazywało”.
+    // Obecność na portalach + duplikaty/konkurencja → backend (pola `dup.*` liczone na całej bazie przez scripts/compute_duplicates.py).
+    // Filtr w przeglądarce (applyDupeFilters) zostaje jako uzupełnienie dla rekordów, których job jeszcze nie policzył.
+    if (document.getElementById('chipMulti')?.classList.contains('active')) apiParams.set('portals', 'multi');
+    else if (document.getElementById('chipUnique')?.classList.contains('active')) apiParams.set('portals', 'unique');
+    if (document.getElementById('chipDupes2')?.classList.contains('active')) apiParams.set('dupes', 'multi');
+    else if (document.getElementById('chipDupes1')?.classList.contains('active')) apiParams.set('dupes', 'solo');
+    else if (document.getElementById('chipDupesOwner')?.classList.contains('active')) apiParams.set('dupes', 'owner');
     // Zakresy liczbowe (rok budowy, cena, m², zł/m²) → backend filtruje pełną bazę
     const numVal = (id) => { const v = parseFloat(document.getElementById(id)?.value || ''); return (isFinite(v) && v > 0) ? v : 0; };
     const rangeMap = { year_from: 'fYearFrom', year_to: 'fYearTo', price_from: 'fPriceFrom', price_to: 'fPriceTo', area_from: 'fAreaFrom', area_to: 'fAreaTo', ppm2_from: 'fPpm2From', ppm2_to: 'fPpm2To' };
@@ -1461,25 +1477,46 @@ function applyScrapedData(d) {
         const base = String(r.type || '').toLowerCase().split(/\s+/)[0];
         return `${price}|${Math.round(area)}|${rooms}|${base}|${String(r.transaction_type || '')}`;
       };
+      // 🔁 Precyzyjne łączenie po `dup.items` z serwera (scripts/compute_duplicates.py — ten sam algorytm co strona oferty, cała baza):
+      // rekordy, które serwer uznał za to samo ogłoszenie, lądują na JEDNEJ karcie. Heurystyka cena+metraż+tytuł zostaje tylko
+      // dla rekordów, których job jeszcze nie policzył (brak `dup`).
+      const byExtId = new Map(deduped.map(r => [String(r.external_id), r]));
+      const leaderOf = new Map();
+      const rootOf = (r) => { let x = r; while (leaderOf.has(x)) x = leaderOf.get(x); return x; };
+      deduped.forEach((r, idx) => { r.__ord = idx; });
+      for (const r of deduped) {
+        const items = r.dup && Array.isArray(r.dup.items) ? r.dup.items : [];
+        for (const it of items) {
+          const other = byExtId.get(String(it && it.id));
+          if (!other || other === r) continue;
+          const a = rootOf(r), b = rootOf(other);
+          if (a === b) continue;
+          const [lead, follower] = a.__ord <= b.__ord ? [a, b] : [b, a];
+          leaderOf.set(follower, lead);
+        }
+      }
       for (const r of deduped) {
         const price = Number(r.price) || 0;
         const area = Number(r.area_m2) || 0;
         const city = String(r.city || '').toLowerCase().trim();
         const title = normalizeTitle(r.title);
+        let serverLead = leaderOf.has(r) ? rootOf(r) : null;
+        while (serverLead && serverLead.__card) serverLead = serverLead.__card;   // lider sam wpadł do innej karty
         // Cross-portal cluster: cena identyczna + area ± 0.5 + to samo miasto + podobny tytuł
-        if (price < 1000 || area < 10 || !city) {
+        if (!serverLead && (price < 1000 || area < 10 || !city)) {
           clusteredList.push(r);  // brak wystarczających danych do klastra
           continue;
         }
         const ck = `${price}|${Math.round(area)}|${city}|${title}`;
         const fp = fingerprintOf(r);
-        const existing = clusterMap.get(ck) || (fp && fpMap.get(fp));
+        const existing = serverLead || (r.dup ? null : (clusterMap.get(ck) || (fp && fpMap.get(fp))));
         if (!existing) {
           clusterMap.set(ck, r);
           if (fp) fpMap.set(fp, r);
           r.dupes = [r];   // 🔁 wszystkie kopie tego ogłoszenia (różne portale / różni pośrednicy)
           clusteredList.push(r);
         } else {
+          r.__card = existing;
           if (!clusterMap.has(ck)) clusterMap.set(ck, existing);
           if (fp && !fpMap.has(fp)) fpMap.set(fp, existing);
           (existing.dupes || (existing.dupes = [existing])).push(r);
@@ -3009,7 +3046,8 @@ document.getElementById('chipUnique')?.addEventListener('click', (e) => {
   if (!wasActive) {
     document.getElementById('chipMulti')?.classList.remove('active');
   }
-  applyAllFilters();  // filtr w przeglądarce (portale z kopii/dupes na załadowanej paczce)
+  currentPage = 1;
+  loadListings();  // → backend (portals=unique, pole dup.portal_count na całej bazie)
 }, false);
 document.getElementById('chipMulti')?.addEventListener('click', (e) => {
   e.stopImmediatePropagation();
@@ -3019,10 +3057,11 @@ document.getElementById('chipMulti')?.addEventListener('click', (e) => {
   if (!wasActive) {
     document.getElementById('chipUnique')?.classList.remove('active');
   }
-  applyAllFilters();  // filtr w przeglądarce (portale z kopii/dupes na załadowanej paczce)
+  currentPage = 1;
+  loadListings();  // → backend (portals=multi)
 }, false);
 
-// 🔁 Duplikaty (widok dla biur) — filtr lokalny na załadowanej paczce (klastry liczone w przeglądarce), wzajemnie wykluczające się
+// 🔁 Duplikaty (widok dla biur) — filtr na backendzie (dupes=multi|solo|owner, pola dup.* na całej bazie), wzajemnie wykluczające się
 ['chipDupes2', 'chipDupes1', 'chipDupesOwner'].forEach(id => {
   document.getElementById(id)?.addEventListener('click', (e) => {
     e.stopImmediatePropagation();
@@ -3031,7 +3070,7 @@ document.getElementById('chipMulti')?.addEventListener('click', (e) => {
     ['chipDupes2', 'chipDupes1', 'chipDupesOwner'].forEach(o => document.getElementById(o)?.classList.remove('active'));
     if (!wasActive) c.classList.add('active');
     currentPage = 1;
-    applyAllFilters();  // pełny pipeline filtrów (applyFilters() filtrowało tylko po typie — chipy „nic nie robiły”)
+    loadListings();
   }, false);
 });
 
@@ -3169,9 +3208,12 @@ document.getElementById('grid')?.addEventListener('click', (e) => {
   const id = b.dataset.multiId || b.dataset.dupesId;
   const listing = LISTINGS.find(l => l.id === id);
   if (!listing) return;
-  // 🔁 lista wszystkich kopii (portal + pośrednik/właściciel + cena) — klik w „N ogłoszeń · M pośredników”
-  const sources = b.dataset.dupesId && Array.isArray(listing.dupes_list) && listing.dupes_list.length
-    ? listing.dupes_list.map(d => ({ portal: d.portal, url: d.url, price: d.price, agency: (d.agency || (d.seller === 'prywatna' ? '👤 właściciel' : d.seller === 'przetarg' ? '🔨 przetarg' : '🏢 pośrednik')) + (d.same_export ? ' · ten sam eksport' : '') }))
+  // 🔁 lista wszystkich kopii (portal + pośrednik/właściciel + cena) — klik w „N ogłoszeń · M pośredników” lub „🌐 N portali”
+  // (kopie z innych portali znalezione przez serwer, dup.items, linkują do strony oferty w FinderDom)
+  const dl = Array.isArray(listing.dupes_list) ? listing.dupes_list : [];
+  const useDupes = b.dataset.dupesId || dl.length >= (Array.isArray(listing.sources) ? listing.sources : []).length;
+  const sources = useDupes && dl.length
+    ? dl.map(d => ({ portal: d.portal, url: d.url, internal: d.internal, price: d.price, agency: (d.agency || (d.seller === 'prywatna' ? '👤 właściciel' : d.seller === 'przetarg' ? '🔨 przetarg' : '🏢 pośrednik')) + (d.same_export ? ' · ten sam eksport' : '') }))
     : (Array.isArray(listing.sources) ? listing.sources : []);
   document.getElementById('multiModalTitle').textContent = listing.title || 'Oferta';
   const listEl = document.getElementById('multiModalList');
@@ -3182,9 +3224,9 @@ document.getElementById('grid')?.addEventListener('click', (e) => {
       const portal = String(s.portal || '').replace(/^./, c => c.toUpperCase()) || 'Portal';
       const url = s.url || '#';
       const price = s.price ? (Number(s.price).toLocaleString('pl-PL').replace(/,/g, ' ') + ' zł') : '';
-      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="fd-modal-item">
+      return `<a href="${url}" ${s.internal ? '' : 'target="_blank" rel="noopener noreferrer"'} class="fd-modal-item">
         <span class="p-name">📌 ${portal}</span>
-        <span>${s.agency ? `<span class="p-agency">${s.agency}</span>` : ''}${price ? `<span class="p-price">${price}</span>` : ''}<span class="p-open">↗</span></span>
+        <span>${s.agency ? `<span class="p-agency">${s.agency}</span>` : ''}${price ? `<span class="p-price">${price}</span>` : ''}<span class="p-open">${s.internal ? '→' : '↗'}</span></span>
       </a>`;
     }).join('');
   }

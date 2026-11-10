@@ -2212,6 +2212,13 @@ async def listing_duplicates(listing_id: str, request: Request, response: Respon
     return out
 
 
+_LT_REGEX = {
+    "biurowy": r"biurow|\bbiur[oa]\b|open.?space|coworking",
+    "handlowy": r"handlow|sklep|witryn|galeri[ia] handlow|pasa[zż]",
+    "uslugowy": r"us[lł]ugow|gabinet|salon (?:fryzjer|kosmet|urody)|fryzjer|kosmetycz|kancelari|przychodni",
+    "gastronomia": r"gastronom|restaurac|kawiarn|\bbar\b|\bpub\b|pizzeri|bistro|piekarni|cukierni",
+    "magazyn": r"magazyn|\bhal[aięe]\b|produkcyjn|warsztat",
+}
 LIVE_COPY_PORTALS = ("morizon", "gratka", "domiporta", "adresowo", "gethome")   # listy renderowane serwerowo, odpowiadają z Vercel w <1 s
 LIVE_COPY_TTL_H = 12
 LIVE_COPY_V = 2   # podbij po zmianie listy portali/algorytmu → oferty sprawdzone starszą wersją sprawdzą się ponownie
@@ -2436,6 +2443,7 @@ async def listings_scraped_endpoint(
     market_type: Optional[str] = None,  # "pierwotny" | "wtorny" | "pierwotny,wtorny"
     building_type: Optional[str] = None,  # typ domu: "wolnostojacy,blizniak,szeregowiec,siedliskowy,rezydencja,letniskowy"
     dzialka_type: Optional[str] = None,  # przeznaczenie działki: "budowlana,rolna,rekreacyjna,lesna,inwestycyjna"
+    lokal_type: Optional[str] = None,    # typ lokalu: "biurowy,handlowy,uslugowy,gastronomia,magazyn" (regex po tytule+opisie)
     verdict: Optional[str] = None,  # AI: "deal" | "normal" | "deal,normal" (prekomputowane ai_verdict, pełna baza)
     hide_over: Optional[int] = None,  # AI: 1 = ukryj zawyżone (over) i outliery
     portals: Optional[str] = None,  # "unique" (tylko 1 portal) | "multi" (2+ portali) — dup.portal_count / sources[]
@@ -2572,6 +2580,14 @@ async def listings_scraped_endpoint(
                     {"dzialka_type": {"$in": db_vals}},
                     {"dzialka_type": {"$in": [None, ""]}, "title": {"$regex": "|".join(dt_regex[k] for k in dt_vals), "$options": "i"}},
                 ]})
+        # Typ lokalu — portale nie dają pola; regex po tytule+opisie (zbiór lokali jest mały, więc regex po opisie jest tani)
+        if lokal_type:
+            lt_vals = [x.strip().lower() for x in lokal_type.split(",") if x.strip().lower() in _LT_REGEX]
+            if lt_vals:
+                has_dt = True
+                pat = "|".join(_LT_REGEX[k] for k in lt_vals)
+                query.setdefault("$and", []).append({"$or": [{"title": {"$regex": pat, "$options": "i"}},
+                                                             {"description": {"$regex": pat, "$options": "i"}}]})
         # Analiza AI (prekomputowana w scripts/compute_ai_verdicts.py, cron 05:30 UTC) — filtr na pełnej bazie
         has_verdict = False
         if verdict:

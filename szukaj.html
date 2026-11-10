@@ -1302,6 +1302,9 @@ async function loadListings() {
     // Typ domu (wolnostojący / bliźniak / szeregowiec…) → backend filtruje pełną bazę (6k domów, nie batch 1000)
     const activeBt = Array.from(document.querySelectorAll('#subTypeChips .chip.active[data-filter="building_type"]')).map(c => c.dataset.value);
     if (activeBt.length) apiParams.set('building_type', activeBt.join(','));
+    // Typ lokalu (biurowy / handlowy / usługowy / gastronomia / magazyn) → backend (regex po tytule+opisie na pełnej bazie)
+    const activeLt = Array.from(document.querySelectorAll('#subTypeChips .chip.active[data-filter="lokal_type"]')).map(c => c.dataset.value);
+    if (activeLt.length) apiParams.set('lokal_type', activeLt.join(','));
     // Data dodania → backend (added_at w pełnej bazie)
     (function(){
       const mode = document.querySelector('.date-chip.active')?.dataset.date || 'all';
@@ -2318,13 +2321,15 @@ const SUB_TYPES = {
     {label:'🌾 Rolna', value:''},
     {label:'🏕️ Rekreacyjna', value:''},
   ]},
-  lokal: {title:'🏪 Typ lokalu', filter:'', options:[
-    {label:'Biurowy', value:''},
-    {label:'Handlowy', value:''},
-    {label:'Gastronomia', value:''},
+  lokal: {title:'🏪 Typ lokalu', filter:'lokal_type', options:[
+    {label:'🏢 Biurowy', value:'biurowy'},
+    {label:'🛍️ Handlowy', value:'handlowy'},
+    {label:'💈 Usługowy', value:'uslugowy'},
+    {label:'🍽️ Gastronomia', value:'gastronomia'},
+    {label:'🏭 Magazyn / hala', value:'magazyn'},
   ]},
-  magazyn: {title:'🏭 Typ magazynu', filter:'', options:[
-    {label:'Hala magazynowa', value:''},
+  magazyn: {title:'🏭 Typ magazynu', filter:'lokal_type', options:[
+    {label:'🏭 Hala magazynowa', value:'magazyn'},
   ]},
   garaz: {title:'🅿️ Typ garażu', filter:'', options:[
     {label:'Podziemny', value:''},
@@ -2405,7 +2410,7 @@ function updateSubType(type){
   document.querySelectorAll('#subTypeChips .chip').forEach(c => {
     c.addEventListener('click', () => {
       c.classList.toggle('active');
-      if (c.dataset.filter === 'building_type' && typeof loadListings === 'function') loadListings();
+      if ((c.dataset.filter === 'building_type' || c.dataset.filter === 'lokal_type') && typeof loadListings === 'function') { currentPage = 1; loadListings(); }
       else if (c.hasAttribute('data-filter') && typeof applyAllFilters === 'function') applyAllFilters();
     });
   });

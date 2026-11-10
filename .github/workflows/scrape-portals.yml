@@ -54,3 +54,20 @@ jobs:
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}
+
+  # 🏗️ Siatka bezpieczeństwa: oferty z ostatnich 48 h bez market_type → pierwotny/wtórny (scripts/market_type.py)
+  market-type:
+    needs: scrape
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pymongo
+      - run: python scripts/backfill_market_type.py --apply --since-hours 48
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: ${{ secrets.MONGODB_DB || 'finderdom' }}

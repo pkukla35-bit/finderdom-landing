@@ -16,6 +16,7 @@ from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scrape_otodom import CITIES, REGIONS, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num, city_from_slug, clean_agency, price_history_ops, with_price_history  # noqa: E402
+from market_type import infer_market  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("portals")
@@ -165,6 +166,7 @@ def parse_gethome(html: str) -> List[Dict[str, Any]]:
             "floor": _num(prop.get("floor")), "image": img, "district": None, "street": addr.get("street"),
             "loc0": city_name, "desc": (o.get("description") or "")[:2000],
             "seller": "prywatna" if o.get("is_private") else ("deweloper" if o.get("market_type") == "primary_market" else "posrednik"),
+            "market": o.get("market_type"),
             "lat": coords.get("lat"), "lng": coords.get("lon"), "plot_area_m2": _num(prop.get("lot_size")),
             "posted_at": o.get("created_at"), "build_year": _num(prop.get("building_year")),
             "agency": _name_of(o.get("agency") or o.get("agent") or o.get("company") or o.get("developer") or ((o.get("investment") or {}).get("developer") if isinstance(o.get("investment"), dict) else None)),
@@ -404,6 +406,9 @@ def normalize(portal: str, it: Dict[str, Any], city_name: str, prop: str, trans:
         "last_seen_at": now_iso, "scraped_via": "portal-direct",
     }
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype
+    # 🏗️ rynek pierwotny/wtórny od razu przy imporcie (nowe oferty bez market_type nie trafiały do filtra „pierwotny”)
+    mt = infer_market(it.get("market"), doc["title"], doc["description"], it.get("build_year"), seller, ptype)
+    if mt: doc["market_type"] = mt
     if portal == "adresowo": doc["seller_verified"] = True   # seller z etykiety karty („bez pośredników”)
     # 🏢 Nazwa biura/dewelopera (gdy portal ją podaje w danych listy)
     an = clean_agency(it.get("agency")) if seller != "prywatna" else None

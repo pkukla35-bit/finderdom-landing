@@ -1884,6 +1884,10 @@ async def admin_cleanup_stale(
                 logger.info("fresh sweep backstop: %s", fs)
         except Exception as e:
             logger.error("fresh sweep backstop failed: %s", str(e)[:200])
+        try:
+            await _trigger_daily_report_if_due()   # idempotentne, ≥ 9:00 PL — backstop gdy cron auto-run na Vercel nie odpali
+        except Exception as e:
+            logger.error("daily report trigger failed: %s", str(e)[:200])
 
     limit = max(1, min(limit, 1000))
     concurrency = max(1, min(concurrency, 50))
@@ -5094,12 +5098,17 @@ async def admin_mailing_auto_run(request: Request, limit: int = 60):
 
 
 async def _trigger_daily_report_if_due(force: bool = False) -> dict:
-    """Raz dziennie uruchamia workflow raportu zdrowia (scripts/health_check.py → e-mail do admina)."""
+    """Raz dziennie uruchamia workflow raportu zdrowia (scripts/health_check.py → e-mail do admina).
+    Nie wcześniej niż 09:00 PL — 10.11 raport poszedł o 02:05 razem z dispatchem importów i pokazał „0 ofert dziś”, bo importy
+    dopiero startowały. Wołany idempotentnie z kilku cronów (auto-run 09:00 PL, cleanup-stale co 6 h) — pierwszy po 9:00 wysyła."""
     db = database()
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    now_pl = datetime.now(ZoneInfo("Europe/Warsaw"))
+    today = now_pl.strftime("%Y-%m-%d")
     st = await db.settings.find_one({"_id": "daily_report"}) or {}
     if not force and st.get("last_triggered_day") == today:
         return {"skipped": True, "reason": "already_today"}
+    if not force and now_pl.hour < 9:
+        return {"skipped": True, "reason": "too_early", "hour_pl": now_pl.hour}
     tok = await _github_token()
     if not tok:
         return {"skipped": True, "reason": "no_github_token"}

@@ -18,6 +18,7 @@ from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scrape_otodom import CITIES, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num, clean_agency, price_history_ops, with_price_history  # noqa: E402
+from market_type import infer_market  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("olx")
@@ -161,12 +162,13 @@ def normalize(ad: dict, city_name: str, prop: str, trans: str) -> Optional[Dict[
         "source": "olx", "external_id": oid, "type": ptype, "title": title or ptype.capitalize(), "url": url,
         "city": city, "district": district, "location": ", ".join(x for x in [city, district] if x),
         "price": price, "area_m2": area, "price_pm2": round(price / area, 2) if price and area and area > 0 else None,
-        "rooms": int(rooms) if rooms else None, "floor": floor, "market_type": market,
+        "rooms": int(rooms) if rooms else None, "floor": floor, "market_type": infer_market(market, title, desc, None, seller, ptype),
         "image": photos[0] if photos else None, "images": photos[:12], "description": desc,
         "lat": lat, "lng": lng, "plot_area_m2": plot_area, "transaction_type": trans, "seller_type": seller,
         "posted_at": posted, "last_seen_at": now_iso, "scraped_via": "olx-direct",
     }
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype
+    if doc["market_type"] is None: del doc["market_type"]   # nie nadpisuj wartości z backfillu pustką
     # 🏢 Nazwa biura (OLX API: ad.user.name) — tylko konta firmowe
     if is_business:
         an = clean_agency((ad.get("user") or {}).get("name") if isinstance(ad.get("user"), dict) else None)

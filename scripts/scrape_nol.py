@@ -20,6 +20,7 @@ from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scrape_otodom import CITIES, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num, clean_agency, price_history_ops, with_price_history  # noqa: E402
+from market_type import infer_market  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("nol")
@@ -166,10 +167,12 @@ def normalize(it: Dict[str, Any], det: Dict[str, Any], city_name: str, prop: str
         "price_pm2": round(price / area, 2) if price and area and area > 0 else None,
         "rooms": int(it["rooms"]) if it.get("rooms") else None,
         "floor": it.get("floor"), "build_year": int(it["year"]) if it.get("year") else None,
-        "market_type": it.get("market"), "image": (det.get("images") or [it.get("image")] or [None])[0] or it.get("image"),
+        "market_type": infer_market(it.get("market"), it["title"], det.get("description", ""), it.get("year"), seller, ptype),
+        "image": (det.get("images") or [it.get("image")] or [None])[0] or it.get("image"),
         "transaction_type": trans, "seller_type": seller, "last_seen_at": now_iso, "scraped_via": "nol-direct",
     }
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype
+    if doc["market_type"] is None: del doc["market_type"]   # nie nadpisuj wartości z backfillu pustką
     for k in ("images", "phone", "lat", "lng", "description"):
         if det.get(k) is not None: doc[k] = det[k]
     an = clean_agency(det.get("agency_name")) if seller != "prywatna" else None

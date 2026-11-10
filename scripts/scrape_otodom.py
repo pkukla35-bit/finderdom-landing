@@ -18,6 +18,9 @@ from typing import Any, Dict, List, Optional
 import requests
 from pymongo import MongoClient, ASCENDING, UpdateOne
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from market_type import infer_market  # noqa: E402
+
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(message)s",
                     datefmt="%H:%M:%S")
@@ -418,6 +421,9 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         "last_seen_at": now_iso,          # kiedy ostatnio widzieliśmy ofertę (live)
         "scraped_via": "scrapingbee",   # (ta sama wartość także dla trybu bezpośredniego — filtry API)
     }
+    # 🏗️ rynek pierwotny/wtórny od razu przy imporcie (filtr „pierwotny” nie widział nowych ofert bez market_type)
+    mt = infer_market(item.get("market"), title, f"{item.get('shortDescription') or ''} {item.get('description') or ''}", None, seller_type, prop_type)
+    if mt: doc["market_type"] = mt
     if subtype_field and subtype:
         doc[subtype_field] = subtype
     # 🏢 Nazwa biura / dewelopera (lista wyników Otodom: item.agency.name) — tylko gdy nie-prywatna

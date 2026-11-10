@@ -6,7 +6,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 30,
-      "includeFiles": "{api/fonts/**,szablony/*.html,szablony/*.txt,scripts/dup_logic.py}"
+      "includeFiles": "{api/fonts/**,szablony/*.html,szablony/*.txt,scripts/dup_logic.py,scripts/scrape_portals.py,scripts/scrape_otodom.py,scripts/market_type.py}"
     },
     "api/subscribe.js": {
       "maxDuration": 10
@@ -149,6 +149,10 @@
     },
     {
       "source": "/api/listings-scraped",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/listing/:id/find-copies",
       "destination": "/api/index"
     },
     {

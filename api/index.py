@@ -15,6 +15,7 @@ Endpoints:
 """
 import asyncio
 import io
+import unicodedata
 import os
 import math
 import re
@@ -47,7 +48,7 @@ from pymongo.errors import DuplicateKeyError
 import sys as _sys
 _sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 from dup_logic import (_build_diacritic_regex, _num_or_zero, _PORTAL_NAMES, _portal_name, _portal_of, _cluster_copies, _price_timeline,  # noqa: E402
-                       _VOIVODESHIPS, _BT_REGEX, _BT_ALIAS, _DT_REGEX, _DT_ALIAS, _dup_match, _dup_ids, dup_prepare, dup_summarize, DUP_PROJ, DUP_CANDS)
+                       _VOIVODESHIPS, _BT_REGEX, _BT_ALIAS, _DT_REGEX, _DT_ALIAS, _dup_match, _dup_ids, _dup_norm, dup_prepare, dup_summarize, DUP_PROJ, DUP_CANDS)
 
 
 # --- Config ---
@@ -2208,6 +2209,86 @@ async def listing_duplicates(listing_id: str, request: Request, response: Respon
     out = await _find_duplicates(doc, include_urls=paid is not None)
     out["locked"] = paid is None
     response.headers["Cache-Control"] = "private, max-age=120" if paid else "public, max-age=300, s-maxage=600"
+    return out
+
+
+LIVE_COPY_PORTALS = ("morizon", "gratka", "adresowo", "gethome")   # listy renderowane serwerowo, odpowiadają z Vercel w <1 s
+LIVE_COPY_TTL_H = 12
+
+
+def _city_slug_pl(name: str) -> str:
+    base = unicodedata.normalize("NFKD", (name or "").lower().replace("ł", "l").replace("Ł", "l")).encode("ascii", "ignore").decode()
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", base)).strip("-")
+
+
+async def _live_fetch_copies(doc: dict) -> dict:
+    """🔎 „Szukaj kopii teraz”: dociąga NA ŻYWO listy ofert z miejscowości tej oferty (Morizon/Gratka/Adresowo/Gethome, strona 1–2)
+    i zapisuje je do bazy — bo codzienne importy biorą tylko najnowsze strony na województwo i starsze kopie (Istebna: Otodom z 10.11,
+    Morizon sprzed tygodni) nigdy nie wchodziły. Potem _find_duplicates widzi je od razu. Parsery: scripts/scrape_portals.py."""
+    import sys as _s
+    _s.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+    import scrape_portals as sp  # noqa: E402
+    city_name = (doc.get("city") or "").strip()
+    prop = re.sub(r"\s.*", "", str(doc.get("type") or "")).lower()
+    trans = doc.get("transaction_type") or "sprzedaz"
+    if not city_name or prop not in ("mieszkanie", "dom", "dzialka", "lokal") or _dup_norm(city_name) in _VOIVODESHIPS:
+        return {"skipped": True, "reason": "no_city_or_type"}
+    city = {"name": city_name, "slug": _city_slug_pl(city_name), "voi": ""}
+    coll = database().listings
+    ua = sp.UA
+    out: dict = {"city": city_name, "fetched": {}, "new": 0, "updated": 0}
+
+    async def one(client, portal, page):
+        try:
+            u = sp.PORTALS[portal]["url"](prop, trans, city, page)
+            if not u:
+                return portal, page, []
+            r = await client.get(u, headers={"User-Agent": ua, "Accept-Language": "pl-PL,pl;q=0.9", "Accept": "text/html,*/*;q=0.8"})
+            if r.status_code != 200 or len(r.text) < 3000:
+                return portal, page, []
+            return portal, page, sp.PORTALS[portal]["parse"](r.text) or []
+        except Exception as e:
+            logger.warning("live copies %s p%d: %s", portal, page, str(e)[:100])
+            return portal, page, []
+
+    async with httpx.AsyncClient(follow_redirects=True, timeout=9.0) as client:
+        results = await asyncio.gather(*[one(client, p, pg) for p in LIVE_COPY_PORTALS for pg in (1, 2)])
+    ops = []
+    for portal, page, items in results:
+        out["fetched"][f"{portal}:{page}"] = len(items)
+        for it in items:
+            try:
+                d = sp.normalize(portal, it, city_name, prop, trans)
+            except Exception:
+                continue
+            if not d.get("price"):
+                continue
+            posted = d.pop("posted_at", None)
+            ops.append(UpdateOne({"source": portal, "external_id": d["external_id"]},
+                                 {"$set": d, "$setOnInsert": {"added_at": posted or d["last_seen_at"], "posted_at": posted},
+                                  "$unset": {"is_stale": "", "stale_since": "", "stale_reason": ""}}, upsert=True))
+    if ops:
+        r = await coll.bulk_write(ops, ordered=False)
+        out["new"], out["updated"] = r.upserted_count, r.modified_count
+    await coll.update_one({"_id": doc["_id"]}, {"$set": {"copies_checked_at": datetime.now(timezone.utc).isoformat()}, "$unset": {"dup.v": ""}})
+    return out
+
+
+@app.post("/api/listing/{listing_id}/find-copies")
+async def listing_find_copies(listing_id: str, request: Request, response: Response):
+    """🔎 Widok dla biur: dociągnij kopie tej nieruchomości z innych portali TERAZ (raz na LIVE_COPY_TTL_H h na ofertę) i zwróć duplikaty."""
+    doc = await _listing_by_any_id(listing_id)
+    if not doc:
+        response.status_code = 404
+        return {"error": "Listing not found"}
+    paid = await _paid_user_from_request(request)
+    last = doc.get("copies_checked_at") or ""
+    fresh = last and last > (datetime.now(timezone.utc) - timedelta(hours=LIVE_COPY_TTL_H)).isoformat()
+    live = {"skipped": True, "reason": "checked_recently", "checked_at": last} if fresh else await _live_fetch_copies(doc)
+    out = await _find_duplicates(doc, include_urls=paid is not None)
+    out["locked"] = paid is None
+    out["live"] = live
+    response.headers["Cache-Control"] = "no-store"
     return out
 
 

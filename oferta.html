@@ -1095,27 +1095,47 @@ function renderMultiPortalBox(l) {
 
 
 // --- 🔁 Duplikaty oferty (widok dla biur): ile ogłoszeń tej nieruchomości, ilu pośredników, w jakich cenach ---
-async function renderDupesBox(l) {
+async function renderDupesBox(l, mode) {
+  // mode: undefined = pierwsze ładowanie (duplikaty z bazy, a gdy brak kopii → automatycznie „szukaj na portalach teraz”),
+  //       'live' = ręczny przycisk „Sprawdź portale teraz” (POST /find-copies: dociąga listy z miejscowości oferty i dopasowuje od nowa)
   const box = document.getElementById('dupesBox');
-  if (!box || box.dataset.done) return;
+  if (!box || (box.dataset.done && !mode)) return;
   box.dataset.done = '1';
   const idParam = new URLSearchParams(location.search).get('id') || l.id || l.external_id;
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const pln = (n) => Number(n || 0).toLocaleString('pl-PL') + ' zł';
   box.style.display = 'block';
-  box.innerHTML = `<div class="contact-title" style="color:#60a5fa">🔁 Duplikaty tej oferty</div><div style="color:#8ba3d4;font-size:12px">Sprawdzam inne portale i pośredników…</div>`;
+  const title = `<div class="contact-title" style="color:#60a5fa">🔁 Duplikaty tej oferty</div>`;
+  box.innerHTML = `${title}<div style="color:#8ba3d4;font-size:12px">${mode === 'live' ? '🔎 Przeszukuję Morizon, Gratkę, Adresowo i Gethome dla tej miejscowości…' : 'Sprawdzam inne portale i pośredników…'}</div>`;
   try {
     const tok = localStorage.getItem('finderdom_token');
-    const r = await fetch('/api/listing/' + encodeURIComponent(idParam) + '/duplicates', tok ? { headers: { 'Authorization': 'Bearer ' + tok } } : {});
-    const d = await r.json();
+    const hdr = tok ? { headers: { 'Authorization': 'Bearer ' + tok } } : {};
+    let r = await fetch('/api/listing/' + encodeURIComponent(idParam) + (mode === 'live' ? '/find-copies' : '/duplicates'), { ...hdr, method: mode === 'live' ? 'POST' : 'GET' });
+    let d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error || r.status);
+    if (!mode && !(d.items || []).length) {
+      // Brak kopii w bazie → od razu sprawdź portale na żywo (codzienne importy biorą tylko najnowsze strony na województwo,
+      // starsze kopie z Morizon/Gratki mogły nigdy nie wejść). Raz na 12 h na ofertę (serwer pamięta copies_checked_at).
+      box.innerHTML = `${title}<div style="color:#8ba3d4;font-size:12px">🔎 Brak kopii w bazie — sprawdzam Morizon, Gratkę, Adresowo i Gethome na żywo…</div>`;
+      try {
+        r = await fetch('/api/listing/' + encodeURIComponent(idParam) + '/find-copies', { ...hdr, method: 'POST' });
+        const d2 = await r.json();
+        if (r.ok && !d2.error) d = d2;
+      } catch (e2) { console.warn('[dupes live]', e2); }
+    }
     const items = d.items || [];
+    const live = d.live || null;
+    const liveNote = live ? (live.skipped ? (live.reason === 'checked_recently' ? `portale sprawdzone na żywo ${live.checked_at ? 'ostatnio ' + new Date(live.checked_at).toLocaleString('pl-PL', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'niedawno'}` : '')
+      : `portale sprawdzone na żywo przed chwilą${live.new ? ` · dociągnięto ${live.new} nowych ogłoszeń z ${esc(live.city || '')}` : ''}`) : '';
+    const liveBtn = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.07)">
+        <span style="font-size:10px;color:#8ba3d4">${liveNote}</span>
+        <button type="button" id="dupesLiveBtn" style="background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.4);color:#bfdbfe;border-radius:100px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer">🔎 Sprawdź portale teraz</button></div>`;
     const thisPrice = Number(d.this?.price || l.price || 0);
     const sellerLabel = (it) => it.seller_type === 'prywatna' ? '👤 właściciel' : it.seller_type === 'przetarg' ? '🔨 przetarg' : (it.agency ? '🏢 ' + esc(it.agency) : '🏢 pośrednik');
     const ago = (iso) => { if (!iso) return ''; const dd = (Date.now() - new Date(iso).getTime()) / 864e5; return dd < 1 ? 'dziś' : dd < 2 ? 'wczoraj' : `${Math.floor(dd)} dni temu`; };
     const head = items.length === 0
       ? `<div style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.35);border-radius:10px;padding:10px 12px;color:#4ade80;font-size:13px;font-weight:700">🎯 Tylko to jedno ogłoszenie — brak duplikatów na innych portalach</div>
-         <div style="color:#8ba3d4;font-size:11px;margin-top:8px;line-height:1.45">Szukamy tej samej nieruchomości na wszystkich portalach: ta sama lokalizacja (miejscowość lub GPS), cena (±2%), metraż (±3%), liczba pokoi, rok budowy i zgodne opisy.</div>`
+         <div style="color:#8ba3d4;font-size:11px;margin-top:8px;line-height:1.45">Sprawdziliśmy bazę FinderDom i na żywo listy Morizon, Gratki, Adresowo i Gethome dla tej miejscowości: ta sama lokalizacja, cena (±2%), metraż (±3%), liczba pokoi, rok budowy i zgodne opisy.</div>`
       : `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
            <span style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);color:#bfdbfe;border-radius:100px;padding:5px 10px;font-size:12px;font-weight:800">🔁 ${d.count} ogłoszeń</span>
            <span style="background:rgba(255,184,0,0.12);border:1px solid rgba(255,184,0,0.4);color:#FFD166;border-radius:100px;padding:5px 10px;font-size:12px;font-weight:800">🏢 ${d.agents} ${d.agents === 1 ? 'pośrednik' : d.agents < 5 ? 'pośredników' : 'pośredników'}</span>
@@ -1178,10 +1198,11 @@ async function renderDupesBox(l) {
     }
     box.innerHTML = `<div class="contact-title" style="color:#60a5fa">🔁 Duplikaty tej oferty</div>${head}
       <div style="margin-top:${items.length ? '4px' : '10px'}">${items.length ? rows : ''}</div>${histHtml}
-      ${items.length ? `<div style="color:#8ba3d4;font-size:11px;margin-top:10px;line-height:1.45">${d.agents > 1 ? '💡 Kilku pośredników = oferta bez wyłączności.' : d.owner_too ? '💡 Właściciel ogłasza też sam — oferta bez wyłączności.' : '💡 Jeden pośrednik — to samo ogłoszenie na ' + d.count + ' portalach (ten sam eksport).'} Najniższa cena: <b style="color:#4ade80">${pln(Math.min(thisPrice, ...items.map(i => i.price || thisPrice)))}</b>.${d.locked ? ' Linki do ogłoszeń — w planie dla biur.' : ''}</div>` : ''}`;
+      ${items.length ? `<div style="color:#8ba3d4;font-size:11px;margin-top:10px;line-height:1.45">${d.agents > 1 ? '💡 Kilku pośredników = oferta bez wyłączności.' : d.owner_too ? '💡 Właściciel ogłasza też sam — oferta bez wyłączności.' : '💡 Jeden pośrednik — to samo ogłoszenie na ' + d.count + ' portalach (ten sam eksport).'} Najniższa cena: <b style="color:#4ade80">${pln(Math.min(thisPrice, ...items.map(i => i.price || thisPrice)))}</b>.${d.locked ? ' Linki do ogłoszeń — w planie dla biur.' : ''}</div>` : ''}${liveBtn}`;
+    document.getElementById('dupesLiveBtn')?.addEventListener('click', () => renderDupesBox(l, 'live'));
   } catch (e) {
     console.warn('[dupes]', e);
-    box.innerHTML = `<div class="contact-title" style="color:#60a5fa">🔁 Duplikaty tej oferty</div><div style="color:#8ba3d4;font-size:12px">Nie udało się pobrać duplikatów. Spróbuj odświeżyć stronę.</div>`;
+    box.innerHTML = `${title}<div style="color:#8ba3d4;font-size:12px">Nie udało się pobrać duplikatów. Spróbuj odświeżyć stronę.</div>`;
   }
 }
 

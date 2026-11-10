@@ -2555,9 +2555,10 @@ async def listings_scraped_endpoint(
                     {"building_type": {"$in": [None, ""]}, "title": {"$regex": title_pat, "$options": "i"}},
                 ]
                 if "wolnostojacy" in bt_vals:
-                    # Dom bez żadnego sygnału typu w tytule i opisie (po backfillu: subtype_scanned) to w Polsce niemal zawsze dom
-                    # wolnostojący (bliźniak/szeregowiec/siedlisko są w ogłoszeniach zawsze nazwane) → chip „Wolnostojący” je obejmuje.
-                    bt_or.append({"building_type": {"$in": [None, ""]}, "subtype_scanned": True})
+                    # Dom bez żadnego sygnału typu w tytule (bliźniak/szeregowiec/siedlisko/rezydencja/letniskowy są w ogłoszeniach zawsze
+                    # nazwane) to w Polsce niemal zawsze dom wolnostojący → chip „Wolnostojący” je obejmuje (inaczej pokrycie ~50%).
+                    other_pat = "|".join(bt_regex[k] for k in bt_regex if k != "wolnostojacy")
+                    bt_or.append({"building_type": {"$in": [None, ""]}, "title": {"$not": {"$regex": other_pat, "$options": "i"}}})
                 query.setdefault("$and", []).append({"$or": bt_or})
         # Przeznaczenie działki — na pełnej bazie. ~15% działek nie ma dzialka_type → fallback regex po tytule.
         has_dt = False

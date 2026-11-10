@@ -219,6 +219,15 @@ def _dup_match(doc: dict, d: dict):
         pass
     dd = _dup_norm(d.get("district"))
     d_area = _num_or_zero(d.get("area_m2"))
+    # 2b) Inwestycja deweloperska: identyczny metraż, RÓŻNE ceny, a każda cena = metraż × okrągła stawka zł/m² (657 072 = 42,12 × 15 600)
+    #     → to różne mieszkania (piętra) w tej samej inwestycji, nie duplikat (Gratka/Morizon rzadko oznaczają rynek pierwotny).
+    p2 = _num_or_zero(d.get("price"))
+    if area and abs(d_area - area) < 0.05 and abs(p2 - price) >= 1:
+        def _dev_price(p):
+            ppm = p / area
+            return abs(ppm - round(ppm)) < 0.005 and round(ppm) % 50 == 0
+        if _dev_price(price) and _dev_price(p2):
+            return False
     # 3) Pewne potwierdzenia (ważniejsze niż różnie wpisana dzielnica/gmina): ta sama ulica, GPS < 300 m, identyczny tytuł,
     #    identyczny metraż z ułamkiem (138,84 m²) + identyczna cena
     if _dup_same_street(doc, d) is True or (km is not None and km < 0.3):
@@ -385,7 +394,10 @@ def dup_summarize(doc: dict, this_copy: dict, extra_this: list, cands: list, inc
     for c in agents_copies:
         if not c["agency"].strip():
             per_portal[c["portal"]] = per_portal.get(c["portal"], 0) + 1
-    agents = max(len(named) + (max(per_portal.values()) if per_portal else 0), 1 if agents_copies else 0)
+    # Jedno biuro z nazwą (np. z Otodom) + bezimienne kopie po jednej na portal (Gratka, Morizon) = zwykle TEN SAM eksport tego biura →
+    # nie dodajemy; sumujemy dopiero, gdy nazwanych biur jest ≥ 2 (wtedy bezimienne kopie to raczej kolejne biura).
+    max_pp = max(per_portal.values()) if per_portal else 0
+    agents = max(len(named) + (max_pp if len(named) >= 2 else 0), max_pp, 1 if agents_copies else 0)
     timeline = _price_timeline(all_copies)
     for c in all_copies:
         c.pop("price_history", None)

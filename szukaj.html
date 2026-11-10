@@ -544,14 +544,6 @@ gtag('set', 'url_passthrough', false);
       </div>
     </div>
 
-    <div class="filter-group">
-      <div class="filter-title">🌐 Obecność na portalach</div>
-      <div class="chip-group">
-        <div class="chip" id="chipUnique" title="Oferty wystawione tylko na jednym portalu — często mniej konkurencji">🎯 Tylko unikalne (1 portal)</div>
-        <div class="chip" id="chipMulti" title="Ta sama oferta jest na wielu serwisach (Otodom+Morizon+Gratka)">🌐 Multi-portal (2+)</div>
-      </div>
-    </div>
-
     <!-- 🔁 Duplikaty (widok dla biur — zamiast kalkulatora kredytu) -->
     <div class="filter-group" id="dupesGroup" style="display:none">
       <div class="filter-title">🔁 Duplikaty i konkurencja</div>
@@ -3076,29 +3068,7 @@ document.querySelectorAll('.chip[data-seller]').forEach(c => {
   }, true);
 });
 
-// Chipy Multi-portal — 🎯 Unikalne (1 portal) i 🌐 Multi-portal (2+) — mutually exclusive
-document.getElementById('chipUnique')?.addEventListener('click', (e) => {
-  e.stopImmediatePropagation();
-  const c = e.currentTarget;
-  const wasActive = c.classList.contains('active');
-  c.classList.toggle('active');
-  if (!wasActive) {
-    document.getElementById('chipMulti')?.classList.remove('active');
-  }
-  currentPage = 1;
-  loadListings();  // → backend (portals=unique, pole dup.portal_count na całej bazie)
-}, false);
-document.getElementById('chipMulti')?.addEventListener('click', (e) => {
-  e.stopImmediatePropagation();
-  const c = e.currentTarget;
-  const wasActive = c.classList.contains('active');
-  c.classList.toggle('active');
-  if (!wasActive) {
-    document.getElementById('chipUnique')?.classList.remove('active');
-  }
-  currentPage = 1;
-  loadListings();  // → backend (portals=multi)
-}, false);
+// (sekcja „🌐 Obecność na portalach” usunięta z panelu 10.11 na prośbę użytkownika — filtr portals= w API i w AI-search zostaje)
 
 // 🔁 Duplikaty (widok dla biur) — filtr na backendzie (dupes=multi|solo|owner, pola dup.* na całej bazie), wzajemnie wykluczające się
 ['chipDupes2', 'chipDupes1', 'chipDupesOwner'].forEach(id => {

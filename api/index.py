@@ -2254,9 +2254,21 @@ async def _live_fetch_copies(doc: dict) -> dict:
     async with httpx.AsyncClient(follow_redirects=True, timeout=9.0) as client:
         results = await asyncio.gather(*[one(client, p, pg) for p in LIVE_COPY_PORTALS for pg in (1, 2)])
     ops = []
+    want = _dup_norm(city_name)
+    out["skipped_other_city"] = 0
     for portal, page, items in results:
         out["fetched"][f"{portal}:{page}"] = len(items)
         for it in items:
+            # ⚠️ Adresowo/Gethome przy nieznanym slugu zwracają listę OGÓLNOPOLSKĄ → bierzemy tylko oferty, których miejscowość
+            #    (z URL/tytułu/lokalizacji) to faktycznie miasto tej oferty; inaczej 160 ofert dostałoby city="Istebna".
+            try:
+                g = sp.guess_city(portal, it)
+            except Exception:
+                g = None
+            blob = _dup_norm(f"{it.get('title') or ''} {it.get('loc0') or ''} {it.get('url') or ''}")
+            if (g and _dup_norm(g) != want) or (not g and want not in blob):
+                out["skipped_other_city"] += 1
+                continue
             try:
                 d = sp.normalize(portal, it, city_name, prop, trans)
             except Exception:
@@ -2272,6 +2284,31 @@ async def _live_fetch_copies(doc: dict) -> dict:
         out["new"], out["updated"] = r.upserted_count, r.modified_count
     await coll.update_one({"_id": doc["_id"]}, {"$set": {"copies_checked_at": datetime.now(timezone.utc).isoformat()}, "$unset": {"dup.v": ""}})
     return out
+
+
+@app.post("/api/admin/repair-live-city")
+async def admin_repair_live_city(city: str, admin: dict = Depends(require_admin)):
+    """Naprawa po find-copies z 10.11: oferty Adresowo/Gethome z listy ogólnopolskiej dostały city=<miasto oferty>. Miasto z URL/tytułu."""
+    import sys as _s
+    _s.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+    import scrape_portals as sp  # noqa: E402
+    coll = database().listings
+    want = _dup_norm(city)
+    fixed = kept = 0
+    async for d in coll.find({"source": {"$in": ["adresowo", "gethome"]}, "city": city}, {"url": 1, "title": 1, "source": 1}):
+        blob = _dup_norm(f"{d.get('title') or ''} {d.get('url') or ''}")
+        if want in blob:
+            kept += 1
+            continue
+        g = sp.guess_city(d.get("source") or "adresowo", {"url": d.get("url") or "", "title": d.get("title") or ""})
+        m = re.match(r"^([A-ZŁŚŻŹĆŃÓ][\w\-]+(?: [A-ZŁŚŻŹĆŃÓ][\w\-]+)?)", d.get("title") or "")
+        new_city = g or (m.group(1) if m else None)
+        if new_city:
+            await coll.update_one({"_id": d["_id"]}, {"$set": {"city": new_city, "city_unresolved": True}})
+        else:
+            await coll.update_one({"_id": d["_id"]}, {"$unset": {"city": ""}, "$set": {"city_unresolved": True}})
+        fixed += 1
+    return {"city": city, "fixed": fixed, "kept": kept}
 
 
 @app.post("/api/listing/{listing_id}/find-copies")

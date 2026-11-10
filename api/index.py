@@ -48,7 +48,7 @@ from pymongo.errors import DuplicateKeyError
 import sys as _sys
 _sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 from dup_logic import (_build_diacritic_regex, _num_or_zero, _PORTAL_NAMES, _portal_name, _portal_of, _cluster_copies, _price_timeline,  # noqa: E402
-                       _VOIVODESHIPS, _BT_REGEX, _BT_ALIAS, _DT_REGEX, _DT_ALIAS, _dup_match, _dup_ids, _dup_norm, dup_prepare, dup_summarize, DUP_PROJ, DUP_CANDS)
+                       _VOIVODESHIPS, _BT_REGEX, _BT_ALIAS, _DT_REGEX, _DT_ALIAS, bt_classify, _dup_match, _dup_ids, _dup_norm, dup_prepare, dup_summarize, DUP_PROJ, DUP_CANDS)
 
 
 # --- Config ---
@@ -2554,6 +2554,10 @@ async def listings_scraped_endpoint(
                     {"building_type": {"$in": bt_all}},
                     {"building_type": {"$in": [None, ""]}, "title": {"$regex": title_pat, "$options": "i"}},
                 ]
+                if "wolnostojacy" in bt_vals:
+                    # Dom bez żadnego sygnału typu w tytule i opisie (po backfillu: subtype_scanned) to w Polsce niemal zawsze dom
+                    # wolnostojący (bliźniak/szeregowiec/siedlisko są w ogłoszeniach zawsze nazwane) → chip „Wolnostojący” je obejmuje.
+                    bt_or.append({"building_type": {"$in": [None, ""]}, "subtype_scanned": True})
                 query.setdefault("$and", []).append({"$or": bt_or})
         # Przeznaczenie działki — na pełnej bazie. ~15% działek nie ma dzialka_type → fallback regex po tytule.
         has_dt = False
@@ -4559,8 +4563,8 @@ async def admin_backfill_subtypes(limit: int = 2000, apply: int = 0, admin: dict
         remaining = await coll.count_documents(q)
         ups, unknown, by_val = [], [], {}
         for d in docs:
-            text = (str(d.get("title") or "") + " " + str(d.get("description") or "")[:800]).lower()
-            val = next((k for k, pat in rx.items() if re.search(pat, text, re.I)), None)
+            text = (str(d.get("title") or "") + " " + str(d.get("description") or "")).lower()
+            val = bt_classify(d.get("title"), d.get("description")) if kind == "dom" else next((k for k, pat in rx.items() if re.search(pat, text, re.I)), None)
             by_val[val or "nierozpoznane"] = by_val.get(val or "nierozpoznane", 0) + 1
             if val:
                 ups.append(UpdateOne({"_id": d["_id"]}, {"$set": {field: val, "subtype_scanned": True}}))

@@ -125,6 +125,18 @@ _BT_REGEX = {
     "letniskowy": r"letnisk|rekreac|\brod\b|weekendow",
 }
 _BT_ALIAS = {"wolnostojacy": ["wolnostojący"], "blizniak": ["bliźniak", "blizniak"], "szeregowiec": ["szeregowy"], "rezydencja": ["willa"]}
+# kolejność rozpoznawania: najpierw typy SZCZEGÓLNE (bliźniak, szeregowiec, siedlisko, rezydencja, letniskowy), na końcu „wolnostojący”,
+# którego wzorzec jest szeroki (parterowy/piętrowy/jednorodzinny) — inaczej „szeregowiec parterowy” wpadał do wolnostojących
+_BT_ORDER = ("blizniak", "szeregowiec", "siedliskowy", "rezydencja", "letniskowy", "wolnostojacy")
+
+
+def bt_classify(title, description=None):
+    """Typ domu z tytułu + pełnego opisu (ASCII jak chipy / filtr API) albo None."""
+    text = f"{title or ''} {description or ''}"
+    for k in _BT_ORDER:
+        if re.search(_BT_REGEX[k], text, re.I):
+            return k
+    return None
 _DT_ALIAS = {"budowlana": ["budowlana"], "rolna": ["rolna"], "rekreacyjna": ["rekreacyjna"],
              "lesna": ["lesna", "leśna"], "inwestycyjna": ["inwestycyjna", "usługowa", "uslugowa", "komercyjna"]}
 _DT_REGEX = {

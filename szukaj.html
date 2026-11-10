@@ -2314,7 +2314,7 @@ const SUB_TYPES = {
     {label:'🏙️ Wieżowiec', value:'wiezowiec'},
   ]},
   dom: {title:'🏡 Typ domu', filter:'building_type', options:[
-    {label:'🏠 Wolnostojący', value:'wolnostojacy'},
+    {label:'🏠 Wolnostojący', value:'wolnostojacy', title:'Domy wolnostojące oraz domy bez podanego typu (bliźniak, szeregowiec i siedlisko są w ogłoszeniach zawsze nazwane)'},
     {label:'🏘️ Bliźniak', value:'blizniak'},
     {label:'🏘️ Szeregowiec', value:'szeregowiec'},
     {label:'🌾 Siedliskowy', value:'siedliskowy'},
@@ -2367,7 +2367,8 @@ function updateSubType(type){
     const val = o.value || '';
     const filter = cfg.filter || '';
     const attrs = (val && filter) ? `data-filter="${filter}" data-value="${val}"` : '';
-    return `<div class="chip" ${attrs}>${o.label}</div>`;
+    const title = o.title ? ` title="${o.title}"` : '';
+    return `<div class="chip" ${attrs}${title}>${o.label}</div>`;
   }).join('');
 
   // Dynamiczna sekcja: Rynek (dla mieszkania/dom) vs Przeznaczenie działki

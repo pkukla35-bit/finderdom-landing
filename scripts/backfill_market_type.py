@@ -46,6 +46,10 @@ def main():
         print(f"Zaktualizowano: {total}")
     elif not args.apply:
         print("Dry-run — użyj --apply, aby zapisać.")
+    # 🏠 typ domu / przeznaczenie działki z pełnego opisu — ten sam workflow (token GitHub bez scope `workflow`)
+    if not args.type and args.since_hours == 0:
+        from backfill_subtypes import run as run_subtypes
+        run_subtypes(apply=args.apply, rescan=True)
 
 
 if __name__ == "__main__":

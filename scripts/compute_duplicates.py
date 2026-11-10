@@ -22,7 +22,7 @@ from dup_logic import dup_prepare, dup_summarize, DUP_PROJ, DUP_CANDS, _num_or_z
 
 SELECT_PROJ = {**DUP_PROJ, "_id": 1, "dup.checked_at": 1, "dup.sig": 1}
 RECHECK_DAYS = 5
-DUP_VERSION = 2   # podbij po zmianie algorytmu w dup_logic.py → wszystkie oferty zostaną policzone od nowa
+DUP_VERSION = 3   # podbij po zmianie algorytmu w dup_logic.py → wszystkie oferty zostaną policzone od nowa
 
 
 def _sig(doc: dict) -> str:

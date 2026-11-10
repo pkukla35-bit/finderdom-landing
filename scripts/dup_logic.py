@@ -219,14 +219,16 @@ def _dup_match(doc: dict, d: dict):
         pass
     dd = _dup_norm(d.get("district"))
     d_area = _num_or_zero(d.get("area_m2"))
-    # 2b) Inwestycja deweloperska: identyczny metraż, RÓŻNE ceny, a każda cena = metraż × okrągła stawka zł/m² (657 072 = 42,12 × 15 600)
-    #     → to różne mieszkania (piętra) w tej samej inwestycji, nie duplikat (Gratka/Morizon rzadko oznaczają rynek pierwotny).
+    # 2b) Inwestycja deweloperska: cena = metraż × okrągła stawka zł/m² po OBU stronach (710 850 = 47,39 × 15 000; 699 194 = 47,89 × 14 600),
+    #     a metraż lub cena się różnią → różne mieszkania tej samej inwestycji (piętra), nie duplikat. Gratka/Morizon rzadko oznaczają
+    #     rynek pierwotny, a opisy dewelopera są identyczne, więc bez tej reguły 11 lokali zlewało się w „11 ogłoszeń · 6 pośredników”.
+    #     Wymagamy metrażu z ułamkiem (rynek wtórny: 50 m² i 750 000 zł trywialnie dałoby „okrągłą stawkę”).
     p2 = _num_or_zero(d.get("price"))
-    if area and abs(d_area - area) < 0.05 and abs(p2 - price) >= 1:
-        def _dev_price(p):
-            ppm = p / area
+    if area and d_area and (abs(area - round(area)) > 0.01 or abs(d_area - round(d_area)) > 0.01) and (abs(d_area - area) >= 0.05 or abs(p2 - price) >= 1):
+        def _dev_price(p, a):
+            ppm = p / a
             return abs(ppm - round(ppm)) < 0.005 and round(ppm) % 50 == 0
-        if _dev_price(price) and _dev_price(p2):
+        if _dev_price(price, area) and _dev_price(p2, d_area):
             return False
     # 3) Pewne potwierdzenia (ważniejsze niż różnie wpisana dzielnica/gmina): ta sama ulica, GPS < 300 m, identyczny tytuł,
     #    identyczny metraż z ułamkiem (138,84 m²) + identyczna cena

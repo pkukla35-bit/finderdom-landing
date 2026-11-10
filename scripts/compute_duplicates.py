@@ -22,6 +22,7 @@ from dup_logic import dup_prepare, dup_summarize, DUP_PROJ, DUP_CANDS, _num_or_z
 
 SELECT_PROJ = {**DUP_PROJ, "_id": 1, "dup.checked_at": 1, "dup.sig": 1}
 RECHECK_DAYS = 5
+DUP_VERSION = 2   # podbij po zmianie algorytmu w dup_logic.py → wszystkie oferty zostaną policzone od nowa
 
 
 def _sig(doc: dict) -> str:
@@ -46,7 +47,7 @@ def summarize_doc(coll, doc: dict) -> dict:
         "price_min": min(prices) if prices else None, "price_max": max(prices) if prices else None,
         "items": [{"id": it.get("id"), "portal": it.get("portal"), "price": it.get("price"), "seller_type": it.get("seller_type"),
                    "agency": it.get("agency") or "", **({"same_export": True} if it.get("same_export") else {})} for it in items[:12]],
-        "checked_at": datetime.now(timezone.utc).isoformat(), "sig": _sig(doc),
+        "checked_at": datetime.now(timezone.utc).isoformat(), "sig": _sig(doc), "v": DUP_VERSION,
     }
 
 
@@ -54,7 +55,7 @@ def run(minutes: float = 240, threads: int = 8, limit: int = 0, dry_run: bool = 
     db = MongoClient(os.environ["MONGODB_URI"])[os.environ.get("MONGODB_DB", "finderdom")]
     coll = db.listings
     for keys in ([("transaction_type", ASCENDING), ("price", ASCENDING)], [("dup.checked_at", ASCENDING)],
-                 [("dup.agents", ASCENDING)], [("dup.portal_count", ASCENDING)], [("dup.copies", ASCENDING)]):
+                 [("dup.agents", ASCENDING)], [("dup.portal_count", ASCENDING)], [("dup.copies", ASCENDING)], [("dup.v", ASCENDING)]):
         try:
             coll.create_index(keys, background=True)
         except Exception as e:
@@ -63,7 +64,7 @@ def run(minutes: float = 240, threads: int = 8, limit: int = 0, dry_run: bool = 
     deadline = time.time() + minutes * 60
     base = {"is_stale": {"$ne": True}, "price": {"$gte": 1000}, "area_m2": {"$gte": 5}}
     stale_cut = (datetime.now(timezone.utc) - timedelta(days=RECHECK_DAYS)).isoformat()
-    phases = [("nowe (bez dup)", {**base, "dup": {"$exists": False}}, [("added_at", DESCENDING)]),
+    phases = [("nowe (bez dup / stara wersja)", {**base, "dup.v": {"$ne": DUP_VERSION}}, [("added_at", DESCENDING)]),
               ("odświeżenie (> %d dni)" % RECHECK_DAYS, {**base, "dup.checked_at": {"$lt": stale_cut}}, [("dup.checked_at", ASCENDING)])]
     stats = {"scanned": 0, "updated": 0, "multi_agents": 0, "multi_portal": 0, "errors": 0}
 

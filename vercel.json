@@ -14,8 +14,8 @@
   },
   "crons": [
     {
-      "path": "/api/admin/cleanup-stale?limit=500&concurrency=25",
-      "schedule": "0 3 * * *"
+      "path": "/api/cron/tick",
+      "schedule": "30 3 * * *"
     },
     {
       "path": "/api/admin/mailing/auto-run?limit=60",
@@ -24,10 +24,6 @@
     {
       "path": "/api/admin/alerts/run?limit=300",
       "schedule": "30 6 * * *"
-    },
-    {
-      "path": "/api/cron/tick",
-      "schedule": "*/15 * * * *"
     }
   ],
   "rewrites": [

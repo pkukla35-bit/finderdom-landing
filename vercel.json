@@ -24,9 +24,17 @@
     {
       "path": "/api/admin/alerts/run?limit=300",
       "schedule": "30 6 * * *"
+    },
+    {
+      "path": "/api/cron/tick",
+      "schedule": "*/15 * * * *"
     }
   ],
   "rewrites": [
+    {
+      "source": "/api/cron/tick",
+      "destination": "/api/index"
+    },
     {
       "source": "/api/chat/:path*",
       "destination": "/api/index"

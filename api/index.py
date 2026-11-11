@@ -4417,7 +4417,7 @@ async def _trigger_imports_if_due(force: bool = False) -> dict:
     st = await db.settings.find_one({"_id": "imports"}) or {}
     if not force and st.get("last_triggered_day") == today:
         return {"skipped": True, "reason": "already_today"}
-    if not force and now_pl.hour < 6:
+    if not force and now_pl.hour < 4:   # 4:00 PL — cron cleanup-stale z GitHub trafia ok. 5:00 PL i ma już odpalić pełny import
         return {"skipped": True, "reason": "too_early", "hour_pl": now_pl.hour}
     tok = await _github_token()
     if not tok:
@@ -4892,6 +4892,18 @@ async def _scheduler_tick(source: str, force: bool = False) -> dict:
     return out
 
 
+@app.get("/api/cron/tick")
+async def public_cron_tick(request: Request):
+    """⏱️ Publiczny „puls” dla zewnętrznego pingera / crona Vercel (bez sekretu): odpala _scheduler_tick (blokada 10 min, same odczyty
+    settings + ewentualny dispatch do GitHub). Harmonogramy GitHub Actions opóźniają się o godziny, a crony Vercel z sekretem nie trafiały."""
+    try:
+        await database().settings.update_one({"_id": "cron_hits"}, {"$set": {"/api/cron/tick": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    except Exception:
+        pass
+    out = await _scheduler_tick("public-tick")
+    return {"ok": True, "skipped": bool(out.get("skipped")), "at": datetime.now(timezone.utc).isoformat()}
+
+
 @app.get("/api/admin/cron/status")
 async def admin_cron_status(admin: dict = Depends(require_admin)):
     """Diagnostyka harmonogramów: kiedy ostatnio trafiły crony (Vercel/GitHub), ostatni tick zegara, importy, lekkie tury, raport."""
@@ -4988,8 +5000,15 @@ async def _dispatch_daily(key: str, workflow: str, min_hour_pl: int, force: bool
 
 
 async def _trigger_daily_report_if_due(force: bool = False) -> dict:
-    """Raport zdrowia (scripts/health_check.py → e-mail do admina) raz dziennie, nie wcześniej niż 09:00 PL — 10.11 raport poszedł
-    o 02:05 razem z dispatchem importów i pokazał „0 ofert dziś”, bo importy dopiero startowały."""
+    """Raport zdrowia (scripts/health_check.py → e-mail do admina) raz dziennie, ≥ 09:00 PL i dopiero ≥ 75 min PO dzisiejszym
+    dispatchu importów (10.11 i 11.11 raport szedł w tej samej minucie co importy i pokazywał „0 ofert dziś”)."""
+    if not force:
+        imp = await database().settings.find_one({"_id": "imports"}) or {}
+        today = datetime.now(ZoneInfo("Europe/Warsaw")).strftime("%Y-%m-%d")
+        if imp.get("last_triggered_day") != today:
+            return {"skipped": True, "reason": "imports_not_yet_today"}
+        if (imp.get("last_attempt_at") or "") > (datetime.now(timezone.utc) - timedelta(minutes=75)).isoformat():
+            return {"skipped": True, "reason": "imports_still_running"}
     return await _dispatch_daily("daily_report", "health-check.yml", 9, force)
 
 

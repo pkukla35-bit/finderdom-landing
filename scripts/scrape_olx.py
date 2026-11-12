@@ -92,9 +92,15 @@ def parse_list(html: str) -> List[dict]:
 
 
 def _param(ad: dict, key: str):
+    """Param ogłoszenia jako {"key": ..., "label": ...}. API (/api/v1/offers): value = {"key","label"}; strona listy
+    (__PRERENDERED_STATE__): value = etykieta („2 pokoje”, „Wtórny”), normalizedValue = klucz („two”, „secondary”).
+    Wcześniej dla listy zwracał gołą etykietę → ROOMS.get("2 pokoje") = None: pokoje i rynek z OLX nigdy nie wchodziły."""
     for p in ad.get("params") or []:
         if p.get("key") == key:
-            return p.get("value")
+            v = p.get("value")
+            if isinstance(v, dict):
+                return v
+            return {"key": p.get("normalizedValue") if p.get("normalizedValue") is not None else v, "label": v}
     return None
 
 

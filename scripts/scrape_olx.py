@@ -18,7 +18,7 @@ from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scrape_otodom import CITIES, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num, clean_agency, price_history_ops, with_price_history  # noqa: E402
-from market_type import infer_market, infer_rooms  # noqa: E402
+from market_type import infer_market, infer_rooms, infer_build_year  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("olx")
@@ -169,6 +169,10 @@ def normalize(ad: dict, city_name: str, prop: str, trans: str) -> Optional[Dict[
     }
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype
     if doc["market_type"] is None: del doc["market_type"]   # nie nadpisuj wartości z backfillu pustką
+    # 📅 rok budowy z opisu (OLX nie ma takiego parametru) — bez niego oferta nie wchodzi w filtr „Rok budowy”
+    if prop in ("mieszkanie", "dom", "lokal"):
+        by = infer_build_year(title, desc)
+        if by: doc["build_year"], doc["build_year_inferred"] = by, True
     # 🏢 Nazwa biura (OLX API: ad.user.name) — tylko konta firmowe
     if is_business:
         an = clean_agency((ad.get("user") or {}).get("name") if isinstance(ad.get("user"), dict) else None)

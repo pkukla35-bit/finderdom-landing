@@ -20,7 +20,7 @@ from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scrape_otodom import CITIES, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num, clean_agency, price_history_ops, with_price_history  # noqa: E402
-from market_type import infer_market, infer_rooms  # noqa: E402
+from market_type import infer_market, infer_rooms, infer_build_year  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("nol")
@@ -175,6 +175,11 @@ def normalize(it: Dict[str, Any], det: Dict[str, Any], city_name: str, prop: str
     if doc["market_type"] is None: del doc["market_type"]   # nie nadpisuj wartości z backfillu pustką
     for k in ("images", "phone", "lat", "lng", "description"):
         if det.get(k) is not None: doc[k] = det[k]
+    # 📅 rok budowy z opisu, gdy portal go nie podał
+    if not doc.get("build_year") and prop in ("mieszkanie", "dom", "lokal"):
+        by = infer_build_year(it["title"], det.get("description", ""))
+        if by: doc["build_year"], doc["build_year_inferred"] = by, True
+    if doc.get("build_year") is None: del doc["build_year"]   # nie nadpisuj wartości z backfillu pustką
     an = clean_agency(det.get("agency_name")) if seller != "prywatna" else None
     if an: doc["agency_name"] = an
     if det: doc["details_at"] = now_iso

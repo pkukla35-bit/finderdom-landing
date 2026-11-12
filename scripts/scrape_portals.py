@@ -16,7 +16,7 @@ from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scrape_otodom import CITIES, REGIONS, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num, city_from_slug, clean_agency, price_history_ops, with_price_history  # noqa: E402
-from market_type import infer_market, infer_rooms  # noqa: E402
+from market_type import infer_market, infer_rooms, infer_build_year  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("portals")
@@ -415,6 +415,10 @@ def normalize(portal: str, it: Dict[str, Any], city_name: str, prop: str, trans:
     if an: doc["agency_name"] = an
     for k in ("lat", "lng", "plot_area_m2", "phone", "build_year", "posted_at", "auction_kind", "auction_deadline", "auction_discount_pct"):
         if it.get(k) not in (None, "", 0): doc[k] = it[k]
+    # 📅 rok budowy z opisu („w budynku z 1976”, „rok budowy: 2009”) — listy portali nie mają tego pola
+    if "build_year" not in doc and prop in ("mieszkanie", "dom", "lokal"):
+        by = infer_build_year(doc["title"], it.get("desc"))
+        if by: doc["build_year"], doc["build_year_inferred"] = by, True
     # 🌳 wielkość działki z opisu (Gratka/Morizon/Domiporta nie podają jej w danych listy)
     if "plot_area_m2" not in doc and prop in ("dom", "dzialka"):
         m = re.search(r"dzia[łl]k[aięą]\w*\D{0,30}?(\d[\d\s.,]{1,8})\s*(m2|m²|mkw|m kw|ar(?:y|ów)?|ha)\b", blob)

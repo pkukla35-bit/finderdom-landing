@@ -15,6 +15,8 @@ import argparse, logging, os, re, sys, urllib.request, json, ssl
 from datetime import datetime, timezone
 from pymongo import MongoClient, UpdateOne
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from market_type import infer_build_year  # noqa: E402
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s")
 log = logging.getLogger("import_apify")
 
@@ -344,7 +346,7 @@ def normalize(item: dict, prop_type_hint: str = None) -> dict | None:
         "price_pm2": ppm2,
         "rooms": item.get("rooms") or detect_rooms_from_text(item.get("title") or "", item.get("descriptionText") or ""),
         "floor": item.get("floor"),
-        "build_year": item.get("buildYear"),
+        "build_year": item.get("buildYear") or infer_build_year(item.get("title") or "", item.get("descriptionText") or ""),
         "lat": item.get("latitude"),
         "lng": item.get("longitude"),
         "image": img,

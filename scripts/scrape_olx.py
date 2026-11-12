@@ -216,6 +216,7 @@ def main():
             if a.debug and page == 1:
                 log.info("  DEBUG keys: %s", sorted(ads[0].keys())[:40])
                 log.info("  DEBUG params: %s", [p.get("key") for p in ads[0].get("params") or []])
+                log.info("  DEBUG params full: %s", json.dumps(ads[0].get("params"), ensure_ascii=False)[:1500])
                 log.info("  DEBUG price=%s photos0=%s location=%s map=%s", json.dumps(ads[0].get("price"))[:200], json.dumps((ads[0].get("photos") or [None])[0])[:150], json.dumps(ads[0].get("location"))[:150], json.dumps(ads[0].get("map"))[:80])
             ops = []
             docs = [d for d in (normalize(ad, city["name"], a.property, a.transaction) for ad in ads) if d and d["price"]]

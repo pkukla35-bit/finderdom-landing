@@ -564,6 +564,9 @@ def main():
             items = parse_listings(html)
             if not items:
                 log.info("  page %d: no listings", page); break
+            if page == 1 and not DIRECT_STATE.get("rooms_dumped"):   # diagnostyka: surowe pole pokoi z listy (Kraków: 1/15 domów Otodom z rooms)
+                DIRECT_STATE["rooms_dumped"] = True
+                log.info("  DEBUG rooms raw: %s | keys: %s", [(it.get("roomsNumber"), it.get("rooms")) for it in items[:5]], sorted(items[0].keys())[:60])
 
             docs = [d for d in (normalize(it, city["name"], args.property) for it in items) if d]
             if docs and city["slug"] == city["voi"]:   # diagnostyka trybu regionów: ile ofert ma rozpoznane miasto

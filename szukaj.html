@@ -544,16 +544,8 @@ gtag('set', 'url_passthrough', false);
       </div>
     </div>
 
-    <!-- 🔁 Duplikaty (widok dla biur — zamiast kalkulatora kredytu) -->
-    <div class="filter-group" id="dupesGroup" style="display:none">
-      <div class="filter-title">🔁 Duplikaty i konkurencja</div>
-      <div class="chip-group">
-        <div class="chip" id="chipDupes2" title="Ta sama nieruchomość wystawiona przez 2 lub więcej pośredników">🏢 2+ pośredników</div>
-        <div class="chip" id="chipDupes1" title="Tylko jedno ogłoszenie tej nieruchomości — brak konkurencji">🎯 Bez duplikatów</div>
-        <div class="chip" id="chipDupesOwner" title="Oprócz ofert pośredników jest też ogłoszenie właściciela — można ominąć prowizję">👤 Właściciel ogłasza też sam</div>
-      </div>
-      <div style="font-size:11px;color:#8ba3d4;margin-top:6px;line-height:1.4">Łączymy ogłoszenia tej samej nieruchomości z różnych portali i biur (cena + metraż + pokoje). Na karcie: „🔁 3 ogłoszenia · 2 pośredników”.</div>
-    </div>
+    <!-- 🔁 Sekcja „Duplikaty i konkurencja” zdjęta z panelu 11.11 (na prośbę użytkownika) — duplikaty widać na karcie i po otwarciu oferty -->
+    <div class="filter-group" id="dupesGroup" style="display:none"></div>
 
     <!-- CRM filters (Firmowy only - shown via JS) -->
     <div class="filter-group" id="crmFilters" style="display:none">
@@ -1716,9 +1708,7 @@ function enableCrmUi() {
   window.CRM_ENABLED = true;
   const bar = document.getElementById('crmFilters');
   if (bar) bar.style.display = 'block';
-  // 🔁 Widok dla biur: zamiast kalkulatora kredytu — duplikaty (ile kopii / ilu pośredników ma tę nieruchomość)
-  const dg = document.getElementById('dupesGroup');
-  if (dg) dg.style.display = 'block';
+  // 🔁 Widok dla biur: kalkulator kredytu ukryty; duplikaty widać na karcie („🔁 N ogłoszeń · M pośredników”) i na stronie oferty
   const kb = document.getElementById('kredytBox');
   if (kb) kb.style.display = 'none';
 }

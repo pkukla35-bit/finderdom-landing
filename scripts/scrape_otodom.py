@@ -19,7 +19,7 @@ import requests
 from pymongo import MongoClient, ASCENDING, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from market_type import infer_market  # noqa: E402
+from market_type import infer_market, infer_rooms  # noqa: E402
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -409,7 +409,7 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         "price": price,
         "area_m2": area_m2,
         "price_pm2": round(price / area_m2, 2) if price and area_m2 and area_m2 > 0 else None,
-        "rooms": int(rooms) if rooms else None,
+        "rooms": int(rooms) if rooms else infer_rooms(title, item.get("shortDescription") or item.get("description")),
         "lat": lat,
         "lng": lon,
         "image": img_url,

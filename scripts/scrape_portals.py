@@ -16,7 +16,7 @@ from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scrape_otodom import CITIES, REGIONS, DOM_SUBTYPES, DZIALKA_SUBTYPES, _num, city_from_slug, clean_agency, price_history_ops, with_price_history  # noqa: E402
-from market_type import infer_market  # noqa: E402
+from market_type import infer_market, infer_rooms  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("portals")
@@ -400,7 +400,7 @@ def normalize(portal: str, it: Dict[str, Any], city_name: str, prop: str, trans:
         "url": it["url"], "city": city_name, "district": it.get("district"),
         "location": ", ".join(x for x in [city_name, it.get("district"), it.get("street")] if x),
         "price": price, "area_m2": area, "price_pm2": round(price / area, 2) if price and area and area > 0 else None,
-        "rooms": int(it["rooms"]) if it.get("rooms") else None, "floor": it.get("floor"),
+        "rooms": int(it["rooms"]) if it.get("rooms") else infer_rooms(it.get("title"), it.get("desc")), "floor": it.get("floor"),
         "image": it.get("image"), "images": [it["image"]] if it.get("image") else [],
         "description": (it.get("desc") or "")[:2000], "transaction_type": trans, "seller_type": seller,
         "last_seen_at": now_iso, "scraped_via": "portal-direct",

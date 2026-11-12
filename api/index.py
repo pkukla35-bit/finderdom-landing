@@ -2675,8 +2675,12 @@ async def listings_scraped_endpoint(
             room_clauses = []
             if room_vals:
                 room_clauses.append({"rooms": {"$in": room_vals}})
+                # oferty bez `rooms` (ok. 1/3 nowych z Gratki/Domiporty): liczba pokoi z tytułu („3 pokoje”, „3-pok.”, „kawalerka”=1)
+                alts = [rf"\b{n}\s*-?\s*pok" for n in room_vals] + ([r"kawalerk|garsonier"] if 1 in room_vals else [])
+                room_clauses.append({"rooms": {"$in": [None, 0]}, "title": {"$regex": "|".join(alts), "$options": "i"}})
             if has_5plus:
                 room_clauses.append({"rooms": {"$gte": 5}})
+                room_clauses.append({"rooms": {"$in": [None, 0]}, "title": {"$regex": r"\b([5-9]|1\d)\s*-?\s*pok", "$options": "i"}})
             if room_clauses:
                 if len(room_clauses) == 1:
                     query.update(room_clauses[0])

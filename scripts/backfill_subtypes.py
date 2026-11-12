@@ -10,6 +10,7 @@ from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dup_logic import bt_classify, _DT_REGEX  # noqa: E402
+from market_type import infer_rooms  # noqa: E402
 
 
 def dt_classify(title, description=None):
@@ -38,6 +39,19 @@ def run(apply: bool = False, rescan: bool = True) -> dict:
                 coll.bulk_write(ups[i:i + 500], ordered=False)
         out[kind] = {"updated": len(ups) if apply else 0, "would_update": len(ups), "still_unknown": unknown, "by_value": by_val}
         print(kind, out[kind])
+    # 🚪 liczba pokoi z tytułu/opisu (mieszkania i domy bez `rooms`)
+    ups, unknown = [], 0
+    for d in coll.find({"type": {"$regex": "^(mieszkanie|dom)", "$options": "i"}, "rooms": {"$in": [None, 0, ""]}}, {"title": 1, "description": 1}):
+        n = infer_rooms(d.get("title"), d.get("description"))
+        if n:
+            ups.append(UpdateOne({"_id": d["_id"]}, {"$set": {"rooms": n, "rooms_inferred": True}}))
+        else:
+            unknown += 1
+    if apply:
+        for i in range(0, len(ups), 500):
+            coll.bulk_write(ups[i:i + 500], ordered=False)
+    out["rooms"] = {"updated": len(ups) if apply else 0, "would_update": len(ups), "still_unknown": unknown}
+    print("rooms", out["rooms"])
     return out
 
 

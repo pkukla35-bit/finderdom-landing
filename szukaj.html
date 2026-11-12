@@ -1300,6 +1300,13 @@ async function loadListings() {
     if (activeLt.length) apiParams.set('lokal_type', activeLt.join(','));
     // Data dodania → backend (added_at w pełnej bazie)
     (function(){
+      // Deep link ?date=today: chip aktywowany dopiero w „URL params init” (po pierwszym fetchu) → pierwszy wynik szedł bez daty (2020 zamiast 45). Seedujemy tu.
+      if (firstLoad) {
+        const urlDate0 = urlParams.get('date');
+        if (urlDate0 && ['today','3d','7d','30d','all'].includes(urlDate0)) {
+          document.querySelectorAll('.date-chip').forEach(c => c.classList.toggle('active', c.dataset.date === urlDate0));
+        }
+      }
       const mode = document.querySelector('.date-chip.active')?.dataset.date || 'all';
       const day = 24*3600*1000; let fromMs = 0, toMs = 0;
       if (mode === 'today') fromMs = todayFromMs();

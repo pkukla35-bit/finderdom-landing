@@ -175,6 +175,7 @@ def normalize(ad: dict, city_name: str, prop: str, trans: str) -> Optional[Dict[
     }
     if subtype: doc["dzialka_type" if prop == "dzialka" else "building_type"] = subtype
     if doc["market_type"] is None: del doc["market_type"]   # nie nadpisuj wartości z backfillu pustką
+    if doc.get("rooms") is None: doc.pop("rooms", None)   # nie nadpisuj pokoi z backfillu pustką
     # 📅 rok budowy z opisu (OLX nie ma takiego parametru) — bez niego oferta nie wchodzi w filtr „Rok budowy”
     if prop in ("mieszkanie", "dom", "lokal"):
         by = infer_build_year(title, desc)

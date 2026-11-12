@@ -203,6 +203,9 @@ def _num(v) -> Optional[float]:
     except: return None
 
 
+_ROOMS_ENUM = {"ONE": 1, "TWO": 2, "THREE": 3, "FOUR": 4, "FIVE": 5, "SIX": 6, "SEVEN": 7, "EIGHT": 8, "NINE": 9, "TEN": 10, "MORE": 11}
+
+
 
 # ───────────────────────── Wspólne dla wszystkich scraperów (importowane przez olx/nol/portals) ─────────────────────────
 _AGENCY_JUNK = re.compile(r"^(osoba prywatna|prywatny|private|właściciel|wlasciciel|brak|none|null|-+)$", re.I)
@@ -337,8 +340,8 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
     if not price: price = _num(item.get("price"))
     area_m2 = _num(item.get("areaInSquareMeters")) or _num(item.get("area"))
 
-    # rooms (for mieszkania/domy)
-    rooms = _num(item.get("roomsNumber"))
+    # rooms (for mieszkania/domy): lista Otodom daje słowny enum ("FOUR", "SIX", "MORE") — _num() go gubił → domy Otodom bez pokoi (Kraków: 1/15)
+    rooms = _num(item.get("roomsNumber")) or _ROOMS_ENUM.get(str(item.get("roomsNumber") or "").upper())
 
     # location
     loc = item.get("location") or {}
@@ -428,6 +431,7 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
     if prop in ("mieszkanie", "dom", "lokal"):
         by = infer_build_year(title, f"{item.get('shortDescription') or ''} {item.get('description') or ''}")
         if by: doc["build_year"], doc["build_year_inferred"] = by, True
+    if doc.get("rooms") is None: doc.pop("rooms", None)   # nie nadpisuj pokoi z backfillu pustką
     if subtype_field and subtype:
         doc[subtype_field] = subtype
     # 🏢 Nazwa biura / dewelopera (lista wyników Otodom: item.agency.name) — tylko gdy nie-prywatna

@@ -23,7 +23,8 @@ def run(apply: bool = False, rescan: bool = True) -> dict:
     coll = db.listings
     out = {}
     for kind, field, fn in (("dom", "building_type", bt_classify), ("dzialka", "dzialka_type", dt_classify)):
-        q = {"type": {"$regex": "^" + kind, "$options": "i"}, field: {"$in": [None, ""]}}
+        # type bywa „działka budowlana” (ł!) — „^dzialka” pomijało 99% działek (13.11: skan 451 z ~40k)
+        q = {"type": {"$regex": "^dzia[lł]ka" if kind == "dzialka" else "^" + kind, "$options": "i"}, field: {"$in": [None, ""]}}
         if not rescan:
             q["subtype_scanned"] = {"$ne": True}
         ups, unknown, by_val = [], 0, {}

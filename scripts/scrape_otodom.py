@@ -328,6 +328,8 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
                     subtype = label; break
         subtype_field = "building_type"
         base = "dom"
+    elif prop == "lokal":   # 13.11: lokale z Otodomu (CHAIN po działkach) lądowały jako „mieszkanie” → 0 lokali Otodom w wyszukiwarce, śmieci w mieszkaniach
+        base = "lokal"
     else:  # mieszkanie
         base = "mieszkanie"
 
@@ -362,17 +364,27 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
                     if not isinstance(x, dict): continue
                     lvl = str(x.get("locationLevel") or "").lower()
                     parts = [p.strip() for p in str(x.get("fullName") or x.get("name") or "").split(",") if p.strip()]
-                    if lvl in ("district", "sub_district", "subdistrict", "neighbourhood", "neighborhood") and len(parts) >= 2:
-                        city_part = city_part or parts[1]
-                        district = district or parts[0]
-                    elif parts and not parts[0].islower() and lvl not in ("region", "province", "voivodeship", "county", "powiat", "country"):
-                        city_part = parts[0]   # city/town/village/locality — kolejne wpisy są coraz dokładniejsze
+                    if not parts or parts[0].islower():
+                        continue
+                    if lvl in ("district", "sub_district", "subdistrict", "neighbourhood", "neighborhood", "street"):
+                        if lvl != "street": district = district or parts[0]
+                        if len(parts) >= 2: city_part = city_part or parts[1]
+                    elif lvl in ("city", "town", "village", "locality", "municipality"):
+                        city_part = parts[0]
+                    # inne poziomy (region/subregion/powiat/nieznane) pomijamy — 13.11: „Centrum”, „Stare Miasto”, „Żelechowa” trafiały jako MIASTO
                 if not city_part and locs:
+                    # fallback: wpis „Miejscowość, województwo” (2 części, druga małą literą) — to miejscowość; inaczej ostatni wpis
+                    cand = None
+                    for x in locs:
+                        parts = [p.strip() for p in str((x or {}).get("fullName") or "").split(",") if p.strip()] if isinstance(x, dict) else []
+                        if len(parts) == 2 and not parts[0].islower() and parts[1].islower():
+                            cand = parts[0]
                     last = locs[-1] if isinstance(locs[-1], dict) else {}
                     parts = [p.strip() for p in str(last.get("fullName") or "").split(",") if p.strip()]
                     # ostatni element to najdokładniejsza lokalizacja („Chełmiec, nowosądecki, małopolskie” → Chełmiec);
                     # nazwy pisane małą literą to powiat/województwo — nie są miejscowością
-                    if parts and not parts[0].islower(): city_part = parts[0]
+                    if cand: city_part = cand
+                    elif parts and not parts[0].islower(): city_part = parts[0]
         location = ", ".join(x for x in [city_part, district] if x)
     if not location: location = city_name
     real_city = city_part if (isinstance(loc, dict) and city_part) else city_name

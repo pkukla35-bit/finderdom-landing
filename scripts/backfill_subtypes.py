@@ -70,6 +70,21 @@ def run(apply: bool = False, rescan: bool = True) -> dict:
             coll.update_many({"_id": {"$in": scanned_only[i:i + 5000]}}, {"$set": {"year_scanned": True}})
     out["build_year"] = {"updated": len(ups) if apply else 0, "would_update": len(ups), "still_unknown": len(scanned_only), "by_decade": dict(sorted(by_decade.items()))}
     print("build_year", out["build_year"])
+    # 🏪 Lokale z Otodomu zapisane jako „mieszkanie” (do 13.11 normalize() znał tylko dzialka/dom → reszta = mieszkanie).
+    # Tylko tytuły jednoznacznie komercyjne i bez słów mieszkaniowych; kolejne importy (CHAIN lokal) i tak ustawią type=lokal.
+    lok_rx = re.compile(r"lokal(?!izacj)|biurow|handlow|us[łl]ugow|magazyn|\bhal[aeę]\b|obiekt|pawilon|gastronom|\bsklep|restaurac|kamienic[aę]\s+(?:z|na)\s+lokal", re.I)
+    flat_rx = re.compile(r"mieszkani|kawalerk|apartament|\bpok(?:ój|oje|oi|\.)|\bm[2-6]\b|dwupoziom|studio\b", re.I)
+    ups, checked = [], 0
+    for d in coll.find({"source": "otodom", "type": {"$regex": "^mieszkanie", "$options": "i"}}, {"title": 1, "url": 1}):
+        checked += 1
+        t = f"{d.get('title') or ''} {(d.get('url') or '').rsplit('/', 1)[-1].replace('-', ' ')}"
+        if lok_rx.search(t) and not flat_rx.search(t):
+            ups.append(UpdateOne({"_id": d["_id"]}, {"$set": {"type": "lokal", "type_fixed_from": "mieszkanie"}, "$unset": {"rooms": "", "building_type": ""}}))
+    if apply:
+        for i in range(0, len(ups), 500):
+            coll.bulk_write(ups[i:i + 500], ordered=False)
+    out["otodom_lokal_fix"] = {"checked": checked, "updated": len(ups) if apply else 0, "would_update": len(ups)}
+    print("otodom_lokal_fix", out["otodom_lokal_fix"])
     return out
 
 

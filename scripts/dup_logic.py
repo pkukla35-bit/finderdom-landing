@@ -140,11 +140,11 @@ def bt_classify(title, description=None):
 _DT_ALIAS = {"budowlana": ["budowlana"], "rolna": ["rolna"], "rekreacyjna": ["rekreacyjna"],
              "lesna": ["lesna", "leśna"], "inwestycyjna": ["inwestycyjna", "usługowa", "uslugowa", "komercyjna"]}
 _DT_REGEX = {
-    "budowlana": r"budowlan|pod zabudow|pod dom|pod budow",
-    "rolna": r"roln[aey]|orn[aey]|uprawn|gospodarstw|ł[aą]k",
+    "budowlana": r"budowlan|pod zabudow|pod dom|pod budow|warunk\w* zabudowy|\bwz\b|mpzp|zabudow\w* (?:mieszkan|jednorodzinn)|pozwoleni\w* na budow|plan\w* zagospodarowania",
+    "rolna": r"roln[aeoy]|\born[aey]\b|uprawn|gospodarstw|ł[aą]k",
     "rekreacyjna": r"rekreac|letnisk|weekend|rod|ogrodow|nad jezior",
     "lesna": r"le[sś]n[aey]|lasu|w lesie|zalesion",
-    "inwestycyjna": r"inwestyc|komercyj|us[lł]ugow|przemys[lł]ow|pod rozw[oó]j firm|magazyn|produkcyj",
+    "inwestycyjna": r"inwestyc|komercyj|us[lł]ugow|przemys[lł]ow|pod rozw[oó]j firm|magazyn|produkcyj|pod dzia[lł]alno",
 }
 
 _DUP_STOP = {"mieszkanie", "mieszkania", "sprzedaz", "sprzedaż", "wynajem", "wynajęcia", "wynajecia", "kawalerka", "pokoje", "pokój", "pokoi", "metrów", "metrow",

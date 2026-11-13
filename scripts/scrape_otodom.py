@@ -246,13 +246,15 @@ def with_price_history(update: Dict[str, Any], entry: Optional[Dict[str, Any]]) 
     return update
 
 
-DZIALKA_SUBTYPES = [
-    ("budowlana",    ["budowlan"]),
-    ("rolna",        ["rolna", "rolne", "rolny"]),
-    ("rekreacyjna",  ["rekreacyj"]),
-    ("siedliskowa",  ["siedlisk"]),
-    ("lesna",        ["leśn", "lesn"]),
-    ("inwestycyjna", ["usługow", "uslugow", "komercyj", "inwestycyj"]),
+DZIALKA_SUBTYPES = [  # podciągi w lower(title+desc); pierwsze trafienie wygrywa. 13.11: Szczecin+20 km — 7/21 działek bez typu
+    ("budowlana",    ["budowlan", "warunki zabudowy", "warunkami zabudowy", "warunków zabudowy", "warunkow zabudowy", "pod zabudow", "pozwolenie na budow",
+                      "pozwoleniem na budow", "zabudowy mieszkan", "zabudowa mieszkan", "zabudowy jednorodzinn", "zabudowa jednorodzinn", "zabudowę jednorodzinn",
+                      "pod dom ", "pod budowę domu", "pod budowe domu", " wz ", " wz,", " wz.", "(wz)", " wz!", "z wz", "mpzp", "plan zagospodarowania", "planem zagospodarowania"]),
+    ("rolna",        ["rolna", "rolne", "rolny", "rolno", " orna", "uprawn", "gospodarstw", "grunt rolny", "grunty rolne"]),
+    ("rekreacyjna",  ["rekreacyj", "letnisk", "weekendow", "nad jezior", "ogródek działkow", "ogrodek dzialkow", " rod ", " rod."]),
+    ("siedliskowa",  ["siedlisk", "zagrodow"]),
+    ("lesna",        ["leśn", "lesn", "zalesion", "w lesie", "lasu "]),
+    ("inwestycyjna", ["usługow", "uslugow", "komercyj", "inwestycyj", "przemysłow", "przemyslow", "magazynow", "produkcyj", "pod działalność", "pod dzialalnosc"]),
 ]
 DOM_SUBTYPES = [  # wartości ASCII = identyczne z chipami w szukaj.html (data-value) i filtrem API building_type
     ("wolnostojacy", ["wolnostoj", "jednorodzinn"]),

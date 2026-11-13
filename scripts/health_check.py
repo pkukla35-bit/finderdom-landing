@@ -106,13 +106,17 @@ def main():
         rent_ok = (not rent_expected) or today_r > 0
         fresh_ok = weekend or (today_s > 0 and rent_ok)
         # 🔴 CICHA AWARIA: job „success” dziś, a portal wczytał 0 ofert (4.11 Gratka+Morizon zmieniły HTML — joby zielone, new=0)
-        silent_zero = (not weekend) and run_today and today == 0 and (yday_s + yday_r) >= 20   # małe portale (0 wczoraj też) → tylko ⚠️
+        # 12.11 fałszywy alarm ListaPrzetargow: nocny job o 04:25 nie znalazł NOWYCH (portal dodaje kilkadziesiąt/dzień, w dzień),
+        # ale odświeżył 50 istniejących → parser działa. Dowód: last_seen_at ≥ dziś u ofert z tego źródła.
+        parser_alive = L.find_one({"source": src, "last_seen_at": {"$gte": today0}}, {"_id": 1}) is not None
+        silent_zero = (not weekend) and run_today and today == 0 and (yday_s + yday_r) >= 20 and not parser_alive   # małe portale (0 wczoraj też) → tylko ⚠️
         status = "🔴" if silent_zero else ("✅" if (live_ok and run_ok and fresh_ok) else ("⚠️" if live_ok else "❌"))
         if silent_zero:
             critical.append(f"{label}: job zakończył się sukcesem ({(run.get('at') or '')[11:16]} UTC), ale wczytał <b>0 ofert</b> (wczoraj {yday_s + yday_r}) — "
                             f"najpewniej zmiana strony portalu lub blokada; parser do sprawdzenia")
         elif status != "✅":
             why = []
+            if today == 0 and parser_alive: why.append("0 nowych ofert dziś, ale parser działa (oferty z portalu odświeżone dziś) — czekamy na kolejne tury")
             if not live_ok: why.append(f"strona portalu: HTTP {code}, ofert w HTML: {n_live}")
             if not run_ok: why.append(f"workflow: {run.get('conclusion')}")
             if not weekend and today_s == 0:

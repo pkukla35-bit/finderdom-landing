@@ -4921,6 +4921,32 @@ async def admin_cron_status(admin: dict = Depends(require_admin)):
     return out
 
 
+@app.get("/api/admin/db/inspect")
+async def admin_db_inspect(admin: dict = Depends(require_admin), source: Optional[str] = None, type: Optional[str] = None,
+                           transaction: Optional[str] = None, city: Optional[str] = None):
+    """Diagnostyka bazy (admin): ile ofert pasuje do source/type/transaction/city, ile z nich odpada na filtrach /api/listings-scraped
+    (price>1000, is_stale, scraped_via) + 3 przykładowe dokumenty. 13.11: Otodom „updated=2850 lokali”, a w wyszukiwarce 0."""
+    coll = database().listings
+    q: Dict[str, Any] = {}
+    if source: q["source"] = source
+    if type: q["type"] = {"$regex": "^" + re.escape(type), "$options": "i"}
+    if transaction: q["transaction_type"] = transaction
+    if city: q["city"] = {"$regex": "^" + re.escape(city) + "$", "$options": "i"}
+    total = await coll.count_documents(q)
+    out = {"query": {k: str(v) for k, v in q.items()}, "total": total}
+    if total:
+        out["price_gt_1000"] = await coll.count_documents({**q, "price": {"$gt": 1000}})
+        out["price_missing"] = await coll.count_documents({**q, "price": {"$in": [None, 0]}})
+        out["stale"] = await coll.count_documents({**q, "is_stale": True})
+        out["scraped_via"] = {r["_id"]: r["n"] async for r in coll.aggregate([{"$match": q}, {"$group": {"_id": "$scraped_via", "n": {"$sum": 1}}}])}
+        out["types"] = {r["_id"]: r["n"] async for r in coll.aggregate([{"$match": q}, {"$group": {"_id": "$type", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 12}])}
+        out["top_cities"] = {r["_id"]: r["n"] async for r in coll.aggregate([{"$match": q}, {"$group": {"_id": "$city", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 12}])}
+        proj = {"_id": 0, "external_id": 1, "title": 1, "price": 1, "area_m2": 1, "city": 1, "type": 1, "transaction_type": 1, "scraped_via": 1, "is_stale": 1, "added_at": 1, "last_seen_at": 1, "url": 1, "rooms": 1, "floor": 1}
+        out["sample"] = await coll.find(q, proj).sort("last_seen_at", -1).limit(3).to_list(length=3)
+    return out
+
+
+
 _SMOKE_CASES = {
     "mieszkanie-szczecin": {"type": "mieszkanie", "market_type": "wtorny", "city": "Szczecin", "district": "Pogodno", "area_m2": 62, "rooms": 3, "floor": 2, "max_floor": 4},
     "dom-krakow": {"type": "dom", "market_type": "wtorny", "city": "Kraków", "area_m2": 180, "rooms": 5, "plot_area": 600},

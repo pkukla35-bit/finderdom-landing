@@ -4943,7 +4943,7 @@ async def admin_db_inspect(admin: dict = Depends(require_admin), source: Optiona
         out["scraped_via"] = {r["_id"]: r["n"] async for r in coll.aggregate([{"$match": q}, {"$group": {"_id": "$scraped_via", "n": {"$sum": 1}}}])}
         out["types"] = {r["_id"]: r["n"] async for r in coll.aggregate([{"$match": q}, {"$group": {"_id": "$type", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 12}])}
         out["top_cities"] = {r["_id"]: r["n"] async for r in coll.aggregate([{"$match": q}, {"$group": {"_id": "$city", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 12}])}
-        proj = {"_id": 0, "external_id": 1, "title": 1, "price": 1, "area_m2": 1, "city": 1, "type": 1, "transaction_type": 1, "scraped_via": 1, "is_stale": 1, "added_at": 1, "last_seen_at": 1, "url": 1, "rooms": 1, "floor": 1}
+        proj = {"_id": 0, "external_id": 1, "title": 1, "price": 1, "area_m2": 1, "city": 1, "type": 1, "transaction_type": 1, "scraped_via": 1, "is_stale": 1, "added_at": 1, "last_seen_at": 1, "url": 1, "rooms": 1, "floor": 1, "lat": 1, "lng": 1, "district": 1, "location": 1}
         out["sample"] = await coll.find(q, proj).sort("last_seen_at", -1).limit(3).to_list(length=3)
     return out
 

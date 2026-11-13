@@ -72,7 +72,7 @@ def run(apply: bool = False, rescan: bool = True) -> dict:
     print("build_year", out["build_year"])
     # 🏪 Lokale z Otodomu zapisane jako „mieszkanie” (do 13.11 normalize() znał tylko dzialka/dom → reszta = mieszkanie).
     # Tylko tytuły jednoznacznie komercyjne i bez słów mieszkaniowych; kolejne importy (CHAIN lokal) i tak ustawią type=lokal.
-    lok_rx = re.compile(r"lokal(?!izacj)|biurow|handlow|us[łl]ugow|magazyn|\bhal[aeę]\b|obiekt|pawilon|gastronom|\bsklep|restaurac|kamienic[aę]\s+(?:z|na)\s+lokal", re.I)
+    lok_rx = re.compile(r"lokal(?!izacj)|\bbiur|handlow|us[łl]ugow|magazyn|\bhal[aeę]\b|obiekt|pawilon|gastronom|\bsklep|restaurac|kamienic[aę]\s+(?:z|na)\s+lokal", re.I)
     flat_rx = re.compile(r"mieszkani|kawalerk|apartament|\bpok(?:ój|oje|oi|\.)|\bm[2-6]\b|dwupoziom|studio\b", re.I)
     ups, checked = [], 0
     for d in coll.find({"source": "otodom", "type": {"$regex": "^mieszkanie", "$options": "i"}}, {"title": 1, "url": 1}):

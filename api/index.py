@@ -4887,7 +4887,7 @@ async def _scheduler_tick(source: str, force: bool = False) -> dict:
             await db.settings.update_one({"_id": "scheduler_tick"}, {"$setOnInsert": {"last_at": now.isoformat(), "source": source}}, upsert=True)
     out: dict = {"source": source, "at": now.isoformat()}
     for key, fn in (("imports", _trigger_imports_if_due), ("fresh_sweep", _fresh_sweep_backstop), ("daily_report", _trigger_daily_report_if_due),
-                    ("dup_compute", _trigger_dup_compute_if_due)):
+                    ("dup_compute", _trigger_dup_compute_if_due), ("city_sweeps", _trigger_city_sweeps_if_due)):
         try:
             out[key] = await fn()
         except Exception as e:
@@ -4913,7 +4913,7 @@ async def admin_cron_status(admin: dict = Depends(require_admin)):
     """Diagnostyka harmonogramów: kiedy ostatnio trafiły crony (Vercel/GitHub), ostatni tick zegara, importy, lekkie tury, raport."""
     db = database()
     out = {}
-    for key in ("cron_hits", "scheduler_tick", "imports", "fresh_sweep", "daily_report", "dup_compute", "daily_jobs"):
+    for key in ("cron_hits", "scheduler_tick", "imports", "fresh_sweep", "daily_report", "dup_compute", "daily_jobs", "city_sweep_otodom", *[f"city_sweep_olx_{c}" for c in BIURA_CITIES]):
         d = await db.settings.find_one({"_id": key}, {"_id": 0}) or {}
         d.pop("token", None)
         out[key] = d
@@ -5081,6 +5081,23 @@ async def _trigger_dup_compute_if_due(force: bool = False) -> dict:
     ≥ 13:00 PL — po porannych importach, żeby świeżo doimportowane kopie (inne portale) od razu trafiły na karty w /szukaj."""
     return await _dispatch_daily("dup_compute", "compute-ai-verdicts.yml", 13, force, {"dry_run": "no"})
 
+
+
+BIURA_CITIES = ["szczecin", "krakow", "warszawa", "wroclaw", "poznan", "gdansk"]   # miasta biur-klientów: codzienna tura per miasto
+
+
+async def _trigger_city_sweeps_if_due(force: bool = False) -> dict:
+    """📍 Tury PER MIASTO dla miast biur (≥ 10:00 PL, raz dziennie). Importy OLX/Otodom idą z list ogólnopolskich/wojewódzkich i urywają
+    się po kilku–kilkunastu stronach, więc w konkretnym mieście „dziś” bywa 0–3 działek (13.11 raport: Wrocław 0, Poznań 0, Szczecin 3),
+    choć portale mają ich tam dziesiątki. OLX: scrape-olx.yml z city=<slug> (wszystkie typy, 4 strony) — jedno miasto na tick
+    (workflow zajęty → kolejny tick). Otodom: scrape-otodom-regions.yml regions=0 (20 miast, 3 strony) — jeden run."""
+    out = {"otodom": await _dispatch_daily("city_sweep_otodom", "scrape-otodom-regions.yml", 10, force, {"max_pages": "3", "regions": "0"})}
+    for slug in BIURA_CITIES:
+        r = await _dispatch_daily(f"city_sweep_olx_{slug}", "scrape-olx.yml", 10, force, {"max_pages": "4", "regions": "0", "city": slug})
+        out[f"olx_{slug}"] = r
+        if not r.get("skipped") or r.get("reason") == "already_running":   # wysłano (albo workflow zajęty) → reszta miast na kolejnych tickach
+            break
+    return out
 
 @app.post("/api/admin/daily-report/run")
 async def admin_daily_report_run(admin: dict = Depends(require_admin)):

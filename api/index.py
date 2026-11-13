@@ -190,7 +190,7 @@ async def _err(_req, exc):
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
     return JSONResponse(
         {"detail": f"{type(exc).__name__}: {str(exc)[:200]}",
-         "trace": _tb.format_exc().split("\n")[-3:-1]},
+         "trace": [ln.strip() for ln in _tb.format_exc().split("\n") if 'File "' in ln and "index.py" in ln][-4:]},
         status_code=500,
     )
 

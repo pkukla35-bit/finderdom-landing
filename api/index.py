@@ -6191,9 +6191,9 @@ def _sanitize_valuation_property(prop: dict) -> dict:
         "location": str(prop.get("location", ""))[:120],
         "area_m2": float(prop.get("area_m2") or 0),
         "rooms": int(prop.get("rooms") or 0) or None,
-        "floor": prop.get("floor"),
-        "max_floor": prop.get("max_floor"),
-        "build_year": prop.get("build_year"),
+        "floor": _val_int(prop.get("floor")),
+        "max_floor": _val_int(prop.get("max_floor")),
+        "build_year": _val_int(prop.get("build_year")),
         "standard": str(prop.get("standard", ""))[:20],
         "elevator": str(prop.get("elevator", ""))[:10],
         "basement": str(prop.get("basement", ""))[:10],
@@ -6373,6 +6373,20 @@ async def debug_map():
     return result
 
 
+def _val_int(v):
+    """OLX zapisuje piętro jako etykietę ('4', 'parter', '> 10'), portale rok/pokoje bywają stringami → int albo None
+    (12.11: `o.get("floor") > 0` → TypeError str/int = brak wyceny PDF dla biur)."""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return int(v)
+    s = str(v).strip().lower()
+    if s in ("parter", "0", "ground"):
+        return 0
+    m = re.search(r"-?\d+", s)
+    return int(m.group(0)) if m else None
+
+
 def _listing_doc_to_valuation(d: dict) -> dict:
     """Dokument Mongo `listings` → płaski rekord używany przez build_valuation_pdf."""
     price = d.get("price") or 0
@@ -6383,9 +6397,9 @@ def _listing_doc_to_valuation(d: dict) -> dict:
         "external_id": d.get("external_id"), "title": d.get("title") or "", "url": d.get("url") or "",
         "city": d.get("city") or "", "district": d.get("district") or "", "sub_location": d.get("sub_location") or "",
         "type": (d.get("type") or "").lower(), "transaction": "wynajem" if (d.get("transaction_type") or "").lower().startswith("wynaj") else "sprzedaz",
-        "price": price, "area_m2": area, "price_pm2": ppm, "rooms": d.get("rooms"),
-        "floor": d.get("floor"), "max_floor": d.get("max_floor"), "standard": d.get("standard"),
-        "market_type": d.get("market_type"), "build_year": d.get("build_year"), "elevator": d.get("elevator"),
+        "price": price, "area_m2": area, "price_pm2": ppm, "rooms": _val_int(d.get("rooms")),
+        "floor": _val_int(d.get("floor")), "max_floor": _val_int(d.get("max_floor")), "standard": d.get("standard"),
+        "market_type": d.get("market_type"), "build_year": _val_int(d.get("build_year")), "elevator": d.get("elevator"),
         "lat": d.get("lat"), "lon": d.get("lng"), "is_original": True, "source": d.get("source"),
         "location": d.get("location") or "", "description": (d.get("description") or "")[:2000],
         "image": (d.get("images") or [None])[0] if isinstance(d.get("images"), list) else d.get("image"),

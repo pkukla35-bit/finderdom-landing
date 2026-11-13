@@ -157,8 +157,9 @@ def main():
             tq = {"type": {"$regex": "^" + key[:3], "$options": "i"}}
             per.append((L.count_documents({**cq, **tq, "added_at": {"$gte": today0}}), L.count_documents({**cq, **tq, "added_at": {"$gte": yday0, "$lt": today0}})))
         city_rows.append((cname, per))
-        if not weekend and per[2][0] == 0:
-            problems.append(f"📍 {cname}: 0 działek dodanych dziś (wczoraj {per[2][1]}) — sprawdź import działek OLX/Otodom dla miasta")
+        # działki w granicach miasta to rzadkość (większość w gminach obok → promień); ⚠️ dopiero gdy 0 dziś I 0 wczoraj
+        if not weekend and per[2][0] == 0 and per[2][1] == 0:
+            problems.append(f"📍 {cname}: 0 działek dodanych dziś i wczoraj — sprawdź import działek OLX/Otodom dla miasta")
 
     # 🧪 Wycena PDF na żywo (4 przypadki: mieszkanie/dom/działka, Szczecin/Kraków/Warszawa) — klucz w settings.health (tworzony tu, czytany przez API)
     smoke_rows = []

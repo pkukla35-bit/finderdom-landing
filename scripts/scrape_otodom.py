@@ -354,6 +354,18 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         if isinstance(addr, dict):
             city_part = (addr.get("city") or {}).get("name", "") if isinstance(addr.get("city"), dict) else ""
             district = (addr.get("district") or {}).get("name", "") if isinstance(addr.get("district"), dict) else ""
+        # 13.11: address.city bywa DZIELNICĄ („Centrum”, „Stare Miasto”, „Śródmieście Północne” — 1431 ofert z city=Centrum bez GPS).
+        # Gdy reverseGeocoding ma wpis poziomu „city” z inną nazwą → to jest miasto, a address.city schodzi do dzielnicy.
+        rg0 = loc.get("reverseGeocoding") or {}
+        locs0 = rg0.get("locations") if isinstance(rg0, dict) else None
+        if city_part and isinstance(locs0, list):
+            for x in locs0:
+                if isinstance(x, dict) and str(x.get("locationLevel") or "").lower() == "city":
+                    nm = [p.strip() for p in str(x.get("fullName") or x.get("name") or "").split(",") if p.strip()]
+                    if nm and not nm[0].islower() and nm[0].lower() != city_part.lower():
+                        district = district or city_part
+                        city_part = nm[0]
+                    break
         # tryb --regions: address.city bywa puste → miasto z reverseGeocoding.locations
         # (np. [{"fullName": "Kraków, małopolskie", "locationLevel": "city"}, {"fullName": "Krowodrza, Kraków, małopolskie", "locationLevel": "district"}])
         if not city_part:

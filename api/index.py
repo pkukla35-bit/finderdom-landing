@@ -4923,7 +4923,7 @@ async def admin_cron_status(admin: dict = Depends(require_admin)):
 
 @app.get("/api/admin/db/inspect")
 async def admin_db_inspect(admin: dict = Depends(require_admin), source: Optional[str] = None, type: Optional[str] = None,
-                           transaction: Optional[str] = None, city: Optional[str] = None):
+                           transaction: Optional[str] = None, city: Optional[str] = None, title: Optional[str] = None, seen_from: Optional[str] = None):
     """Diagnostyka bazy (admin): ile ofert pasuje do source/type/transaction/city, ile z nich odpada na filtrach /api/listings-scraped
     (price>1000, is_stale, scraped_via) + 3 przykładowe dokumenty. 13.11: Otodom „updated=2850 lokali”, a w wyszukiwarce 0."""
     coll = database().listings
@@ -4932,6 +4932,8 @@ async def admin_db_inspect(admin: dict = Depends(require_admin), source: Optiona
     if type: q["type"] = {"$regex": "^" + re.escape(type), "$options": "i"}
     if transaction: q["transaction_type"] = transaction
     if city: q["city"] = {"$regex": "^" + re.escape(city) + "$", "$options": "i"}
+    if title: q["title"] = {"$regex": title, "$options": "i"}
+    if seen_from: q["last_seen_at"] = {"$gte": seen_from}
     total = await coll.count_documents(q)
     out = {"query": {k: str(v) for k, v in q.items()}, "total": total}
     if total:

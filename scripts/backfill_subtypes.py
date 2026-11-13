@@ -85,6 +85,44 @@ def run(apply: bool = False, rescan: bool = True) -> dict:
             coll.bulk_write(ups[i:i + 500], ordered=False)
     out["otodom_lokal_fix"] = {"checked": checked, "updated": len(ups) if apply else 0, "would_update": len(ups)}
     print("otodom_lokal_fix", out["otodom_lokal_fix"])
+    # 📍 Otodom (tryb województw): dzielnica jako MIASTO („Centrum”, „Stare Miasto”, „Żelechowa”) — nazwa, która u innych źródeł nigdy nie jest
+    # miastem, a oferta ma GPS ≤ 10 km od znanego miasta (scripts/city-coords.js) → city = to miasto, dzielnica zachowana.
+    import math, unicodedata
+    def _norm(s):
+        return unicodedata.normalize("NFKD", (s or "").replace("ł", "l").replace("Ł", "L")).encode("ascii", "ignore").decode().lower().strip()
+    real = {r["_id"]: r["n"] for r in coll.aggregate([{"$match": {"source": {"$ne": "otodom"}, "city": {"$type": "string"}}},
+                                                       {"$group": {"_id": "$city", "n": {"$sum": 1}}}, {"$match": {"n": {"$gte": 3}}}])}
+    display = {}
+    for name, n in sorted(real.items(), key=lambda kv: -kv[1]):
+        display.setdefault(_norm(name), name)
+    coords = {}
+    cc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "city-coords.js")
+    if os.path.exists(cc_path):
+        for m in re.finditer(r'"([^"]+)":\[([-\d.]+),([-\d.]+)\]', open(cc_path, encoding="utf-8").read()):
+            coords[m.group(1)] = (float(m.group(2)), float(m.group(3)))
+    def _km(a, b, c, d):
+        return 2 * 6371 * math.asin(math.sqrt(math.sin(math.radians(c - a) / 2) ** 2 + math.cos(math.radians(a)) * math.cos(math.radians(c)) * math.sin(math.radians(d - b) / 2) ** 2))
+    ups, by_city, checked = [], {}, 0
+    for d in coll.find({"source": "otodom", "city": {"$type": "string", "$nin": list(real)}, "lat": {"$type": "number"}, "lng": {"$type": "number"}},
+                       {"city": 1, "district": 1, "lat": 1, "lng": 1}):
+        checked += 1
+        old = d["city"]
+        if not old or old.islower():
+            continue
+        best = min(((k, _km(d["lat"], d["lng"], la, lo)) for k, (la, lo) in coords.items()), key=lambda kv: kv[1], default=None)
+        if not best or best[1] > 10 or best[0] not in display:
+            continue
+        new_city = display[best[0]]
+        if _norm(new_city) == _norm(old):
+            continue
+        by_city[f"{old} → {new_city}"] = by_city.get(f"{old} → {new_city}", 0) + 1
+        ups.append(UpdateOne({"_id": d["_id"]}, {"$set": {"city": new_city, "district": d.get("district") or old, "city_fixed_from": old}}))
+    if apply:
+        for i in range(0, len(ups), 500):
+            coll.bulk_write(ups[i:i + 500], ordered=False)
+    out["otodom_city_fix"] = {"checked": checked, "updated": len(ups) if apply else 0, "would_update": len(ups),
+                              "top": dict(sorted(by_city.items(), key=lambda kv: -kv[1])[:25])}
+    print("otodom_city_fix", out["otodom_city_fix"])
     return out
 
 

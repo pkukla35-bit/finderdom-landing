@@ -467,7 +467,7 @@ gtag('set', 'url_passthrough', false);
         <div class="chip" data-filter="market_type" data-value="wtorny">🏘️ Wtórny</div>
         <div class="chip" data-filter="market_type" data-value="__unknown__" title="Oferty bez określonego rynku — brak info od portalu">🔍 Bez określenia</div>
       </div>
-      <div style="font-size:11px;color:#8ba3d4;margin-top:8px;line-height:1.4">💡 Wiele ofert nie ma określonego rynku w źródłowym portalu — używaj chipa "Bez określenia" aby je zobaczyć</div>
+      <div id="marketOrPurposeHint" style="font-size:11px;color:#8ba3d4;margin-top:8px;line-height:1.4">💡 Wiele ofert nie ma określonego rynku w źródłowym portalu — używaj chipa "Bez określenia" aby je zobaczyć</div>
     </div>
 
     <div class="filter-group" id="subTypeGroup">
@@ -2379,7 +2379,10 @@ function updateSubType(type){
         <div class="chip" data-filter="land_purpose" data-value="rekreacyjna">🏖️ Rekreacyjna</div>
         <div class="chip" data-filter="land_purpose" data-value="lesna">🌲 Leśna</div>
         <div class="chip" data-filter="land_purpose" data-value="inwestycyjna">💼 Inwestycyjna</div>
+        <div class="chip" data-filter="land_purpose" data-value="__unknown__" title="Działki bez przeznaczenia w ogłoszeniu i opisie">🔍 Bez określenia</div>
       `;
+      const hintDz = document.getElementById('marketOrPurposeHint');
+      if (hintDz) hintDz.textContent = '💡 Przeznaczenie bierzemy z ogłoszenia i opisu (budowlana, WZ, MPZP, rolna…). Oferty bez tej informacji są pod „Bez określenia”.';
       mpGroup.style.display = '';
     } else if (type === 'garaz' || type === 'magazyn' || type === 'pokoj') {
       // Dla tych typów rynek nie ma sensu — chowamy sekcję
@@ -2393,6 +2396,8 @@ function updateSubType(type){
         <div class="chip" data-filter="market_type" data-value="wtorny">🏘️ Wtórny</div>
         <div class="chip" data-filter="market_type" data-value="__unknown__" title="Oferty bez okreslonego rynku - brak info od portalu">🔍 Bez określenia</div>
       `;
+      const hintMk = document.getElementById('marketOrPurposeHint');
+      if (hintMk) hintMk.textContent = '💡 Wiele ofert nie ma określonego rynku w źródłowym portalu — używaj chipa "Bez określenia" aby je zobaczyć';
       mpGroup.style.display = '';
     }
     // Podepnij handlery (rynek pierwotny/wtórny → refetch z API; reszta client-side)

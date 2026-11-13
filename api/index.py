@@ -2572,14 +2572,19 @@ async def listings_scraped_endpoint(
         has_dt = False
         if dzialka_type:
             dt_alias, dt_regex = _DT_ALIAS, _DT_REGEX
-            dt_vals = [x.strip().lower() for x in dzialka_type.split(",") if x.strip().lower() in dt_alias]
-            if dt_vals:
+            dt_raw = [x.strip().lower() for x in dzialka_type.split(",")]
+            dt_vals = [x for x in dt_raw if x in dt_alias]
+            dt_unknown = "__unknown__" in dt_raw   # chip „Bez określenia”: działki bez przeznaczenia w ogłoszeniu i opisie
+            if dt_vals or dt_unknown:
                 has_dt = True
-                db_vals = [v for k in dt_vals for v in dt_alias[k]]
-                query.setdefault("$and", []).append({"$or": [
-                    {"dzialka_type": {"$in": db_vals}},
-                    {"dzialka_type": {"$in": [None, ""]}, "title": {"$regex": "|".join(dt_regex[k] for k in dt_vals), "$options": "i"}},
-                ]})
+                ors = []
+                if dt_vals:
+                    db_vals = [v for k in dt_vals for v in dt_alias[k]]
+                    ors += [{"dzialka_type": {"$in": db_vals}},
+                            {"dzialka_type": {"$in": [None, ""]}, "title": {"$regex": "|".join(dt_regex[k] for k in dt_vals), "$options": "i"}}]
+                if dt_unknown:
+                    ors.append({"dzialka_type": {"$in": [None, ""]}, "title": {"$not": {"$regex": "|".join(dt_regex.values()), "$options": "i"}}})
+                query.setdefault("$and", []).append({"$or": ors})
         # Typ lokalu — portale nie dają pola; regex po tytule+opisie (zbiór lokali jest mały, więc regex po opisie jest tani)
         if lokal_type:
             lt_vals = [x.strip().lower() for x in lokal_type.split(",") if x.strip().lower() in _LT_REGEX]

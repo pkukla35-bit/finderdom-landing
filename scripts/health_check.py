@@ -147,9 +147,41 @@ def main():
             problems.append(f"{label_t}: 0 ofert dodanych dziś (wczoraj {t_yday})")
     st = db.command("dbStats"); size_mb = (st["dataSize"] + st["indexSize"]) / 1024 / 1024
 
+    # 📍 Miasta biur (szkolenia/klienci): nowe oferty dziś per typ — 13.11 Szczecin miał 3 działki „dziś” i filtr przeznaczenia dawał 0,
+    # a raport mówił „✅ Działki 141” (suma ogólnopolska). Działki = 0 w mieście biura → ⚠️.
+    city_rows = []
+    for cname in ("Szczecin", "Kraków", "Warszawa", "Wrocław", "Poznań", "Gdańsk"):
+        cq = {"city": {"$regex": "^" + re.escape(cname) + "$", "$options": "i"}, "transaction_type": {"$ne": "wynajem"}}
+        per = []
+        for key in ("mieszkanie", "dom", "dzialka", "lokal"):
+            tq = {"type": {"$regex": "^" + key[:3], "$options": "i"}}
+            per.append((L.count_documents({**cq, **tq, "added_at": {"$gte": today0}}), L.count_documents({**cq, **tq, "added_at": {"$gte": yday0, "$lt": today0}})))
+        city_rows.append((cname, per))
+        if not weekend and per[2][0] == 0:
+            problems.append(f"📍 {cname}: 0 działek dodanych dziś (wczoraj {per[2][1]}) — sprawdź import działek OLX/Otodom dla miasta")
+
+    # 🧪 Wycena PDF na żywo (4 przypadki: mieszkanie/dom/działka, Szczecin/Kraków/Warszawa) — klucz w settings.health (tworzony tu, czytany przez API)
+    smoke_rows = []
+    hcfg = db.settings.find_one({"_id": "health"}) or {}
+    if not hcfg.get("smoke_key"):
+        import secrets as _sec
+        hcfg["smoke_key"] = _sec.token_urlsafe(32)
+        db.settings.update_one({"_id": "health"}, {"$set": {"smoke_key": hcfg["smoke_key"], "created_at": datetime.now(timezone.utc)}}, upsert=True)
+    for case in ("mieszkanie-szczecin", "dom-krakow", "dzialka-szczecin", "mieszkanie-warszawa"):
+        try:
+            rq = urllib.request.Request(f"https://www.finderdom.pl/api/health/valuation-smoke?case={case}", headers={"X-Health-Key": hcfg["smoke_key"], "User-Agent": "FinderDom-health"})
+            with urllib.request.urlopen(rq, timeout=60) as r:
+                res = json.loads(r.read().decode())
+        except Exception as e:
+            res = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:120]}"}
+        smoke_rows.append((case, res))
+        if not res.get("ok"):
+            critical.append(f"🧪 Wycena PDF ({case}): <b>{res.get('error') or 'brak PDF'}</b> {' · '.join(res.get('trace') or [])}")
+    smoke_fail = sum(1 for _, r in smoke_rows if not r.get("ok"))
+
     date_s = now.astimezone(PL).strftime("%d.%m.%Y %H:%M")
-    subject = (f"🔴 FinderDom: {len(critical)} portal(e) wczytały 0 OFERT mimo udanego joba" if critical else
-               ("✅ FinderDom: importy OK" if not problems else f"⚠️ FinderDom: {len(problems)} portal(e) do sprawdzenia")) + f" — {date_s}"
+    subject = ((f"🔴 FinderDom: WYCENA PDF nie działa ({smoke_fail}/4 testów)" if smoke_fail else f"🔴 FinderDom: {len(critical)} portal(e) wczytały 0 OFERT mimo udanego joba") if critical else
+               ("✅ FinderDom: importy i wycena OK" if not problems else f"⚠️ FinderDom: {len(problems)} rzeczy do sprawdzenia")) + f" — {date_s}"
     def link(c, u):
         return f'<a href="{u}">{c}</a>' if u else str(c)
     def rent_cell(v, bold=False):
@@ -168,7 +200,15 @@ def main():
 <table style="border-collapse:collapse;margin:0 0 16px;font-size:13px"><thead><tr style="background:#f3f4f6"><th style="padding:5px 10px;text-align:left">Rodzaj</th><th style="padding:5px 10px;text-align:right">Dziś</th><th style="padding:5px 10px;text-align:right">Wczoraj</th></tr></thead><tbody>
 {"".join(f"<tr><td style='padding:5px 10px'>{st} {lb}</td><td style='padding:5px 10px;text-align:right;color:{'#b45309' if td == 0 else '#111'}'><b>{td}</b></td><td style='padding:5px 10px;text-align:right;color:#666'>{ty}</td></tr>" for st, lb, td, ty in type_rows)}
 </tbody></table>
-{('<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:8px;padding:12px 14px;margin:0 0 14px;color:#7f1d1d"><b style="font-size:15px">🔴 ALARM — zerowy import mimo „sukcesu” joba:</b><br>' + '<br>'.join(critical) + '</div>') if critical else ''}
+<h3 style="color:#0B1836;margin:0 0 6px;font-size:15px">🧪 Wycena PDF — test na żywo</h3>
+<table style="border-collapse:collapse;margin:0 0 16px;font-size:13px"><tbody>
+{"".join(f"<tr><td style='padding:4px 10px'>{'✅' if r.get('ok') else '🔴'} {c}</td><td style='padding:4px 10px;color:{'#111' if r.get('ok') else '#b91c1c'}'>{('PDF ' + str(r.get('pdf_kb')) + ' KB, ' + str(r.get('seconds')) + ' s') if r.get('ok') else (r.get('error') or 'brak PDF')}</td></tr>" for c, r in smoke_rows)}
+</tbody></table>
+<h3 style="color:#0B1836;margin:0 0 6px;font-size:15px">📍 Miasta biur — nowe oferty sprzedaży dziś (wczoraj)</h3>
+<table style="border-collapse:collapse;margin:0 0 16px;font-size:13px"><thead><tr style="background:#f3f4f6"><th style="padding:5px 10px;text-align:left">Miasto</th><th style="padding:5px 10px;text-align:right">🏢 Mieszkania</th><th style="padding:5px 10px;text-align:right">🏠 Domy</th><th style="padding:5px 10px;text-align:right">🌳 Działki</th><th style="padding:5px 10px;text-align:right">🏪 Lokale</th></tr></thead><tbody>
+{"".join("<tr><td style='padding:5px 10px'><b>" + cn + "</b></td>" + "".join(f"<td style='padding:5px 10px;text-align:right;color:{'#b45309' if t == 0 else '#111'}'><b>{t}</b> <span style='color:#888'>({y})</span></td>" for t, y in per) + "</tr>" for cn, per in city_rows)}
+</tbody></table>
+{('<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:8px;padding:12px 14px;margin:0 0 14px;color:#7f1d1d"><b style="font-size:15px">🔴 ALARM' + (' — WYCENA PDF NIE DZIAŁA' if smoke_fail else ' — zerowy import mimo „sukcesu” joba') + ':</b><br>' + '<br>'.join(critical) + '</div>') if critical else ''}
 {('<div style="background:#fff3cd;border:1px solid #ffe08a;border-radius:8px;padding:10px 14px;margin:0 0 14px"><b>Do sprawdzenia:</b><br>' + '<br>'.join(problems) + '</div>') if problems else ''}
 <table style="border-collapse:collapse;font-size:14px;width:100%"><thead><tr style="background:#f3f4f6;text-align:left">
 <th style="padding:6px 10px">Portal</th><th style="padding:6px 10px">Strona portalu</th><th style="padding:6px 10px;text-align:right">Dziś sprzedaż</th><th style="padding:6px 10px;text-align:right">Dziś wynajem</th><th style="padding:6px 10px;text-align:right">Wczoraj sprz.</th><th style="padding:6px 10px;text-align:right">Wczoraj wyn.</th><th style="padding:6px 10px">Ostatni bieg</th></tr></thead>

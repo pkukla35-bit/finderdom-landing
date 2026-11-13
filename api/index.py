@@ -4921,6 +4921,38 @@ async def admin_cron_status(admin: dict = Depends(require_admin)):
     return out
 
 
+_SMOKE_CASES = {
+    "mieszkanie-szczecin": {"type": "mieszkanie", "market_type": "wtorny", "city": "Szczecin", "district": "Pogodno", "area_m2": 62, "rooms": 3, "floor": 2, "max_floor": 4},
+    "dom-krakow": {"type": "dom", "market_type": "wtorny", "city": "Kraków", "area_m2": 180, "rooms": 5, "plot_area": 600},
+    "dzialka-szczecin": {"type": "dzialka", "market_type": "wtorny", "city": "Szczecin", "area_m2": 1000, "plot_area": 1000, "land_type": "budowlana"},
+    "mieszkanie-warszawa": {"type": "mieszkanie", "market_type": "wtorny", "city": "Warszawa", "district": "Mokotów", "area_m2": 48, "rooms": 2, "floor": 3, "max_floor": 6},
+}
+
+
+@app.get("/api/health/valuation-smoke")
+async def health_valuation_smoke(request: Request, case: str = "mieszkanie-szczecin"):
+    """Test „na żywo” wyceny PDF dla codziennego raportu (scripts/health_check.py): renderuje prawdziwy PDF jak /api/valuation/business,
+    ale bez konta i bez logu. Autoryzacja: nagłówek X-Health-Key = settings.health.smoke_key (klucz w Mongo — GitHub Actions ma Mongo, nie ma JWT).
+    13.11: biuro zgłosiło 500 w wycenie (TypeError str/int) — raport dzienny tego nie widział, bo testował tylko importy."""
+    db = database()
+    cfg = await db.settings.find_one({"_id": "health"}) or {}
+    key = cfg.get("smoke_key") or ""
+    if not key or not _hmac.compare_digest(request.headers.get("x-health-key") or "", key):
+        raise HTTPException(403, "Brak klucza")
+    prop = _SMOKE_CASES.get(case)
+    if not prop:
+        raise HTTPException(400, f"Nieznany przypadek: {case}")
+    import json as _json, time as _time
+    t0 = _time.time()
+    try:
+        pdf_data, fname = await _render_valuation_pdf("valuation_custom", {"type": "valuation_custom", "property_json": _json.dumps(_sanitize_valuation_property(prop))}, f"smoke{int(t0)}")
+    except Exception as e:
+        tb = [ln.strip() for ln in _tb.format_exc().split("\n") if 'File "' in ln and "index.py" in ln][-2:]
+        return JSONResponse({"ok": False, "case": case, "error": f"{type(e).__name__}: {str(e)[:200]}", "trace": tb, "seconds": round(_time.time() - t0, 1)}, status_code=200)
+    return {"ok": bool(pdf_data) and len(pdf_data) > 20000, "case": case, "pdf_kb": len(pdf_data) // 1024, "seconds": round(_time.time() - t0, 1), "file": fname}
+
+
+
 async def _authorize_cron_or_admin(request: Request) -> None:
     if _is_cron_request(request):
         try:   # log trafień cronów (Vercel / GitHub) — do diagnozy, czy harmonogramy w ogóle odpalają

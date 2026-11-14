@@ -4924,7 +4924,7 @@ async def admin_cron_status(admin: dict = Depends(require_admin)):
     """Diagnostyka harmonogramów: kiedy ostatnio trafiły crony (Vercel/GitHub), ostatni tick zegara, importy, lekkie tury, raport."""
     db = database()
     out = {}
-    for key in ("cron_hits", "scheduler_tick", "imports", "fresh_sweep", "daily_report", "dup_compute", "daily_jobs", "city_sweep_otodom", *[f"city_sweep_olx_{c}" for c in BIURA_CITIES]):
+    for key in ("cron_hits", "scheduler_tick", "imports", "fresh_sweep", "daily_report", "dup_compute", "daily_jobs", "city_sweep_otodom", "olx_img_refresh_pm", *[f"city_sweep_olx_{c}" for c in BIURA_CITIES]):
         d = await db.settings.find_one({"_id": key}, {"_id": 0}) or {}
         d.pop("token", None)
         out[key] = d
@@ -5113,7 +5113,9 @@ async def _trigger_city_sweeps_if_due(force: bool = False) -> dict:
     się po kilku–kilkunastu stronach, więc w konkretnym mieście „dziś” bywa 0–3 działek (13.11 raport: Wrocław 0, Poznań 0, Szczecin 3),
     choć portale mają ich tam dziesiątki. OLX: scrape-olx.yml z city=<slug> (wszystkie typy, 4 strony) — jedno miasto na tick
     (workflow zajęty → kolejny tick). Otodom: scrape-otodom-regions.yml regions=0 (20 miast, 3 strony) — jeden run."""
-    out = {"otodom": await _dispatch_daily("city_sweep_otodom", "scrape-otodom-regions.yml", 10, force, {"max_pages": "3", "regions": "0"})}
+    out = {"otodom": await _dispatch_daily("city_sweep_otodom", "scrape-otodom-regions.yml", 10, force, {"max_pages": "3", "regions": "0"}),
+           # zdjęcia OLX: druga tura dziennie (≥15 PL, limit 3000) — zaległość 82k ofert po tygodniach blokady API (fallback HTML od 14.11)
+           "olx_images": await _dispatch_daily("olx_img_refresh_pm", "refresh-olx-images.yml", 15, force, {"limit": "3000"})}
     for slug in BIURA_CITIES:
         r = await _dispatch_daily(f"city_sweep_olx_{slug}", "scrape-olx.yml", 10, force, {"max_pages": "4", "regions": "0", "city": slug})
         out[f"olx_{slug}"] = r

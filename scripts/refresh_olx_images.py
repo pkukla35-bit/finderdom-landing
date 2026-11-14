@@ -159,7 +159,7 @@ def main():
          "$or": [{"olx_img_checked_at": {"$exists": False}}, {"olx_img_checked_at": {"$lt": since}},
                  {"olx_img_checked_at": {"$lt": since_dt}}]}
     cur = coll.find(q, {"external_id": 1, "image": 1, "images": 1, "source": 1, "olx_img_checked_at": 1, "url": 1}) \
-              .sort("olx_img_checked_at", 1).limit(a.limit)
+              .sort([("olx_img_checked_at", 1), ("added_at", -1)]).limit(a.limit)   # najpierw nigdy niesprawdzane, od najnowszych (najczęściej oglądane)
     docs = list(cur)
     log.info("Do sprawdzenia: %d ofert OLX (limit %d, pozostałe w bazie: %d)", len(docs), a.limit, coll.count_documents(q))
     st = {"ok": 0, "refreshed": 0, "gone": 0, "error": 0, "blocked": 0}

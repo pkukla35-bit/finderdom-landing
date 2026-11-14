@@ -2391,34 +2391,40 @@ async def geo_city_center(name: str):
 async def _nearby_cities(coll, box: dict, lat: float, lng: float, radius_km: float) -> list:
     """Miejscowości „w promieniu”: nazwy `city` ofert z GPS w bounding-boxie, zawężone do realnego koła (haversine po medianie
     współrzędnych każdej miejscowości). Cache 24 h w geo_cache (klucz: środek zaokrąglony do 0.01° + promień)."""
-    key = f"near2:{lat:.2f}:{lng:.2f}:{radius_km:g}"
+    key = f"near3:{lat:.2f}:{lng:.2f}:{radius_km:g}"
     db = database()
     cached = await db.geo_cache.find_one({"_id": key})
     if cached and isinstance(cached.get("cities"), list) and cached.get("at") and (datetime.now(timezone.utc) - cached["at"].replace(tzinfo=timezone.utc)).total_seconds() < 86400:
         return cached["cities"]
     pipeline = [{"$match": {**box, "city": {"$type": "string", "$ne": ""}, "is_stale": {"$ne": True}}},
-                {"$group": {"_id": "$city", "n": {"$sum": 1}}},
+                {"$group": {"_id": "$city", "n": {"$sum": 1}, "lat": {"$avg": "$lat"}, "lng": {"$avg": "$lng"}}},
                 {"$limit": 400}]
     cities = []
     def _km(a_lat, a_lng):
         return 2 * 6371 * math.asin(math.sqrt(math.sin(math.radians(a_lat - lat) / 2) ** 2 + math.cos(math.radians(lat)) * math.cos(math.radians(a_lat)) * math.sin(math.radians(a_lng - lng) / 2) ** 2))
     try:
-        names = [r["_id"] async for r in coll.aggregate(pipeline) if r["_id"] and not str(r["_id"]).islower()]  # „małopolskie” = województwo, nie miejscowość
-        # Położenie miejscowości liczymy z WSZYSTKICH jej ofert z GPS (nie tylko z tych w boxie) — jedna źle zgeokodowana oferta
-        # z Katowic w boxie Krakowa wciągała do wyników całe Katowice. Duże miasta: współrzędne z CITY_COORDS.
-        centroids: dict = {}
+        in_box = {r["_id"]: r async for r in coll.aggregate(pipeline) if r["_id"] and not str(r["_id"]).islower()}  # „małopolskie” = województwo, nie miejscowość
+        names = list(in_box)
+        # Położenie miejscowości: duże miasta z CITY_COORDS; pozostałe — środek JEJ ofert z GPS leżących w boxie, ale tylko gdy to istotna
+        # część wszystkich ofert tej nazwy z GPS (≥20%). Jedna źle zgeokodowana oferta z Katowic w boxie Krakowa (<1%) → odrzucona;
+        # 14.11: średnia ze WSZYSTKICH ofert „Dobra”/„Mierzyn” (nazwy wielu miejscowości w Polsce) lądowała w środku kraju → 0 działek
+        # z gmin wokół Szczecina w promieniu 20 km (Dobra 121, Mierzyn 63, Goleniów 48 ofert).
+        totals: dict = {}
         if names:
             async for r in coll.aggregate([{"$match": {"city": {"$in": names}, "lat": {"$type": "number"}, "lng": {"$type": "number"}}},
-                                           {"$group": {"_id": "$city", "lat": {"$avg": "$lat"}, "lng": {"$avg": "$lng"}, "n": {"$sum": 1}}}]):
-                centroids[r["_id"]] = (r["lat"], r["lng"], r["n"])
+                                           {"$group": {"_id": "$city", "n": {"$sum": 1}}}]):
+                totals[r["_id"]] = r["n"]
         for name in names:
             known = CITY_COORDS.get(_normalize_city_name(name))
             if known:
                 c_lat, c_lng = known[0], known[1]
-            elif name in centroids:
-                c_lat, c_lng = centroids[name][0], centroids[name][1]
             else:
-                continue
+                r = in_box[name]
+                if r.get("lat") is None or r.get("lng") is None or not totals.get(name):
+                    continue
+                if r["n"] / totals[name] < 0.2:
+                    continue
+                c_lat, c_lng = r["lat"], r["lng"]
             if _km(c_lat, c_lng) <= radius_km * 1.15:
                 cities.append(name)
     except Exception as e:

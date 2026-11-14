@@ -131,7 +131,7 @@ def run(apply: bool = False, rescan: bool = True) -> dict:
     from datetime import datetime, timezone
     cc = db.city_coords
     groups = list(coll.aggregate([{"$match": {"lat": {"$not": {"$type": "number"}}, "region": {"$type": "string"}, "city": {"$type": "string", "$ne": ""}}},
-                                  {"$group": {"_id": {"city": "$city", "region": "$region"}, "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 600}]))
+                                  {"$group": {"_id": {"city": "$city", "region": "$region"}, "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 2000}]))
     geo_set, geo_new, geo_fail, calls = 0, 0, 0, 0
     for g in groups:
         city_n, region_n = g["_id"]["city"], g["_id"]["region"]
@@ -139,7 +139,7 @@ def run(apply: bool = False, rescan: bool = True) -> dict:
             continue
         key = f"{city_n}|{region_n}"
         rec = cc.find_one({"_id": key})
-        if rec is None and calls < 300:
+        if rec is None and calls < 600:
             calls += 1
             try:
                 q = _up.urlencode({"q": f"{city_n}, {region_n}, Polska", "format": "json", "limit": 1, "countrycodes": "pl"})

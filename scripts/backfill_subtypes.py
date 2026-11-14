@@ -124,6 +124,40 @@ def run(apply: bool = False, rescan: bool = True) -> dict:
     out["otodom_city_fix"] = {"checked": checked, "updated": len(ups) if apply else 0, "would_update": len(ups),
                               "top": dict(sorted(by_city.items(), key=lambda kv: -kv[1])[:25])}
     print("otodom_city_fix", out["otodom_city_fix"])
+    # 🗺️ GPS dla ofert bez współrzędnych (Otodom z list wojewódzkich nie ma GPS) — środek miejscowości z Nominatim (OSM, 1 req/s,
+    # cache w city_coords). Tylko gdy znane województwo (`region`) — „Dobra” jest w 6 województwach. Wynik: lat/lng + geo_approx=True,
+    # dzięki czemu promień (bbox + _nearby_cities) widzi gminy wokół miasta (14.11: Szczecin +20 km działki bez Otodomu spoza miasta).
+    import json as _json, time as _time, urllib.request as _ur, urllib.parse as _up
+    cc = db.city_coords
+    groups = list(coll.aggregate([{"$match": {"lat": {"$not": {"$type": "number"}}, "region": {"$type": "string"}, "city": {"$type": "string", "$ne": ""}}},
+                                  {"$group": {"_id": {"city": "$city", "region": "$region"}, "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 600}]))
+    geo_set, geo_new, geo_fail, calls = 0, 0, 0, 0
+    for g in groups:
+        city_n, region_n = g["_id"]["city"], g["_id"]["region"]
+        if city_n.islower() or len(city_n) < 3:
+            continue
+        key = f"{city_n}|{region_n}"
+        rec = cc.find_one({"_id": key})
+        if rec is None and calls < 300:
+            calls += 1
+            try:
+                q = _up.urlencode({"q": f"{city_n}, {region_n}, Polska", "format": "json", "limit": 1, "countrycodes": "pl"})
+                rq = _ur.Request("https://nominatim.openstreetmap.org/search?" + q, headers={"User-Agent": "FinderDomBot/1.0 (kontakt@finderdom.pl)"})
+                res = _json.loads(_ur.urlopen(rq, timeout=20).read().decode())
+                rec = {"_id": key, "city": city_n, "region": region_n, "lat": float(res[0]["lat"]) if res else None, "lng": float(res[0]["lon"]) if res else None,
+                       "osm_type": (res[0].get("type") if res else None), "at": datetime.now(timezone.utc)}
+                cc.replace_one({"_id": key}, rec, upsert=True)
+                geo_new += 1 if rec["lat"] else 0
+                geo_fail += 0 if rec["lat"] else 1
+            except Exception as e:
+                print("nominatim", key, str(e)[:80]); geo_fail += 1; rec = None
+            _time.sleep(1.1)
+        if rec and rec.get("lat") and apply:
+            r = coll.update_many({"city": city_n, "region": region_n, "lat": {"$not": {"$type": "number"}}},
+                                 {"$set": {"lat": rec["lat"], "lng": rec["lng"], "geo_approx": True}})
+            geo_set += r.modified_count
+    out["geocode"] = {"groups": len(groups), "nominatim_calls": calls, "new_coords": geo_new, "failed": geo_fail, "docs_set": geo_set}
+    print("geocode", out["geocode"])
     return out
 
 

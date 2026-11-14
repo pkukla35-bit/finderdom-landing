@@ -434,6 +434,8 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         "title": title,
         "url": url,
         "location": location,
+        # województwo (tryb --regions: city_name = nazwa województwa) — potrzebne do geokodowania miejscowości bez GPS (promień)
+        **({"region": city_name.lower()} if city_name and city_name.islower() else {}),
         "city": real_city,
         "price": price,
         "area_m2": area_m2,
@@ -458,6 +460,8 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         by = infer_build_year(title, f"{item.get('shortDescription') or ''} {item.get('description') or ''}")
         if by: doc["build_year"], doc["build_year_inferred"] = by, True
     if doc.get("rooms") is None: doc.pop("rooms", None)   # nie nadpisuj pokoi z backfillu pustką
+    if doc.get("lat") is None or doc.get("lng") is None:   # nie nadpisuj GPS z geokodowania (geo_approx) pustką
+        doc.pop("lat", None); doc.pop("lng", None)
     if subtype_field and subtype:
         doc[subtype_field] = subtype
     # 🏢 Nazwa biura / dewelopera (lista wyników Otodom: item.agency.name) — tylko gdy nie-prywatna

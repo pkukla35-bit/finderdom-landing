@@ -252,6 +252,10 @@
       "destination": "/bot.html"
     },
     {
+      "source": "/kontrola",
+      "destination": "/kontrola.html"
+    },
+    {
       "source": "/regulamin",
       "destination": "/regulamin.html"
     },

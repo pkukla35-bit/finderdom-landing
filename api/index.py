@@ -4971,7 +4971,18 @@ async def health_valuation_smoke(request: Request, case: str = "mieszkanie-szcze
     cfg = await db.settings.find_one({"_id": "health"}) or {}
     key = cfg.get("smoke_key") or ""
     if not key or not _hmac.compare_digest(request.headers.get("x-health-key") or "", key):
-        raise HTTPException(403, "Brak klucza")
+        # alternatywnie: admin JWT (strona /kontrola przed szkoleniem)
+        auth = request.headers.get("authorization") or ""
+        is_admin = False
+        if auth.lower().startswith("bearer "):
+            try:
+                payload = jwt.decode(auth.split(" ", 1)[1], JWT_SECRET, algorithms=[JWT_ALGORITHM])
+                u = await (await users_collection()).find_one({"_id": ObjectId(payload["sub"])})
+                is_admin = bool(u) and (u.get("email") or "").strip().lower() in ADMIN_EMAILS
+            except Exception:
+                is_admin = False
+        if not is_admin:
+            raise HTTPException(403, "Brak klucza")
     prop = _SMOKE_CASES.get(case)
     if not prop:
         raise HTTPException(400, f"Nieznany przypadek: {case}")

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Kontrola przed prezentacją — FinderDom.pl</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#0B1836;color:#e6e9f2;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:980px;margin:0 auto;padding:24px 16px 60px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:#8ba3d4;font-size:14px;margin:0 0 18px}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+  input,select{background:#111f44;border:1px solid #2a3d6e;color:#fff;border-radius:8px;padding:10px 12px;font-size:15px}
+  button{background:#F7B500;color:#0B1836;border:0;border-radius:8px;padding:10px 18px;font-weight:700;font-size:15px;cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  .summary{display:flex;gap:14px;flex-wrap:wrap;margin:0 0 16px;font-size:15px}
+  .pill{padding:6px 12px;border-radius:999px;background:#111f44;border:1px solid #2a3d6e}
+  .pill.ok{border-color:#16a34a;color:#86efac}.pill.bad{border-color:#dc2626;color:#fca5a5}.pill.warn{border-color:#d97706;color:#fcd34d}
+  .test{background:#111f44;border:1px solid #2a3d6e;border-radius:10px;padding:12px 14px;margin-bottom:10px}
+  .test .head{display:flex;gap:10px;align-items:flex-start}
+  .test .ico{font-size:20px;line-height:1.2;width:26px;flex:0 0 26px}
+  .test .name{font-weight:700;font-size:15px}
+  .test .detail{color:#b9c6e6;font-size:13.5px;margin-top:4px;white-space:pre-wrap}
+  .test a{color:#F7B500}
+  .test.ok{border-color:#16a34a44}.test.bad{border-color:#dc2626}.test.warn{border-color:#d9770688}
+  .muted{color:#8ba3d4;font-size:12.5px}
+  .login{background:#111f44;border:1px solid #2a3d6e;border-radius:10px;padding:16px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🧪 Kontrola przed prezentacją</h1>
+  <p class="sub">Żywe testy na produkcji — dokładnie te same zapytania, które wysyła wyszukiwarka i wycena. Odpal rano przed szkoleniem.</p>
+
+  <div id="loginBox" class="login" style="display:none">
+    <b>Zaloguj się kontem administratora</b> (test wyceny i status importów wymagają admina)<br>
+    <div class="bar" style="margin-top:10px">
+      <input id="lEmail" type="email" placeholder="e-mail" autocomplete="username">
+      <input id="lPass" type="password" placeholder="hasło" autocomplete="current-password">
+      <button id="lBtn">Zaloguj</button>
+      <span id="lMsg" class="muted"></span>
+    </div>
+  </div>
+
+  <div class="bar">
+    <input id="city" value="Szczecin" placeholder="Miasto" style="width:180px">
+    <input id="lat" value="53.4285" style="width:100px" title="lat"><input id="lng" value="14.5528" style="width:100px" title="lng">
+    <select id="radius"><option value="20" selected>+20 km</option><option value="10">+10 km</option><option value="25">+25 km</option></select>
+    <button id="run">▶ Uruchom 12 testów</button>
+    <span id="who" class="muted"></span>
+  </div>
+
+  <div id="summary" class="summary"></div>
+  <div id="tests"></div>
+  <p class="muted">„Dziś” = ostatnie 24 h (jak chip „Dziś” w wyszukiwarce). Sumy chipów liczone tak samo jak w lewym panelu /szukaj. Strona nie zapisuje nic w bazie (wycena testowa nie trafia do logu wycen).</p>
+</div>
+
+<script>
+const TOKEN_KEY = 'finderdom_token';
+const $ = id => document.getElementById(id);
+const tok = () => localStorage.getItem(TOKEN_KEY) || '';
+const CITY_COORDS = {szczecin:[53.4285,14.5528], krakow:[50.0647,19.945], warszawa:[52.2297,21.0122], wroclaw:[51.1079,17.0385], poznan:[52.4064,16.9252], gdansk:[54.352,18.6466]};
+const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ł/g,'l');
+$('city').addEventListener('change', () => { const c = CITY_COORDS[norm($('city').value)]; if (c) { $('lat').value = c[0]; $('lng').value = c[1]; } });
+
+async function api(path, opts = {}) {
+  const h = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  if (tok()) h['Authorization'] = 'Bearer ' + tok();
+  const t0 = performance.now();
+  const r = await fetch(path, { ...opts, headers: h });
+  const ms = Math.round(performance.now() - t0);
+  let body = null; const ct = r.headers.get('content-type') || '';
+  if (ct.includes('json')) body = await r.json(); else body = await r.text();
+  return { status: r.status, body, ms, ct };
+}
+const iso = d => d.toISOString().slice(0, 19) + 'Z';
+const ago = h => iso(new Date(Date.now() - h * 3600e3));
+
+function row(name) {
+  const el = document.createElement('div'); el.className = 'test';
+  el.innerHTML = `<div class="head"><div class="ico">⏳</div><div><div class="name">${name}</div><div class="detail">…</div></div></div>`;
+  $('tests').appendChild(el);
+  return (state, detail) => { el.className = 'test ' + state; el.querySelector('.ico').textContent = state === 'ok' ? '✅' : state === 'warn' ? '⚠️' : '❌'; el.querySelector('.detail').innerHTML = detail; return state; };
+}
+
+async function count(params) {
+  const r = await api('/api/listings-scraped?' + new URLSearchParams({ limit: '1', ...params }));
+  if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
+  return r.body.total_count ?? r.body.count ?? 0;
+}
+async function sample(params, limit = 200) {
+  const r = await api('/api/listings-scraped?' + new URLSearchParams({ limit: String(limit), ...params }));
+  if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
+  return r.body;
+}
+const link = (p) => `<a href="/szukaj?${new URLSearchParams(p)}" target="_blank">otwórz w wyszukiwarce ↗</a>`;
+
+async function run() {
+  $('run').disabled = true; $('tests').innerHTML = ''; $('summary').innerHTML = '';
+  const city = $('city').value.trim(), lat = $('lat').value, lng = $('lng').value, radius = $('radius').value;
+  const base = { city, transaction: 'sprzedaz' };
+  const geo = { ...base, lat, lng, radius_km: radius };
+  const results = [];
+  const T = async (name, fn) => { const set = row(name); try { results.push(await fn(set)); } catch (e) { results.push(set('bad', 'Błąd: ' + (e.message || e))); } };
+
+  // 1. Mieszkania dziś + suma pokoi
+  await T(`🏢 Mieszkania „dziś” — suma chipów pokoi = liczba ofert (${city})`, async set => {
+    const p = { ...base, type: 'mieszkanie', added_from: ago(24) };
+    const total = await count(p);
+    const rooms = {}; for (const r of ['1', '2', '3', '4', '5+']) rooms[r] = await count({ ...p, rooms: r });
+    const sum = Object.values(rooms).reduce((a, b) => a + b, 0);
+    const miss = total - sum;
+    const st = total === 0 ? 'bad' : (miss <= Math.max(2, total * 0.1) ? 'ok' : 'warn');
+    return set(st, `Ofert: <b>${total}</b> · pokoje: ${Object.entries(rooms).map(([k, v]) => k + '→' + v).join(', ')} · bez liczby pokoi w ogłoszeniu: <b>${miss}</b>  ${link({ city, type: 'mieszkanie', transaction: 'sprzedaz', date: 'today' })}`);
+  });
+  // 2. Domy dziś + pokoje
+  await T(`🏠 Domy „dziś” — liczba ofert i pokoje`, async set => {
+    const p = { ...base, type: 'dom', added_from: ago(24) };
+    const total = await count(p);
+    const rooms = {}; for (const r of ['1', '2', '3', '4', '5+']) rooms[r] = await count({ ...p, rooms: r });
+    const sum = Object.values(rooms).reduce((a, b) => a + b, 0);
+    return set(total === 0 ? 'warn' : 'ok', `Ofert: <b>${total}</b> · z pokojami: ${sum} (${Object.entries(rooms).filter(([, v]) => v).map(([k, v]) => k + '→' + v).join(', ') || '—'}) · OLX nie podaje pokoi dla domów → ${total - sum} bez  ${link({ city, type: 'dom', transaction: 'sprzedaz', date: 'today' })}`);
+  });
+  // 3. Działki promień 3 dni + przeznaczenie
+  await T(`🌳 Działki +${radius} km, 3 dni — suma przeznaczeń = liczba ofert`, async set => {
+    const p = { ...geo, type: 'dzialka', added_from: ago(72) };
+    const total = await count(p);
+    const dt = {}; for (const k of ['budowlana', 'rolna', 'rekreacyjna', 'lesna', 'inwestycyjna', '__unknown__']) dt[k === '__unknown__' ? 'bez określenia' : k] = await count({ ...p, dzialka_type: k });
+    const sum = Object.values(dt).reduce((a, b) => a + b, 0);
+    const st = total === 0 ? 'bad' : (Math.abs(total - sum) <= 2 ? 'ok' : 'warn');
+    return set(st, `Ofert: <b>${total}</b> · ${Object.entries(dt).map(([k, v]) => k + '→' + v).join(', ')} · suma ${sum}  ${link({ city, radius, type: 'dzialka', transaction: 'sprzedaz', date: '3d' })}`);
+  });
+  // 4. Promień rzeczywiście poszerza
+  await T(`📍 Promień +${radius} km dodaje sąsiednie miejscowości (działki, cała baza)`, async set => {
+    const onlyCity = await count({ ...base, type: 'dzialka' });
+    const withR = await count({ ...geo, type: 'dzialka' });
+    const s = await sample({ ...geo, type: 'dzialka' }, 300);
+    const cities = {}; for (const l of s.listings || []) cities[l.city] = (cities[l.city] || 0) + 1;
+    const top = Object.entries(cities).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${v}`).join(', ');
+    return set(withR > onlyCity * 1.2 ? 'ok' : 'warn', `Tylko ${city}: ${onlyCity} · z promieniem: <b>${withR}</b> · miejscowości (próbka 300): ${top}`);
+  });
+  // 5. Lokale + typ lokalu
+  await T(`🏪 Lokale (sprzedaż) — liczba i typy lokalu`, async set => {
+    const total = await count({ ...base, type: 'lokal' });
+    const lt = {}; for (const k of ['biurowy', 'handlowy', 'uslugowy', 'gastronomia', 'magazyn']) lt[k] = await count({ ...base, type: 'lokal', lokal_type: k });
+    const s = await sample({ ...base, type: 'lokal' }, 300); const src = {}; for (const l of s.listings || []) src[l.source] = (src[l.source] || 0) + 1;
+    return set(total >= 30 && lt.biurowy > 0 && lt.handlowy > 0 ? 'ok' : 'warn', `Ofert: <b>${total}</b> · ${Object.entries(lt).map(([k, v]) => k + '→' + v).join(', ')} · źródła: ${Object.entries(src).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + v).join(', ')}  ${link({ city, type: 'lokal', transaction: 'sprzedaz' })}`);
+  });
+  // 6. Rynek pierwotny / wtórny
+  await T(`🏗️ Rynek pierwotny / wtórny — mieszkania (cała baza)`, async set => {
+    const p = { ...base, type: 'mieszkanie' };
+    const total = await count(p), prim = await count({ ...p, market_type: 'pierwotny' }), sec = await count({ ...p, market_type: 'wtorny' });
+    return set(prim > 0 && sec > 0 && Math.abs(total - prim - sec) <= 2 ? 'ok' : 'warn', `Ofert: <b>${total}</b> · pierwotny ${prim} · wtórny (w tym bez określenia) ${sec} · suma ${prim + sec}`);
+  });
+  // 7. Rok budowy
+  await T(`📅 Rok budowy — filtr daje wyniki (mieszkania, cała baza)`, async set => {
+    const p = { ...base, type: 'mieszkanie' };
+    const total = await count(p), known = await count({ ...p, year_from: '1800' }), a = await count({ ...p, year_from: '1800', year_to: '1944' }), b = await count({ ...p, year_from: '1945', year_to: '1989' }), c = await count({ ...p, year_from: '1990', year_to: '2015' }), d = await count({ ...p, year_from: '2016' });
+    return set(known > 0 && b > 0 ? 'ok' : 'warn', `Z rokiem: <b>${known}</b> z ${total} (${Math.round(100 * known / Math.max(1, total))}%) · do 1944: ${a} · 1945–89: ${b} · 1990–2015: ${c} · 2016+: ${d} · portale rzadko podają rok — reszta nie ma go w ogłoszeniu`);
+  });
+  // 8. Duplikaty
+  await T(`👥 Duplikaty / konkurencja — ile ofert ma wykryte kopie (mieszkania sprzedaż, próbka 300)`, async set => {
+    const s = await sample({ ...base, type: 'mieszkanie' }, 300);
+    const L = s.listings || []; const withDup = L.filter(l => l.dup && (l.dup.count > 1 || l.dup.copies > 1)); const multi = L.filter(l => l.dup && l.dup.agents >= 2);
+    const ex = withDup[0]; const lid = l => 'otodom-' + (l.external_id || '');
+    return set(L.length && withDup.length > 0 ? 'ok' : 'warn', `Próbka ${L.length}: z kopiami na innych portalach <b>${withDup.length}</b> (${Math.round(100 * withDup.length / Math.max(1, L.length))}%) · 2+ pośredników: ${multi.length}` + (ex ? ` · przykład: <a href="/oferta?id=${encodeURIComponent(lid(ex))}&widok=biuro" target="_blank">${(ex.title || '').slice(0, 60)} ↗</a>` : ''));
+  });
+  // 9. Strona oferty
+  await T(`📄 Strona oferty — szczegóły pierwszej oferty z listy`, async set => {
+    const s = await sample({ ...base, type: 'mieszkanie', added_from: ago(24) }, 1);
+    const l = (s.listings || [])[0]; if (!l) return set('warn', 'Brak ofert z 24 h do sprawdzenia');
+    const id = 'otodom-' + l.external_id; const r = await api('/api/listing/' + encodeURIComponent(id));
+    return set(r.status === 200 ? 'ok' : 'bad', `HTTP ${r.status} w ${r.ms} ms · <a href="/oferta?id=${encodeURIComponent(id)}&widok=biuro" target="_blank">${(l.title || id).slice(0, 70)} ↗</a>`);
+  });
+  // 10. Wycena PDF
+  await T(`💰 Wycena PDF — mieszkanie w ${city} (prawdziwy PDF, bez zapisu)`, async set => {
+    if (!tok()) return set('warn', 'Zaloguj się jako administrator, żeby uruchomić test wyceny');
+    const c = norm(city) === 'szczecin' ? 'mieszkanie-szczecin' : norm(city) === 'krakow' ? 'dom-krakow' : norm(city) === 'warszawa' ? 'mieszkanie-warszawa' : 'mieszkanie-szczecin';
+    const r = await api('/api/health/valuation-smoke?case=' + c);
+    if (r.status !== 200) return set('bad', `HTTP ${r.status}: ${JSON.stringify(r.body).slice(0, 200)}`);
+    return set(r.body.ok ? 'ok' : 'bad', r.body.ok ? `PDF ${r.body.pdf_kb} KB w ${r.body.seconds} s (${c}) · <a href="/wycena" target="_blank">formularz wyceny ↗</a>` : `${r.body.error || 'brak PDF'} ${(r.body.trace || []).join(' · ')}`);
+  });
+  // 11. Świeżość importów
+  await T(`⏱️ Świeżość importów — najnowsze oferty w ${city}`, async set => {
+    const s = await sample({ ...base, type: 'mieszkanie' }, 5);
+    const newest = (s.listings || []).map(l => l.added_at).filter(Boolean).sort().pop();
+    const hrs = newest ? (Date.now() - new Date(newest.endsWith('Z') ? newest : newest + 'Z').getTime()) / 3600e3 : null;
+    let imp = '';
+    if (tok()) { const r = await api('/api/admin/cron/status'); if (r.status === 200) { const i = r.body.imports || {}; imp = ` · pełny import: ${i.last_day || '?'} ${i.last_dispatch_at ? '(' + i.last_dispatch_at.slice(11, 16) + ' UTC)' : ''} · tick crona: ${(r.body.cron_hits || {})['/api/cron/tick'] ? (r.body.cron_hits['/api/cron/tick']).slice(0, 16) : 'brak'}`; } }
+    return set(hrs !== null && hrs < 30 ? 'ok' : 'warn', `Najnowsza oferta: ${newest ? newest.slice(0, 16).replace('T', ' ') + ' UTC (' + hrs.toFixed(1) + ' h temu)' : 'brak'}${imp}`);
+  });
+  // 12. Wynajem
+  await T(`🔑 Wynajem mieszkań „dziś” — liczba ofert i pokoje`, async set => {
+    const p = { city, transaction: 'wynajem', type: 'mieszkanie', added_from: ago(24) };
+    const total = await count(p); const r2 = await count({ ...p, rooms: '2' });
+    return set(total > 0 ? 'ok' : 'warn', `Ofert: <b>${total}</b> · 2-pokojowe: ${r2}  ${link({ city, type: 'mieszkanie', transaction: 'wynajem', date: 'today' })}`);
+  });
+
+  const ok = results.filter(r => r === 'ok').length, warn = results.filter(r => r === 'warn').length, bad = results.filter(r => r === 'bad').length;
+  $('summary').innerHTML = `<span class="pill ok">✅ ${ok} OK</span><span class="pill warn">⚠️ ${warn} do zerknięcia</span><span class="pill bad">❌ ${bad} błędów</span><span class="pill">${new Date().toLocaleString('pl-PL')}</span>`;
+  $('run').disabled = false;
+}
+
+async function whoami() {
+  if (!tok()) { $('loginBox').style.display = ''; $('who').textContent = 'niezalogowany — testy wyceny/importów pominięte'; return; }
+  const r = await api('/api/auth/me');
+  if (r.status === 200) { $('who').textContent = 'zalogowany: ' + (r.body.email || ''); $('loginBox').style.display = 'none'; }
+  else { localStorage.removeItem(TOKEN_KEY); $('loginBox').style.display = ''; $('who').textContent = 'sesja wygasła — zaloguj się'; }
+}
+$('lBtn').addEventListener('click', async () => {
+  $('lMsg').textContent = '…';
+  const r = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: $('lEmail').value.trim(), password: $('lPass').value }) });
+  if (r.status === 200 && r.body.token) { localStorage.setItem(TOKEN_KEY, r.body.token); if (r.body.user) localStorage.setItem('finderdom_user', JSON.stringify(r.body.user)); $('lMsg').textContent = ''; whoami(); }
+  else $('lMsg').textContent = 'Błąd logowania (' + r.status + ')';
+});
+$('run').addEventListener('click', run);
+whoami().then(() => { if (location.search.includes('auto=1')) run(); });
+</script>
+</body>
+</html>

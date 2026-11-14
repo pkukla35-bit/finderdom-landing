@@ -2393,16 +2393,16 @@ async def _nearby_cities(coll, box: dict, lat: float, lng: float, radius_km: flo
     współrzędnych każdej miejscowości). Zwraca (miejscowości, województwa ofert z GPS w boxie). Cache 24 h w geo_cache
     (klucz: środek zaokrąglony do 0.01° + promień). Oferty z GPS „przybliżonym” (geo_approx — środek miejscowości z Nominatim)
     nie są dowodem położenia miejscowości (14.11: „Dobra”/„Mierzyn” zgeokodowane na inną Dobrą w tym samym województwie)."""
-    key = f"near4:{lat:.2f}:{lng:.2f}:{radius_km:g}"
+    key = f"near5:{lat:.2f}:{lng:.2f}:{radius_km:g}"
     db = database()
     cached = await db.geo_cache.find_one({"_id": key})
     if cached and isinstance(cached.get("cities"), list) and cached.get("at") and (datetime.now(timezone.utc) - cached["at"].replace(tzinfo=timezone.utc)).total_seconds() < 86400:
         return cached["cities"], cached.get("regions") or []
     pipeline = [{"$match": {**box, "city": {"$type": "string", "$ne": ""}, "is_stale": {"$ne": True}, "geo_approx": {"$ne": True}}},
-                {"$group": {"_id": "$city", "n": {"$sum": 1}, "lat": {"$avg": "$lat"}, "lng": {"$avg": "$lng"}, "regions": {"$addToSet": "$region"}}},
+                {"$group": {"_id": "$city", "n": {"$sum": 1}, "lat": {"$avg": "$lat"}, "lng": {"$avg": "$lng"}}},
                 {"$limit": 400}]
     cities = []
-    regions: set = set()
+    regions: list = []
     def _km(a_lat, a_lng):
         return 2 * 6371 * math.asin(math.sqrt(math.sin(math.radians(a_lat - lat) / 2) ** 2 + math.cos(math.radians(lat)) * math.cos(math.radians(a_lat)) * math.sin(math.radians(a_lng - lng) / 2) ** 2))
     try:
@@ -2430,12 +2430,16 @@ async def _nearby_cities(coll, box: dict, lat: float, lng: float, radius_km: flo
                 c_lat, c_lng = r["lat"], r["lng"]
             if _km(c_lat, c_lng) <= radius_km * 1.15:
                 cities.append(name)
-                regions.update(x for x in (in_box[name].get("regions") or []) if isinstance(x, str) and x)
+        # Województwa okolicy: `region` ofert z GPS w boxie (także przybliżonym — region pochodzi z listy wojewódzkiej portalu, nie z geokodowania).
+        # Próg ≥3 ofert odcina pojedyncze błędy. Służy do odrzucenia „Przecław, lubuskie” przy Szczecinie (ta sama nazwa, inne województwo).
+        reg_rows = [r async for r in coll.aggregate([{"$match": {**box, "region": {"$type": "string", "$ne": ""}, "is_stale": {"$ne": True}}},
+                                                     {"$group": {"_id": "$region", "n": {"$sum": 1}}}])]
+        regions = sorted(r["_id"] for r in reg_rows if r["n"] >= 3)
     except Exception as e:
         logger.warning("nearby_cities: %s", e)
         return [], []
-    await db.geo_cache.update_one({"_id": key}, {"$set": {"cities": cities, "regions": sorted(regions), "at": datetime.now(timezone.utc)}}, upsert=True)
-    return cities, sorted(regions)
+    await db.geo_cache.update_one({"_id": key}, {"$set": {"cities": cities, "regions": regions, "at": datetime.now(timezone.utc)}}, upsert=True)
+    return cities, regions
 
 
 @app.get("/api/listings-scraped")

@@ -187,10 +187,10 @@ async function run() {
   await T(`⏱️ Świeżość importów — najnowsze oferty w ${city}`, async set => {
     const s = await sample({ ...base, type: 'mieszkanie' }, 5);
     const newest = (s.listings || []).map(l => l.added_at).filter(Boolean).sort().pop();
-    const hrs = newest ? (Date.now() - new Date(newest.endsWith('Z') ? newest : newest + 'Z').getTime()) / 3600e3 : null;
+    const hrs = newest ? (Date.now() - new Date(newest.slice(0, 19) + 'Z').getTime()) / 3600e3 : null;
     let imp = '';
-    if (tok()) { const r = await api('/api/admin/cron/status'); if (r.status === 200) { const i = r.body.imports || {}; imp = ` · pełny import: ${i.last_day || '?'} ${i.last_dispatch_at ? '(' + i.last_dispatch_at.slice(11, 16) + ' UTC)' : ''} · tick crona: ${(r.body.cron_hits || {})['/api/cron/tick'] ? (r.body.cron_hits['/api/cron/tick']).slice(0, 16) : 'brak'}`; } }
-    return set(hrs !== null && hrs < 30 ? 'ok' : 'warn', `Najnowsza oferta: ${newest ? newest.slice(0, 16).replace('T', ' ') + ' UTC (' + hrs.toFixed(1) + ' h temu)' : 'brak'}${imp}`);
+    if (tok()) { const r = await api('/api/admin/cron/status'); if (r.status === 200) { const i = r.body.imports || {}; const okN = Object.values(i.last_results || {}).filter(v => v === 204).length; imp = ` · pełny import: ${i.last_triggered_day || '?'} ${i.last_attempt_at ? '(' + i.last_attempt_at.slice(11, 16) + ' UTC, ' + okN + '/' + Object.keys(i.last_results || {}).length + ' workflow OK)' : ''} · tick crona: ${(r.body.cron_hits || {})['/api/cron/tick'] ? (r.body.cron_hits['/api/cron/tick']).slice(0, 16).replace('T', ' ') : 'brak'}`; } }
+    return set(hrs !== null && hrs < 30 ? 'ok' : 'warn', `Najnowsza oferta: ${newest ? newest.slice(0, 16).replace('T', ' ') + ' UTC (' + (isNaN(hrs) ? '?' : hrs.toFixed(1)) + ' h temu)' : 'brak'}${imp}`);
   });
   // 12. Wynajem
   await T(`🔑 Wynajem mieszkań „dziś” — liczba ofert i pokoje`, async set => {
@@ -207,7 +207,7 @@ async function run() {
 async function whoami() {
   if (!tok()) { $('loginBox').style.display = ''; $('who').textContent = 'niezalogowany — testy wyceny/importów pominięte'; return; }
   const r = await api('/api/auth/me');
-  if (r.status === 200) { $('who').textContent = 'zalogowany: ' + (r.body.email || ''); $('loginBox').style.display = 'none'; }
+  if (r.status === 200) { $('who').textContent = 'zalogowany: ' + ((r.body.user || r.body).email || ''); $('loginBox').style.display = 'none'; }
   else { localStorage.removeItem(TOKEN_KEY); $('loginBox').style.display = ''; $('who').textContent = 'sesja wygasła — zaloguj się'; }
 }
 $('lBtn').addEventListener('click', async () => {

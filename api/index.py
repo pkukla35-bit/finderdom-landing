@@ -5129,7 +5129,9 @@ async def _trigger_city_sweeps_if_due(force: bool = False) -> dict:
     (workflow zajęty → kolejny tick). Otodom: scrape-otodom-regions.yml regions=0 (20 miast, 3 strony) — jeden run."""
     out = {"otodom": await _dispatch_daily("city_sweep_otodom", "scrape-otodom-regions.yml", 10, force, {"max_pages": "3", "regions": "0"}),
            # zdjęcia OLX: druga tura dziennie (≥15 PL, limit 3000) — zaległość 82k ofert po tygodniach blokady API (fallback HTML od 14.11)
-           "olx_images": await _dispatch_daily("olx_img_refresh_pm", "refresh-olx-images.yml", 15, force, {"limit": "3000"})}
+           "olx_images": await _dispatch_daily("olx_img_refresh_pm", "refresh-olx-images.yml", 15, force, {"limit": "3000"}),
+           # backfill (pokoje/rok/przeznaczenie z opisu + geokodowanie miejscowości bez GPS z powiatem, 600 zapytań Nominatim/dzień)
+           "backfill": await _dispatch_daily("backfill_subtypes", "backfill-market-type.yml", 12, force, {"apply": "true", "type": ""})}
     for slug in BIURA_CITIES:
         r = await _dispatch_daily(f"city_sweep_olx_{slug}", "scrape-olx.yml", 10, force, {"max_pages": "4", "regions": "0", "city": slug})
         out[f"olx_{slug}"] = r

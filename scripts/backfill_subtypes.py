@@ -128,6 +128,7 @@ def run(apply: bool = False, rescan: bool = True) -> dict:
     # cache w city_coords). Tylko gdy znane województwo (`region`) — „Dobra” jest w 6 województwach. Wynik: lat/lng + geo_approx=True,
     # dzięki czemu promień (bbox + _nearby_cities) widzi gminy wokół miasta (14.11: Szczecin +20 km działki bez Otodomu spoza miasta).
     import json as _json, time as _time, urllib.request as _ur, urllib.parse as _up
+    from datetime import datetime, timezone
     cc = db.city_coords
     groups = list(coll.aggregate([{"$match": {"lat": {"$not": {"$type": "number"}}, "region": {"$type": "string"}, "city": {"$type": "string", "$ne": ""}}},
                                   {"$group": {"_id": {"city": "$city", "region": "$region"}, "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 600}]))

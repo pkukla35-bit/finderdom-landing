@@ -402,6 +402,15 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         location = ", ".join(x for x in [city_part, district] if x)
     if not location: location = city_name
     real_city = city_part if (isinstance(loc, dict) and city_part) else city_name
+    # powiat / gmina z reverseGeocoding (tryb województw) — do jednoznacznego geokodowania miejscowości bez GPS
+    # („Dobra” i „Mierzyn” są po 2× w zachodniopomorskim; 14.11: Nominatim bez powiatu dał Dobrą łobeską 53 km od Szczecina)
+    county = commune = None
+    if isinstance(loc, dict):
+        for x in ((loc.get("reverseGeocoding") or {}).get("locations") or []) if isinstance(loc.get("reverseGeocoding"), dict) else []:
+            if not isinstance(x, dict) or not x.get("name"): continue
+            lvl = str(x.get("locationLevel") or "").lower()
+            if lvl == "county": county = str(x["name"]).strip().lower()
+            elif lvl == "commune": commune = str(x["name"]).strip()
 
     coords = loc.get("coordinates") if isinstance(loc, dict) else None
     lat = _num((coords or {}).get("latitude"))
@@ -436,6 +445,8 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         "location": location,
         # województwo (tryb --regions: city_name = nazwa województwa) — potrzebne do geokodowania miejscowości bez GPS (promień)
         **({"region": city_name.lower()} if city_name and city_name.islower() else {}),
+        **({"county": county} if county else {}),
+        **({"commune": commune} if commune else {}),
         "city": real_city,
         "price": price,
         "area_m2": area_m2,

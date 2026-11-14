@@ -2388,18 +2388,21 @@ async def geo_city_center(name: str):
     return {"city": key, "lat": lat, "lng": lng, "n": len(pts), "source": "listings"}
 
 
-async def _nearby_cities(coll, box: dict, lat: float, lng: float, radius_km: float) -> list:
+async def _nearby_cities(coll, box: dict, lat: float, lng: float, radius_km: float) -> tuple:
     """Miejscowości „w promieniu”: nazwy `city` ofert z GPS w bounding-boxie, zawężone do realnego koła (haversine po medianie
-    współrzędnych każdej miejscowości). Cache 24 h w geo_cache (klucz: środek zaokrąglony do 0.01° + promień)."""
-    key = f"near3:{lat:.2f}:{lng:.2f}:{radius_km:g}"
+    współrzędnych każdej miejscowości). Zwraca (miejscowości, województwa ofert z GPS w boxie). Cache 24 h w geo_cache
+    (klucz: środek zaokrąglony do 0.01° + promień). Oferty z GPS „przybliżonym” (geo_approx — środek miejscowości z Nominatim)
+    nie są dowodem położenia miejscowości (14.11: „Dobra”/„Mierzyn” zgeokodowane na inną Dobrą w tym samym województwie)."""
+    key = f"near4:{lat:.2f}:{lng:.2f}:{radius_km:g}"
     db = database()
     cached = await db.geo_cache.find_one({"_id": key})
     if cached and isinstance(cached.get("cities"), list) and cached.get("at") and (datetime.now(timezone.utc) - cached["at"].replace(tzinfo=timezone.utc)).total_seconds() < 86400:
-        return cached["cities"]
-    pipeline = [{"$match": {**box, "city": {"$type": "string", "$ne": ""}, "is_stale": {"$ne": True}}},
-                {"$group": {"_id": "$city", "n": {"$sum": 1}, "lat": {"$avg": "$lat"}, "lng": {"$avg": "$lng"}}},
+        return cached["cities"], cached.get("regions") or []
+    pipeline = [{"$match": {**box, "city": {"$type": "string", "$ne": ""}, "is_stale": {"$ne": True}, "geo_approx": {"$ne": True}}},
+                {"$group": {"_id": "$city", "n": {"$sum": 1}, "lat": {"$avg": "$lat"}, "lng": {"$avg": "$lng"}, "regions": {"$addToSet": "$region"}}},
                 {"$limit": 400}]
     cities = []
+    regions: set = set()
     def _km(a_lat, a_lng):
         return 2 * 6371 * math.asin(math.sqrt(math.sin(math.radians(a_lat - lat) / 2) ** 2 + math.cos(math.radians(lat)) * math.cos(math.radians(a_lat)) * math.sin(math.radians(a_lng - lng) / 2) ** 2))
     try:
@@ -2411,7 +2414,7 @@ async def _nearby_cities(coll, box: dict, lat: float, lng: float, radius_km: flo
         # z gmin wokół Szczecina w promieniu 20 km (Dobra 121, Mierzyn 63, Goleniów 48 ofert).
         totals: dict = {}
         if names:
-            async for r in coll.aggregate([{"$match": {"city": {"$in": names}, "lat": {"$type": "number"}, "lng": {"$type": "number"}}},
+            async for r in coll.aggregate([{"$match": {"city": {"$in": names}, "lat": {"$type": "number"}, "lng": {"$type": "number"}, "geo_approx": {"$ne": True}}},
                                            {"$group": {"_id": "$city", "n": {"$sum": 1}}}]):
                 totals[r["_id"]] = r["n"]
         for name in names:
@@ -2427,11 +2430,12 @@ async def _nearby_cities(coll, box: dict, lat: float, lng: float, radius_km: flo
                 c_lat, c_lng = r["lat"], r["lng"]
             if _km(c_lat, c_lng) <= radius_km * 1.15:
                 cities.append(name)
+                regions.update(x for x in (in_box[name].get("regions") or []) if isinstance(x, str) and x)
     except Exception as e:
         logger.warning("nearby_cities: %s", e)
-        return []
-    await db.geo_cache.update_one({"_id": key}, {"$set": {"cities": cities, "at": datetime.now(timezone.utc)}}, upsert=True)
-    return cities
+        return [], []
+    await db.geo_cache.update_one({"_id": key}, {"$set": {"cities": cities, "regions": sorted(regions), "at": datetime.now(timezone.utc)}}, upsert=True)
+    return cities, sorted(regions)
 
 
 @app.get("/api/listings-scraped")
@@ -2515,10 +2519,16 @@ async def listings_scraped_endpoint(
             # miejscowości bez GPS → promień 20 km dawał MNIEJ wyników niż samo miasto. Dlatego:
             #  (a) oferty z GPS w boxie  LUB  (b) oferty z miejscowości, które mają w boxie jakiekolwiek oferty z GPS
             #  LUB (c) oferty z wpisanego miasta (city/district/title) — tak jak bez promienia.
-            nearby_cities = await _nearby_cities(coll, box, float(lat), float(lng), float(radius_km))
+            nearby_cities, box_regions = await _nearby_cities(coll, box, float(lat), float(lng), float(radius_km))
             geo_or = [box]
             if nearby_cities:
-                geo_or.append({"city": {"$in": nearby_cities}})
+                # Po NAZWIE miejscowości tylko oferty bez własnego GPS (lub z GPS przybliżonym z geokodowania). Oferta z prawdziwym GPS
+                # poza boxem to inna miejscowość o tej samej nazwie (14.11: OLX „Dobra” 664 km od Szczecina w promieniu 20 km).
+                by_name = {"city": {"$in": nearby_cities},
+                           "$and": [{"$or": [{"lat": {"$not": {"$type": "number"}}}, {"geo_approx": True}]}]}
+                if box_regions:   # znane województwo musi zgadzać się z województwem okolicy („Przecław, lubuskie” ≠ Przecław pod Szczecinem)
+                    by_name["$and"].append({"$or": [{"region": {"$exists": False}}, {"region": None}, {"region": {"$in": box_regions}}]})
+                geo_or.append(by_name)
             if city:
                 city_re_geo = {"$regex": _word_bounded(_build_diacritic_regex(city.strip()))}
                 geo_or += [{"city": city_re_geo}, {"district": city_re_geo}, {"title": city_re_geo}]

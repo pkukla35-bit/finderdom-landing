@@ -18,7 +18,7 @@ Co robi:
 
 Użycie: python scripts/refresh_olx_images.py [--limit 1500] [--delay 0.8] [--dry-run]
 """
-import argparse, logging, os, sys, time
+import argparse, json, logging, os, re, sys, time
 from datetime import datetime, timezone, timedelta
 
 from pymongo import MongoClient
@@ -43,14 +43,61 @@ def head_ok(url: str) -> bool:
         return False
 
 
-def fetch_ad(ext_id: str):
-    """→ ('active', data) | ('gone', None) | ('blocked', None) | ('error', None)"""
+def _find_ad_in_state(node, ext_id: str):
+    """Obiekt ogłoszenia w __PRERENDERED_STATE__ strony oferty: dict z 'photos' i id == ext_id (albo jedyny z 'photos')."""
+    if isinstance(node, dict):
+        if isinstance(node.get("photos"), list) and str(node.get("id") or "") == str(ext_id):
+            return node
+        for v in node.values():
+            r = _find_ad_in_state(v, ext_id)
+            if r is not None: return r
+    elif isinstance(node, list):
+        for v in node:
+            r = _find_ad_in_state(v, ext_id)
+            if r is not None: return r
+    return None
+
+
+def fetch_ad_html(ext_id: str, url: str):
+    """Fallback gdy API OLX blokuje (13.11: 403 od pierwszego zapytania z GitHub Actions → 23/78 281 sprawdzonych dziennie, 27% ofert OLX
+    ze zdjęciem 404). Strona oferty (ta sama ochrona co listy, które działają) ma pełne dane w window.__PRERENDERED_STATE__."""
+    if not url or "olx.pl" not in url: return "error", None
+    try:
+        r = S.get(url, headers={**HDR, "Accept": "text/html,*/*;q=0.8"}, timeout=30, allow_redirects=True)
+    except Exception as e:
+        log.warning("  html error %s: %s", ext_id, str(e)[:80]); return "error", None
+    if r.status_code in (404, 410): return "gone", None
+    if r.status_code in (403, 429): return "blocked", None
+    if r.status_code != 200: return "error", None
+    html = r.text
+    if len(html) < 20000: return "error", None
+    m = re.search(r'window\.__PRERENDERED_STATE__\s*=\s*(".*?");', html, re.S)
+    if not m:
+        # ogłoszenie zakończone: OLX pokazuje stronę bez stanu / z komunikatem
+        return ("gone", None) if re.search(r"nie jest ju[żz] dost[ęe]pne|og[łl]oszenie (?:zosta[łl]o )?zako[ńn]czone|nieaktywne", html, re.I) else ("error", None)
+    try:
+        state = json.loads(json.loads(m.group(1)))
+    except Exception:
+        return "error", None
+    ad = _find_ad_in_state(state, ext_id)
+    if ad is None:
+        return ("gone", None) if re.search(r"nie jest ju[żz] dost[ęe]pne|zako[ńn]czone|nieaktywne", html, re.I) else ("error", None)
+    if (ad.get("status") or "active") not in ("active", "new", "activated"): return "gone", None
+    if ad.get("isActive") is False: return "gone", None
+    return "active", ad
+
+
+def fetch_ad(ext_id: str, url: str = ""):
+    """→ ('active', data) | ('gone', None) | ('blocked', None) | ('error', None). API, a przy 403/429 strona HTML oferty."""
     try:
         r = S.get(f"https://www.olx.pl/api/v1/offers/{ext_id}/", headers=HDR, timeout=30)
     except Exception as e:
         log.warning("  api error %s: %s", ext_id, str(e)[:80]); return "error", None
     if r.status_code == 404: return "gone", None
-    if r.status_code in (403, 429): return "blocked", None
+    if r.status_code in (403, 429):
+        st, data = fetch_ad_html(ext_id, url)
+        if st != "error": return st, data
+        return "blocked", None
     if r.status_code != 200:
         log.warning("  api %s → HTTP %s", ext_id, r.status_code); return "error", None
     try:
@@ -111,7 +158,7 @@ def main():
     q = {"url": {"$regex": r"olx\.pl/"}, "is_stale": {"$ne": True},
          "$or": [{"olx_img_checked_at": {"$exists": False}}, {"olx_img_checked_at": {"$lt": since}},
                  {"olx_img_checked_at": {"$lt": since_dt}}]}
-    cur = coll.find(q, {"external_id": 1, "image": 1, "images": 1, "source": 1, "olx_img_checked_at": 1}) \
+    cur = coll.find(q, {"external_id": 1, "image": 1, "images": 1, "source": 1, "olx_img_checked_at": 1, "url": 1}) \
               .sort("olx_img_checked_at", 1).limit(a.limit)
     docs = list(cur)
     log.info("Do sprawdzenia: %d ofert OLX (limit %d, pozostałe w bazie: %d)", len(docs), a.limit, coll.count_documents(q))
@@ -127,7 +174,7 @@ def main():
             continue
         if not ext.isdigit():
             st["error"] += 1; continue
-        status, data = fetch_ad(ext)
+        status, data = fetch_ad(ext, d.get("url") or "")
         time.sleep(a.delay)
         if status == "blocked":
             blocked_streak += 1; st["blocked"] += 1

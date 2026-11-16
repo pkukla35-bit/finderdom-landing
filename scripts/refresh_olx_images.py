@@ -158,9 +158,13 @@ def main():
     q = {"url": {"$regex": r"olx\.pl/"}, "is_stale": {"$ne": True},
          "$or": [{"olx_img_checked_at": {"$exists": False}}, {"olx_img_checked_at": {"$lt": since}},
                  {"olx_img_checked_at": {"$lt": since_dt}}]}
+    try:
+        coll.create_index([("olx_img_checked_at", 1), ("added_at", -1)], name="olx_img_checked_added", background=True)
+    except Exception as e:
+        log.warning("create_index: %s", str(e)[:80])
     cur = coll.find(q, {"external_id": 1, "image": 1, "images": 1, "source": 1, "olx_img_checked_at": 1, "url": 1}) \
-              .sort([("olx_img_checked_at", 1), ("added_at", -1)]).limit(a.limit)   # najpierw nigdy niesprawdzane, od najnowszych (najczęściej oglądane)
-    docs = list(cur)
+              .sort([("olx_img_checked_at", 1), ("added_at", -1)]).limit(a.limit).allow_disk_use(True)   # najpierw nigdy niesprawdzane, od najnowszych
+    docs = list(cur)   # 16.11: limit 8000 → „Sort exceeded memory limit 32 MB” bez indeksu/allowDiskUse
     log.info("Do sprawdzenia: %d ofert OLX (limit %d, pozostałe w bazie: %d)", len(docs), a.limit, coll.count_documents(q))
     st = {"ok": 0, "refreshed": 0, "gone": 0, "error": 0, "blocked": 0}
     blocked_streak = 0

@@ -221,9 +221,11 @@ def parse_gratka(html): return parse_ldjson_offers(html, r"/ob/(\d+)")
 def parse_domiporta(html: str) -> List[Dict[str, Any]]:
     out = []
     for a in re.findall(r'<article class="sneakpeak[^"]*"(.*?)</article>', html, re.S):
-        mid = re.search(r'data-detail-id="(\d+)"', a)
-        href = re.search(r'href="(/nieruchomosci/[^"]+/\d+)"', a)
+        # 16.11: Kraków strona 1 = same inwestycje deweloperskie: data-detail-id="/DPRP/658224", href="/nowe/ogloszenie/…_658224"
+        mid = re.search(r'data-detail-id="(\d+|/DPRP/\d+)"', a)
+        href = re.search(r'href="(/nieruchomosci/[^"]+/\d+|/nowe/ogloszenie/[^"]+)"', a)
         if not mid or not href: continue
+        dprp = mid.group(1).startswith("/DPRP/")
         title = re.search(r'<h2 class="sneakpeak__title--bold">(.*?)</h2>', a, re.S)
         loc = re.search(r'<span class="sneakpeak__title--inblock">(.*?)</span>', a, re.S)
         price = re.search(r'<span class="sneakpeak__price_value">(.*?)</span>', a, re.S)
@@ -233,12 +235,15 @@ def parse_domiporta(html: str) -> List[Dict[str, Any]]:
         desc = re.search(r'<p class="sneakpeak__[a-z_]*"[^>]*>([^<]{5,})', a)
         loc_parts = [p.strip() for p in _txt(loc.group(1)).split(",")] if loc else []
         out.append({
-            "id": mid.group(1), "url": "https://www.domiporta.pl" + href.group(1), "title": _txt(title.group(1)) if title else "",
+            "id": ("dprp-" + mid.group(1).rsplit("/", 1)[1]) if dprp else mid.group(1), "url": "https://www.domiporta.pl" + href.group(1), "title": _txt(title.group(1)) if title else "",
             "price": _money(price.group(1)) if price else None, "area": _money(area.group(1)) if area else None,
             "rooms": _num(_txt(rooms.group(1))) if rooms else None, "floor": None, "image": img.group(1) if img else None,
-            "district": loc_parts[1] if len(loc_parts) > 1 else None, "street": loc_parts[2] if len(loc_parts) > 2 else None,
+            # „Kraków, Bronowice, Zgodna 34” → dzielnica + ulica; „Kraków, Zgodna 34” (numer) → tylko ulica
+            "district": loc_parts[1] if len(loc_parts) > 2 or (len(loc_parts) == 2 and not re.search(r"\d", loc_parts[1])) else None,
+            "street": loc_parts[-1] if (len(loc_parts) > 2 or (len(loc_parts) == 2 and re.search(r"\d", loc_parts[1]))) else None,
             "loc0": loc_parts[0] if loc_parts else None,
-            "desc": _txt(desc.group(1)) if desc else "", "seller": None,
+            "desc": _txt(desc.group(1)) if desc else "", "seller": "deweloper" if dprp else None,
+            **({"market": "pierwotny"} if dprp else {}),
         })
     return out
 

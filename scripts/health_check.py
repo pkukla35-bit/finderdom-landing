@@ -34,7 +34,7 @@ PORTALS = [
     ("Gratka", "gratka", "scrape-portals.yml",
      "https://gratka.pl/nieruchomosci/mieszkania/krakow", lambda h: h.count('"@type": "Offer"') or h.count('"@type":"Offer"')),
     ("Domiporta", "domiporta", "scrape-portals.yml",
-     "https://www.domiporta.pl/mieszkanie/sprzedam/malopolskie/krakow", lambda h: len(re.findall(r'data-detail-id="\d+"', h))),
+     "https://www.domiporta.pl/mieszkanie/sprzedam/malopolskie/krakow", lambda h: len(re.findall(r'data-detail-id="(?:\d+|/DPRP/\d+)"', h))),
     ("Adresowo", "adresowo", "scrape-portals.yml",
      "https://adresowo.pl/mieszkania/krakow/", lambda h: h.count("data-offer-card")),
     ("Gethome", "gethome", "scrape-portals.yml",

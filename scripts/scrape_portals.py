@@ -506,13 +506,139 @@ PORTALS["krn"] = {"url": url_krn, "parse": parse_krn}
 PORTALS["allegrolokalnie"] = {"url": url_allegrolokalnie, "parse": parse_allegrolokalnie}
 
 
+# ───────────────────────── sprzedajemy.pl + lento.pl (16.11.2026) ─────────────────────────
+def url_sprzedajemy(prop, trans, city, page):
+    """sprzedajemy.pl — 30/str., sort=inp_srt_date_d (od najnowszych), offset. Karty mają datę dodania i typ sprzedawcy (OSOBA/FIRMA)."""
+    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "grunty-i-dzialki", "lokal": "lokale-uzytkowe"}[prop]
+    loc = "" if city_slug(city) in ("polska", city.get("voi")) else f"/{city_slug(city)}"
+    return f"https://sprzedajemy.pl{loc}/nieruchomosci/{seg}/{trans}?sort=inp_srt_date_d" + (f"&offset={(page - 1) * 30}" if page > 1 else "")
+
+
+def _pl_dt_to_utc(s: str) -> Optional[str]:
+    """„2026-11-16 13:59:15” (czas PL) → ISO UTC."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.strptime(s.strip(), "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo("Europe/Warsaw")).astimezone(timezone.utc).isoformat()
+    except Exception:
+        return None
+
+
+def parse_sprzedajemy(html: str) -> List[Dict[str, Any]]:
+    out = []
+    html = re.sub(r"<svg.*?</svg>", "", html, flags=re.S)
+    for m in re.finditer(r'<li id="offer-(\d+)"[^>]*>\s*<article class="element[^"]*">(.*?)</article>', html, re.S):
+        oid, c = m.group(1), m.group(2)
+        link = re.search(r'<h2 class="title[^"]*">\s*<a href="([^"]+)"[^>]*>(.*?)</a>', c, re.S)
+        if not link: continue
+        href = htmllib.unescape(link.group(1))
+        price = re.search(r'class="price[^"]*">\s*([^<]*)<', c)
+        area = re.search(r'Pow\.:\s*</span>\s*([\d\s.,]+)\s*m', c)
+        seller = re.search(r'seller-type-info__label[^>]*>\s*(\w+)', c)
+        when = re.search(r'<time class="time" datetime="([^"]+)"', c)
+        city = re.search(r'<strong class="city">\s*(.*?)\s*</strong>', c, re.S)
+        img = re.search(r'<img src="(https://thumbs\.img-sprzedajemy\.pl/[^"]+)"', c)
+        pv = _money(price.group(1)) if price else None
+        out.append({
+            "id": oid, "url": "https://sprzedajemy.pl" + href if href.startswith("/") else href, "title": _txt(link.group(2)),
+            "price": pv if pv and pv >= 500 else None,   # „1 zł” = cena do uzgodnienia
+            "area": _money(area.group(1)) if area else None, "rooms": None, "floor": None,
+            "image": img.group(1).replace("/350x250c/", "/1000x901c/") if img else None, "district": None, "street": None,
+            "loc0": _txt(city.group(1)) if city else None, "desc": "",
+            "seller": "prywatna" if seller and seller.group(1).upper() == "OSOBA" else ("posrednik" if seller else None),
+            "posted_at": _pl_dt_to_utc(when.group(1)) if when else None,
+        })
+    return out
+
+
+def url_lento(prop, trans, city, page):
+    """lento.pl — tylko lista ogólnopolska (subdomeny miast odpowiadają 403 „nietypowe zachowanie”), ~40/str., od najnowszych."""
+    if city_slug(city) not in ("polska", city.get("voi")):
+        return None
+    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki-i-grunty", "lokal": "biura-i-lokale"}[prop]
+    t = "do-wynajecia" if trans == "wynajem" else "sprzedaz"
+    return f"https://www.lento.pl/nieruchomosci/{seg}/{t}.html" + (f"?page={page}" if page > 1 else "")
+
+
+_PL_MONTHS = {"sty": 1, "lut": 2, "mar": 3, "kwi": 4, "maj": 5, "cze": 6, "lip": 7, "sie": 8, "wrz": 9, "paź": 10, "paz": 10, "lis": 11, "gru": 12}
+
+
+def _lento_date(s: str) -> Optional[str]:
+    """„14 lis 10:29” (czas PL, rok bieżący; grudzień w styczniu → rok poprzedni) → ISO UTC."""
+    s = re.sub(r"\s+", " ", s.lower()).strip()
+    try:
+        from zoneinfo import ZoneInfo
+        from datetime import timedelta
+        now = datetime.now(ZoneInfo("Europe/Warsaw"))
+        hm = re.search(r"(\d{1,2}):(\d{2})", s)
+        if s.startswith("dzisiaj") or s.startswith("wczoraj"):
+            d = now - (timedelta(days=1) if s.startswith("wczoraj") else timedelta())
+            if hm: d = d.replace(hour=int(hm.group(1)), minute=int(hm.group(2)), second=0, microsecond=0)
+            return d.astimezone(timezone.utc).isoformat()
+        m = re.search(r"(\d{1,2}) ([a-ząźż]{3})(?: (\d{1,2}):(\d{2}))?", s)
+        if not m or m.group(2) not in _PL_MONTHS: return None
+        d = now.replace(month=_PL_MONTHS[m.group(2)], day=int(m.group(1)), hour=int(m.group(3) or 12), minute=int(m.group(4) or 0), second=0, microsecond=0)
+        if d > now: d = d.replace(year=d.year - 1)
+        return d.astimezone(timezone.utc).isoformat()
+    except Exception:
+        return None
+
+
+def parse_lento(html: str) -> List[Dict[str, Any]]:
+    out = []
+    html = re.sub(r"<svg.*?</svg>", "", html, flags=re.S)
+    for m in re.finditer(r'<div class="tablelist-tr[^"]*" data-id="(\d+)"[^>]*>(.*?)(?=<div class="tablelist-tr|<div class="tablelist-ads|<div class="pagination|</section>|$)', html, re.S):
+        oid, c = m.group(1), m.group(2)
+        link = re.search(r'<a href="([^"]+)" class="title-list-item">(.*?)</a>', c, re.S)
+        if not link: continue
+        city = re.search(r'licon-pin-f">([^<]*)<', c)
+        price = re.search(r'price-list-item">([^<]*)<', c)
+        when = re.search(r'<div class="data-list-item hidden-xs">(.*?)</div>', c, re.S)
+        img = re.search(r'<img[^>]*(?:src|data-src)="(https://st-lento\.pl/adpics/[^"]+)"', c)
+        if city and city.group(1).strip().lower().startswith("cała polska"): city = None
+        desc = re.search(r'<p class="hidden-xs[^"]*">(.*?)</p>', c, re.S)
+        params = [_txt(x) for x in re.findall(r'list-atrr-item-tab">(.*?)</span>', c, re.S)]
+        area = next((_money(p) for p in params if re.search(r"m\s*(2|²)|\bar\b|\bha\b", p)), None)
+        rooms = next((int(re.search(r"\d+", p).group(0)) for p in params if re.search(r"\d+\s*pok", p) and re.search(r"\d+", p)), None)
+        out.append({
+            "id": oid, "url": link.group(1), "title": _txt(re.sub(r"<span[^>]*>.*?</span>", "", link.group(2), flags=re.S)),
+            "price": _money(price.group(1)) if price else None, "area": area, "rooms": rooms, "floor": None,
+            "image": img.group(1).replace("/middle/", "/original/") if img else None, "district": None, "street": None,
+            "loc0": _txt(city.group(1)) if city else None, "desc": _txt(desc.group(1)) if desc else "",
+            "seller": "prywatna" if "bez pośredników" in c.lower() else "posrednik",
+            "posted_at": _lento_date(_txt(when.group(1))) if when else None,
+        })
+    return out
+
+
+PORTALS["sprzedajemy"] = {"url": url_sprzedajemy, "parse": parse_sprzedajemy}
+PORTALS["lento"] = {"url": url_lento, "parse": parse_lento}
+CFFI_PORTALS |= {"sprzedajemy", "lento"}
+NATIONAL_LIST_PORTALS |= {"sprzedajemy", "lento"}
+_CFFI_SESSION = None
+
+
+def _cffi_session():
+    """Jedna sesja (ciasteczka) — lento.pl blokuje „zimne” wejścia na listy bez wcześniejszej wizyty na stronie głównej."""
+    global _CFFI_SESSION
+    if _CFFI_SESSION is None and cffi_requests is not None:
+        _CFFI_SESSION = cffi_requests.Session(impersonate="chrome")
+        try:
+            _CFFI_SESSION.get("https://www.lento.pl/", timeout=30); time.sleep(2)
+        except Exception as e:
+            log.warning("  lento warm-up: %s", str(e)[:80])
+    return _CFFI_SESSION
+
+
 def fetch_cffi(url: str) -> Optional[str]:
     """Pobranie z odciskiem TLS/HTTP2 Chrome (Cloudflare przed okolica/krn). krn.pl zrywa co kilka połączeń → ponawiamy z pauzą."""
     if cffi_requests is None:
         log.error("curl_cffi niezainstalowane"); return None
     for i in range(4):
         try:
-            r = cffi_requests.get(url, impersonate="chrome", timeout=40, headers={"Accept-Language": "pl-PL,pl;q=0.9"})
+            if "lento.pl" in url:
+                r = _cffi_session().get(url, timeout=40, headers={"Accept-Language": "pl-PL,pl;q=0.9", "Referer": "https://www.lento.pl/"})
+            else:
+                r = cffi_requests.get(url, impersonate="chrome", timeout=40, headers={"Accept-Language": "pl-PL,pl;q=0.9"})
             if r.status_code == 200 and len(r.text) > 3000: return r.text
             if r.status_code == 404: return None
             log.warning("  HTTP %s — pauza %ds", r.status_code, 10 * (i + 1)); time.sleep(10 * (i + 1))
@@ -522,7 +648,7 @@ def fetch_cffi(url: str) -> Optional[str]:
 
 
 def fetch(url: str) -> Optional[str]:
-    if any(h in url for h in ("okolica.pl", "krn.pl", "allegrolokalnie.pl")):
+    if any(h in url for h in ("okolica.pl", "krn.pl", "allegrolokalnie.pl", "sprzedajemy.pl", "lento.pl")):
         return fetch_cffi(url)
     for _ in range(3):
         try:
@@ -564,7 +690,7 @@ def guess_city(portal: str, it: Dict[str, Any]) -> Optional[str]:
         return toks[0] if toks and toks[0] else None
     elif portal == "listaprzetargow":
         return (it.get("loc0") or "").strip() or None   # „Radom, Południe” → Radom
-    elif portal in ("okolica", "krn", "allegrolokalnie"):
+    elif portal in ("okolica", "krn", "allegrolokalnie", "sprzedajemy", "lento"):
         t = (it.get("loc0") or "").strip()              # okolica: „Szczecin, Dąbie, ul. X”; krn: addressLocality; allegro: <address>
         return (t.title() if t.islower() else t) or None
     return None
@@ -645,7 +771,7 @@ def main():
     if a.regions and not a.city: cities = [{"name": "Polska", "slug": "polska", "voi": "polska"}] if a.portal in NATIONAL_LIST_PORTALS else REGIONS
     if a.portal == "odwlasciciela": a.max_pages = max(a.max_pages, 3)   # mały portal — 20 ofert/strona
     if a.portal == "listaprzetargow": a.max_pages = max(a.max_pages, 4)  # lista ogólnopolska, 25/str. — 4 strony = ~100 najnowszych
-    if a.portal in ("okolica", "krn"): a.max_pages = max(a.max_pages, 4)   # listy ogólnopolskie 25–40/str.
+    if a.portal in ("okolica", "krn", "sprzedajemy", "lento"): a.max_pages = max(a.max_pages, 4)   # listy ogólnopolskie 25–40/str.
     if a.portal == "allegrolokalnie": a.max_pages = max(a.max_pages, 6)    # 60/str., ale ~90% kart to syndykacja z Gratki (pomijana)
     if a.portal in CFFI_PORTALS: a.delay = max(a.delay, 2.5)                # krn.pl zrywa połączenia przy szybkich zapytaniach
     if not cities: log.error("Unknown city"); sys.exit(1)
@@ -723,8 +849,8 @@ def _verify_adresowo_sellers(coll, prop: str, trans: str) -> None:
 #    na tokenie GitHub), więc lokal (sprzedaż + wynajem) jedzie w tym samym zadaniu co działki. 2.11.2026
 CHAIN_AFTER = {"dzialka": [("lokal", "sprzedaz"), ("lokal", "wynajem")]}
 # Nowe portale (5.11.2026) jadą w zadaniach istniejących portali (ta sama property/transaction):
-PORTAL_CHAIN = {"adresowo": ["odwlasciciela", "allegrolokalnie"], "domiporta": ["gethome", "krn"], "gratka": ["listaprzetargow"],
-                "morizon": ["okolica"]}   # listaprzetargow (5.11): przetargi i licytacje, badge 🔨; okolica/krn/allegrolokalnie (16.11)
+PORTAL_CHAIN = {"adresowo": ["odwlasciciela", "allegrolokalnie"], "domiporta": ["gethome", "krn"], "gratka": ["listaprzetargow", "sprzedajemy"],
+                "morizon": ["okolica", "lento"]}   # listaprzetargow (5.11): przetargi i licytacje, badge 🔨; okolica/krn/allegrolokalnie (16.11)
 
 
 def _run_portal_chain(argv0: List[str]) -> None:

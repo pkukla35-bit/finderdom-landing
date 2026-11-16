@@ -50,7 +50,7 @@ def _num_or_zero(v) -> float:
 
 _PORTAL_NAMES = {"otodom": "Otodom", "olx": "OLX", "nol": "Nieruchomosci-online", "nieruchomosci-online": "Nieruchomosci-online", "morizon": "Morizon",
                  "gratka": "Gratka", "domiporta": "Domiporta", "adresowo": "Adresowo", "gethome": "Gethome", "odwlasciciela": "OdWłaściciela",
-                 "listaprzetargow": "ListaPrzetargow", "apify": "Otodom", "okolica": "Okolica", "krn": "KRN", "allegrolokalnie": "Allegro Lokalnie"}
+                 "listaprzetargow": "ListaPrzetargow", "apify": "Otodom", "okolica": "Okolica", "krn": "KRN", "allegrolokalnie": "Allegro Lokalnie", "sprzedajemy": "Sprzedajemy", "lento": "Lento"}
 
 
 def _portal_name(key: str) -> str:

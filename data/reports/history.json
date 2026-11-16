@@ -31,6 +31,14 @@
    "new_week": 2105,
    "median_price": 839990,
    "slug": "warszawa-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 17188,
+   "n": 14268,
+   "new_week": 5159,
+   "median_price": 840000,
+   "slug": "warszawa-mieszkanie-tydzien-46-2026"
   }
  ],
  "warszawa-dom": [
@@ -65,6 +73,14 @@
    "new_week": 226,
    "median_price": 2265000,
    "slug": "warszawa-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 11607,
+   "n": 1996,
+   "new_week": 464,
+   "median_price": 2200000,
+   "slug": "warszawa-dom-tydzien-46-2026"
   }
  ],
  "krakow-mieszkanie": [
@@ -99,6 +115,14 @@
    "new_week": 1392,
    "median_price": 783580,
    "slug": "krakow-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 15640,
+   "n": 9215,
+   "new_week": 2442,
+   "median_price": 779000,
+   "slug": "krakow-mieszkanie-tydzien-46-2026"
   }
  ],
  "krakow-dom": [
@@ -133,6 +157,14 @@
    "new_week": 77,
    "median_price": 1950000,
    "slug": "krakow-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 11230,
+   "n": 1433,
+   "new_week": 317,
+   "median_price": 1880000,
+   "slug": "krakow-dom-tydzien-46-2026"
   }
  ],
  "wroclaw-mieszkanie": [
@@ -167,6 +199,14 @@
    "new_week": 1043,
    "median_price": 688000,
    "slug": "wroclaw-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 13627,
+   "n": 8638,
+   "new_week": 2105,
+   "median_price": 689000,
+   "slug": "wroclaw-mieszkanie-tydzien-46-2026"
   }
  ],
  "wroclaw-dom": [
@@ -201,6 +241,14 @@
    "new_week": 79,
    "median_price": 1599000,
    "slug": "wroclaw-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 10312,
+   "n": 1094,
+   "new_week": 213,
+   "median_price": 1570000,
+   "slug": "wroclaw-dom-tydzien-46-2026"
   }
  ],
  "gdansk-mieszkanie": [
@@ -235,6 +283,14 @@
    "new_week": 1433,
    "median_price": 715000,
    "slug": "gdansk-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 14802,
+   "n": 9438,
+   "new_week": 2652,
+   "median_price": 719000,
+   "slug": "gdansk-mieszkanie-tydzien-46-2026"
   }
  ],
  "gdansk-dom": [
@@ -269,6 +325,14 @@
    "new_week": 79,
    "median_price": 1899000,
    "slug": "gdansk-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 10278,
+   "n": 1198,
+   "new_week": 245,
+   "median_price": 1924500,
+   "slug": "gdansk-dom-tydzien-46-2026"
   }
  ],
  "poznan-mieszkanie": [
@@ -303,6 +367,14 @@
    "new_week": 408,
    "median_price": 605102,
    "slug": "poznan-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 12633,
+   "n": 4957,
+   "new_week": 1120,
+   "median_price": 606620,
+   "slug": "poznan-mieszkanie-tydzien-46-2026"
   }
  ],
  "poznan-dom": [
@@ -337,6 +409,14 @@
    "new_week": 40,
    "median_price": 1399000,
    "slug": "poznan-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 8282,
+   "n": 874,
+   "new_week": 97,
+   "median_price": 1350000,
+   "slug": "poznan-dom-tydzien-46-2026"
   }
  ],
  "lodz-mieszkanie": [
@@ -371,6 +451,14 @@
    "new_week": 599,
    "median_price": 439000,
    "slug": "lodz-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 9500,
+   "n": 5828,
+   "new_week": 1610,
+   "median_price": 439000,
+   "slug": "lodz-mieszkanie-tydzien-46-2026"
   }
  ],
  "lodz-dom": [
@@ -405,6 +493,14 @@
    "new_week": 29,
    "median_price": 1059000,
    "slug": "lodz-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 7468,
+   "n": 727,
+   "new_week": 202,
+   "median_price": 1050000,
+   "slug": "lodz-dom-tydzien-46-2026"
   }
  ],
  "bydgoszcz-mieszkanie": [
@@ -439,6 +535,14 @@
    "new_week": 210,
    "median_price": 482295,
    "slug": "bydgoszcz-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 10490,
+   "n": 3893,
+   "new_week": 1203,
+   "median_price": 501892,
+   "slug": "bydgoszcz-mieszkanie-tydzien-46-2026"
   }
  ],
  "bydgoszcz-dom": [
@@ -473,6 +577,14 @@
    "new_week": 14,
    "median_price": 1180000,
    "slug": "bydgoszcz-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 6750,
+   "n": 444,
+   "new_week": 176,
+   "median_price": 1183000,
+   "slug": "bydgoszcz-dom-tydzien-46-2026"
   }
  ],
  "kielce-mieszkanie": [
@@ -507,6 +619,14 @@
    "new_week": 278,
    "median_price": 449000,
    "slug": "kielce-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 9408,
+   "n": 2685,
+   "new_week": 329,
+   "median_price": 449000,
+   "slug": "kielce-mieszkanie-tydzien-46-2026"
   }
  ],
  "kielce-dom": [
@@ -541,6 +661,14 @@
    "new_week": 18,
    "median_price": 1135000,
    "slug": "kielce-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 6053,
+   "n": 319,
+   "new_week": 39,
+   "median_price": 1025000,
+   "slug": "kielce-dom-tydzien-46-2026"
   }
  ],
  "bialystok-mieszkanie": [
@@ -575,6 +703,14 @@
    "new_week": 321,
    "median_price": 519000,
    "slug": "bialystok-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 10150,
+   "n": 2945,
+   "new_week": 441,
+   "median_price": 519999,
+   "slug": "bialystok-mieszkanie-tydzien-46-2026"
   }
  ],
  "bialystok-dom": [
@@ -609,6 +745,14 @@
    "new_week": 53,
    "median_price": 929000,
    "slug": "bialystok-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 7426,
+   "n": 563,
+   "new_week": 122,
+   "median_price": 949000,
+   "slug": "bialystok-dom-tydzien-46-2026"
   }
  ],
  "lublin-mieszkanie": [
@@ -643,6 +787,14 @@
    "new_week": 371,
    "median_price": 540000,
    "slug": "lublin-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 10430,
+   "n": 3879,
+   "new_week": 453,
+   "median_price": 544891,
+   "slug": "lublin-mieszkanie-tydzien-46-2026"
   }
  ],
  "lublin-dom": [
@@ -677,6 +829,14 @@
    "new_week": 43,
    "median_price": 1300000,
    "slug": "lublin-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 7758,
+   "n": 542,
+   "new_week": 102,
+   "median_price": 1275000,
+   "slug": "lublin-dom-tydzien-46-2026"
   }
  ],
  "rzeszow-mieszkanie": [
@@ -711,6 +871,14 @@
    "new_week": 437,
    "median_price": 559000,
    "slug": "rzeszow-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 10253,
+   "n": 4071,
+   "new_week": 647,
+   "median_price": 549000,
+   "slug": "rzeszow-mieszkanie-tydzien-46-2026"
   }
  ],
  "rzeszow-dom": [
@@ -745,6 +913,14 @@
    "new_week": 58,
    "median_price": 849500,
    "slug": "rzeszow-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 7850,
+   "n": 885,
+   "new_week": 133,
+   "median_price": 839000,
+   "slug": "rzeszow-dom-tydzien-46-2026"
   }
  ],
  "katowice-mieszkanie": [
@@ -779,6 +955,14 @@
    "new_week": 515,
    "median_price": 522500,
    "slug": "katowice-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 10900,
+   "n": 3958,
+   "new_week": 1386,
+   "median_price": 530000,
+   "slug": "katowice-mieszkanie-tydzien-46-2026"
   }
  ],
  "gorzow-wielkopolski-mieszkanie": [
@@ -815,6 +999,14 @@
    "new_week": 75,
    "median_price": 504500,
    "slug": "olsztyn-mieszkanie-tydzien-43-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 9983,
+   "n": 1179,
+   "new_week": 279,
+   "median_price": 527000,
+   "slug": "olsztyn-mieszkanie-tydzien-46-2026"
   }
  ],
  "olsztyn-dom": [
@@ -833,6 +1025,14 @@
    "new_week": 16,
    "median_price": 1200000,
    "slug": "olsztyn-dom-tydzien-43-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 7250,
+   "n": 214,
+   "new_week": 32,
+   "median_price": 1090000,
+   "slug": "olsztyn-dom-tydzien-46-2026"
   }
  ],
  "zielona-gora-mieszkanie": [
@@ -895,6 +1095,14 @@
    "new_week": 219,
    "median_price": 569000,
    "slug": "szczecin-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 10760,
+   "n": 2126,
+   "new_week": 606,
+   "median_price": 589000,
+   "slug": "szczecin-mieszkanie-tydzien-46-2026"
   }
  ],
  "szczecin-dom": [
@@ -921,6 +1129,14 @@
    "new_week": 25,
    "median_price": 1350000,
    "slug": "szczecin-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 7778,
+   "n": 514,
+   "new_week": 246,
+   "median_price": 1349500,
+   "slug": "szczecin-dom-tydzien-46-2026"
   }
  ],
  "gdynia-mieszkanie": [
@@ -947,6 +1163,14 @@
    "new_week": 437,
    "median_price": 729000,
    "slug": "gdynia-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 13224,
+   "n": 2320,
+   "new_week": 579,
+   "median_price": 717990,
+   "slug": "gdynia-mieszkanie-tydzien-46-2026"
   }
  ],
  "gdynia-dom": [
@@ -973,6 +1197,14 @@
    "new_week": 57,
    "median_price": 1849000,
    "slug": "gdynia-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 9458,
+   "n": 642,
+   "new_week": 145,
+   "median_price": 1999500,
+   "slug": "gdynia-dom-tydzien-46-2026"
   }
  ],
  "opole-mieszkanie": [
@@ -999,6 +1231,14 @@
    "new_week": 171,
    "median_price": 579000,
    "slug": "opole-mieszkanie-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 10364,
+   "n": 1311,
+   "new_week": 123,
+   "median_price": 579000,
+   "slug": "opole-mieszkanie-tydzien-46-2026"
   }
  ],
  "opole-dom": [
@@ -1025,6 +1265,14 @@
    "new_week": 40,
    "median_price": 1049000,
    "slug": "opole-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 8233,
+   "n": 472,
+   "new_week": 111,
+   "median_price": 1054500,
+   "slug": "opole-dom-tydzien-46-2026"
   }
  ],
  "koszalin-mieszkanie": [
@@ -1087,6 +1335,14 @@
    "new_week": 47,
    "median_price": 1249000,
    "slug": "katowice-dom-tydzien-45-2026"
+  },
+  {
+   "week": "46/2026",
+   "median_ppm2": 8159,
+   "n": 330,
+   "new_week": 54,
+   "median_price": 1250000,
+   "slug": "katowice-dom-tydzien-46-2026"
   }
  ],
  "mazowieckie-mieszkanie": [
@@ -1327,6 +1583,86 @@
    "new_week": 267,
    "median_price": 839000,
    "slug": "wielkopolskie-dom-tydzien-44-2026"
+  }
+ ],
+ "czestochowa-mieszkanie": [
+  {
+   "week": "46/2026",
+   "median_ppm2": 7091,
+   "n": 1638,
+   "new_week": 803,
+   "median_price": 350000,
+   "slug": "czestochowa-mieszkanie-tydzien-46-2026"
+  }
+ ],
+ "czestochowa-dom": [
+  {
+   "week": "46/2026",
+   "median_ppm2": 5555,
+   "n": 465,
+   "new_week": 65,
+   "median_price": 810000,
+   "slug": "czestochowa-dom-tydzien-46-2026"
+  }
+ ],
+ "torun-mieszkanie": [
+  {
+   "week": "46/2026",
+   "median_ppm2": 10375,
+   "n": 1376,
+   "new_week": 438,
+   "median_price": 499000,
+   "slug": "torun-mieszkanie-tydzien-46-2026"
+  }
+ ],
+ "torun-dom": [
+  {
+   "week": "46/2026",
+   "median_ppm2": 7196,
+   "n": 132,
+   "new_week": 57,
+   "median_price": 1450000,
+   "slug": "torun-dom-tydzien-46-2026"
+  }
+ ],
+ "gliwice-mieszkanie": [
+  {
+   "week": "46/2026",
+   "median_ppm2": 8576,
+   "n": 1358,
+   "new_week": 425,
+   "median_price": 431100,
+   "slug": "gliwice-mieszkanie-tydzien-46-2026"
+  }
+ ],
+ "gliwice-dom": [
+  {
+   "week": "46/2026",
+   "median_ppm2": 7616,
+   "n": 178,
+   "new_week": 30,
+   "median_price": 1234500,
+   "slug": "gliwice-dom-tydzien-46-2026"
+  }
+ ],
+ "sosnowiec-mieszkanie": [
+  {
+   "week": "46/2026",
+   "median_ppm2": 6968,
+   "n": 1039,
+   "new_week": 393,
+   "median_price": 339000,
+   "slug": "sosnowiec-mieszkanie-tydzien-46-2026"
+  }
+ ],
+ "sosnowiec-dom": [
+  {
+   "week": "46/2026",
+   "median_ppm2": 5200,
+   "n": 107,
+   "new_week": 23,
+   "median_price": 769000,
+   "slug": "sosnowiec-dom-tydzien-46-2026"
   }
  ]
 }

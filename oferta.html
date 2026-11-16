@@ -981,7 +981,7 @@ function normalizeScrapedListing(raw) {
   for (let i = 0; i < raw.external_id.length; i++) h = (h * 31 + raw.external_id.charCodeAt(i)) & 0xffff;
   const imgClass = IMG_CLASSES_OFF[h % IMG_CLASSES_OFF.length];
   return {
-    id, source: 'otodom', source_url: raw.url, url: raw.url,
+    id, source: 'otodom', source_url: raw.url, url: raw.url, external_id: raw.external_id,
     type: baseType, title: raw.title || 'Oferta',
     location: '📍 ' + locStr, city, district,
     price, price_display: fmtPlnOff(price),
@@ -1421,6 +1421,8 @@ async function renderOffer(l, all) {
   }
   window.__galImgs = galleryImgs;
   window.__galIdx = 0;
+  // OLX rotuje ID zdjęć na CDN → przy 404 pytamy /api/olx-photo/<id> o świeże (zapisuje też do bazy)
+  window.__galOlxId = (/olx\.pl\//.test(l.source_url || l.url || '') && (l.external_id || String(l.id || '').replace(/^olx-/, ''))) ? String(l.external_id || String(l.id).replace(/^olx-/, '')).replace(/[^0-9]/g, '') : '';
   const galPhoto = el('galleryPhoto');
   const galEmoji = el('galleryEmoji');
   const galPrev = el('galPrev');
@@ -1459,7 +1461,12 @@ async function renderOffer(l, all) {
     galPhoto.onerror = () => {
       // Bezpośredni CDN (np. OLX) zablokowany u klienta? → ten sam obraz przez nasz serwer, zanim uznamy go za zepsuty
       const curSrc = galPhoto.getAttribute('src') || '';
-      if (/^https?:\/\//.test(curSrc) && !curSrc.includes('/api/img?') && !curSrc.includes('wsrv.nl') && galPhoto.dataset.proxied !== curSrc) {
+      if (curSrc.includes('olxcdn') && window.__galOlxId && galPhoto.dataset.olxFresh !== String(window.__galIdx)) {
+        galPhoto.dataset.olxFresh = String(window.__galIdx);
+        galPhoto.src = '/api/olx-photo/' + window.__galOlxId + '?i=' + window.__galIdx;
+        return;
+      }
+      if (/^https?:\/\//.test(curSrc) && !curSrc.includes('/api/img?') && !curSrc.includes('wsrv.nl') && !curSrc.includes('/api/olx-photo/') && galPhoto.dataset.proxied !== curSrc) {
         galPhoto.dataset.proxied = curSrc;
         galPhoto.src = '/api/img?u=' + encodeURIComponent(curSrc);
         return;

@@ -1684,12 +1684,49 @@ async def _olx_offer_state(doc: dict, client: httpx.AsyncClient) -> tuple[str, O
     return "active", photos
 
 
+_OLX_PHOTO_SVG = ('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480"><rect width="100%" height="100%" fill="#1f2a44"/>'
+                  '<text x="50%" y="50%" fill="#9fb3d9" font-family="sans-serif" font-size="22" text-anchor="middle">zdjęcie dostępne na OLX</text></svg>')
+
+
+@app.get("/api/olx-photo/{ext_id}")
+async def olx_photo(ext_id: str, i: int = 0):
+    """Świeże zdjęcie oferty OLX (OLX rotuje ID plików na CDN — zapisane linki po kilku dniach zwracają 404, choć ogłoszenie żyje;
+    job refresh-olx-images sprawdza 3–8 tys./dzień przy ~75 tys. ofert, więc nie nadąża). Wołane przez onerror obrazka na karcie
+    / w galerii: pytamy API OLX, zapisujemy nowe zdjęcia do bazy i przekierowujemy na aktualny link (lub placeholder SVG)."""
+    ext = "".join(ch for ch in ext_id if ch.isdigit())
+    if not ext:
+        raise HTTPException(400, "bad id")
+    coll = database().listings
+    doc = await coll.find_one({"source": {"$in": ["olx", "apify"]}, "url": {"$regex": r"olx\.pl/"}, "external_id": {"$in": [ext, int(ext)]}},
+                              {"external_id": 1, "url": 1, "images": 1, "image": 1, "is_stale": 1, "stale_reason": 1, "olx_images_refreshed_at": 1})
+    if not doc:
+        doc = await coll.find_one({"url": {"$regex": rf"olx\.pl/.*ID{ext}\b"}}, {"external_id": 1, "url": 1, "images": 1, "image": 1, "is_stale": 1, "stale_reason": 1, "olx_images_refreshed_at": 1})
+    if not doc:
+        raise HTTPException(404, "listing not found")
+    now = datetime.now(timezone.utc)
+    photos: Optional[list] = None
+    refreshed_at = doc.get("olx_images_refreshed_at")
+    if isinstance(refreshed_at, datetime) and (now - refreshed_at.replace(tzinfo=timezone.utc)).total_seconds() < 600:
+        photos = doc.get("images") or []   # odświeżone przed chwilą (inny użytkownik / kolejne zdjęcie z tej samej karty)
+    else:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as client:
+            state, photos = await _olx_offer_state({**doc, "external_id": ext}, client)
+        await _olx_apply_state(coll, doc, state, photos, now)
+        if state != "active":
+            photos = None
+    headers = {"Cache-Control": "private, no-store"}
+    if photos:
+        return RedirectResponse(photos[i] if 0 <= i < len(photos) else photos[0], status_code=302, headers=headers)
+    return Response(content=_OLX_PHOTO_SVG, media_type="image/svg+xml", headers=headers)
+
+
 async def _olx_apply_state(coll, doc: dict, state: str, photos: Optional[list], now: datetime) -> None:
     """Zapis wyniku sprawdzenia OLX: active → odśwież zdjęcia i zdejmij ewentualne is_stale (olx_image_404); gone → is_stale."""
     if state == "active":
         upd = {"$set": {"olx_img_checked_at": now, "last_checked_at": now}}
         if photos and photos != (doc.get("images") or []):
             upd["$set"]["images"] = photos
+            upd["$set"]["image"] = photos[0]   # karta w wyszukiwarce czyta `image` — bez tego zostawał martwy link
             upd["$set"]["olx_images_refreshed_at"] = now
         if doc.get("is_stale") and doc.get("stale_reason") in ("olx_image_404", "olx_api_gone"):
             upd["$set"]["is_stale"] = False
@@ -5129,7 +5166,7 @@ async def _trigger_city_sweeps_if_due(force: bool = False) -> dict:
     (workflow zajęty → kolejny tick). Otodom: scrape-otodom-regions.yml regions=0 (20 miast, 3 strony) — jeden run."""
     out = {"otodom": await _dispatch_daily("city_sweep_otodom", "scrape-otodom-regions.yml", 10, force, {"max_pages": "3", "regions": "0"}),
            # zdjęcia OLX: druga tura dziennie (≥15 PL, limit 3000) — zaległość 82k ofert po tygodniach blokady API (fallback HTML od 14.11)
-           "olx_images": await _dispatch_daily("olx_img_refresh_pm", "refresh-olx-images.yml", 15, force, {"limit": "3000"}),
+           "olx_images": await _dispatch_daily("olx_img_refresh_pm", "refresh-olx-images.yml", 15, force, {"limit": "8000"}),
            # backfill (pokoje/rok/przeznaczenie z opisu + geokodowanie miejscowości bez GPS z powiatem, 600 zapytań Nominatim/dzień)
            "backfill": await _dispatch_daily("backfill_subtypes", "backfill-market-type.yml", 12, force, {"apply": "true", "type": ""})}
     for slug in BIURA_CITIES:

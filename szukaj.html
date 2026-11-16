@@ -2014,7 +2014,7 @@ function renderPage() {
     const hasPhoto = _dedup.length > 0;
     const imgList = _dedup.slice(0, 15);  // max 15 zdjec per karta
     const photoHtml = hasPhoto
-      ? `<img class="photo" data-imgs='${JSON.stringify(imgList).replace(/'/g, "&#39;")}' data-og='${(ogFallback || '').replace(/'/g, "&#39;")}' data-idx="0" src="${imgList[0]}" alt="" loading="${idx < 6 ? 'eager' : 'lazy'}"${idx < 3 ? ' fetchpriority="high"' : ''} decoding="async" onerror="window.__cardImgFallback(this)">`
+      ? `<img class="photo" data-imgs='${JSON.stringify(imgList).replace(/'/g, "&#39;")}' data-og='${(ogFallback || '').replace(/'/g, "&#39;")}' data-olx="${(l.source === 'olx' && l.external_id) ? String(l.external_id).replace(/[^0-9]/g, '') : ''}" data-idx="0" src="${imgList[0]}" alt="" loading="${idx < 6 ? 'eager' : 'lazy'}"${idx < 3 ? ' fetchpriority="high"' : ''} decoding="async" onerror="window.__cardImgFallback(this)">`
       : '';
     const carouselHtml = (hasPhoto && imgList.length > 1) ? `
       <button class="card-img-nav prev" data-nav="prev" aria-label="Poprzednie zdjęcie" type="button">‹</button>
@@ -2081,7 +2081,14 @@ function renderPage() {
       try {
         // Bezpośredni CDN (np. OLX) zablokowany u klienta (adblock / ochrona przed śledzeniem)? → spróbuj przez nasz serwer
         const cur = img.getAttribute('src') || '';
-        if (/^https?:\/\//.test(cur) && !cur.includes('/api/img?') && !cur.includes('wsrv.nl') && !img.dataset.proxied) {
+        // OLX ROTUJE ID zdjęć na CDN (po kilku dniach stare linki → 404, choć ogłoszenie żyje). Zamiast proxy'ować martwy link,
+        // prosimy nasz serwer o świeże zdjęcie z API OLX (/api/olx-photo/<id> → 302 na aktualny link + zapis do bazy). Raz na kartę.
+        if (cur.includes('olxcdn') && img.dataset.olx && !img.dataset.olxFresh) {
+          img.dataset.olxFresh = '1';
+          img.src = '/api/olx-photo/' + img.dataset.olx + '?i=' + (parseInt(img.dataset.idx || '0', 10) || 0);
+          return;
+        }
+        if (/^https?:\/\//.test(cur) && !cur.includes('/api/img?') && !cur.includes('wsrv.nl') && !cur.includes('/api/olx-photo/') && !img.dataset.proxied) {
           img.dataset.proxied = '1';
           img.src = '/api/img?u=' + encodeURIComponent(cur);
           return;

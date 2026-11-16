@@ -164,14 +164,20 @@ def main():
     log.info("Do sprawdzenia: %d ofert OLX (limit %d, pozostałe w bazie: %d)", len(docs), a.limit, coll.count_documents(q))
     st = {"ok": 0, "refreshed": 0, "gone": 0, "error": 0, "blocked": 0}
     blocked_streak = 0
+    # 16.11: HEAD-y równolegle (10 wątków) — przy 75 tys. ofert OLX i ~40% martwych linków po 3+ dniach sekwencyjne 3000/dzień nie nadążało
+    from concurrent.futures import ThreadPoolExecutor
+    first_img = {d["_id"]: (d.get("image") or ((d.get("images") or [None])[0])) for d in docs}
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        alive = dict(zip([d["_id"] for d in docs], ex.map(lambda d: bool(first_img[d["_id"]]) and head_ok(first_img[d["_id"]]), docs)))
+    ok_ids = [k for k, v in alive.items() if v]
+    st["ok"] = len(ok_ids)
+    if ok_ids and not a.dry_run:
+        coll.update_many({"_id": {"$in": ok_ids}}, {"$set": {"olx_img_checked_at": datetime.now(timezone.utc).isoformat()}})
+    docs = [d for d in docs if not alive.get(d["_id"])]
+    log.info("HEAD: %d ok, %d do odświeżenia przez API OLX", st["ok"], len(docs))
     for i, d in enumerate(docs, 1):
         now = datetime.now(timezone.utc).isoformat()
-        img = d.get("image") or ((d.get("images") or [None])[0])
         ext = str(d.get("external_id") or "")
-        if img and head_ok(img):
-            st["ok"] += 1
-            if not a.dry_run: coll.update_one({"_id": d["_id"]}, {"$set": {"olx_img_checked_at": now}})
-            continue
         if not ext.isdigit():
             st["error"] += 1; continue
         status, data = fetch_ad(ext, d.get("url") or "")
@@ -186,6 +192,7 @@ def main():
             photos = photos_of(data)
             upd = {"olx_img_checked_at": now, "last_seen_at": now}
             if photos: upd["image"], upd["images"] = photos[0], photos[:12]
+            upd["olx_images_refreshed_at"] = datetime.now(timezone.utc)
             p = price_of(data)
             if p and p > 1000: upd["price"] = p
             st["refreshed"] += 1

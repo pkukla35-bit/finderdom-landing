@@ -662,7 +662,12 @@ def main():
             html = fetch(u); tot["pages"] += 1
             if not html: log.info("  page %d: brak HTML", page); break
             items = P["parse"](html)
-            if not items: log.info("  page %d: 0 ofert", page); break
+            if not items:
+                if a.portal == "allegrolokalnie" and "mlc-itembox" in html:   # strona pełna kart syndykowanych (pomijanych) — idziemy dalej
+                    zero_streak += 1; log.info("  page %d: 0 własnych ofert", page)
+                    if zero_streak >= (6 if deep else 3): break
+                    time.sleep(a.delay); continue
+                log.info("  page %d: 0 ofert", page); break
             ops = []
             if a.portal == "odwlasciciela":   # numer właściciela ze strony oferty — dla ofert, które nie mają jeszcze numeru w bazie (nowe i stare)
                 have_phone = {x["external_id"] for x in coll.find({"source": a.portal, "external_id": {"$in": [str(it["id"]) for it in items]}, "phone": {"$regex": r"\d{9}"}}, {"external_id": 1})}

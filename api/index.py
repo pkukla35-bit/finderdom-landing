@@ -1684,6 +1684,53 @@ async def _olx_offer_state(doc: dict, client: httpx.AsyncClient) -> tuple[str, O
     return "active", photos
 
 
+def _olx_find_ad_in_state(node, ext_id: str):
+    """Obiekt ogłoszenia w window.__PRERENDERED_STATE__ strony oferty OLX: dict z 'photos' i id == ext_id."""
+    if isinstance(node, dict):
+        if isinstance(node.get("photos"), list) and str(node.get("id") or "") == str(ext_id):
+            return node
+        for v in node.values():
+            r = _olx_find_ad_in_state(v, ext_id)
+            if r is not None: return r
+    elif isinstance(node, list):
+        for v in node:
+            r = _olx_find_ad_in_state(v, ext_id)
+            if r is not None: return r
+    return None
+
+
+async def _olx_offer_state_html(url: str, ext: str, client: httpx.AsyncClient) -> tuple[str, Optional[list]]:
+    """Fallback dla _olx_offer_state, gdy API OLX blokuje (403 z chmury): strona oferty ma pełne dane w __PRERENDERED_STATE__."""
+    if not url or "olx.pl" not in url:
+        return "unknown", None
+    try:
+        r = await client.get(url, headers={"User-Agent": _OLX_UA, "Accept": "text/html,*/*;q=0.8", "Accept-Language": "pl-PL,pl;q=0.9", "Referer": "https://www.olx.pl/"})
+    except Exception:
+        return "unknown", None
+    if r.status_code in (404, 410):
+        return "gone", None
+    if r.status_code != 200 or len(r.text) < 20000:
+        return "unknown", None
+    html = r.text
+    m = re.search(r'window\.__PRERENDERED_STATE__\s*=\s*(".*?");', html, re.S)
+    if not m:
+        return ("gone", None) if re.search(r"nie jest ju[żz] dost[ęe]pne|og[łl]oszenie (?:zosta[łl]o )?zako[ńn]czone|nieaktywne", html, re.I) else ("unknown", None)
+    try:
+        ad = _olx_find_ad_in_state(json.loads(json.loads(m.group(1))), ext)
+    except Exception:
+        return "unknown", None
+    if ad is None:
+        return ("gone", None) if re.search(r"nie jest ju[żz] dost[ęe]pne|zako[ńn]czone|nieaktywne", html, re.I) else ("unknown", None)
+    if (ad.get("status") or "active") not in ("active", "new", "activated") or ad.get("isActive") is False:
+        return "gone", None
+    photos = []
+    for ph in ad.get("photos") or []:
+        link = ph.get("link") if isinstance(ph, dict) else ph
+        if isinstance(link, str) and link:
+            photos.append(link.replace("{width}x{height}", "1080x720"))
+    return "active", photos
+
+
 _OLX_PHOTO_SVG = ('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480"><rect width="100%" height="100%" fill="#1f2a44"/>'
                   '<text x="50%" y="50%" fill="#9fb3d9" font-family="sans-serif" font-size="22" text-anchor="middle">zdjęcie dostępne na OLX</text></svg>')
 
@@ -1711,6 +1758,8 @@ async def olx_photo(ext_id: str, i: int = 0):
     else:
         async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as client:
             state, photos = await _olx_offer_state({**doc, "external_id": ext}, client)
+            if state == "unknown":   # API OLX odpowiada 403 z Vercel/AWS; strona oferty (HTML, jak /api/og-image) działa
+                state, photos = await _olx_offer_state_html(doc.get("url") or "", ext, client)
         await _olx_apply_state(coll, doc, state, photos, now)
         if state != "active":
             photos = None

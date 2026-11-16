@@ -204,7 +204,9 @@ def main():
     a = ap.parse_args()
     db = get_mongo(); coll = db["listings"]
     cities = CITIES if not a.city else [c for c in CITIES if c["slug"].split("/")[0] == a.city.lower()]
-    if a.regions: cities = [{"name": "Polska", "slug": "polska"}]
+    # --city ma pierwszeństwo przed --regions: workflow (ternary `== '0' && '' || '--regions'` w GitHub Actions zawsze daje --regions,
+    # a plików workflow nie da się zmienić bez scope `workflow`) — do 16.11 tura „per miasto” jechała po liście ogólnopolskiej.
+    if a.regions and not a.city: cities = [{"name": "Polska", "slug": "polska"}]
     if not cities: log.error("Unknown city"); sys.exit(1)
     log.info("═══ OLX direct — %s/%s — cities=%d max_pages=%d ═══", a.transaction, a.property, len(cities), a.max_pages)
     tot = {"new": 0, "updated": 0, "pages": 0}

@@ -206,7 +206,7 @@ def main():
 
     db = get_mongo(); coll = db["listings"]
     cities = CITIES if not a.city else [c for c in CITIES if c["slug"].split("/")[0] == a.city.lower()]
-    if a.regions: cities = [{"name": "Polska", "slug": "polska"}]
+    if a.regions and not a.city: cities = [{"name": "Polska", "slug": "polska"}]   # --city ma pierwszeństwo (workflow zawsze dodaje --regions)
     if not cities: log.error("Unknown city"); sys.exit(1)
     log.info("═══ NOL scraper — %s / %s — cities=%d max_pages=%d ═══", a.transaction, a.property, len(cities), a.max_pages)
     tot = {"new": 0, "updated": 0, "details": 0, "pages": 0}

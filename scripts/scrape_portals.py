@@ -451,7 +451,7 @@ def main():
     P = PORTALS[a.portal]
     db = get_mongo(); coll = db["listings"]
     cities = CITIES if not a.city else [c for c in CITIES if city_slug(c) == a.city.lower()]
-    if a.regions: cities = [{"name": "Polska", "slug": "polska", "voi": "polska"}] if a.portal in ("adresowo", "listaprzetargow") else REGIONS
+    if a.regions and not a.city: cities = [{"name": "Polska", "slug": "polska", "voi": "polska"}] if a.portal in ("adresowo", "listaprzetargow") else REGIONS
     if a.portal == "odwlasciciela": a.max_pages = max(a.max_pages, 3)   # mały portal — 20 ofert/strona
     if a.portal == "listaprzetargow": a.max_pages = max(a.max_pages, 4)  # lista ogólnopolska, 25/str. — 4 strony = ~100 najnowszych
     if not cities: log.error("Unknown city"); sys.exit(1)

@@ -335,7 +335,195 @@ def parse_listaprzetargow(html: str) -> List[Dict[str, Any]]:
 PORTALS["listaprzetargow"]["parse"] = parse_listaprzetargow
 
 
+# ───────────────────────── Nowe portale 16.11.2026: okolica.pl, krn.pl, allegrolokalnie.pl ─────────────────────────
+# Wcześniejsze próby (requests, zwykły UA) kończyły się 403/Cloudflare. Z odciskiem Chrome (curl_cffi, jak OLX) listy odpowiadają 200.
+try:
+    from curl_cffi import requests as cffi_requests   # w scripts/requirements.txt (scraper OLX)
+except ImportError:   # pragma: no cover
+    cffi_requests = None
+CFFI_PORTALS = {"okolica", "krn", "allegrolokalnie"}
+# tryb --regions: te portale mają listę ogólnopolską „od najnowszych” (jak adresowo) zamiast 16 województw
+NATIONAL_LIST_PORTALS = {"adresowo", "listaprzetargow", "okolica", "krn", "allegrolokalnie"}
+
+
+def _rel_date(txt: Optional[str]) -> Optional[str]:
+    """„19 godz temu” / „3 dni temu” / „1 min temu” / „wczoraj” → ISO (UTC). Dokładność listy okolica.pl: godziny/dni."""
+    if not txt: return None
+    t = txt.lower().strip()
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    m = re.search(r"(\d+)\s*(min|godz|dni|dzie|tyg|mies)", t)
+    if m:
+        n, unit = int(m.group(1)), m.group(2)
+        delta = {"min": timedelta(minutes=n), "godz": timedelta(hours=n), "dni": timedelta(days=n), "dzie": timedelta(days=n),
+                 "tyg": timedelta(weeks=n), "mies": timedelta(days=30 * n)}[unit]
+        return (now - delta).isoformat()
+    if "wczoraj" in t: return (now - timedelta(days=1)).isoformat()
+    if "dzisiaj" in t or "dziś" in t or "teraz" in t: return now.isoformat()
+    return None
+
+
+def url_okolica(prop, trans, city, page):
+    """okolica.pl — darmowe ogłoszenia, dużo bezpośrednich. Listy SSR: <section class="property">, 25–40/str., sort „data dodania”."""
+    seg = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "dzialka", "lokal": "komercyjne/lokal-uzytkowy"}[prop]
+    if prop == "dzialka" and trans == "wynajem": return None   # brak kategorii (404)
+    t = "wynajme" if trans == "wynajem" else "sprzedam"
+    loc = "" if city_slug(city) in ("polska", city.get("voi")) else f"{city_slug(city)}/"
+    return f"https://www.okolica.pl/{seg}/{t}/{loc}?browser%5Bsort%5D=add_desc" + (f"&page={page}" if page > 1 else "")
+
+
+def parse_okolica(html: str) -> List[Dict[str, Any]]:
+    out = []
+    for m in re.finditer(r'<section class="property"[^>]*data-id="([^"]+)"[^>]*>(.*?)</section>', html, re.S):
+        oid, c = m.group(1), m.group(2)
+        url = re.search(r'<h2 class="property-title"><a href="([^"]+)"', c)
+        title = re.search(r'<h2 class="property-title"><a[^>]*>(.*?)</a>', c, re.S)
+        addr = re.search(r'class="property-address"[^>]*>(.*?)</a>', c, re.S)
+        price = re.search(r'<li><span class="price">([^<]*)</span>\s*zł</li>', c)
+        rooms = re.search(r'Pokoje:\s*(\d+)', c)
+        area = re.search(r'<li><span>([\d\s,.]+)</span>\s*m<sup>2</sup></li>', c)
+        img = re.search(r'<img class="property-photo-master"[^>]*src="([^"]+)"', c, re.S)
+        added = re.search(r'class="added_1">([^<]*)<', c)
+        desc = re.search(r'description-short-content">(.*?)</span>', c, re.S)
+        agency = re.search(r'<a href="/firma/([^"]+)"', c)
+        # „Szczecin, Dąbie, Emilli Gierczak” / „Szczecin, Hieronima Derdowskiego” / „Niemstów (powiat lubiński, gmina Lubin)”
+        parts = [p.strip() for p in re.sub(r"\(.*?\)", "", _txt(addr.group(1))).split(",") if p.strip()] if addr else []
+        if not url: continue
+        out.append({
+            "id": oid, "url": url.group(1), "title": _txt(title.group(1)) if title else "",
+            "price": _money(price.group(1)) if price else None, "area": _money(area.group(1)) if area else None,
+            "rooms": int(rooms.group(1)) if rooms else None, "floor": None,
+            "image": img.group(1) if img else None,
+            "district": parts[1] if len(parts) > 2 else None, "street": parts[-1] if len(parts) > 1 else None,
+            "loc0": parts[0] if parts else None, "desc": _txt(desc.group(1)) if desc else "",
+            # karta z awatarem /firma/… = biuro; bez awatara = ogłoszenie bezpośrednie (sekcja „bezposrednio” portalu nie ma żadnego awatara)
+            "seller": "posrednik" if agency else "prywatna",
+            "agency": agency.group(1).rsplit("-", 1)[0].replace("-", " ").title() if agency else None,
+            "posted_at": _rel_date(added.group(1) if added else None),
+        })
+    return out
+
+
+def url_krn(prop, trans, city, page):
+    """krn.pl (Krakowski Rynek Nieruchomości) — głównie Kraków/Małopolska, 24/str., sort=1_2 = data od najnowszej."""
+    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki", "lokal": "lokale-uzytkowe"}[prop]
+    loc = "" if city_slug(city) in ("polska", city.get("voi")) else f"/{city_slug(city)}"
+    return f"https://www.krn.pl/{seg}/{trans}{loc}/s{page}?&sort=1_2"
+
+
+def parse_krn(html: str) -> List[Dict[str, Any]]:
+    out = []
+    html = re.sub(r"<svg.*?</svg>", "", html, flags=re.S)
+    html = html.replace("<sup>2</sup>", "²")
+    for m in re.finditer(r'<a name="(\d+)" href="(https://www\.krn\.pl/oferta/[^"]+)"[^>]*>(.*?)</a>\s*<span style="display:none;">(.*?)</span>', html, re.S):
+        oid, url, c, meta = m.groups()
+        title = re.search(r'<h2 class="title">(.*?)</h2>', c, re.S)
+        addr = re.search(r'<span class="address">(.*?)</span>', c, re.S)
+        rooms_blk = re.search(r'<span class="rooms">(.*?)</span>\s*<span class="added">', c, re.S)
+        rb = _txt(rooms_blk.group(1)) if rooms_blk else ""
+        rooms = re.search(r'(\d+)\s*pok', rb); floor = re.search(r'piętro:\s*(\d+)', rb)
+        area = re.search(r'([\d.,]+)\s*m²\s*$', rb)                       # „5 pokoi · piętro: 2 · 170.90 m²”
+        plot = re.search(r'działka:\s*([\d\s.,]+)\s*m', rb)
+        # miasto: addressLocality (strona miasta) albo z tytułu „Mieszkanie Jastrzębie-Zdrój 34.50m²” (lista ogólnopolska)
+        locality = re.search(r'itemprop="addressLocality">(.*?)<', meta, re.S)
+        t_city = re.match(r'^(?:Now[aey]\s+)?(?:Mieszkanie|Dom|Działka|Lokal\S*|Biuro|Kamienica|Garaż)\s+(.+?)\s+[\d.,]+\s*m²', _txt(title.group(1)) if title else "")
+        price = re.search(r'<span class="price">([^<]*)</span>', c)
+        img = re.search(r'<img src="([^"]+)" class="main-image"', c)
+        firm = re.search(r'<span class="firm">(.*?)</span>', c, re.S)
+        street = _txt(addr.group(1)) if addr else ""
+        loc0 = (_txt(locality.group(1)) if locality else "") or (t_city.group(1).strip() if t_city else "")
+        out.append({
+            "id": oid, "url": url, "title": _txt(title.group(1)) if title else "",
+            "price": _money(price.group(1)) if price else None, "area": _money(area.group(1)) if area else None,
+            "rooms": int(rooms.group(1)) if rooms else None, "floor": int(floor.group(1)) if floor else None,
+            "image": htmllib.unescape(img.group(1)) if img else None, "district": None, "street": street or None,
+            "loc0": loc0 or None, "desc": "", "seller": None,
+            "agency": _txt(firm.group(1)) if firm and _txt(firm.group(1)) else None,
+            "plot_area_m2": _money(plot.group(1)) if plot else None,
+        })
+    return out
+
+
+AL_CAT = {("mieszkanie", "sprzedaz"): "mieszkania-na-sprzedaz-112739", ("dom", "sprzedaz"): "domy-na-sprzedaz-112740",
+          ("dzialka", "sprzedaz"): "dzialki-na-sprzedaz-112741", ("lokal", "sprzedaz"): "lokale-i-obiekty-uzytkowe-na-sprzedaz-112742",
+          ("mieszkanie", "wynajem"): "mieszkania-do-wynajecia-112745", ("dom", "wynajem"): "domy-do-wynajecia-112746",
+          ("dzialka", "wynajem"): "dzialki-do-wynajecia-112748", ("lokal", "wynajem"): "lokale-i-obiekty-uzytkowe-do-wynajecia-112749"}
+
+
+def url_allegrolokalnie(prop, trans, city, page):
+    """allegrolokalnie.pl — 60 kart/str., sort od najnowszych. ~90% kart to syndykacja z Gratka.pl (badge źródła) — te pomijamy
+    (Gratkę importujemy wprost); zostają własne ogłoszenia Allegro (głównie osoby prywatne)."""
+    loc = "" if city_slug(city) in ("polska", city.get("voi")) else f"/{city_slug(city)}"
+    return f"https://allegrolokalnie.pl/oferty/nieruchomosci/{AL_CAT[(prop, trans)]}{loc}?sort=startingTime%3Adesc" + (f"&page={page}" if page > 1 else "")
+
+
+def parse_allegrolokalnie(html: str) -> List[Dict[str, Any]]:
+    out, skipped = [], 0
+    ld: Dict[str, Dict[str, Any]] = {}
+    for blk in re.findall(r'<script type="application/ld\+json"[^>]*>(.*?)</script>', html, re.S):
+        try: d = json.loads(blk)
+        except Exception: continue
+        if isinstance(d, dict) and d.get("@type") == "ItemList":
+            for el in d.get("itemListElement") or []:
+                it = el.get("item") or {}
+                if it.get("url"): ld[it["url"].split("?")[0]] = it
+    html = re.sub(r"<svg.*?</svg>", "", html, flags=re.S)
+    for m in re.finditer(r'<a ([^>]*class="mlc-card mlc-itembox"[^>]*)>(.*?)</a>', html, re.S):
+        attrs, c = m.group(1), m.group(2)
+        href = re.search(r'href="([^"]+)"', attrs)
+        if not href: continue
+        path = htmllib.unescape(href.group(1)).split("?")[0]
+        url = "https://allegrolokalnie.pl" + path if path.startswith("/") else path
+        if re.search(r'mlc-itembox__advert-source">\s*<span aria-label="', c):   # syndykacja (Gratka.pl itp.) → pomijamy
+            skipped += 1; continue
+        title = re.search(r'<h3 class="mlc-itembox__title"[^>]*>(.*?)</h3>', c, re.S)
+        params = {_txt(k).lower(): _txt(v) for k, v in re.findall(r'<div class="ml-text-small">\s*([^<:]+):\s*<span class="mlc-itembox__params__param__name">(.*?)</span>', c, re.S)}
+        price = re.search(r'ml-offer-price__dollars">([^<]*)<', c)
+        seller = re.search(r'Sprzedający:\s*(\w+)', c)
+        addr = re.search(r'<address[^>]*>(.*?)</address>', c, re.S)
+        img = re.search(r'<img src="([^"]+)"', c)
+        meta = ld.get(url) or {}
+        img_u = ((meta.get("image") or {}).get("url") if isinstance(meta.get("image"), dict) else None) or (img.group(1) if img else None)
+        parts = [p.strip() for p in _txt(addr.group(1)).split(",") if p.strip()] if addr else []
+        area = _money(params.get("powierzchnia", "")) if params.get("powierzchnia") else None
+        rooms = re.search(r"\d+", params.get("liczba pokoi", "") or "")
+        by = re.search(r"\b(1[89]\d{2}|20[0-2]\d)\b", params.get("rok budowy", "") or "")
+        out.append({
+            "id": path.rsplit("/", 1)[-1], "url": url, "title": _txt(title.group(1)) if title else (meta.get("name") or ""),
+            "price": _money(price.group(1)) if price else _num((meta.get("offers") or {}).get("price")),
+            "area": area, "rooms": int(rooms.group(0)) if rooms else None, "floor": None,
+            "image": img_u, "district": parts[1] if len(parts) > 1 else None, "street": None,
+            "loc0": parts[0] if parts else None, "desc": "", "market": (params.get("rynek") or "").lower() or None,
+            "build_year": int(by.group(1)) if by else None,
+            "seller": "posrednik" if seller and seller.group(1).lower().startswith("firm") else "prywatna",
+        })
+    if skipped: log.info("  allegrolokalnie: pominięto %d kart syndykowanych z innych portali", skipped)
+    return out
+
+
+PORTALS["okolica"] = {"url": url_okolica, "parse": parse_okolica}
+PORTALS["krn"] = {"url": url_krn, "parse": parse_krn}
+PORTALS["allegrolokalnie"] = {"url": url_allegrolokalnie, "parse": parse_allegrolokalnie}
+
+
+def fetch_cffi(url: str) -> Optional[str]:
+    """Pobranie z odciskiem TLS/HTTP2 Chrome (Cloudflare przed okolica/krn). krn.pl zrywa co kilka połączeń → ponawiamy z pauzą."""
+    if cffi_requests is None:
+        log.error("curl_cffi niezainstalowane"); return None
+    for i in range(4):
+        try:
+            r = cffi_requests.get(url, impersonate="chrome", timeout=40, headers={"Accept-Language": "pl-PL,pl;q=0.9"})
+            if r.status_code == 200 and len(r.text) > 3000: return r.text
+            if r.status_code == 404: return None
+            log.warning("  HTTP %s — pauza %ds", r.status_code, 10 * (i + 1)); time.sleep(10 * (i + 1))
+        except Exception as e:
+            log.warning("  fetch_cffi error: %s", str(e)[:100]); time.sleep(4 * (i + 1))
+    return None
+
+
 def fetch(url: str) -> Optional[str]:
+    if any(h in url for h in ("okolica.pl", "krn.pl", "allegrolokalnie.pl")):
+        return fetch_cffi(url)
     for _ in range(3):
         try:
             r = S.get(url, timeout=30)
@@ -376,6 +564,9 @@ def guess_city(portal: str, it: Dict[str, Any]) -> Optional[str]:
         return toks[0] if toks and toks[0] else None
     elif portal == "listaprzetargow":
         return (it.get("loc0") or "").strip() or None   # „Radom, Południe” → Radom
+    elif portal in ("okolica", "krn", "allegrolokalnie"):
+        t = (it.get("loc0") or "").strip()              # okolica: „Szczecin, Dąbie, ul. X”; krn: addressLocality; allegro: <address>
+        return (t.title() if t.islower() else t) or None
     return None
 
 
@@ -451,9 +642,12 @@ def main():
     P = PORTALS[a.portal]
     db = get_mongo(); coll = db["listings"]
     cities = CITIES if not a.city else [c for c in CITIES if city_slug(c) == a.city.lower()]
-    if a.regions and not a.city: cities = [{"name": "Polska", "slug": "polska", "voi": "polska"}] if a.portal in ("adresowo", "listaprzetargow") else REGIONS
+    if a.regions and not a.city: cities = [{"name": "Polska", "slug": "polska", "voi": "polska"}] if a.portal in NATIONAL_LIST_PORTALS else REGIONS
     if a.portal == "odwlasciciela": a.max_pages = max(a.max_pages, 3)   # mały portal — 20 ofert/strona
     if a.portal == "listaprzetargow": a.max_pages = max(a.max_pages, 4)  # lista ogólnopolska, 25/str. — 4 strony = ~100 najnowszych
+    if a.portal in ("okolica", "krn"): a.max_pages = max(a.max_pages, 4)   # listy ogólnopolskie 25–40/str.
+    if a.portal == "allegrolokalnie": a.max_pages = max(a.max_pages, 6)    # 60/str., ale ~90% kart to syndykacja z Gratki (pomijana)
+    if a.portal in CFFI_PORTALS: a.delay = max(a.delay, 2.5)                # krn.pl zrywa połączenia przy szybkich zapytaniach
     if not cities: log.error("Unknown city"); sys.exit(1)
     log.info("═══ %s — %s/%s — cities=%d max_pages=%d ═══", a.portal, a.transaction, a.property, len(cities), a.max_pages)
     tot = {"new": 0, "updated": 0, "pages": 0}
@@ -524,7 +718,8 @@ def _verify_adresowo_sellers(coll, prop: str, trans: str) -> None:
 #    na tokenie GitHub), więc lokal (sprzedaż + wynajem) jedzie w tym samym zadaniu co działki. 2.11.2026
 CHAIN_AFTER = {"dzialka": [("lokal", "sprzedaz"), ("lokal", "wynajem")]}
 # Nowe portale (5.11.2026) jadą w zadaniach istniejących portali (ta sama property/transaction):
-PORTAL_CHAIN = {"adresowo": ["odwlasciciela"], "domiporta": ["gethome"], "gratka": ["listaprzetargow"]}   # listaprzetargow (5.11): przetargi i licytacje, badge 🔨
+PORTAL_CHAIN = {"adresowo": ["odwlasciciela", "allegrolokalnie"], "domiporta": ["gethome", "krn"], "gratka": ["listaprzetargow"],
+                "morizon": ["okolica"]}   # listaprzetargow (5.11): przetargi i licytacje, badge 🔨; okolica/krn/allegrolokalnie (16.11)
 
 
 def _run_portal_chain(argv0: List[str]) -> None:

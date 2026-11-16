@@ -1038,7 +1038,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('archiveBack')?.addEventListener('click', (e) => { e.preventDefault(); setArchiveMode(false); });
 });
 // Bez planu API nie zwraca linku (url) — nazwę portalu bierzemy z pola source
-function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania',listaprzetargow:'ListaPrzetargów'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
+function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania',listaprzetargow:'ListaPrzetargów',okolica:'Okolica',krn:'KRN',allegrolokalnie:'Allegro Lokalnie'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
 function detectPortalFromUrl(url) {
   if (!url) return null;
   const u = String(url).toLowerCase();
@@ -1052,6 +1052,9 @@ function detectPortalFromUrl(url) {
   if (u.includes('nieruchomosci-online')) return 'NOL';
   if (u.includes('gethome.pl')) return 'Gethome';
   if (u.includes('odwlasciciela.pl')) return 'OdWłaściciela';
+  if (u.includes('okolica.pl')) return 'Okolica';
+  if (u.includes('krn.pl')) return 'KRN';
+  if (u.includes('allegrolokalnie.pl')) return 'Allegro Lokalnie';
   if (u.includes('szybko.pl')) return 'Szybko';
   if (u.includes('kupmieszkania.pl')) return 'KupMieszkania';
   if (u.includes('listaprzetargow.pl')) return 'ListaPrzetargów';
@@ -1458,6 +1461,9 @@ function applyScrapedData(d, append) {
         if (u.includes('nieruchomosci-online')) return 'nol';
         if (u.includes('gethome.pl')) return 'gethome';
         if (u.includes('odwlasciciela.pl')) return 'odwlasciciela';
+        if (u.includes('okolica.pl')) return 'okolica';
+        if (u.includes('krn.pl')) return 'krn';
+        if (u.includes('allegrolokalnie.pl')) return 'allegrolokalnie';
         const m = u.match(/^https?:\/\/(?:www\.)?([a-z0-9-]+)\./);
         return m ? m[1] : '';
       }

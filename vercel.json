@@ -116,6 +116,10 @@
       "destination": "/api/index"
     },
     {
+      "source": "/api/olx-photo/:path*",
+      "destination": "/api/index"
+    },
+    {
       "source": "/api/og-image",
       "destination": "/api/index"
     },

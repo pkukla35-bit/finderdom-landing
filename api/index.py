@@ -1716,7 +1716,8 @@ async def _olx_offer_state_html(url: str, ext: str, client: httpx.AsyncClient) -
     if not m:
         return ("gone", None) if re.search(r"nie jest ju[żz] dost[ęe]pne|og[łl]oszenie (?:zosta[łl]o )?zako[ńn]czone|nieaktywne", html, re.I) else ("unknown", None)
     try:
-        ad = _olx_find_ad_in_state(json.loads(json.loads(m.group(1))), ext)
+        import json as _json_olx
+        ad = _olx_find_ad_in_state(_json_olx.loads(_json_olx.loads(m.group(1))), ext)
     except Exception:
         return "unknown", None
     if ad is None:

@@ -1458,6 +1458,11 @@ async function renderOffer(l, all) {
     galPhoto.style.display = 'block';
     galEmoji.style.display = 'none';
     window.__failedImgs = 0;
+    // OLX CDN: martwy link = HTTP 404, ale z obrazkiem (szare logo 500×500) → onload zamiast onerror; wykrywamy po wymiarach
+    galPhoto.onload = () => {
+      const cs = galPhoto.currentSrc || galPhoto.src || '';
+      if (cs.includes('olxcdn') && galPhoto.naturalWidth === 500 && galPhoto.naturalHeight === 500) galPhoto.onerror();
+    };
     galPhoto.onerror = () => {
       // Bezpośredni CDN (np. OLX) zablokowany u klienta? → ten sam obraz przez nasz serwer, zanim uznamy go za zepsuty
       const curSrc = galPhoto.getAttribute('src') || '';
@@ -1508,7 +1513,7 @@ async function renderOffer(l, all) {
     galDots.style.display = 'flex';
     // Render thumbnails
     galThumbs.innerHTML = galleryImgs.map((src, i) =>
-      `<button class="thumb${i===0?' active':''}" type="button" data-thumb-idx="${i}" aria-label="Zdjęcie ${i+1}"><img src="${src}" alt="" loading="lazy" onerror="if(/^https?:/.test(this.getAttribute('src'))&&!this.dataset.p){this.dataset.p='1';this.src='/api/img?u='+encodeURIComponent(this.getAttribute('src'));}else{this.parentElement.style.display='none';}"></button>`
+      `<button class="thumb${i===0?' active':''}" type="button" data-thumb-idx="${i}" aria-label="Zdjęcie ${i+1}"><img src="${src}" alt="" loading="lazy" onload="if((this.currentSrc||this.src||'').includes('olxcdn')&&this.naturalWidth===500&&this.naturalHeight===500&&window.__galOlxId&&!this.dataset.f){this.dataset.f='1';this.src='/api/olx-photo/'+window.__galOlxId+'?i=${i}';}" onerror="if(/^https?:/.test(this.getAttribute('src'))&&!this.dataset.p){this.dataset.p='1';this.src='/api/img?u='+encodeURIComponent(this.getAttribute('src'));}else{this.parentElement.style.display='none';}"></button>`
     ).join('');
     galThumbs.style.display = 'grid';
   } else {

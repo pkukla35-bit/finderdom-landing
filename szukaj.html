@@ -2014,7 +2014,7 @@ function renderPage() {
     const hasPhoto = _dedup.length > 0;
     const imgList = _dedup.slice(0, 15);  // max 15 zdjec per karta
     const photoHtml = hasPhoto
-      ? `<img class="photo" data-imgs='${JSON.stringify(imgList).replace(/'/g, "&#39;")}' data-og='${(ogFallback || '').replace(/'/g, "&#39;")}' data-olx="${(/olx\.pl\//.test(l.url || '') && l.external_id) ? String(l.external_id).replace(/[^0-9]/g, '') : ''}" data-idx="0" src="${imgList[0]}" alt="" loading="${idx < 6 ? 'eager' : 'lazy'}"${idx < 3 ? ' fetchpriority="high"' : ''} decoding="async" onerror="window.__cardImgFallback(this)">`
+      ? `<img class="photo" data-imgs='${JSON.stringify(imgList).replace(/'/g, "&#39;")}' data-og='${(ogFallback || '').replace(/'/g, "&#39;")}' data-olx="${(/olx\.pl\//.test(l.url || '') && l.external_id) ? String(l.external_id).replace(/[^0-9]/g, '') : ''}" data-idx="0" src="${imgList[0]}" alt="" loading="${idx < 6 ? 'eager' : 'lazy'}"${idx < 3 ? ' fetchpriority="high"' : ''} decoding="async" onerror="window.__cardImgFallback(this)" onload="window.__cardImgCheck(this)">`
       : '';
     const carouselHtml = (hasPhoto && imgList.length > 1) ? `
       <button class="card-img-nav prev" data-nav="prev" aria-label="Poprzednie zdjęcie" type="button">‹</button>
@@ -2077,6 +2077,14 @@ function renderPage() {
 
   // Fallback dla zdjęć karty: próbuje kolejnego z listy imgs, potem og-image (data-og), a jak wszystkie zawiodą — pokazuje placeholder emoji
   if (!window.__cardImgFallback) {
+    // OLX CDN odpowiada na martwy link HTTP 404, ale Z OBRAZKIEM (szare logo OLX 500×500 PNG) → przeglądarka go WYŚWIETLA i onerror
+    // nigdy nie zadziała. Dlatego po onload sprawdzamy wymiary i traktujemy logo jak błąd (→ /api/olx-photo z aktualnym zdjęciem).
+    window.__cardImgCheck = function(img) {
+      try {
+        const cur = img.currentSrc || img.src || '';
+        if (cur.includes('olxcdn') && img.naturalWidth === 500 && img.naturalHeight === 500) window.__cardImgFallback(img);
+      } catch (e) {}
+    };
     window.__cardImgFallback = function(img) {
       try {
         // Bezpośredni CDN (np. OLX) zablokowany u klienta (adblock / ochrona przed śledzeniem)? → spróbuj przez nasz serwer

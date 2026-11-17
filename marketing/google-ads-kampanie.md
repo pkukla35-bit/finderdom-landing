@@ -292,7 +292,7 @@ Plan Osobisty 45 zł / 30 dni — bez umowy, anulujesz kiedy chcesz.
 - **Słowa kluczowe (kierowanie na treść):** `mieszkanie na sprzedaż`, `kupno mieszkania`, `wycena mieszkania`, `ile warte mieszkanie`,
   `otodom`, `olx nieruchomości`, `sprzedaż mieszkania bez pośrednika`.
 - **Wykluczenia:** osoby < 18 lat; tematy „Gry”, „Dzieci”.
-- Dla biur zrób **osobną kampanię** z drugim filmem (gdy będzie) — inne kierowanie (frazy „program dla biura nieruchomości”, „CRM nieruchomości”, „oferty prywatne dla pośredników”).
+- Dla biur jest **osobna kampania z drugim filmem — Kampania 4 poniżej** (inne kierowanie: frazy „program dla biura nieruchomości”, „CRM nieruchomości”, „oferty prywatne dla pośredników”).
 
 ### Krok 4 — reklama (teksty do wklejenia)
 ```
@@ -316,3 +316,69 @@ CTA:             Wyceń teraz        URL: https://www.finderdom.pl/wycena?utm_so
 - Konwersje (rejestracja, zakup wyceny, zakup planu) — te same co w Kampanii 1 i 2 (sekcja „Konwersje do założenia”).
 - Po 2 tygodniach: jeśli **współczynnik obejrzeń (VTR) < 15 %** → skróć film do 30–45 s (sam początek: hasło → wyszukiwanie AI → analiza ceny → CTA);
   format bumper 6 s / 15 s niemożliwy do pominięcia daje tani zasięg, ale tam musi być osobny, krótki montaż.
+
+---
+
+## KAMPANIA 4 — FILM „Dla biur nieruchomości” (YouTube / Google Ads Wideo) · 20 zł/dzień
+
+Film: **3:19, poziomy 16:9.** Oryginał 1080p (99 MB) masz u siebie; wersja 720p (16,6 MB) leży na stronie:
+`https://www.finderdom.pl/media/finderdom-biura.mp4`. Film jest osadzony na `/dla-biur#film-biura` (do niego prowadzi też
+link „Jesteś z biura? Zobacz film dla biur” pod filmem dla prywatnych na stronie głównej).
+
+### Krok 1 — YouTube
+1. youtube.com → „Utwórz” → „Prześlij film” → oryginał 1080p.
+2. **Tytuł:** `FinderDom dla biur nieruchomości — wszystkie portale, duplikaty, CRM i wyceny PDF w jednym abonamencie (3 min)`
+3. **Opis:**
+```
+Program dla pośredników i biur nieruchomości. FinderDom zbiera ogłoszenia z Otodom, OLX, Morizon, Gratki i pozostałych portali —
+cała Polska w jednym abonamencie, bez pakietów regionalnych.
+✅ Oferty bezpośrednie od właścicieli (z numerem telefonu tam, gdzie portal go udostępnia) + 90-dniowe archiwum
+✅ Duplikaty: ile razy i u ilu pośredników wisi ta sama nieruchomość, w jakich cenach — szansa na wyłączność
+✅ CRM zespołu: statusy ofert, notatki, alert wyłączności, historia ceny na wszystkich portalach
+✅ Wyceny PDF bez limitu z transakcjami z RCN — gotowy argument na spotkanie z właścicielem
+✅ Leady od właścicieli zamawiających wycenę w Twoim regionie
+👉 https://www.finderdom.pl/dla-biur?utm_source=youtube&utm_medium=video&utm_campaign=biura
+Biuro jednoosobowe 90 zł/mies · Plan Firmowy 199 zł/mies (4 loginy dla agentów) · 7 dni za darmo, bez karty.
+```
+4. **Widoczność:** „Niepubliczny” (unlisted). **Miniatura:** `https://www.finderdom.pl/media/finderdom-biura-poster.jpg`.
+5. Skopiuj link (`https://youtu.be/...`).
+
+### Krok 2 — kampania w Google Ads
+- Nowa kampania → cel **„Potencjalni klienci”** (konwersja: rejestracja firmowa) lub „Ruch w witrynie” → typ **Wideo**.
+- Format **In-stream możliwy do pominięcia** + **In-feed** (pośrednicy szukają na YouTube „jak pozyskać oferty”, „CRM dla biura”).
+- Strategia stawek: **Docelowy CPV** → stawka startowa **0,15 zł** (grupa B2B jest mniejsza i droższa niż prywatni). Budżet **20 zł/dzień**.
+- Sieci: YouTube. Lokalizacja: **Polska**. Język: polski. Harmonogram: **pn–pt 8:00–20:00** (pośrednicy pracują w tygodniu).
+
+### Krok 3 — grupa reklam i kierowanie
+- **Odbiorcy niestandardowi (custom segment)** — osoby, które wyszukiwały w Google: `program dla biura nieruchomości`,
+  `crm nieruchomości`, `oferty bezpośrednie nieruchomości`, `jak pozyskać oferty na wyłączność`, `pozyskiwanie ofert nieruchomości`,
+  `asari`, `esti crm`, `galactica virgo`, `imo nieruchomości`, `mls nieruchomości`.
+- **Odbiorcy na rynku:** „Usługi dla firm → Oprogramowanie dla firm”; **Zainteresowania:** „Nieruchomości”.
+- **Słowa kluczowe (kierowanie na treść YouTube):** `pośrednik nieruchomości`, `agent nieruchomości`, `biuro nieruchomości`,
+  `pozyskiwanie ofert`, `wyłączność nieruchomości`, `szkolenie pośredników`.
+- **Wykluczenia:** osoby < 25 lat; tematy „Gry”, „Dzieci”, „Muzyka”. Wyklucz też kierowanie na frazy prywatne z Kampanii 3
+  (`mieszkanie na sprzedaż`, `kupno mieszkania`), żeby obie kampanie nie licytowały tych samych widzów.
+
+### Krok 4 — reklama (teksty do wklejenia)
+```
+URL końcowy:      https://www.finderdom.pl/dla-biur?utm_source=google&utm_medium=video&utm_campaign=biura
+Wyświetlany URL:  finderdom.pl/dla-biur
+Wezwanie do działania (10 zn.):  Testuj 7 dni
+Nagłówek (15 zn.):              Całe biuro 199 zł
+Długi nagłówek (90 zn.):        Wszystkie portale, cała Polska, 4 loginy dla agentów, CRM i wyceny PDF bez limitu — 7 dni za darmo.
+Opis (70 zn.):                  Duplikaty, liczba pośredników i oferty bezpośrednie z telefonem właściciela.
+```
+Wariant B (test A/B):
+```
+Nagłówek:        Oferty na wyłączność
+Długi nagłówek:  Zobacz, u ilu pośredników wisi ta sama nieruchomość i gdzie właściciel sprzedaje sam. Dzwoń pierwszy.
+Opis:            Pośrednik solo 90 zł/mies, zespół 199 zł/mies. Bez umowy, faktura VAT.
+CTA:             Sprawdź         URL: https://www.finderdom.pl/dla-biur?utm_source=google&utm_medium=video&utm_campaign=biura-wylacznosc
+```
+
+### Krok 5 — pomiar
+- Odtworzenie filmu na `/dla-biur` wysyła zdarzenie GA4 `video_play` z tytułem `biura` (prywatni → `prywatni`), więc w GA4 widzisz
+  osobno, ilu pośredników ogląda swój film.
+- Konwersja główna: **rejestracja firmowa** (`/rejestracja?typ=firma` → sukces), wtórna: zakup planu 90/199 zł — te same działania co w Kampanii 2.
+- Po 2 tygodniach: VTR < 15 % lub CPV > 0,40 zł → skróć do 45–60 s (duplikaty → telefony właścicieli → wycena PDF → „7 dni za darmo”).
+  Jeśli rejestracje firmowe są, ale drogie (> 60 zł/szt.), zawęź kierowanie tylko do segmentu niestandardowego (pkt. Krok 3) i godzin 9–17.

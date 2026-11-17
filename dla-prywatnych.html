@@ -133,6 +133,26 @@ gtag('set', 'url_passthrough', false);
     <div class="note">ℹ️ FinderDom nie ma własnych ogłoszeń — zbieramy w jednym miejscu oferty z Otodom, OLX, Morizon, Gratki, Domiporty i innych portali. Płacisz za wygodę: wszystkie portale w jednej wyszukiwarce, połączone duplikaty, analiza AI ceny, alerty i wyceny PDF — nie za oferty „na wyłączność”.</div>
   </section>
 
+  <!-- 🎬 Film „jak to działa” dla osób prywatnych (17.11) — MP4 720p 9,5 MB w /media, poster, preload=none (nie obciąża ładowania strony) -->
+  <section id="film-prywatni" style="max-width:960px;width:100%;margin:8px auto 48px;padding:0 20px;box-sizing:border-box">
+    <div style="text-align:center;margin-bottom:14px">
+      <div style="display:inline-block;background:rgba(255,184,0,0.12);color:#FFB800;font-weight:800;font-size:12px;letter-spacing:1px;text-transform:uppercase;padding:6px 14px;border-radius:999px">🎬 Zobacz, jak to działa · 2 min</div>
+      <h2 style="margin:12px 0 6px;font-size:clamp(22px,3.4vw,32px);line-height:1.2">FinderDom dla osób prywatnych — od wyszukiwania AI po wycenę PDF</h2>
+      <p style="margin:0;color:rgba(255,255,255,0.7);font-size:15px">Kupujesz, sprzedajesz albo chcesz wiedzieć, ile jest warte Twoje mieszkanie? Obejrzyj 2-minutowy przewodnik.</p>
+    </div>
+    <div style="position:relative;border-radius:18px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.12);background:#0B1836">
+      <video controls preload="none" playsinline poster="/media/finderdom-prywatni-poster.jpg" style="display:block;width:100%;aspect-ratio:16/9;background:#0B1836"
+             onplay="try{window.gtag&&gtag('event','video_play',{video_title:'prywatni'})}catch(e){}">
+        <source src="/media/finderdom-prywatni.mp4" type="video/mp4">
+        Twoja przeglądarka nie obsługuje wideo. <a href="/media/finderdom-prywatni.mp4">Pobierz film</a>.
+      </video>
+    </div>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:18px">
+      <a href="/szukaj" style="background:linear-gradient(135deg,#FFB800,#FFA200);color:#0B1836;font-weight:900;padding:13px 26px;border-radius:12px;text-decoration:none;font-size:14px">🔍 Wypróbuj wyszukiwarkę</a>
+      <a href="/wycena" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.2);color:#fff;font-weight:700;padding:13px 26px;border-radius:12px;text-decoration:none;font-size:14px">💎 Wyceń mieszkanie (PDF 35 zł)</a>
+    </div>
+  </section>
+
   <div class="grid">
     <div class="card"><div class="ic">🗺️</div><h3><span>Wszystkie portale</span> w jednym miejscu</h3><p>Otodom, OLX, Morizon, Gratka i pozostałe — mieszkania, domy, działki i lokale z całej Polski. Zobaczysz od razu, czy ta sama oferta wisi na kilku portalach w różnych cenach.</p></div>
     <div class="card"><div class="ic">🤖</div><h3><span>Analiza AI:</span> okazja czy zawyżka?</h3><p>Każda oferta jest porównana z podobnymi w promieniu kilku kilometrów. Dostajesz werdykt: okazja / cena typowa / zawyżona — i wiesz, od czego zacząć negocjacje.</p></div>

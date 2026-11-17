@@ -251,3 +251,68 @@ Prześlij mi te wartości (nie są tajne) — wkleję je do strony. Śledzenie z
 5. Wklej listę wykluczeń (Słowa kluczowe → Wykluczające → dodaj listę).
 6. Po 7 dniach: usuń słowa bez kliknięć, dodaj wykluczenia z raportu „Wyszukiwane hasła”.
 7. Po ~30 konwersjach: zmień strategię na „Maksymalizuj konwersje” (K1: docelowy CPA 25 zł; K2: 40 zł za rejestrację).
+
+---
+
+## KAMPANIA 3 — FILM „Dla osób prywatnych” (YouTube / Google Ads Wideo) · 15–20 zł/dzień
+
+Film: **2:05, poziomy 16:9, z lektorem i muzyką.** Plik w pełnej jakości (1080p, 65 MB) masz u siebie; wersja 720p (9,5 MB) leży na
+stronie: `https://www.finderdom.pl/media/finderdom-prywatni.mp4` (możesz ją pobrać i wrzucić na YouTube, ale lepiej wrzuć oryginał 1080p).
+Film jest już osadzony na stronie głównej (`/#film-prywatni`) i na `/dla-prywatnych`.
+
+### Krok 1 — YouTube (Google Ads NIE przyjmuje pliku MP4, tylko link do YouTube)
+1. Zaloguj się na konto Google firmy → youtube.com → „Utwórz” → „Prześlij film” → wybierz oryginał 1080p.
+2. **Tytuł:** `FinderDom.pl — wszystkie ogłoszenia nieruchomości w jednym miejscu (jak to działa, 2 min)`
+3. **Opis:**
+```
+Kupujesz, sprzedajesz albo chcesz wiedzieć, ile jest warte Twoje mieszkanie?
+FinderDom zbiera ogłoszenia z Otodom, OLX, Morizon, Gratki i pozostałych portali w jednym wyszukiwaniu.
+✅ Wyszukiwanie AI — opisz, czego szukasz, filtry ustawią się same
+✅ Analiza AI ceny — okazja czy zawyżka? Porównanie z medianą okolicy i transakcjami z RCN
+✅ Alerty o nowych ofertach, kalkulator raty kredytu
+✅ Wycena PDF Twojej nieruchomości w 2 minuty — 35 zł
+👉 https://www.finderdom.pl/?utm_source=youtube&utm_medium=video&utm_campaign=prywatni
+Plan Osobisty 45 zł / 30 dni — bez umowy, anulujesz kiedy chcesz.
+```
+4. **Widoczność:** „Niepubliczny” (unlisted) wystarczy do reklam; „Publiczny”, jeśli chcesz też ruch organiczny z YouTube.
+5. **Miniatura:** `https://www.finderdom.pl/media/finderdom-prywatni-poster.jpg` (pobierz i wgraj) albo własna.
+6. Skopiuj link do filmu (`https://youtu.be/...`).
+
+### Krok 2 — kampania w Google Ads
+- Nowa kampania → cel **„Ruch w witrynie”** (lub „Potencjalni klienci”, gdy masz skonfigurowane konwersje) → typ **Wideo**.
+- Podtyp: **„Kampania wideo zwiększająca zasięg”** → format **In-stream możliwy do pominięcia** (płacisz tylko, gdy ktoś obejrzy ≥30 s
+  lub kliknie — przy 2-minutowym filmie to optymalne). Opcjonalnie dodaj **In-feed** (film pojawia się w wynikach YouTube).
+- Strategia stawek: **Docelowy CPV** → stawka startowa **0,10 zł**. Budżet dzienny **15–20 zł**.
+- Sieci: YouTube (odznacz „Partnerzy wideo w sieci reklamowej” na start). Lokalizacja: **Polska**. Język: **polski**.
+- Urządzenia: wszystkie. Harmonogram: 7:00–23:00.
+
+### Krok 3 — grupa reklam i kierowanie
+- **Odbiorcy (na rynku / in-market):** „Nieruchomości → Mieszkania na sprzedaż”, „Domy na sprzedaż”, „Nieruchomości komercyjne”;
+  **Zdarzenia życiowe:** „Przeprowadzka wkrótce / niedawno”, „Zakup domu”.
+- **Słowa kluczowe (kierowanie na treść):** `mieszkanie na sprzedaż`, `kupno mieszkania`, `wycena mieszkania`, `ile warte mieszkanie`,
+  `otodom`, `olx nieruchomości`, `sprzedaż mieszkania bez pośrednika`.
+- **Wykluczenia:** osoby < 18 lat; tematy „Gry”, „Dzieci”.
+- Dla biur zrób **osobną kampanię** z drugim filmem (gdy będzie) — inne kierowanie (frazy „program dla biura nieruchomości”, „CRM nieruchomości”, „oferty prywatne dla pośredników”).
+
+### Krok 4 — reklama (teksty do wklejenia)
+```
+URL końcowy:      https://www.finderdom.pl/?utm_source=google&utm_medium=video&utm_campaign=prywatni
+Wyświetlany URL:  finderdom.pl
+Wezwanie do działania (10 zn.):  Sprawdź
+Nagłówek (15 zn.):              Nie przepłać
+Długi nagłówek (90 zn.):        Wszystkie ogłoszenia z Otodom, OLX, Morizon i Gratki w jednym miejscu. AI oceni, czy cena to okazja.
+Opis (70 zn.):                  Wyszukiwanie AI, alerty, kalkulator raty i wycena PDF za 35 zł.
+```
+Wariant B (test A/B, drugi zestaw tekstów):
+```
+Nagłówek:        Ile warte jest Twoje M?
+Długi nagłówek:  Wycena mieszkania w 2 minuty — raport PDF z aktów notarialnych za 35 zł. Plan Osobisty 45 zł/mies.
+Opis:            Sprawdź wartość zanim sprzedasz. Bez umowy, anulujesz kiedy chcesz.
+CTA:             Wyceń teraz        URL: https://www.finderdom.pl/wycena?utm_source=google&utm_medium=video&utm_campaign=wycena
+```
+
+### Krok 5 — pomiar
+- Na stronie odtworzenie filmu wysyła zdarzenie GA4 `video_play` (tytuł `prywatni`) — zobaczysz, ilu odwiedzających ogląda film.
+- Konwersje (rejestracja, zakup wyceny, zakup planu) — te same co w Kampanii 1 i 2 (sekcja „Konwersje do założenia”).
+- Po 2 tygodniach: jeśli **współczynnik obejrzeń (VTR) < 15 %** → skróć film do 30–45 s (sam początek: hasło → wyszukiwanie AI → analiza ceny → CTA);
+  format bumper 6 s / 15 s niemożliwy do pominięcia daje tani zasięg, ale tam musi być osobny, krótki montaż.

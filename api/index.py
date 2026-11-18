@@ -3754,7 +3754,16 @@ async def _brand_master_doc(user: dict) -> dict:
     return user
 
 
-def _brand_public(master: dict) -> dict:
+async def _brand_can_edit(user: dict) -> bool:
+    """Właściciel konta firmowego, każde konto z planem Biuro jednoosobowe/Firmowy albo admin — agent tylko odczyt."""
+    if user.get("role") == "agent":
+        return False
+    if user.get("account_type") == "business" or (user.get("email") or "").lower() in ADMIN_EMAILS:
+        return True
+    return (await effective_tier_async(user)) in BUSINESS_TIERS
+
+
+def _brand_public(master: dict, editable: bool) -> dict:
     b = master.get("brand") or {}
     return {
         "name": b.get("name") or master.get("company_name") or "",
@@ -3763,7 +3772,7 @@ def _brand_public(master: dict) -> dict:
         "www": b.get("www") or "",
         "logo": b.get("logo") or None,
         "has_logo": bool(b.get("logo")),
-        "editable": master.get("account_type") == "business",
+        "editable": editable,
     }
 
 
@@ -3771,13 +3780,13 @@ def _brand_public(master: dict) -> dict:
 async def get_brand(user: dict = Depends(current_user)):
     """Logo i dane biura do wycen PDF — dla właściciela konta firmowego i jego agentów."""
     master = await _brand_master_doc(user)
-    return _brand_public(master)
+    return _brand_public(master, await _brand_can_edit(user))
 
 
 @app.put("/api/auth/brand")
 async def update_brand(body: BrandRequest, user: dict = Depends(current_user)):
-    """Zapis logo/danych biura. Tylko właściciel konta firmowego (agent widzi, nie edytuje)."""
-    if user.get("account_type") != "business" or user.get("role") == "agent":
+    """Zapis logo/danych biura. Właściciel konta firmowego / plan biurowy / admin (agent widzi, nie edytuje)."""
+    if not await _brand_can_edit(user):
         raise HTTPException(403, "Logo i dane biura ustawia właściciel konta firmowego")
     cur = user.get("brand") or {}
     email = (body.email or "").strip().lower()
@@ -3796,7 +3805,7 @@ async def update_brand(body: BrandRequest, user: dict = Depends(current_user)):
     }
     await database().users.update_one({"_id": user["_id"]}, {"$set": {"brand": brand}})
     user["brand"] = brand
-    return _brand_public(user)
+    return _brand_public(user, True)
 
 
 class StripeKeyRequest(BaseModel):
@@ -7018,7 +7027,7 @@ async def valuation_business(body: BusinessValuationReq, user: dict = Depends(cu
         if tier not in BUSINESS_TIERS and (user.get("email") or "").lower() not in ADMIN_EMAILS:
             raise HTTPException(403, "Wycena z logo biura jest w planach Biuro jednoosobowe (90 zł) i Firmowy (199 zł)")
         master = await _brand_master_doc(user)
-        bp = _brand_public(master)
+        bp = _brand_public(master, False)
         brand = {"name": bp["name"] or email, "phone": bp["phone"], "email": bp["email"], "www": bp["www"], "logo": bp["logo"]}
     if body.listing_id:
         val_type, md = "valuation", {"type": "valuation", "listing_id": body.listing_id, "email": email}

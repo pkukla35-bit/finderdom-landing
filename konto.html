@@ -410,8 +410,8 @@ gtag('set', 'url_passthrough', false);
         document.querySelectorAll('.biz-only').forEach(el => el.style.display = '');
         document.getElementById('pCompany').textContent = u.company_name || '—';
         document.getElementById('pNip').textContent = u.nip || '—';
-        loadBrand(u);
       }
+      loadBrand(u);
       // Show Leady tab for active Firmowy / Biuro jednoosobowe subscribers; Zespół only for Firmowy
       if (u.tier === 'business' || u.tier === 'solo'){
         document.querySelectorAll('.biz-only-tab').forEach(el => el.style.display = '');
@@ -547,17 +547,18 @@ gtag('set', 'url_passthrough', false);
     else { box.innerHTML = '<span style="font-size:12px;color:#6b7280">brak logo</span>'; rm.style.display = 'none'; }
   }
   async function loadBrand(u){
-    if (u.account_type !== 'business') return;
+    // Konto firmowe albo aktywny plan Biuro jednoosobowe / Firmowy (także konto osobiste z takim planem / admin)
+    if (u.account_type !== 'business' && u.tier !== 'business' && u.tier !== 'solo') return;
     const card = document.getElementById('brandCard');
     card.style.display = '';
-    if (u.role === 'agent') {
-      document.getElementById('brandAgentNote').style.display = '';
-      document.getElementById('brandForm').style.display = 'none';
-    }
     try {
       const r = await fetch('/api/auth/brand', { headers: { 'Authorization': 'Bearer ' + token } });
       if (!r.ok) return;
       const b = await r.json();
+      if (b.editable === false) {
+        document.getElementById('brandAgentNote').style.display = '';
+        document.getElementById('brandForm').style.display = 'none';
+      }
       document.getElementById('brandName').value = b.name || '';
       document.getElementById('brandPhone').value = b.phone || '';
       document.getElementById('brandEmail').value = b.email || '';

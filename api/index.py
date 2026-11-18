@@ -3708,6 +3708,97 @@ async def update_invoice_data(body: InvoiceDataRequest, user: dict = Depends(cur
     return {"ok": True, **upd}
 
 
+# ── 🎨 Logo i dane biura na wycenach PDF (white-label dla planów Biuro jednoosobowe / Firmowy) ──────────
+# users.brand = {"name","phone","email","www","logo" (data:image/png;base64,...) }. Agent dziedziczy brand mastera.
+class BrandRequest(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=120)
+    phone: Optional[str] = Field(default=None, max_length=40)
+    email: Optional[str] = Field(default=None, max_length=120)
+    www: Optional[str] = Field(default=None, max_length=120)
+    logo: Optional[str] = Field(default=None, max_length=3_000_000)  # data URL z przeglądarki (≤ ~2 MB)
+    remove_logo: bool = False
+
+
+def _brand_process_logo(data_url: str) -> str:
+    """data URL (png/jpg/webp) → PNG RGBA dopasowane do 900×300 px, zwraca data URL. Odrzuca śmieci i za duże pliki."""
+    import base64 as _b64
+    from PIL import Image as _Img
+    m = re.match(r"^data:image/(png|jpeg|jpg|webp);base64,(.+)$", data_url.strip(), re.S)
+    if not m:
+        raise HTTPException(400, "Logo musi być plikiem PNG, JPG lub WEBP")
+    try:
+        raw = _b64.b64decode(m.group(2), validate=True)
+    except Exception:
+        raise HTTPException(400, "Nie udało się odczytać pliku z logo")
+    if len(raw) > 2_200_000:
+        raise HTTPException(400, "Logo jest za duże — maks. 2 MB")
+    try:
+        im = _Img.open(io.BytesIO(raw)); im.load()
+    except Exception:
+        raise HTTPException(400, "Plik nie jest poprawnym obrazkiem")
+    im = im.convert("RGBA")
+    im.thumbnail((900, 300))
+    out = io.BytesIO(); im.save(out, format="PNG", optimize=True)
+    return "data:image/png;base64," + _b64.b64encode(out.getvalue()).decode()
+
+
+async def _brand_master_doc(user: dict) -> dict:
+    """Dokument właściciela konta firmowego (dla agenta → master)."""
+    if user.get("role") == "agent" and user.get("master_id"):
+        try:
+            m = await (await users_collection()).find_one({"_id": ObjectId(user["master_id"])})
+            if m:
+                return m
+        except Exception:
+            pass
+    return user
+
+
+def _brand_public(master: dict) -> dict:
+    b = master.get("brand") or {}
+    return {
+        "name": b.get("name") or master.get("company_name") or "",
+        "phone": b.get("phone") or "",
+        "email": b.get("email") or master.get("email") or "",
+        "www": b.get("www") or "",
+        "logo": b.get("logo") or None,
+        "has_logo": bool(b.get("logo")),
+        "editable": master.get("account_type") == "business",
+    }
+
+
+@app.get("/api/auth/brand")
+async def get_brand(user: dict = Depends(current_user)):
+    """Logo i dane biura do wycen PDF — dla właściciela konta firmowego i jego agentów."""
+    master = await _brand_master_doc(user)
+    return _brand_public(master)
+
+
+@app.put("/api/auth/brand")
+async def update_brand(body: BrandRequest, user: dict = Depends(current_user)):
+    """Zapis logo/danych biura. Tylko właściciel konta firmowego (agent widzi, nie edytuje)."""
+    if user.get("account_type") != "business" or user.get("role") == "agent":
+        raise HTTPException(403, "Logo i dane biura ustawia właściciel konta firmowego")
+    cur = user.get("brand") or {}
+    email = (body.email or "").strip().lower()
+    if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise HTTPException(400, "Podaj prawidłowy e-mail biura")
+    www = (body.www or "").strip()
+    www = re.sub(r"^https?://", "", www).rstrip("/")
+    if www and not re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}(/.*)?", www, re.I):
+        raise HTTPException(400, "Podaj prawidłowy adres strony (np. biuro.pl)")
+    brand = {
+        "name": (body.name or "").strip()[:120] or None,
+        "phone": (body.phone or "").strip()[:40] or None,
+        "email": email or None,
+        "www": www or None,
+        "logo": None if body.remove_logo else (_brand_process_logo(body.logo) if body.logo else cur.get("logo")),
+    }
+    await database().users.update_one({"_id": user["_id"]}, {"$set": {"brand": brand}})
+    user["brand"] = brand
+    return _brand_public(user)
+
+
 class StripeKeyRequest(BaseModel):
     secret_key: str = Field(min_length=20, max_length=200)
 
@@ -6782,7 +6873,7 @@ async def valuation_download(session_id: str):
     )
 
 
-async def _render_valuation_pdf(val_type: str, md: dict, session_id: str) -> Tuple[bytes, str]:
+async def _render_valuation_pdf(val_type: str, md: dict, session_id: str, brand: Optional[dict] = None) -> Tuple[bytes, str]:
     """Buduje PDF wyceny: val_type 'valuation' (listing_id w md) lub 'valuation_custom' (req_id/property_json w md)."""
     # Pula porównawcza z MongoDB (dawniej statyczny /data/listings.json — już nie istnieje → 404 i brak PDF po zapłacie)
     import json as _json
@@ -6861,7 +6952,7 @@ async def _render_valuation_pdf(val_type: str, md: dict, session_id: str) -> Tup
     if (listing.get("type") or "") == "dom":
         rcn_houses = await get_rcn_house_comps(listing.get("city") or "", listing.get("lat"), listing.get("lon"))
 
-    pdf_data = await asyncio.to_thread(build_valuation_pdf, listing, all_listings, md.get("email", ""), rcn_stats, rcn_houses)
+    pdf_data = await asyncio.to_thread(build_valuation_pdf, listing, all_listings, md.get("email", ""), rcn_stats, rcn_houses, brand)
     fname = f"wycena-{listing.get('id','custom')}.pdf".replace("/", "-")
     return pdf_data, fname
 
@@ -6905,6 +6996,7 @@ async def valuation_quota(user: dict = Depends(current_user)):
 class BusinessValuationReq(BaseModel):
     property: Optional[dict] = None
     listing_id: Optional[str] = None
+    white_label: bool = False  # PDF z logo/danymi biura zamiast oznaczeń FinderDom (plany Biuro jednoosobowe / Firmowy)
 
 
 @app.post("/api/valuation/business")
@@ -6921,6 +7013,13 @@ async def valuation_business(body: BusinessValuationReq, user: dict = Depends(cu
     owner_id = str(user.get("master_id") or user["_id"])
     tier = q["tier"]
     email = user.get("email") or ""
+    brand = None
+    if body.white_label:
+        if tier not in BUSINESS_TIERS and (user.get("email") or "").lower() not in ADMIN_EMAILS:
+            raise HTTPException(403, "Wycena z logo biura jest w planach Biuro jednoosobowe (90 zł) i Firmowy (199 zł)")
+        master = await _brand_master_doc(user)
+        bp = _brand_public(master)
+        brand = {"name": bp["name"] or email, "phone": bp["phone"], "email": bp["email"], "www": bp["www"], "logo": bp["logo"]}
     if body.listing_id:
         val_type, md = "valuation", {"type": "valuation", "listing_id": body.listing_id, "email": email}
     else:
@@ -6930,9 +7029,9 @@ async def valuation_business(body: BusinessValuationReq, user: dict = Depends(cu
         safe_prop = _sanitize_valuation_property(prop)
         ins = await db.valuation_requests.insert_one({"property": safe_prop, "email": email, "user_id": str(user["_id"]), "source": "business", "created_at": datetime.now(timezone.utc)})
         val_type, md = "valuation_custom", {"type": "valuation_custom", "req_id": str(ins.inserted_id), "email": email}
-    pdf_data, fname = await _render_valuation_pdf(val_type, md, f"biz{int(datetime.now(timezone.utc).timestamp())}")
+    pdf_data, fname = await _render_valuation_pdf(val_type, md, f"biz{int(datetime.now(timezone.utc).timestamp())}", brand=brand)
     await db.valuation_log.insert_one({"owner_id": owner_id, "user_id": str(user["_id"]), "email": email, "source": "business", "tier": tier,
-                                       "listing_id": body.listing_id, "created_at": datetime.now(timezone.utc)})
+                                       "listing_id": body.listing_id, "white_label": bool(brand), "created_at": datetime.now(timezone.utc)})
     return StreamingResponse(io.BytesIO(pdf_data), media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
@@ -7972,7 +8071,8 @@ def _make_distribution_chart(values, highlight_val, kind="price", face="Helvetic
     return d
 
 
-def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None, rcn_houses=None):
+def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None, rcn_houses=None, brand=None):
+    """brand (white-label dla biur): {name, phone, email, www, logo(data URL)} → logo na okładce i dane biura w stopce zamiast FinderDom."""
     """
     Wycena nieruchomości w stylu propertly.io - profesjonalny raport 4-stronicowy.
     Kolorystyka: głęboki indygo/purpura, białe karty na jasnym tle.
@@ -8335,17 +8435,24 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None, rcn_houses
         canvas.setStrokeColor(BORDER)
         canvas.setLineWidth(0.5)
         canvas.line(18*mm, 20*mm, A4[0] - 18*mm, 20*mm)
-        # Brand left
+        # Brand left — white-label: nazwa i kontakt biura; domyślnie FinderDom.pl
         canvas.setFont(face_bold, 9)
         canvas.setFillColor(PRIMARY)
-        canvas.drawString(18*mm, 14*mm, "FinderDom.pl")
-        canvas.setFont(face, 7)
-        canvas.setFillColor(TEXT_MUTED)
-        canvas.drawString(18*mm, 10*mm, "Wycena AI · Baza 40 000+ ofert · Aktualizacja 24h/dobę")
+        if brand:
+            canvas.drawString(18*mm, 14*mm, (brand.get("name") or "")[:60])
+            canvas.setFont(face, 7)
+            canvas.setFillColor(TEXT_MUTED)
+            contact = " · ".join(x for x in [brand.get("phone"), brand.get("email"), brand.get("www")] if x)
+            canvas.drawString(18*mm, 10*mm, contact[:110] or "Raport przygotowany na podstawie aktualnych ofert z portali nieruchomości")
+        else:
+            canvas.drawString(18*mm, 14*mm, "FinderDom.pl")
+            canvas.setFont(face, 7)
+            canvas.setFillColor(TEXT_MUTED)
+            canvas.drawString(18*mm, 10*mm, "Wycena AI · Baza 40 000+ ofert · Aktualizacja 24h/dobę")
         # Right: page + date
         canvas.setFont(face, 7)
         canvas.setFillColor(TEXT_MUTED)
-        gen_txt = f"Wygenerowano {datetime.now(timezone.utc).strftime('%d.%m.%Y')} · FinderDom.pl"
+        gen_txt = f"Wygenerowano {datetime.now(timezone.utc).strftime('%d.%m.%Y')}" + ("" if brand else " · FinderDom.pl")
         canvas.drawRightString(A4[0] - 18*mm, 14*mm, gen_txt)
         canvas.drawRightString(A4[0] - 18*mm, 10*mm, f"Strona {doc.page}")
         canvas.restoreState()
@@ -8359,6 +8466,30 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None, rcn_houses
     story = []
 
     # ============ PAGE 1: Cover + Prices + Parameters ============
+    if brand:
+        # Nagłówek biura: logo (jeśli jest) po lewej, nazwa + kontakt po prawej
+        _hdr_cells = []
+        if brand.get("logo"):
+            try:
+                import base64 as _b64
+                from reportlab.platypus import Image as _RLImage
+                from reportlab.lib.utils import ImageReader as _IR
+                _raw = _b64.b64decode(brand["logo"].split(",", 1)[1])
+                _iw, _ih = _IR(io.BytesIO(_raw)).getSize()
+                _h = 14*mm; _w = min(_h * _iw / max(_ih, 1), 60*mm)
+                _hdr_cells.append(_RLImage(io.BytesIO(_raw), width=_w, height=_h, kind="proportional"))
+            except Exception:
+                pass
+        _contact = " · ".join(x for x in [brand.get("phone"), brand.get("email"), brand.get("www")] if x)
+        _hdr_cells.append(Paragraph(
+            f"<b>{(brand.get('name') or '')[:60]}</b><br/><font size='7' color='#6b7280'>{_contact[:110]}</font>",
+            ParagraphStyle("brandhdr", fontName=face, fontSize=10, leading=13, textColor=TEXT_DARK, alignment=TA_RIGHT)))
+        _hdr = Table([_hdr_cells], colWidths=([65*mm, None] if len(_hdr_cells) == 2 else [None]))
+        _hdr.setStyle(TableStyle([("VALIGN", (0,0),(-1,-1), "MIDDLE"), ("ALIGN", (0,0),(0,0), "LEFT"),
+                                  ("LEFTPADDING", (0,0),(-1,-1), 0), ("RIGHTPADDING", (0,0),(-1,-1), 0),
+                                  ("LINEBELOW", (0,0),(-1,0), 0.5, BORDER), ("BOTTOMPADDING", (0,0),(-1,-1), 4)]))
+        story.append(_hdr)
+        story.append(Spacer(1, 4*mm))
     story.append(Paragraph("Szczegółowy raport wyceny dla nieruchomości:", title_style))
     loc_full = ", ".join(filter(None, [
         l.get("sub_location") or "",

@@ -188,6 +188,34 @@ gtag('set', 'url_passthrough', false);
           </div>
         </form>
       </div>
+      <!-- 🎨 Logo i dane biura na wycenach PDF (white-label) — tylko konta firmowe -->
+      <div class="card biz-only" id="brandCard" style="display:none;margin-top:16px">
+        <h2>🎨 Logo biura na wycenach PDF</h2>
+        <p style="margin:0 0 14px;font-size:13px;color:#8ba3d4;line-height:1.5">Wycena PDF generowana z karty oferty (przycisk „Wyceń tę nieruchomość” w planach Biuro jednoosobowe i Firmowy) będzie miała <b style="color:#fff">Twoje logo i dane biura</b> — bez oznaczeń FinderDom. Gotowa do pokazania właścicielowi.</p>
+        <div id="brandAgentNote" style="display:none;font-size:13px;color:#8ba3d4">Logo i dane biura ustawia właściciel konta firmowego. Twoje wyceny PDF używają tych samych danych.</div>
+        <form id="brandForm" class="inv-form" autocomplete="off">
+          <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+            <div id="brandLogoPreview" style="width:200px;height:72px;background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid rgba(255,255,255,0.15)">
+              <span style="font-size:12px;color:#6b7280">brak logo</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label class="btn-outline" style="cursor:pointer;text-align:center;margin:0">📁 Wybierz plik logo<input type="file" id="brandLogoFile" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
+              <button type="button" class="btn-outline" id="brandLogoRemove" style="display:none">🗑 Usuń logo</button>
+              <span style="font-size:11px;color:#6b7280">PNG / JPG / WEBP, maks. 2 MB. Najlepiej poziome logo na przezroczystym lub białym tle.</span>
+            </div>
+          </div>
+          <div class="inv-grid">
+            <label>Nazwa biura na raporcie<input type="text" id="brandName" maxlength="120" placeholder="np. Nieruchomości Kowalski"></label>
+            <label>Telefon<input type="text" id="brandPhone" maxlength="40" placeholder="+48 600 000 000"></label>
+            <label>E-mail biura<input type="email" id="brandEmail" maxlength="120" placeholder="biuro@twojafirma.pl"></label>
+            <label>Strona www<input type="text" id="brandWww" maxlength="120" placeholder="twojafirma.pl"></label>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+            <button type="submit" class="btn-outline" id="brandSaveBtn">Zapisz logo i dane</button>
+            <span id="brandMsg" style="font-size:13px;color:#8ba3d4"></span>
+          </div>
+        </form>
+      </div>
     </div>
 
     <!-- Subskrypcja -->
@@ -382,6 +410,7 @@ gtag('set', 'url_passthrough', false);
         document.querySelectorAll('.biz-only').forEach(el => el.style.display = '');
         document.getElementById('pCompany').textContent = u.company_name || '—';
         document.getElementById('pNip').textContent = u.nip || '—';
+        loadBrand(u);
       }
       // Show Leady tab for active Firmowy / Biuro jednoosobowe subscribers; Zespół only for Firmowy
       if (u.tier === 'business' || u.tier === 'solo'){
@@ -499,6 +528,80 @@ gtag('set', 'url_passthrough', false);
       const data = await r.json();
       if (!r.ok) throw new Error(data.detail || 'Błąd zapisu');
       msg.textContent = '✅ Zapisano — dane pojawią się na fakturach.';
+      msg.style.color = '#4ade80';
+    } catch (err) {
+      msg.textContent = '❌ ' + err.message;
+      msg.style.color = '#f87171';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ── 🎨 Logo i dane biura na wycenach PDF ──────────────────────────────────
+  let brandLogoDataUrl = null;      // nowe logo wybrane w formularzu (data URL) — wysyłane tylko gdy zmienione
+  let brandRemoveLogo = false;
+  function brandRenderLogo(src){
+    const box = document.getElementById('brandLogoPreview');
+    const rm = document.getElementById('brandLogoRemove');
+    if (src) { box.innerHTML = '<img src="' + src + '" alt="logo biura" style="max-width:92%;max-height:84%;object-fit:contain">'; rm.style.display = ''; }
+    else { box.innerHTML = '<span style="font-size:12px;color:#6b7280">brak logo</span>'; rm.style.display = 'none'; }
+  }
+  async function loadBrand(u){
+    if (u.account_type !== 'business') return;
+    const card = document.getElementById('brandCard');
+    card.style.display = '';
+    if (u.role === 'agent') {
+      document.getElementById('brandAgentNote').style.display = '';
+      document.getElementById('brandForm').style.display = 'none';
+    }
+    try {
+      const r = await fetch('/api/auth/brand', { headers: { 'Authorization': 'Bearer ' + token } });
+      if (!r.ok) return;
+      const b = await r.json();
+      document.getElementById('brandName').value = b.name || '';
+      document.getElementById('brandPhone').value = b.phone || '';
+      document.getElementById('brandEmail').value = b.email || '';
+      document.getElementById('brandWww').value = b.www || '';
+      brandRenderLogo(b.logo);
+    } catch (e) { /* offline */ }
+  }
+  document.getElementById('brandLogoFile').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    const msg = document.getElementById('brandMsg');
+    if (!f) return;
+    if (f.size > 2 * 1024 * 1024) { msg.textContent = '❌ Plik jest za duży (maks. 2 MB)'; msg.style.color = '#f87171'; e.target.value = ''; return; }
+    const rd = new FileReader();
+    rd.onload = () => { brandLogoDataUrl = rd.result; brandRemoveLogo = false; brandRenderLogo(rd.result); msg.textContent = 'Kliknij „Zapisz logo i dane”, aby zachować.'; msg.style.color = '#8ba3d4'; };
+    rd.readAsDataURL(f);
+  });
+  document.getElementById('brandLogoRemove').addEventListener('click', () => {
+    brandLogoDataUrl = null; brandRemoveLogo = true; brandRenderLogo(null);
+    document.getElementById('brandLogoFile').value = '';
+    const msg = document.getElementById('brandMsg'); msg.textContent = 'Logo zostanie usunięte po zapisaniu.'; msg.style.color = '#8ba3d4';
+  });
+  document.getElementById('brandForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('brandSaveBtn');
+    const msg = document.getElementById('brandMsg');
+    btn.disabled = true; msg.textContent = 'Zapisuję…'; msg.style.color = '#8ba3d4';
+    try {
+      const r = await fetch('/api/auth/brand', {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: document.getElementById('brandName').value,
+          phone: document.getElementById('brandPhone').value,
+          email: document.getElementById('brandEmail').value,
+          www: document.getElementById('brandWww').value,
+          logo: brandLogoDataUrl,
+          remove_logo: brandRemoveLogo,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(Array.isArray(data.detail) ? data.detail.map(x => x.msg).join('; ') : (data.detail || 'Błąd zapisu'));
+      brandLogoDataUrl = null; brandRemoveLogo = false;
+      brandRenderLogo(data.logo);
+      msg.textContent = '✅ Zapisano — wyceny PDF z karty oferty będą miały Twoje logo i dane.';
       msg.style.color = '#4ade80';
     } catch (err) {
       msg.textContent = '❌ ' + err.message;

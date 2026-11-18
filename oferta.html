@@ -452,6 +452,15 @@ gtag('set', 'url_passthrough', false);
 
   <!-- Right: Sidebar -->
   <aside class="sidebar">
+    <!-- 📄 Wycena PDF z logo biura (white-label) — tylko plany Biuro jednoosobowe / Firmowy; wypełnia renderBizValuationBox() -->
+    <div class="contact-card" id="valBizBox" style="display:none;border-color:rgba(96,165,250,0.35)">
+      <div class="contact-title" style="color:#93c5fd">📄 Wyceń tę nieruchomość</div>
+      <div id="valBizLogo" style="display:none;background:#fff;border-radius:12px;padding:10px 14px;margin-bottom:12px;text-align:center"><img alt="logo biura" style="max-height:48px;max-width:100%;object-fit:contain"></div>
+      <div id="valBizText" style="font-size:13px;color:#c7d2fe;line-height:1.55;margin-bottom:12px"></div>
+      <button type="button" id="valBizBtn" class="contact-btn" style="width:100%;font-family:inherit;background:linear-gradient(135deg,#60a5fa,#3b82f6);color:#fff">📄 Generuj wycenę PDF</button>
+      <div id="valBizMsg" style="display:none;font-size:12px;line-height:1.45;margin-top:4px"></div>
+      <div class="contact-mini" id="valBizHint"></div>
+    </div>
     <div class="contact-card">
       <div class="contact-title">📞 Kontakt</div>
       <a id="ctaOtodom" href="#" target="_blank" rel="noopener" class="contact-btn">🔗 Otwórz w Otodom</a>
@@ -689,6 +698,39 @@ async function loadOffer() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = m ? m[1] : 'wycena.pdf'; a.click();
   }
 
+  // 📄 Wycena z logo biura w prawej kolumnie — dla kont z planem Biuro jednoosobowe / Firmowy (white_label → PDF bez oznaczeń FinderDom)
+  async function renderBizValuationBox(u){
+    if (!u || !(u.tier === 'business' || u.tier === 'solo') || !token) return;
+    const box = document.getElementById('valBizBox');
+    let brand = null;
+    try { const rb = await fetch('/api/auth/brand', { headers: { 'Authorization': 'Bearer ' + token } }); if (rb.ok) brand = await rb.json(); } catch(e){}
+    const name = (brand && brand.name) || u.company_name || 'Twojego biura';
+    if (brand && brand.logo) { const lb = document.getElementById('valBizLogo'); lb.querySelector('img').src = brand.logo; lb.style.display = ''; }
+    document.getElementById('valBizText').innerHTML = 'Raport PDF (ceny transakcyjne i ofertowe, podobne oferty, dzielnice) z <b style="color:#fff">logo i danymi ' + name.replace(/</g,'&lt;') + '</b> — bez oznaczeń FinderDom. Gotowy na spotkanie z właścicielem.';
+    const hint = document.getElementById('valBizHint');
+    if (!brand || !brand.logo) {
+      hint.innerHTML = (brand && brand.editable === false)
+        ? '<strong>💡</strong> Logo biura ustawia właściciel konta firmowego w <a href="/konto" style="color:#93c5fd">Moje konto → Profil</a>.'
+        : '<strong>💡</strong> Dodaj logo i telefon biura w <a href="/konto" style="color:#93c5fd">Moje konto → Profil</a> — pojawią się na okładce i w stopce każdej wyceny.';
+    } else {
+      hint.innerHTML = 'W cenie planu' + (u.tier === 'business' ? ' Firmowego' : ' Biuro jednoosobowe') + ' — bez limitu wycen.';
+    }
+    box.style.display = '';
+    document.getElementById('valBizBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('valBizBtn'); const msg = document.getElementById('valBizMsg');
+      const lid = new URLSearchParams(location.search).get('id') || (window.__offer && window.__offer.id);
+      if (!lid) return;
+      btn.disabled = true; btn.textContent = '⏳ Generuję PDF…'; msg.style.display = 'none';
+      try {
+        await downloadBusinessValuation({ listing_id: lid, white_label: true });
+        msg.textContent = '✅ Wycena pobrana — PDF z logo ' + name + '.'; msg.style.color = '#4ade80'; msg.style.display = '';
+        try { window.gtag && gtag('event', 'valuation_whitelabel', { tier: u.tier }); } catch(e){}
+      } catch (err) {
+        msg.textContent = '❌ ' + err.message; msg.style.color = '#f87171'; msg.style.display = '';
+      } finally { btn.disabled = false; btn.textContent = '📄 Generuj wycenę PDF'; }
+    });
+  }
+
   // Jeśli user zalogowany - pobierz świeży status z API (może plan się skończył)
   const token = localStorage.getItem('finderdom_token');
   if (token) {
@@ -698,6 +740,7 @@ async function loadOffer() {
         const d = await r.json();
         localStorage.setItem('finderdom_user', JSON.stringify(d.user));
         window.__isPremium = !!(d.user && d.user.tier && d.user.tier !== 'free');
+        renderBizValuationBox(d.user);
       }
     } catch(e){ /* offline - use cached */ }
   }

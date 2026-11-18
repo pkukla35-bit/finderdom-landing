@@ -174,20 +174,6 @@ gtag('set', 'url_passthrough', false);
         <div class="row biz-only" style="display:none"><div class="k">NIP</div><div class="v" id="pNip">—</div></div>
         <div class="row"><div class="k">Konto od</div><div class="v" id="pCreated">—</div></div>
       </div>
-      <div class="card" style="margin-top:16px">
-        <h2>🔒 Zmień hasło</h2>
-        <form id="pwForm" class="inv-form" autocomplete="off">
-          <div class="inv-grid">
-            <label>Aktualne hasło<input type="password" id="pwCurrent" autocomplete="current-password" required></label>
-            <label>Nowe hasło (min. 8 znaków)<input type="password" id="pwNew" minlength="8" maxlength="72" autocomplete="new-password" required></label>
-            <label>Powtórz nowe hasło<input type="password" id="pwNew2" minlength="8" maxlength="72" autocomplete="new-password" required></label>
-          </div>
-          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
-            <button type="submit" class="btn-outline" id="pwSaveBtn">Zmień hasło</button>
-            <span id="pwMsg" style="font-size:13px;color:#8ba3d4"></span>
-          </div>
-        </form>
-      </div>
       <!-- 🎨 Logo i dane biura na wycenach PDF (white-label) — tylko konta firmowe -->
       <div class="card biz-only" id="brandCard" style="display:none;margin-top:16px">
         <h2>🎨 Logo biura na wycenach PDF</h2>
@@ -213,6 +199,20 @@ gtag('set', 'url_passthrough', false);
           <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
             <button type="submit" class="btn-outline" id="brandSaveBtn">Zapisz logo i dane</button>
             <span id="brandMsg" style="font-size:13px;color:#8ba3d4"></span>
+          </div>
+        </form>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2>🔒 Zmień hasło</h2>
+        <form id="pwForm" class="inv-form" autocomplete="off">
+          <div class="inv-grid">
+            <label>Aktualne hasło<input type="password" id="pwCurrent" autocomplete="current-password" required></label>
+            <label>Nowe hasło (min. 8 znaków)<input type="password" id="pwNew" minlength="8" maxlength="72" autocomplete="new-password" required></label>
+            <label>Powtórz nowe hasło<input type="password" id="pwNew2" minlength="8" maxlength="72" autocomplete="new-password" required></label>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+            <button type="submit" class="btn-outline" id="pwSaveBtn">Zmień hasło</button>
+            <span id="pwMsg" style="font-size:13px;color:#8ba3d4"></span>
           </div>
         </form>
       </div>

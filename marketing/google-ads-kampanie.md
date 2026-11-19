@@ -321,7 +321,7 @@ CTA:             Wyceń teraz        URL: https://www.finderdom.pl/wycena?utm_so
 
 ## KAMPANIA 4 — FILM „Dla biur nieruchomości” (YouTube / Google Ads Wideo) · 20 zł/dzień
 
-Film: **3:19, poziomy 16:9.** Oryginał 1080p (99 MB) masz u siebie; wersja 720p (16,6 MB) leży na stronie:
+Film: **3:41, poziomy 16:9.** Oryginał 1080p (106 MB) masz u siebie; wersja 720p (18 MB) leży na stronie:
 `https://www.finderdom.pl/media/finderdom-biura.mp4`. Film jest osadzony na `/dla-biur#film-biura` (do niego prowadzi też
 link „Jesteś z biura? Zobacz film dla biur” pod filmem dla prywatnych na stronie głównej).
 

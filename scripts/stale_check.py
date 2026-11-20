@@ -68,6 +68,7 @@ GONE_MARKERS = {
 
 
 # Ile ofert sprawdzać po jednym jobie importu — proporcjonalnie do wielkości portalu w bazie (Otodom 185 tys.).
+DEFAULT_CONCURRENCY = {"otodom": 3}
 DEFAULT_LIMIT = {"otodom": 1200, "domiporta": 600, "gratka": 600, "morizon": 600, "adresowo": 500, "gethome": 500, "nol": 500}
 
 
@@ -116,7 +117,9 @@ def sweep(coll, source: str, log, limit: Optional[int] = None, concurrency: Opti
     if limit is None:
         limit = os.environ.get(f"STALE_SWEEP_LIMIT_{source.upper()}") or os.environ.get("STALE_SWEEP_LIMIT") or DEFAULT_LIMIT.get(source, 400)
     limit = int(limit)
-    concurrency = int(concurrency if concurrency is not None else os.environ.get("STALE_SWEEP_CONCURRENCY", "8"))
+    if concurrency is None:
+        concurrency = os.environ.get(f"STALE_SWEEP_CONCURRENCY_{source.upper()}") or os.environ.get("STALE_SWEEP_CONCURRENCY") or DEFAULT_CONCURRENCY.get(source, 8)
+    concurrency = int(concurrency)
     min_age_days = int(min_age_days if min_age_days is not None else os.environ.get("STALE_SWEEP_MIN_AGE_DAYS", "3"))
     dry = bool(dry if dry is not None else os.environ.get("STALE_SWEEP_DRY") == "1")
     if limit <= 0:
@@ -151,8 +154,11 @@ def sweep(coll, source: str, log, limit: Optional[int] = None, concurrency: Opti
     ops = []
     cnt = {"checked": len(results), "gone": 0, "alive": 0, "unknown": 0}
     reasons: Dict[str, int] = {}
+    unknown: Dict[str, int] = {}
     for _id, kind, why, st in results:
         cnt[kind] += 1
+        if kind == "unknown":
+            unknown[why[:24]] = unknown.get(why[:24], 0) + 1
         if kind == "gone":
             reasons[why.split(":")[0]] = reasons.get(why.split(":")[0], 0) + 1
             ops.append(UpdateOne({"_id": _id}, {"$set": {"is_stale": True, "stale_since": now, "stale_reason": f"page_gone:{why[:40]}",
@@ -161,6 +167,6 @@ def sweep(coll, source: str, log, limit: Optional[int] = None, concurrency: Opti
             ops.append(UpdateOne({"_id": _id}, {"$set": {"stale_checked_at": now, **({"last_checked_at": now} if kind == "alive" else {})}}))
     if ops and not dry:
         coll.bulk_write(ops, ordered=False)
-    log.info("stale-sweep %s: checked=%d gone=%d alive=%d unknown=%d reasons=%s in %.0fs%s",
-             source, cnt["checked"], cnt["gone"], cnt["alive"], cnt["unknown"], reasons, time.time() - t0, " (DRY)" if dry else "")
+    log.info("stale-sweep %s: checked=%d gone=%d alive=%d unknown=%d reasons=%s unknown_why=%s in %.0fs%s",
+             source, cnt["checked"], cnt["gone"], cnt["alive"], cnt["unknown"], reasons, unknown, time.time() - t0, " (DRY)" if dry else "")
     return cnt

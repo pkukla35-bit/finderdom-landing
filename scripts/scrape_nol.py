@@ -256,6 +256,12 @@ def main():
 
     log.info("═══ DONE %s/%s: new=%d updated=%d details=%d pages=%d ═══",
              a.transaction, a.property, tot["new"], tot["updated"], tot["details"], tot["pages"])
+    # Rewalidacja najstarszych ofert tego portalu (zdjęte → is_stale). Reguły per portal w scripts/stale_check.py. 20.11
+    try:
+        from stale_check import sweep as _stale_sweep
+        _stale_sweep(coll, "nol", log)
+    except Exception as e:
+        log.error("stale-sweep failed: %s", str(e)[:200])
 
 
 # ── Lokale użytkowe: matryce w .github/workflows nie mają „lokal” (nie da się ich edytować bez uprawnienia „Workflows”

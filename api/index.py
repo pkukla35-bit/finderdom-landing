@@ -47,6 +47,7 @@ from pymongo import ReturnDocument, UpdateOne
 from pymongo.errors import DuplicateKeyError
 import sys as _sys
 _sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+from stale_check import classify as _stale_classify  # reguły „oferta zdjęta” per portal (wspólne z importerami)
 from dup_logic import (_build_diacritic_regex, _num_or_zero, _PORTAL_NAMES, _portal_name, _portal_of, _cluster_copies, _price_timeline,  # noqa: E402
                        _VOIVODESHIPS, _BT_REGEX, _BT_ALIAS, _DT_REGEX, _DT_ALIAS, bt_classify, _dup_match, _dup_ids, _dup_norm, dup_prepare, dup_summarize, DUP_PROJ, DUP_CANDS)
 
@@ -1970,7 +1971,7 @@ async def admin_cleanup_stale(
             {"last_checked_at": {"$lt": recent_cutoff}},
         ],
     }
-    cursor = coll.find(query, {"_id": 1, "url": 1, "images": 1, "external_id": 1, "is_stale": 1, "stale_reason": 1}).sort("last_checked_at", 1).limit(limit)
+    cursor = coll.find(query, {"_id": 1, "url": 1, "source": 1, "images": 1, "external_id": 1, "is_stale": 1, "stale_reason": 1}).sort("last_checked_at", 1).limit(limit)
     docs = await cursor.to_list(length=limit)
     total_to_check = len(docs)
 
@@ -2000,13 +2001,13 @@ async def admin_cleanup_stale(
                 await _olx_apply_state(coll, doc, state, photos, now)
             return (doc["_id"], False, "olx-api")  # stan zapisany wyżej; nie dublujemy w zbiorczym update
         try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
-                r = await client.head(url, headers={"User-Agent": ua})
-                if r.status_code in (405, 501):
-                    r = await client.get(url, headers={"User-Agent": ua, "Range": "bytes=0-1024"})
-                # 404/410 = stale. 4xx (poza 429 rate limit) = też stale (redirect na listing itp)
-                is_stale = r.status_code in (404, 410) or (400 <= r.status_code < 500 and r.status_code != 429)
-                return (doc["_id"], is_stale, r.status_code)
+            # GET zamiast HEAD (20.11): Domiporta/NOL/OdWłaściciela zwracają 200 dla zdjętych ofert (strona „Archiwalne”,
+            # redirect na listę / stronę główną). Reguły per portal w scripts/stale_check.py (wspólne z importerami).
+            async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as client:
+                r = await client.get(url, headers={"User-Agent": ua, "Accept-Language": "pl-PL,pl;q=0.9"})
+                html = r.text[:300_000] if "text/html" in (r.headers.get("content-type") or "") else ""
+                kind, _why = _stale_classify(doc.get("source") or "", url, r.status_code, str(r.url), html)
+                return (doc["_id"], kind == "gone", r.status_code)
         except (httpx.TimeoutException, httpx.HTTPError):
             return (doc["_id"], False, None)
         except Exception:

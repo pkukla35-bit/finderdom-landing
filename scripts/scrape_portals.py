@@ -828,6 +828,12 @@ def main():
     log.info("═══ DONE %s %s/%s: new=%d updated=%d pages=%d ═══", a.portal, a.transaction, a.property, tot["new"], tot["updated"], tot["pages"])
     if a.portal == "adresowo":
         _verify_adresowo_sellers(coll, a.property, a.transaction)
+    # Rewalidacja najstarszych ofert tego portalu (zdjęte → is_stale). Reguły per portal w scripts/stale_check.py. 20.11
+    try:
+        from stale_check import sweep as _stale_sweep
+        _stale_sweep(coll, a.portal, log)
+    except Exception as e:
+        log.error("stale-sweep failed: %s", str(e)[:200])
 
 
 ODW_PHONE_LIMIT = int(os.environ.get("ODW_PHONE_LIMIT", "150"))

@@ -6,7 +6,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 30,
-      "includeFiles": "{api/fonts/**,szablony/*.html,szablony/*.txt,scripts/dup_logic.py,scripts/scrape_portals.py,scripts/scrape_otodom.py,scripts/market_type.py}"
+      "includeFiles": "{api/fonts/**,szablony/*.html,szablony/*.txt,scripts/dup_logic.py,scripts/stale_check.py,scripts/scrape_portals.py,scripts/scrape_otodom.py,scripts/market_type.py}"
     },
     "api/subscribe.js": {
       "maxDuration": 10

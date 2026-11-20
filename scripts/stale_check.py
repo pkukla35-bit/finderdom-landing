@@ -68,10 +68,10 @@ GONE_MARKERS = {
 
 
 # Ile ofert sprawdzać po jednym jobie importu — proporcjonalnie do wielkości portalu w bazie (Otodom 185 tys.).
-# Otodom (Cloudflare) blokuje 403 po ~150–200 szybkich żądaniach z jednego IP → 1 wątek, 0.6 s przerwy, 400/job, stop po 15× 403 z rzędu.
+# Otodom (Cloudflare) blokuje 403 po ~150–200 szybkich żądaniach z jednego IP → 1 wątek, 0.6 s przerwy, 600/job (~10 min), stop po 15× 403 z rzędu.
 DEFAULT_CONCURRENCY = {"otodom": 1}
 DEFAULT_DELAY = {"otodom": 0.6}
-DEFAULT_LIMIT = {"otodom": 400, "domiporta": 600, "gratka": 600, "morizon": 600, "adresowo": 500, "gethome": 500, "nol": 500}
+DEFAULT_LIMIT = {"otodom": 600, "domiporta": 600, "gratka": 600, "morizon": 600, "adresowo": 500, "gethome": 500, "nol": 500}
 BLOCK_STREAK_ABORT = 15
 
 

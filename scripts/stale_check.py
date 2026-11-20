@@ -68,8 +68,11 @@ GONE_MARKERS = {
 
 
 # Ile ofert sprawdzać po jednym jobie importu — proporcjonalnie do wielkości portalu w bazie (Otodom 185 tys.).
-DEFAULT_CONCURRENCY = {"otodom": 3}
-DEFAULT_LIMIT = {"otodom": 1200, "domiporta": 600, "gratka": 600, "morizon": 600, "adresowo": 500, "gethome": 500, "nol": 500}
+# Otodom (Cloudflare) blokuje 403 po ~150–200 szybkich żądaniach z jednego IP → 1 wątek, 0.6 s przerwy, 400/job, stop po 15× 403 z rzędu.
+DEFAULT_CONCURRENCY = {"otodom": 1}
+DEFAULT_DELAY = {"otodom": 0.6}
+DEFAULT_LIMIT = {"otodom": 400, "domiporta": 600, "gratka": 600, "morizon": 600, "adresowo": 500, "gethome": 500, "nol": 500}
+BLOCK_STREAK_ABORT = 15
 
 
 def classify(source: str, url: str, status: int, final_url: str, html: str) -> Tuple[str, str]:
@@ -100,12 +103,18 @@ def classify(source: str, url: str, status: int, final_url: str, html: str) -> T
     return "unknown", "no_html"
 
 
+_SESSION = None
+
+
 def _fetch(url: str, timeout: float = 20.0) -> Tuple[int, str, str]:
-    """GET (do ~300 KB) przez curl_cffi z odciskiem Chrome. → (status, final_url, html)."""
+    """GET (do ~300 KB) przez curl_cffi z odciskiem Chrome (wspólna sesja → cookies). → (status, final_url, html)."""
+    global _SESSION
     if _creq is None:
         raise RuntimeError("curl_cffi not installed")
-    r = _creq.get(url, impersonate="chrome", timeout=timeout, allow_redirects=True,
-                  headers={"Accept-Language": "pl-PL,pl;q=0.9", "Accept": "text/html,*/*;q=0.8"})
+    if _SESSION is None:
+        _SESSION = _creq.Session(impersonate="chrome")
+    r = _SESSION.get(url, timeout=timeout, allow_redirects=True,
+                     headers={"Accept-Language": "pl-PL,pl;q=0.9", "Accept": "text/html,*/*;q=0.8"})
     body = r.text or ""
     return r.status_code, str(r.url or url), body[:300_000]
 
@@ -139,18 +148,32 @@ def sweep(coll, source: str, log, limit: Optional[int] = None, concurrency: Opti
         return {"checked": 0, "gone": 0, "alive": 0, "unknown": 0}
     t0 = time.time()
     results = []
+    delay = float(os.environ.get(f"STALE_SWEEP_DELAY_{source.upper()}") or os.environ.get("STALE_SWEEP_DELAY") or DEFAULT_DELAY.get(source, 0.0))
+    blocked = {"streak": 0, "abort": False}
 
     def work(d):
+        if blocked["abort"]:
+            return d["_id"], "unknown", "skipped_blocked", 0
         try:
             st, fin, html = _fetch(d["url"])
             kind, why = classify(source, d["url"], st, fin, html)
         except Exception as e:
             kind, why, st = "unknown", f"err:{type(e).__name__}", 0
+        if st in (403, 429):
+            blocked["streak"] += 1
+            if blocked["streak"] >= BLOCK_STREAK_ABORT:
+                blocked["abort"] = True
+        else:
+            blocked["streak"] = 0
+        if delay:
+            time.sleep(delay)
         return d["_id"], kind, why, st
 
     with ThreadPoolExecutor(max_workers=max(1, concurrency)) as ex:
         for r in ex.map(work, docs):
             results.append(r)
+    if blocked["abort"]:
+        log.warning("stale-sweep %s: portal blokuje (%d× 403/429 z rzędu) — przerwano, reszta wróci do kolejki", source, BLOCK_STREAK_ABORT)
     ops = []
     cnt = {"checked": len(results), "gone": 0, "alive": 0, "unknown": 0}
     reasons: Dict[str, int] = {}
@@ -163,8 +186,10 @@ def sweep(coll, source: str, log, limit: Optional[int] = None, concurrency: Opti
             reasons[why.split(":")[0]] = reasons.get(why.split(":")[0], 0) + 1
             ops.append(UpdateOne({"_id": _id}, {"$set": {"is_stale": True, "stale_since": now, "stale_reason": f"page_gone:{why[:40]}",
                                                            "stale_checked_at": now, "last_checked_at": now}}))
-        else:
-            ops.append(UpdateOne({"_id": _id}, {"$set": {"stale_checked_at": now, **({"last_checked_at": now} if kind == "alive" else {})}}))
+        elif kind == "alive":
+            ops.append(UpdateOne({"_id": _id}, {"$set": {"stale_checked_at": now, "last_checked_at": now}}))
+        else:  # unknown (403/timeout) — zdejmij „claim”, żeby następny job sprawdził ponownie
+            ops.append(UpdateOne({"_id": _id}, {"$unset": {"stale_checked_at": ""}}))
     if ops and not dry:
         coll.bulk_write(ops, ordered=False)
     log.info("stale-sweep %s: checked=%d gone=%d alive=%d unknown=%d reasons=%s unknown_why=%s in %.0fs%s",

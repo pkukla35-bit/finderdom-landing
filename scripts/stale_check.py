@@ -49,7 +49,9 @@ OFFER_PATH = {
 # Markery w HTML strony oferty (200) oznaczające ofertę zdjętą — tylko jednoznaczne frazy/atrybuty, nie słowa z opisów.
 GONE_MARKERS = {
     "nol": [re.compile(r'class="box-archive-info'), re.compile(r'name="isArchive"\s+value="1"')],
-    "domiporta": [re.compile(r"<title>[^<]*Archiwaln", re.I), re.compile(r"Oferta archiwalna|Ogłoszenie archiwalne|Ta oferta jest nieaktualna", re.I)],
+    # Domiporta (zweryfikowane 20.11): <title>… - Archiwum Domiporta.pl</title>, <h3 class="archive__title">To ogłoszenie jest już nieaktualne.</h3>
+    "domiporta": [re.compile(r"<title>[^<]*Archiwum Domiporta", re.I), re.compile(r'class="archive__(title|content|info)"'),
+                  re.compile(r"To ogłoszenie jest już nieaktualne|Oferta archiwalna|Ogłoszenie archiwalne", re.I)],
     "otodom": [re.compile(r'"adStatus"\s*:\s*"(ARCHIVED|INACTIVE|REMOVED)"'), re.compile(r"To ogłoszenie (jest )?nieaktualne|Ogłoszenie nieaktualne|Ogłoszenie zostało zakończone", re.I)],
     "morizon": [re.compile(r"Ta oferta jest (już )?nieaktualna|Oferta nieaktualna|oferta-nieaktualna", re.I)],
     "gratka": [re.compile(r"Ogłoszenie (jest )?nieaktualne|To ogłoszenie zostało zakończone|Ogłoszenie zarchiwizowane", re.I)],
@@ -126,6 +128,9 @@ def sweep(coll, source: str, log, limit: Optional[int] = None, concurrency: Opti
          "last_seen_at": {"$lt": seen_cut},
          "$or": [{"stale_checked_at": {"$exists": False}}, {"stale_checked_at": {"$lt": chk_cut}}]}
     docs = list(coll.find(q, {"_id": 1, "url": 1}).sort("last_seen_at", 1).limit(limit))
+    if docs and not dry:
+        # „claim” — równoległe joby tego samego portalu (matrix) nie sprawdzają tych samych ofert
+        coll.update_many({"_id": {"$in": [d["_id"] for d in docs]}}, {"$set": {"stale_checked_at": now}})
     if not docs:
         log.info("stale-sweep %s: nic do sprawdzenia (wszystkie oferty widziane < %dd lub sprawdzone < 2d)", source, min_age_days)
         return {"checked": 0, "gone": 0, "alive": 0, "unknown": 0}

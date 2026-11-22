@@ -416,15 +416,21 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
     lat = _num((coords or {}).get("latitude"))
     lon = _num((coords or {}).get("longitude"))
 
-    # ── Obrazek — próba wielu wariantów Otodom API ──
+    # ── Obrazki — lista z wyników (zwykle 3 zdjęcia; pełna galeria do 12 dociągana w enrich_from_details) ──
     img_url = None
     images = item.get("images") or item.get("photos") or []
-    if isinstance(images, list) and images:
-        if isinstance(images[0], dict):
-            img_url = (images[0].get("large") or images[0].get("medium")
-                       or images[0].get("small") or images[0].get("url"))
-        elif isinstance(images[0], str) and images[0].startswith("http"):
-            img_url = images[0]
+    gallery: List[str] = []
+    if isinstance(images, list):
+        for im in images[:12]:
+            u = None
+            if isinstance(im, dict):
+                u = im.get("large") or im.get("medium") or im.get("url") or im.get("small")
+            elif isinstance(im, str):
+                u = im
+            if isinstance(u, str) and u.startswith("http") and u not in gallery:
+                gallery.append(u)
+    if gallery:
+        img_url = gallery[0]
     # Fallback: pole "image", "mainImage", "photoUrl", "thumbnail"
     if not img_url:
         for key in ("image", "mainImage", "photoUrl", "thumbnail", "coverImage", "previewImage"):
@@ -455,6 +461,8 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
         "lat": lat,
         "lng": lon,
         "image": img_url,
+        # images_preview (3 z listy) — osobne pole, żeby import nie nadpisywał pełnej galerii `images` z detali. 21.11
+        **({"images_preview": gallery} if len(gallery) > 1 else {}),
         "transaction_type": TRANSACTION,
         "seller_type": seller_type,
         # added_at = prawdziwa data publikacji na Otodomie (fallback: teraz jeśli nie ma daty)
@@ -515,6 +523,11 @@ def enrich_from_details(coll, prop_type: str, transaction: str, phone_limit: int
     if plot_limit > 0 and prop_type == "dom":
         seen = {t["_id"] for t in targets}
         targets += [t for t in coll.find({**base, "plot_area_m2": {"$exists": False}}, {"url": 1}).sort("added_at", -1).limit(plot_limit) if t["_id"] not in seen]
+    # galerie: najnowsze oferty bez pełnej galerii (OTODOM_GALLERY_LIMIT/job, domyślnie 150) — te same strony co telefony/działki
+    gal_limit = int(os.environ.get("OTODOM_GALLERY_LIMIT", "150"))
+    if gal_limit > 0:
+        seen = {t["_id"] for t in targets}
+        targets += [t for t in coll.find({**base, "images": {"$exists": False}}, {"url": 1}).sort("added_at", -1).limit(gal_limit) if t["_id"] not in seen]
     now_iso = datetime.now(timezone.utc).isoformat()
     streak = 0
     for d in targets:
@@ -527,6 +540,11 @@ def enrich_from_details(coll, prop_type: str, transaction: str, phone_limit: int
             time.sleep(2.0); continue
         streak = 0
         upd: Dict[str, Any] = {"detail_checked_at": now_iso}
+        # pełna galeria (do 12 zdjęć) — strona oferty ma wszystkie, lista tylko 3
+        gal = [im.get("large") or im.get("medium") or im.get("url") for im in (ad.get("images") or []) if isinstance(im, dict)]
+        gal = [u for u in gal if isinstance(u, str) and u.startswith("http")][:12]
+        if len(gal) > 1:
+            upd["images"] = gal; stats["galleries"] = stats.get("galleries", 0) + 1
         cd = ad.get("contactDetails") or {}
         phones = [p for p in (cd.get("phones") or []) if p]
         if (cd.get("type") or (ad.get("owner") or {}).get("type")) == "private" and phones:
@@ -539,8 +557,8 @@ def enrich_from_details(coll, prop_type: str, transaction: str, phone_limit: int
                 pass
         coll.update_one({"_id": d["_id"]}, {"$set": upd})
         time.sleep(1.0)
-    log.info("  detale (%s/%s): sprawdzono=%d telefonów=%d działek=%d nieudane=%d",
-             prop_type, transaction, stats["checked"], stats["phones"], stats["plots"], stats["failed"])
+    log.info("  detale (%s/%s): sprawdzono=%d telefonów=%d działek=%d galerii=%d nieudane=%d",
+             prop_type, transaction, stats["checked"], stats["phones"], stats["plots"], stats.get("galleries", 0), stats["failed"])
     return stats
 
 

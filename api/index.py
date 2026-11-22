@@ -2229,6 +2229,10 @@ async def listing_single(listing_id: str, request: Request, response: Response):
         if not doc:
             response.status_code = 404
             return {"error": "Listing not found", "id": listing_id}
+        # galeria: pełna `images` (detale) → 3 zdjęcia z listy `images_preview` → pojedyncze `image`
+        if not doc.get("images") and doc.get("images_preview"):
+            doc["images"] = doc["images_preview"]
+        doc.pop("images_preview", None)
         paid = await _paid_user_from_request(request)
         if paid is None:
             # 🔒 bez planu: oferta widoczna, ale bez linku do portalu źródłowego
@@ -2846,6 +2850,10 @@ async def listings_scraped_endpoint(
         # Slice images do 3 pierwszych (w lite mode) — karuzela na karcie działa, payload mniejszy o ~20%
         if lite:
             for d in docs:
+                # Otodom: lista daje 3 zdjęcia (images_preview), pełna galeria `images` dociągana z detali — karta bierze co jest
+                if not d.get("images") and d.get("images_preview"):
+                    d["images"] = d["images_preview"]
+                d.pop("images_preview", None)
                 imgs = d.get("images")
                 if isinstance(imgs, list) and len(imgs) > 3:
                     d["images"] = imgs[:3]

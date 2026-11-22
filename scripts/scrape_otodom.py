@@ -500,11 +500,20 @@ def normalize(item: Dict[str, Any], city_name: str, prop: str) -> Optional[Dict[
 
 # ── Dociąganie ze strony oferty: telefon właściciela (PRYWATNE) + wielkość działki (DOMY) ────────
 # __NEXT_DATA__ strony oferty: ad.contactDetails.phones (prywatni jawnie) i ad.target.Terrain_area (lista wyników tego nie ma).
-def _fetch_detail_ad(url: str) -> Optional[Dict[str, Any]]:
-    html = fetch_direct(url)
-    if not html:
-        return None
-    m = NEXT_DATA_RE.search(html)
+_GONE = "GONE"
+
+
+def _fetch_detail_ad(url: str):
+    """→ dict `ad` z __NEXT_DATA__ | {} (strona bez danych) | "GONE" (404/410 — oferta zdjęta) | None (403/429/błąd)."""
+    try:
+        r = _DIRECT.get(url, headers=_DIRECT_HEADERS, timeout=30)
+    except Exception as e:
+        log.warning("direct error: %s", str(e)[:100]); return None
+    if r.status_code in (404, 410):
+        return _GONE
+    if r.status_code != 200 or "__NEXT_DATA__" not in r.text:
+        log.warning("detail HTTP %s", r.status_code); return None
+    m = NEXT_DATA_RE.search(r.text)
     try:
         return json.loads(m.group(1))["props"]["pageProps"]["ad"] if m else {}
     except Exception:
@@ -533,6 +542,12 @@ def enrich_from_details(coll, prop_type: str, transaction: str, phone_limit: int
     for d in targets:
         stats["checked"] += 1
         ad = _fetch_detail_ad(d["url"])
+        if ad == _GONE:
+            # oferta zdjęta z Otodomu (404/410) — oznacz od razu, nie licz jako blokady (wcześniej 8 martwych z rzędu = fałszywy „abort”)
+            coll.update_one({"_id": d["_id"]}, {"$set": {"detail_checked_at": now_iso, "is_stale": True, "stale_since": datetime.now(timezone.utc),
+                                                        "stale_reason": "page_gone:detail_410", "stale_checked_at": datetime.now(timezone.utc)}})
+            stats["gone"] = stats.get("gone", 0) + 1; streak = 0
+            time.sleep(0.5); continue
         if ad is None:
             stats["failed"] += 1; streak += 1
             if streak >= 8:
@@ -557,8 +572,8 @@ def enrich_from_details(coll, prop_type: str, transaction: str, phone_limit: int
                 pass
         coll.update_one({"_id": d["_id"]}, {"$set": upd})
         time.sleep(1.0)
-    log.info("  detale (%s/%s): sprawdzono=%d telefonów=%d działek=%d galerii=%d nieudane=%d",
-             prop_type, transaction, stats["checked"], stats["phones"], stats["plots"], stats.get("galleries", 0), stats["failed"])
+    log.info("  detale (%s/%s): sprawdzono=%d telefonów=%d działek=%d galerii=%d zdjęte=%d nieudane=%d",
+             prop_type, transaction, stats["checked"], stats["phones"], stats["plots"], stats.get("galleries", 0), stats.get("gone", 0), stats["failed"])
     return stats
 
 

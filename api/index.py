@@ -2848,12 +2848,13 @@ async def listings_scraped_endpoint(
         if total_count is None:
             total_count = offset + len(docs)  # licznik nie zdążył — front pokazuje „N+”
         # Slice images do 3 pierwszych (w lite mode) — karuzela na karcie działa, payload mniejszy o ~20%
+        for d in docs:
+            # Otodom: lista daje 3 zdjęcia (images_preview), pełna galeria `images` dociągana z detali — karta bierze co jest
+            if not d.get("images") and d.get("images_preview"):
+                d["images"] = d["images_preview"]
+            d.pop("images_preview", None)
         if lite:
             for d in docs:
-                # Otodom: lista daje 3 zdjęcia (images_preview), pełna galeria `images` dociągana z detali — karta bierze co jest
-                if not d.get("images") and d.get("images_preview"):
-                    d["images"] = d["images_preview"]
-                d.pop("images_preview", None)
                 imgs = d.get("images")
                 if isinstance(imgs, list) and len(imgs) > 3:
                     d["images"] = imgs[:3]

@@ -668,12 +668,6 @@ def main():
 
     log.info("═══ DONE property=%s: new=%d updated=%d | direct_ok=%d (%s) sb_credits=%d ═══",
              args.property, total["new"], total["updated"], DIRECT_STATE["direct_ok"], _DIRECT_KIND, DIRECT_STATE["sb_used"])
-    # Rewalidacja najstarszych ofert tego portalu (zdjęte → is_stale). Reguły per portal w scripts/stale_check.py. 20.11
-    try:
-        from stale_check import sweep as _stale_sweep
-        _stale_sweep(coll, "otodom", log)
-    except Exception as e:
-        log.error("stale-sweep failed: %s", str(e)[:200])
 
     # Telefony właścicieli (oferty prywatne) — po imporcie listy, bez ScrapingBee (tylko bezpośrednio)
     try:
@@ -683,6 +677,13 @@ def main():
                             int(os.environ.get("OTODOM_PLOT_LIMIT") or ("60" if fresh else "250")))
     except Exception as e:
         log.warning("detail enrichment skipped: %s", e)
+
+    # Rewalidacja najstarszych ofert tego portalu (zdjęte → is_stale). Reguły per portal w scripts/stale_check.py. 20.11 — PO detalach (telefony/galerie), bo 600 żądań sweep wyczerpuje limit Otodomu dla tego IP
+    try:
+        from stale_check import sweep as _stale_sweep
+        _stale_sweep(coll, "otodom", log)
+    except Exception as e:
+        log.error("stale-sweep failed: %s", str(e)[:200])
 
     # ⏰ Godzinne odświeżanie 9–19 PL: job-lider (mieszkanie/sprzedaz, tryb regiony) odpala kolejną lekką turę importów
     if args.regions and args.property == "mieszkanie" and TRANSACTION == "sprzedaz":

@@ -828,6 +828,12 @@ def main():
     log.info("═══ DONE %s %s/%s: new=%d updated=%d pages=%d ═══", a.portal, a.transaction, a.property, tot["new"], tot["updated"], tot["pages"])
     if a.portal == "adresowo":
         _verify_adresowo_sellers(coll, a.property, a.transaction)
+    # Galerie (do 12 zdjęć) ze stron najnowszych ofert bez galerii — ekstraktory per portal w scripts/gallery.py. 22.11
+    try:
+        from gallery import enrich_galleries as _enrich_galleries
+        _enrich_galleries(coll, a.portal, log)
+    except Exception as e:
+        log.error("galerie failed: %s", str(e)[:200])
     # Rewalidacja najstarszych ofert tego portalu (zdjęte → is_stale). Reguły per portal w scripts/stale_check.py. 20.11
     try:
         from stale_check import sweep as _stale_sweep

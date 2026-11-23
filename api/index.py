@@ -6978,6 +6978,7 @@ async def _render_valuation_pdf(val_type: str, md: dict, session_id: str, brand:
 
 BUSINESS_TRIAL_VALUATIONS = 3  # w okresie próbnym; opłacony Plan Firmowy = bez limitu
 INDIVIDUAL_MONTHLY_VALUATIONS = 3  # Plan Osobisty (45 zł): pierwsze 3 wyceny PDF w miesiącu w cenie, kolejne 35 zł/szt.
+PRIVATE_FREE_VALUATIONS = 10  # 23.11: konto prywatne bez planu — 10 bezpłatnych wycen PDF (łącznie), potem 35 zł/szt.
 
 
 def _month_start_utc() -> datetime:
@@ -7004,6 +7005,11 @@ async def _valuation_quota(user: dict) -> dict:
         nxt = (ms.replace(year=ms.year + 1, month=1) if ms.month == 12 else ms.replace(month=ms.month + 1))
         return {"tier": tier, "included": True, "unlimited": False, "limit": INDIVIDUAL_MONTHLY_VALUATIONS, "used": used,
                 "remaining": max(0, INDIVIDUAL_MONTHLY_VALUATIONS - used), "resets_at": nxt.isoformat()}
+    if user.get("account_type") != "business":
+        # konto prywatne bez planu: 10 bezpłatnych wycen (łącznie), potem 35 zł/szt. przez Stripe
+        used = await db.valuation_log.count_documents({"owner_id": owner_id, "source": "business"})
+        return {"tier": tier, "included": used < PRIVATE_FREE_VALUATIONS, "unlimited": False, "limit": PRIVATE_FREE_VALUATIONS, "used": used,
+                "remaining": max(0, PRIVATE_FREE_VALUATIONS - used), "resets_at": None, "private_free": True}
     return {"tier": tier, "included": False, "unlimited": False, "limit": 0, "used": 0, "remaining": 0, "resets_at": None}
 
 
@@ -7023,6 +7029,8 @@ async def valuation_business(body: BusinessValuationReq, user: dict = Depends(cu
     """Wycena PDF w cenie planu (Firmowy / Solo / Osobisty: bez limitu; trial firmowy: 3) — bez Stripe."""
     q = await _valuation_quota(user)
     if not q["included"]:
+        if q.get("private_free"):
+            raise HTTPException(402, f"Wykorzystałeś {PRIVATE_FREE_VALUATIONS} bezpłatnych wycen. Kolejne 35 zł/szt. albo plan Osobisty (45 zł/mies.) — wyceny bez limitu.")
         raise HTTPException(402, "Wyceny PDF bez limitu są w cenie każdego opłaconego planu: Osobisty (45 zł), Biuro jednoosobowe (90 zł), Firmowy (199 zł)")
     if not q["unlimited"] and q["remaining"] <= 0:
         if q.get("trial"):

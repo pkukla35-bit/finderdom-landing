@@ -698,9 +698,50 @@ async function loadOffer() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = m ? m[1] : 'wycena.pdf'; a.click();
   }
 
-  // 📄 Wycena z logo biura w prawej kolumnie — dla kont z planem Biuro jednoosobowe / Firmowy (white_label → PDF bez oznaczeń FinderDom)
+  // 📄 Wycena dla konta PRYWATNEGO (bez logo biura): 10 bezpłatnych wycen, potem 35 zł (modal Stripe); plan Osobisty = bez limitu. 23.11
+  async function renderPrivateValuationBox(u){
+    const box = document.getElementById('valBizBox');
+    let q = null;
+    try { const rq = await fetch('/api/valuation/quota', { headers: { 'Authorization': 'Bearer ' + token } }); if (rq.ok) q = await rq.json(); } catch(e){}
+    if (!q) return;
+    const free = q.included && !q.unlimited ? q.remaining : null;
+    document.getElementById('valBizText').innerHTML = 'Raport PDF: szacowana cena transakcyjna, podobne oferty i ceny w dzielnicy — gotowy w kilka sekund.';
+    const hint = document.getElementById('valBizHint');
+    const btn = document.getElementById('valBizBtn');
+    if (q.unlimited) {
+      hint.innerHTML = 'W cenie planu Osobistego — bez limitu wycen.';
+      btn.textContent = '📄 Generuj wycenę PDF';
+    } else if (q.included) {
+      hint.innerHTML = '<strong>' + free + ' z ' + q.limit + '</strong> bezpłatnych wycen do wykorzystania. Potem 35 zł/szt. albo plan Osobisty (45 zł/mies.) bez limitu.';
+      btn.textContent = '📄 Generuj wycenę PDF (bezpłatnie)';
+    } else {
+      hint.innerHTML = 'Wykorzystałeś ' + q.limit + ' bezpłatnych wycen. Kolejne 35 zł/szt. albo <a href="/konto" style="color:#93c5fd">plan Osobisty</a> — bez limitu.';
+      btn.textContent = '📄 Wycena PDF — 35 zł';
+    }
+    box.style.display = '';
+    btn.addEventListener('click', async () => {
+      if (!q.included) { openValuationModal(); return; }
+      const msg = document.getElementById('valBizMsg');
+      const lid = new URLSearchParams(location.search).get('id') || (window.__offer && window.__offer.id);
+      if (!lid) return;
+      btn.disabled = true; btn.textContent = '⏳ Generuję PDF…'; msg.style.display = 'none';
+      try {
+        await downloadBusinessValuation({ listing_id: lid });
+        msg.textContent = '✅ Wycena pobrana.'; msg.style.color = '#4ade80'; msg.style.display = '';
+        try { window.gtag && gtag('event', 'valuation_private', { tier: u.tier }); } catch(e){}
+        renderPrivateValuationBox(u);  // odśwież licznik
+      } catch (err) {
+        msg.textContent = '❌ ' + err.message; msg.style.color = '#f87171'; msg.style.display = '';
+        if (/35 zł/.test(err.message)) openValuationModal();
+      } finally { btn.disabled = false; }
+    }, { once: true });
+  }
+
+  // 📄 Wycena z logo biura w prawej kolumnie — konta FIRMOWE z planem Biuro jednoosobowe / Firmowy (white_label → PDF bez oznaczeń FinderDom)
   async function renderBizValuationBox(u){
-    if (!u || !(u.tier === 'business' || u.tier === 'solo') || !token) return;
+    if (!u || !token) return;
+    const isBiuro = (u.account_type === 'business' || u.role === 'agent') && (u.tier === 'business' || u.tier === 'solo');
+    if (!isBiuro) return renderPrivateValuationBox(u);
     const box = document.getElementById('valBizBox');
     let brand = null;
     try { const rb = await fetch('/api/auth/brand', { headers: { 'Authorization': 'Bearer ' + token } }); if (rb.ok) brand = await rb.json(); } catch(e){}
@@ -2273,6 +2314,7 @@ loadOffer();
   function quotaLabel(){
     if (!__valQuota || !__valQuota.included) return '';
     if (__valQuota.unlimited) return 'w cenie planu';
+    if (__valQuota.private_free) return 'bezpłatnie — zostało ' + __valQuota.remaining + ' z ' + __valQuota.limit;
     return 'w cenie planu — zostało ' + __valQuota.remaining + ' z ' + __valQuota.limit + (__valQuota.trial ? ' (okres próbny)' : ' w tym miesiącu');
   }
   function openValuationModal(){
@@ -2293,7 +2335,7 @@ loadOffer();
         bb.textContent = quotaIncluded() ? ('📄 Generuj wycenę PDF — ' + quotaLabel() + ' →') : 'Zapłać 35 zł kartą / BLIK →';
         const hint = document.getElementById('valQuotaHint');
         if (hint) hint.textContent = (__valQuota && __valQuota.included && !__valQuota.unlimited && __valQuota.remaining <= 0)
-          ? 'Wykorzystałeś ' + __valQuota.limit + ' wycen w cenie planu' + (__valQuota.trial ? '' : ' w tym miesiącu') + ' — kolejne 35 zł/szt.' : '';
+          ? 'Wykorzystałeś ' + __valQuota.limit + (__valQuota.private_free ? ' bezpłatnych wycen' : ' wycen w cenie planu' + (__valQuota.trial ? '' : ' w tym miesiącu')) + ' — kolejne 35 zł/szt.' : '';
       });
     }
   }

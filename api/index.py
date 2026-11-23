@@ -6977,7 +6977,7 @@ async def _render_valuation_pdf(val_type: str, md: dict, session_id: str, brand:
 
 
 BUSINESS_TRIAL_VALUATIONS = 3  # w okresie próbnym; opłacony Plan Firmowy = bez limitu
-INDIVIDUAL_MONTHLY_VALUATIONS = 3  # Plan Osobisty (45 zł): pierwsze 3 wyceny PDF w miesiącu w cenie, kolejne 35 zł/szt.
+INDIVIDUAL_MONTHLY_VALUATIONS = 10  # Plan Osobisty (45 zł): 10 wycen PDF w miesiącu w cenie, kolejne 35 zł/szt. (23.11: było 3)
 PRIVATE_FREE_VALUATIONS = 10  # 23.11: konto prywatne bez planu — 10 bezpłatnych wycen PDF (łącznie), potem 35 zł/szt.
 
 

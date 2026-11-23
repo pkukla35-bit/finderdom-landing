@@ -366,7 +366,7 @@ gtag('set', 'url_passthrough', false);
       <span class="info-badge">🔥 Promocja</span>
       <div class="info-price">35 zł <small>/ jednorazowo</small></div>
       <div class="info-price-strike">Konkurencja: od 49 zł</div>
-      <p class="info-desc">Profesjonalny raport PDF z realną wartością rynkową Twojej nieruchomości. <strong>W planie Osobistym (45 zł/mies) wyceny PDF bez limitu przez cały miesiąc w cenie</strong> — tak samo w planach dla biur.</p>
+      <p class="info-desc">Profesjonalny raport PDF z realną wartością rynkową Twojej nieruchomości. <strong>Po zalogowaniu 10 wycen PDF za darmo, w planie Osobistym (45 zł/mies) 10 wycen miesięcznie w cenie</strong>, w planach dla biur bez limitu.</p>
       <ul class="info-list">
         <li>Wycena min / średnia / max</li>
         <li>10 podobnych transakcji w okolicy</li>
@@ -514,7 +514,7 @@ gtag('set', 'url_passthrough', false);
 
 
 
-  // Wycena w cenie planu: Firmowy/Solo bez limitu (trial 3), Osobisty 45 zł = 6 wycen w miesiącu — liczy serwer (/api/valuation/quota)
+  // Wycena w cenie planu: Firmowy/Solo bez limitu (trial 3), Osobisty 45 zł = 10 wycen w miesiącu, konto prywatne bez planu = 10 łącznie — liczy serwer (/api/valuation/quota)
   let __valQuota = null;
   async function loadValuationQuota(){
     const t = localStorage.getItem('finderdom_token'); if (!t) { __valQuota = null; return null; }

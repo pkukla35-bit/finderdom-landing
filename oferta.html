@@ -709,13 +709,17 @@ async function loadOffer() {
     const hint = document.getElementById('valBizHint');
     const btn = document.getElementById('valBizBtn');
     if (q.unlimited) {
-      hint.innerHTML = 'W cenie planu Osobistego — bez limitu wycen.';
+      hint.innerHTML = 'Konto administratora — bez limitu wycen.';
       btn.textContent = '📄 Generuj wycenę PDF';
     } else if (q.included) {
-      hint.innerHTML = '<strong>' + free + ' z ' + q.limit + '</strong> bezpłatnych wycen do wykorzystania. Potem 35 zł/szt. albo plan Osobisty (45 zł/mies.) bez limitu.';
-      btn.textContent = '📄 Generuj wycenę PDF (bezpłatnie)';
+      hint.innerHTML = q.private_free
+        ? '<strong>' + free + ' z ' + q.limit + '</strong> bezpłatnych wycen do wykorzystania. Potem 35 zł/szt. albo plan Osobisty (45 zł/mies.) — 10 wycen miesięcznie w cenie.'
+        : '<strong>' + free + ' z ' + q.limit + '</strong> wycen w tym miesiącu w cenie planu Osobistego. Kolejne 35 zł/szt.';
+      btn.textContent = '📄 Generuj wycenę PDF (w cenie)';
     } else {
-      hint.innerHTML = 'Wykorzystałeś ' + q.limit + ' bezpłatnych wycen. Kolejne 35 zł/szt. albo <a href="/konto" style="color:#93c5fd">plan Osobisty</a> — bez limitu.';
+      hint.innerHTML = q.private_free
+        ? 'Wykorzystałeś ' + q.limit + ' bezpłatnych wycen. Kolejne 35 zł/szt. albo <a href="/konto" style="color:#93c5fd">plan Osobisty</a> — 10 wycen miesięcznie w cenie.'
+        : 'Wykorzystałeś ' + q.limit + ' wycen w tym miesiącu. Kolejne 35 zł/szt.';
       btn.textContent = '📄 Wycena PDF — 35 zł';
     }
     box.style.display = '';
@@ -1682,7 +1686,7 @@ async function renderOffer(l, all) {
   // Source link — dynamiczny tekst per portal
   const portalName = l.portal || 'portal źródłowy';
   // 📞 Nagłówek kontaktu zależny od tego, KTO sprzedaje: biuro (z nazwą, gdy znana) / właściciel / organizator przetargu
-  const contactTitle = document.querySelector('.contact-card .contact-title');
+  const contactTitle = document.querySelector('.contact-card:not(#valBizBox) .contact-title');
   if (contactTitle) {
     const escT = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     contactTitle.innerHTML = l.seller_type === 'prywatna' ? '📞 Kontakt z właścicielem'

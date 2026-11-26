@@ -5056,15 +5056,16 @@ async def _daily_jobs_if_due() -> Optional[dict]:
 
 
 async def _fresh_sweep_backstop() -> Optional[dict]:
-    """⏰ Godzinne odświeżanie ofert 9–19 PL to samonapędzająca się pętla w GitHub Actions (scripts/fresh_sweep.py).
-    Backstop: gdy ostatni dispatch był > 2 h temu, a jesteśmy w oknie 9–19 PL — odpal lekką turę (max_pages=1) ponownie."""
+    """⏰ Odświeżanie ofert co 30 min (7–21 PL) to samonapędzająca się pętla w GitHub Actions (scripts/fresh_sweep.py).
+    Backstop: gdy ostatni dispatch był > 45 min temu, a jesteśmy w oknie 7–21 PL — odpal lekką turę (max_pages=1) ponownie
+    (26.11: było co godzinę 9–19 z progiem 2 h)."""
     db = database()
     now_pl = datetime.now(ZoneInfo("Europe/Warsaw"))
-    if not (9 <= now_pl.hour <= 19):
+    if not (7 <= now_pl.hour <= 21):
         return None
     st = await db.settings.find_one({"_id": "fresh_sweep"}) or {}
     last = st.get("last_dispatch_at")
-    if last and (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds() < 2 * 3600:
+    if last and (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds() < 45 * 60:
         return None
     tok = await _github_token()
     if not tok:
@@ -5094,7 +5095,7 @@ async def _scheduler_tick(source: str, force: bool = False) -> dict:
     """⏱️ Jeden „zegar” dla zadań cyklicznych, niezależny od harmonogramów GitHub Actions (10.11: żaden scheduled run nie odpalił
     do 11:30 PL; 9.11: 9–10 h opóźnienia) i od cronów Vercel (brak dowodu, że trafiają). Wołany z cronów (force) ORAZ z ruchu
     użytkowników (/api/listings-scraped) — najwyżej raz na SCHEDULER_TICK_MIN minut (atomowa blokada w settings).
-    Każde zadanie jest idempotentne i samo pilnuje swojej pory: pełny import ≥ 6:00 PL raz dziennie, lekkie tury 9–19 PL co ~1 h,
+    Każde zadanie jest idempotentne i samo pilnuje swojej pory: pełny import ≥ 4:00 PL raz dziennie, lekkie tury 7–21 PL co 30 min,
     raport dzienny ≥ 9:00 PL raz dziennie. Lekkie: tylko odczyty settings + ewentualny dispatch do GitHub (≤ ~4 s)."""
     db = database()
     now = datetime.now(timezone.utc)

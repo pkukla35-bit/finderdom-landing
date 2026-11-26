@@ -1,14 +1,14 @@
 """
-Godzinne „odświeżenie” ofert (FRESH SWEEP) — bez zmian w plikach workflow.
+Odświeżenie ofert co 30 minut (FRESH SWEEP) — bez zmian w plikach workflow.
 
 Jak to działa:
   • Każdy workflow importu przyjmuje input `max_pages`. Uruchomienie z max_pages=1 to lekki przebieg:
-    tylko 1. strona list „od najnowszych” — czyli dokładnie to, co pojawiło się w ostatniej godzinie.
-  • Job Otodom (mieszkanie/sprzedaz) po skończeniu czeka do najbliższej pełnej godziny w oknie 9:00–19:00 PL
+    tylko 1. strona list „od najnowszych” — czyli dokładnie to, co pojawiło się w ostatnich 30 minutach.
+  • Job Otodom (mieszkanie/sprzedaz) po skończeniu czeka do najbliższej pełnej/wpół godziny (:00 / :30) w oknie 7:00–21:00 PL
     i odpala kolejną turę (workflow_dispatch przez GitHub API) dla WSZYSTKICH 4 importów → samonapędzająca się pętla.
-    Po 19:00 pętla gaśnie; rano wznawia ją poranny pełny import (~8:30 PL) lub backstop w backendzie.
+    Po 21:00 pętla gaśnie; rano wznawia ją poranny pełny import lub backstop w backendzie (26.11: co 30 min, było co godzinę 9–19).
   • Token GitHub bierzemy z Mongo (settings._id="github" → token; zapisuje go admin przez /api/admin/github/token).
-  • Backstop: backend (cleanup-stale co 6 h) wznawia pętlę, jeśli ostatni dispatch był dawniej niż 2 h (settings._id="fresh_sweep").
+  • Backstop: backend (tick z ruchu co 10 min / cleanup-stale co 6 h) wznawia pętlę, jeśli ostatni dispatch był dawniej niż 45 min (settings._id="fresh_sweep").
 """
 import json, logging, os, time, urllib.request
 from datetime import datetime, timezone
@@ -22,7 +22,8 @@ FRESH_INPUTS = {
     "scrape-portals.yml":        {"max_pages": "1", "regions": "1"},
 }
 MAX_WAIT_S = 70 * 60     # nie czekaj dłużej niż 70 min (timeout jobu 120 min)
-WINDOW_PL = (9, 19)      # tury o pełnych godzinach 9:00–19:00 czasu polskiego (ustalenie użytkownika 5.11)
+WINDOW_PL = (7, 21)      # tury co 30 min (:00 i :30) 7:00–21:00 czasu polskiego (ustalenie użytkownika 26.11; wcześniej co godzinę 9–19)
+TOUR_EVERY_MIN = 30
 
 
 def _gh(tok: str, path: str, method: str = "GET", body=None):
@@ -70,23 +71,24 @@ def dispatch_all(db, reason: str) -> dict:
 
 
 def next_tour_pl(now=None):
-    """Najbliższa pełna godzina w oknie 9–19 PL (datetime aware) albo None, gdy dziś już po oknie → jutro 9:00."""
+    """Najbliższa granica :00 / :30 w oknie 7–21 PL (datetime aware); gdy dziś już po oknie → jutro 7:00."""
     from zoneinfo import ZoneInfo
     from datetime import timedelta
     pl = ZoneInfo("Europe/Warsaw")
     now = now or datetime.now(pl)
-    nxt = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    base = now.replace(second=0, microsecond=0)
+    nxt = base + timedelta(minutes=TOUR_EVERY_MIN - (base.minute % TOUR_EVERY_MIN))
     if nxt.hour < WINDOW_PL[0]:
-        nxt = nxt.replace(hour=WINDOW_PL[0])
-    if nxt.hour > WINDOW_PL[1]:
-        nxt = (nxt + timedelta(days=1)).replace(hour=WINDOW_PL[0])
+        nxt = nxt.replace(hour=WINDOW_PL[0], minute=0)
+    if nxt.hour > WINDOW_PL[1] or (nxt.hour == WINDOW_PL[1] and nxt.minute > 0):
+        nxt = (nxt + timedelta(days=1)).replace(hour=WINDOW_PL[0], minute=0)
     return nxt
 
 
 def wait_and_dispatch_next(db, job_started_at: float = None) -> None:
-    """Koniec jobu-lidera (Otodom mieszkanie/sprzedaz): jeśli następna pełna godzina mieści się w oknie 9–19 PL
-    i da się na nią poczekać (≤70 min), czekamy i odpalamy kolejną turę. Po 19:00 pętla gaśnie; rano wznawia ją
-    poranny pełny import (kończy się ~8:30 PL) albo backstop w backendzie."""
+    """Koniec jobu-lidera (Otodom mieszkanie/sprzedaz): jeśli następna granica :00/:30 mieści się w oknie 7–21 PL
+    i da się na nią poczekać (≤70 min), czekamy i odpalamy kolejną turę. Po 21:00 pętla gaśnie; rano wznawia ją
+    poranny pełny import albo backstop w backendzie."""
     if os.environ.get("FRESH_NO_LOOP") == "1":
         return
     from zoneinfo import ZoneInfo
@@ -99,4 +101,4 @@ def wait_and_dispatch_next(db, job_started_at: float = None) -> None:
         log.info("fresh: następna tura %s PL — za daleko (%.0f min), kończę bez pętli", nxt.strftime("%H:%M"), wait / 60); return
     log.info("fresh: czekam %d s do tury %s PL", int(wait), nxt.strftime("%H:%M"))
     time.sleep(max(0, wait))
-    dispatch_all(db, f"hourly-loop {nxt.strftime('%H:%M')}")
+    dispatch_all(db, f"loop-30min {nxt.strftime('%H:%M')}")

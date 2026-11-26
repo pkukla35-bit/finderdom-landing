@@ -121,29 +121,22 @@ gtag('set', 'url_passthrough', false);
 </nav>
 
 <main>
+  <!-- 26.11: hero pod ruch z Google Ads (81 klików biur / 0 rejestracji) — najpierw korzyść i JEDEN przycisk, cennik niżej -->
   <section class="hero">
     <div class="eyebrow">🏢 Dla biur nieruchomości i pośredników</div>
-    <h1>Całe biuro w jednym abonamencie: <span>wszystkie województwa, 4 loginy dla agentów, wyceny w cenie</span></h1>
-    <p class="lead">Wszystkie ogłoszenia z Otodom, OLX, Morizon, Gratki i pozostałych portali w jednej wyszukiwarce. Profesjonalne wyceny PDF z aktami notarialnymi RCN, CRM do pracy z ofertami i leady od właścicieli — bez dopłat za każdego agenta.</p>
-    <div class="price-row">
-      <div class="price-box">
-        <div class="price-name">Biuro jednoosobowe</div>
-        <div class="price">90 zł <small>/ miesiąc</small></div>
-        <div class="price-sub">1 login · CRM · leady · <b>wyceny PDF bez limitu</b></div>
-      </div>
-      <div class="price-box featured">
-        <div class="price-name">Plan Firmowy</div>
-        <div class="price">199 zł <small>/ miesiąc</small></div>
-        <div class="price-sub">konto główne + <b>4 loginy dla agentów</b> · kolejny agent 55 zł</div>
-      </div>
-    </div>
-    <div class="price-sub" style="margin-bottom:12px"><b>7 dni za darmo</b> dla firm z NIP · bez karty · po okresie próbnym wybierasz plan · anulujesz kiedy chcesz</div>
+    <h1>Oferty bezpośrednie od właścicieli ze wszystkich portali — <span>zanim zobaczy je konkurencja</span></h1>
+    <p class="lead">Otodom, OLX, Morizon, Gratka i 10 innych portali w jednej wyszukiwarce dla pośredników. Widzisz, kto sprzedaje sam, u ilu biur wisi ta sama nieruchomość i w jakiej cenie — i dzwonisz pierwszy.</p>
+    <ul style="list-style:none;padding:0;margin:0 auto 26px;max-width:640px;text-align:left;display:grid;gap:10px;font-size:15px;color:rgba(255,255,255,0.88)">
+      <li>✅ <b>Telefony właścicieli</b> z ogłoszeń bezpośrednich + 90-dniowe archiwum ofert, które zniknęły z portali</li>
+      <li>✅ <b>Duplikaty:</b> ile biur ma tę samą nieruchomość, w jakich cenach — gotowy argument na wyłączność</li>
+      <li>✅ <b>Wycena PDF z Twoim logo</b> w 60 sekund na spotkanie z właścicielem, bez limitu</li>
+      <li>✅ <b>Cała Polska</b> w jednym abonamencie, 4 loginy dla agentów, CRM zespołu i leady od właścicieli</li>
+    </ul>
     <div>
-      <a href="/rejestracja?typ=firma" class="cta-btn">🎁 Wypróbuj 7 dni za darmo</a>
-      <a href="/szukaj?widok=biuro" class="cta-btn outline">🔎 Zobacz wyszukiwarkę w widoku dla biur</a>
-      <a href="/przykladowa-wycena.pdf" target="_blank" rel="noopener" class="cta-btn outline">📄 Zobacz przykładową wycenę (PDF)</a>
+      <a href="/rejestracja?typ=firma" class="cta-btn" style="font-size:17px;padding:16px 34px">🎁 Testuj 7 dni za darmo — bez karty</a>
     </div>
-    <div class="note">Rejestracja zajmuje 30 sekund. Podajesz NIP i nazwę firmy — dostęp aktywuje się od razu.</div>
+    <div class="note" style="margin-top:10px">Rejestracja 30 sekund: e-mail, nazwa firmy i NIP (do faktury). Po 7 dniach sam wybierasz plan albo nic nie płacisz.</div>
+    <div style="margin-top:14px"><a href="#film-biura" style="color:#93c5fd;font-weight:700;text-decoration:none">🎬 Wolisz najpierw zobaczyć? Film 4 min ↓</a></div>
   </section>
 
   <!-- 🎬 Film „jak to działa” dla biur (17.11) — MP4 720p 16,6 MB w /media, poster, preload=none (nie obciąża ładowania strony) -->
@@ -161,9 +154,29 @@ gtag('set', 'url_passthrough', false);
       </video>
     </div>
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:18px">
-      <a href="/rejestracja?typ=firma" class="cta-btn" style="font-size:14px;padding:13px 26px">🎁 Wypróbuj 7 dni za darmo</a>
+      <a href="/rejestracja?typ=firma" class="cta-btn" style="font-size:14px;padding:13px 26px">🎁 Testuj 7 dni za darmo</a>
       <a href="/szukaj?widok=biuro" class="cta-btn outline" style="font-size:14px;padding:13px 26px">🔎 Otwórz widok dla biur</a>
+      <a href="/przykladowa-wycena.pdf" target="_blank" rel="noopener" class="cta-btn outline" style="font-size:14px;padding:13px 26px">📄 Przykładowa wycena (PDF)</a>
     </div>
+  </section>
+
+  <!-- Cennik — po filmie, nie na pierwszym ekranie -->
+  <section id="cennik" class="hero" style="margin-top:8px">
+    <div class="eyebrow">💳 Cennik — jeden abonament na całą Polskę</div>
+    <div class="price-row">
+      <div class="price-box">
+        <div class="price-name">Biuro jednoosobowe</div>
+        <div class="price">90 zł <small>/ miesiąc</small></div>
+        <div class="price-sub">1 login · CRM · leady · <b>wyceny PDF z logo bez limitu</b></div>
+      </div>
+      <div class="price-box featured">
+        <div class="price-name">Plan Firmowy</div>
+        <div class="price">199 zł <small>/ miesiąc</small></div>
+        <div class="price-sub">konto główne + <b>4 loginy dla agentów</b> · kolejny agent 55 zł</div>
+      </div>
+    </div>
+    <div class="price-sub" style="margin-bottom:12px"><b>7 dni za darmo</b> dla firm z NIP · bez karty · po okresie próbnym wybierasz plan · anulujesz kiedy chcesz · faktura VAT</div>
+    <a href="/rejestracja?typ=firma" class="cta-btn">🎁 Testuj 7 dni za darmo</a>
   </section>
 
   <div class="grid">

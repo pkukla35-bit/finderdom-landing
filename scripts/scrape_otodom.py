@@ -520,7 +520,7 @@ def _fetch_detail_ad(url: str):
         return {}
 
 
-def enrich_from_details(coll, prop_type: str, transaction: str, phone_limit: int, plot_limit: int) -> Dict[str, int]:
+def enrich_from_details(coll, prop_type: str, transaction: str, phone_limit: int, plot_limit: int, gallery_default: int = 150) -> Dict[str, int]:
     """Dociąga ze stron ofert: (a) telefon właściciela dla ofert PRYWATNYCH, (b) wielkość działki dla DOMÓW (każdy sprzedający).
     Każdą ofertę odwiedzamy raz (detail_checked_at). Limity na uruchomienie chronią przed blokadą."""
     stats = {"checked": 0, "phones": 0, "plots": 0, "failed": 0}
@@ -533,7 +533,7 @@ def enrich_from_details(coll, prop_type: str, transaction: str, phone_limit: int
         seen = {t["_id"] for t in targets}
         targets += [t for t in coll.find({**base, "plot_area_m2": {"$exists": False}}, {"url": 1}).sort("added_at", -1).limit(plot_limit) if t["_id"] not in seen]
     # galerie: najnowsze oferty bez pełnej galerii (OTODOM_GALLERY_LIMIT/job, domyślnie 150) — te same strony co telefony/działki
-    gal_limit = int(os.environ.get("OTODOM_GALLERY_LIMIT", "150"))
+    gal_limit = int(os.environ.get("OTODOM_GALLERY_LIMIT") or gallery_default)
     if gal_limit > 0:
         seen = {t["_id"] for t in targets}
         targets += [t for t in coll.find({**base, "images": {"$exists": False}}, {"url": 1}).sort("added_at", -1).limit(gal_limit) if t["_id"] not in seen]
@@ -686,10 +686,11 @@ def main():
 
     # Telefony właścicieli (oferty prywatne) — po imporcie listy, bez ScrapingBee (tylko bezpośrednio)
     try:
-        fresh = args.max_pages <= 2
+        fresh = args.max_pages <= 2   # lekka tura co 30 min (fresh_sweep): mniej stron szczegółów, żeby job zmieścił się w ~10 min
         enrich_from_details(coll, PROPERTY_LABELS.get(args.property, args.property), TRANSACTION,
-                            int(os.environ.get("OTODOM_PHONE_LIMIT") or ("40" if fresh else "120")),
-                            int(os.environ.get("OTODOM_PLOT_LIMIT") or ("60" if fresh else "250")))
+                            int(os.environ.get("OTODOM_PHONE_LIMIT") or ("20" if fresh else "120")),
+                            int(os.environ.get("OTODOM_PLOT_LIMIT") or ("20" if fresh else "250")),
+                            gallery_default=(40 if fresh else 150))
     except Exception as e:
         log.warning("detail enrichment skipped: %s", e)
 

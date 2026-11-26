@@ -382,3 +382,107 @@ CTA:             Sprawdź         URL: https://www.finderdom.pl/dla-biur?utm_sou
 - Konwersja główna: **rejestracja firmowa** (`/rejestracja?typ=firma` → sukces), wtórna: zakup planu 90/199 zł — te same działania co w Kampanii 2.
 - Po 2 tygodniach: VTR < 15 % lub CPV > 0,40 zł → skróć do 45–60 s (duplikaty → telefony właścicieli → wycena PDF → „7 dni za darmo”).
   Jeśli rejestracje firmowe są, ale drogie (> 60 zł/szt.), zawęź kierowanie tylko do segmentu niestandardowego (pkt. Krok 3) i godzin 9–17.
+
+---
+
+## KAMPANIA 5 — SIEĆ WYSZUKIWANIA „Biura – wyszukiwarka ogłoszeń” (naprawa „Skuteczność reklamy jest niska”, 26.11)
+
+Diagnoza Google: jedna grupa reklam z niekompletną reklamą. Rozwiązanie: **3 grupy reklam** (osobna intencja = osobna grupa),
+w każdej reklama elastyczna z **15 nagłówkami i 4 opisami** (wklej wszystkie — Google wymaga ≥ 10 nagłówków dla „Dobra/Doskonała”).
+Dopasowanie słów: **do wyrażenia** ("…") na start. Budżet 15 zł/dzień → podziel 8 / 4 / 3 zł.
+
+### Grupa 1 — Biura i pośrednicy (URL: https://www.finderdom.pl/dla-biur?utm_source=google&utm_medium=cpc&utm_campaign=biura-search)
+Słowa: "program dla biura nieruchomości", "wyszukiwarka ofert dla pośredników nieruchomości", "pozyskiwanie ofert prywatnych dla pośredników",
+"oferty bezpośrednie właścicieli dla agentów nieruchomości", "narzędzia dla agenta nieruchomości", "alternatywa dla Nbot", "program podobny do Nbot",
+"pozyskiwanie ofert na wyłączność", "oferty prywatne nieruchomości dla biur".
+Nagłówki (≤30 zn.):
+```
+Wyszukiwarka dla biur
+Oferty prywatne dla pośredników
+Wszystkie portale w 1 miejscu
+Otodom OLX Gratka Morizon
+Telefony właścicieli
+Ile pośredników ma ofertę?
+Duplikaty i historia ceny
+Alternatywa dla Nbot
+CRM dla zespołu w cenie
+Wyceny PDF z Twoim logo
+Cała Polska 199 zł/mies.
+Solo 90 zł · zespół 199 zł
+7 dni za darmo, bez karty
+Nowe oferty co godzinę
+Archiwum ofert z telefonami
+```
+Opisy (≤90 zn.):
+```
+Ogłoszenia z Otodom, OLX, Gratki, Morizon i 10 portali. Oferty bezpośrednie z telefonem właściciela.
+Zobacz, u ilu pośredników wisi ta sama nieruchomość i w jakich cenach. Dzwoń pierwszy po wyłączność.
+Jeden abonament na całą Polskę: 90 zł pośrednik, 199 zł całe biuro (4 loginy). Faktura VAT, bez umowy.
+Wyceny PDF z logo Twojego biura bez limitu, CRM zespołu, alerty nowych ofert. 7 dni za darmo.
+```
+
+### Grupa 2 — Osoby prywatne / kupujący (URL: https://www.finderdom.pl/dla-prywatnych?utm_source=google&utm_medium=cpc&utm_campaign=prywatni-search)
+Słowa: "wyszukiwarka ofert nieruchomości", "agregator ogłoszeń nieruchomości", "wyszukiwarka mieszkań z wielu portali",
+"wszystkie ogłoszenia nieruchomości w jednym miejscu", "oferty bez pośredników wyszukiwarka", "baza ofert bezpośrednich nieruchomości",
+"przeglądarka ofert prywatnych nieruchomości", "mieszkania bezpośrednio od właściciela".
+Nagłówki:
+```
+Wszystkie portale w 1 miejscu
+Mieszkania bez pośredników
+Oferty od właścicieli
+Otodom, OLX, Gratka, Morizon
+Szukaj raz, nie 10 razy
+Nowe oferty co godzinę
+Alert o nowych ogłoszeniach
+Bez prowizji pośrednika
+Historia ceny ogłoszenia
+Cała Polska, 1 wyszukiwarka
+Filtr „tylko od właściciela”
+Darmowe konto
+Wycena PDF Twojego mieszkania
+Działki, domy, mieszkania
+Znajdź okazję przed innymi
+```
+Opisy:
+```
+Ogłoszenia z Otodom, OLX, Gratki, Morizon i 10 innych portali w jednej wyszukiwarce. Za darmo.
+Filtr „tylko od właściciela” — kupuj bez prowizji pośrednika. Nowe oferty pojawiają się co godzinę.
+Ustaw alert i dostawaj nowe mieszkania, domy i działki z całej Polski, zanim zobaczą je inni.
+Sprawdź, jak zmieniała się cena ogłoszenia i czy ta sama nieruchomość wisi na kilku portalach.
+```
+
+### Grupa 3 — Inwestorzy i flipperzy (URL: https://www.finderdom.pl/szukaj?seller=prywatna&utm_source=google&utm_medium=cpc&utm_campaign=inwestorzy-search)
+Słowa: "wyszukiwarka okazji nieruchomości", "monitoring nowych ogłoszeń nieruchomości", "historia cen nieruchomości ogłoszenia",
+"narzędzia dla inwestorów nieruchomości", "okazje inwestycyjne mieszkania", "flipping mieszkań wyszukiwarka", "licytacje komornicze mieszkania".
+Nagłówki:
+```
+Okazje nieruchomości
+Monitoring nowych ogłoszeń
+Historia ceny każdej oferty
+Oferty od właścicieli
+Obniżki cen na bieżąco
+Licytacje i przetargi w 1 miejscu
+Analiza ceny vs rynek
+Wszystkie portale w 1 miejscu
+Alert w minutę od publikacji
+Narzędzia dla inwestora
+Okazja / w cenie / drogo
+Działki, domy, mieszkania
+Cała Polska, 1 wyszukiwarka
+Wycena PDF w 60 sekund
+Zacznij za darmo
+```
+Opisy:
+```
+Każda nowa oferta z Otodom, OLX, Gratki i Morizon z oceną ceny: okazja, w cenie rynku czy drogo.
+Historia obniżek, czas na rynku i liczba portali — widzisz, kto jest zmotywowany do sprzedaży.
+Licytacje komornicze, syndycy i przetargi gmin obok zwykłych ogłoszeń. Alerty w minutę od publikacji.
+Monitoruj wybrane miasta i dzielnice. Oferty bezpośrednie z telefonem właściciela, bez prowizji.
+```
+
+### Wykluczenia (cała kampania)
+`praca`, `kurs`, `licencja pośrednika`, `szkolenie`, `darmowy program excel`, `wzór umowy`, `za granicą`, `hiszpania`, `nbot opinie`* (*zostaw, jeśli chcesz porównania).
+
+### Po wklejeniu
+„Skuteczność reklamy” powinna wskoczyć na „Dobra” — jeśli pokaże „Średnia”, **nie przypinaj** nagłówków do pozycji 1 (przypięcie obniża ocenę).
+Po 7 dniach: frazy z CTR < 1 % → wstrzymaj; frazy z konwersją → podnieś stawkę / przenieś do dopasowania ścisłego [ ].

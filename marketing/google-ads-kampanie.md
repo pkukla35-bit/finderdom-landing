@@ -1,6 +1,6 @@
 # FinderDom.pl — kampanie Google Ads (gotowe do wklejenia)
 
-Budżet łączny: ~35 zł/dzień (Kampania 1: 15 zł, Kampania 2: 20 zł). Zasięg: Polska, język polski.
+Budżet łączny: ~10 zł/dzień (Kampania 1: 15 zł, Kampania 2: 20 zł). Zasięg: Polska, język polski.
 Typ kampanii: **Sieć wyszukiwania** (bez sieci reklamowej, bez partnerów wyszukiwania na start).
 Strategia stawek na start: **Maksymalizuj kliknięcia** z limitem CPC 1,50 zł → po ~30 konwersjach przełącz na **Maksymalizuj konwersje**.
 Harmonogram: codziennie 7:00–23:00. Urządzenia: wszystkie.
@@ -10,7 +10,7 @@ Harmonogram: codziennie 7:00–23:00. Urządzenia: wszystkie.
 ## KAMPANIA 1 — Wycena nieruchomości (osoby prywatne) · 15 zł/dzień
 
 Strona docelowa: `https://www.finderdom.pl/wycena`
-Konwersja główna: **Zakup wyceny PDF (35 zł)**
+Konwersja główna: **Zakup wyceny PDF (10 zł)**
 
 ### Grupa reklam 1A — „wycena nieruchomości”
 Słowa kluczowe (dopasowanie do wyrażenia — wpisuj w cudzysłowie):
@@ -36,7 +36,7 @@ Nagłówki (max 30 znaków — wpisz wszystkie 15, Google je miesza):
 ```
 Wycena Nieruchomości Online
 Wycena Mieszkania w 2 Minuty
-Raport PDF za 35 zł
+Raport PDF za 10 zł
 Dane z Aktów Notarialnych
 Realna Wartość Rynkowa
 Nie Przepłać Przy Zakupie
@@ -54,7 +54,7 @@ Wyceń Teraz — FinderDom.pl
 Opisy (max 90 znaków — wpisz wszystkie 4):
 ```
 Realna wartość mieszkania, domu lub działki wg prawdziwych cen z aktów notarialnych.
-Raport PDF w 2 minuty za 35 zł: zakres ceny, podobne oferty, transakcje i opinia AI.
+Raport PDF w 2 minuty za 10 zł: zakres ceny, podobne oferty, transakcje i opinia AI.
 Bez rejestracji i abonamentu. Płacisz BLIK-iem lub kartą i od razu pobierasz wycenę PDF.
 Sprzedajesz lub kupujesz? Sprawdź, czy cena jest uczciwa, zanim podpiszesz umowę.
 ```
@@ -63,8 +63,8 @@ Sprzedajesz lub kupujesz? Sprawdź, czy cena jest uczciwa, zanim podpiszesz umow
 
 Rozszerzenia (komponenty):
 - Linki do podstron: „Wycena mieszkania” → /wycena · „Wycena domu” → /wycena · „Jak działa wycena?” → /pomoc-wycena · „Wyszukiwarka ofert” → /szukaj
-- Objaśnienia: „Dane RCN z aktów notarialnych” · „35 zł, bez abonamentu” · „PDF w 2 minuty” · „Mieszkania, domy, działki”
-- Cena: Wycena PDF — 35 zł — „Raport z aktów notarialnych”
+- Objaśnienia: „Dane RCN z aktów notarialnych” · „10 zł, bez abonamentu” · „PDF w 2 minuty” · „Mieszkania, domy, działki”
+- Cena: Wycena PDF — 10 zł — „Raport z aktów notarialnych”
 
 ### Grupa reklam 1B — „wyszukiwarka nieruchomości” (ruch ogólny → /dla-prywatnych)
 Strona docelowa: `https://www.finderdom.pl/dla-prywatnych`
@@ -96,7 +96,7 @@ Alerty o Nowych Ofertach
 Monitoring Ogłoszeń 24/7
 Cała Polska w 1 Wyszukiwaniu
 Ceny z Aktów Notarialnych
-Plan Osobisty 45 zł/mies
+Plan Osobisty 25 zł/mies
 Bez Umowy, Anuluj Kiedy Chcesz
 Nie Przegap Okazji
 Porównaj Ceny Między Portalami
@@ -106,16 +106,16 @@ Opisy:
 ```
 Ogłoszenia z Otodom, OLX, Morizon, Gratki i innych portali w jednym miejscu. Cała Polska.
 AI podpowie, czy cena to okazja czy zawyżka. Filtr „tylko od właściciela” — bez prowizji.
-Alerty o nowych ofertach i zmianach cen. Plan Osobisty 45 zł/30 dni, bez umowy.
+Alerty o nowych ofertach i zmianach cen. Plan Osobisty 25 zł/30 dni, bez umowy.
 Zobacz tę samą ofertę na kilku portalach w różnych cenach i negocjuj z raportem w ręku.
 ```
 
 ---
 
-## KAMPANIA 2 — Biura nieruchomości: wyszukiwarka ogłoszeń ze wszystkich portali (plany 90 / 199 zł) · 20 zł/dzień
+## KAMPANIA 2 — Biura nieruchomości: wyszukiwarka ogłoszeń ze wszystkich portali (plany 90 / 49 zł) · 20 zł/dzień
 
 Strona docelowa: `https://www.finderdom.pl/dla-biur`
-Konwersja główna: **Rejestracja konta firmowego** (lead); drugorzędna: zakup planu 90 / 199 zł.
+Konwersja główna: **Rejestracja konta firmowego** (lead); drugorzędna: zakup planu 90 / 49 zł.
 Harmonogram: pon–pt 8:00–19:00 (biura pracują w tych godzinach). Cel kampanii: „Potencjalni klienci”.
 Przekaz: jedna wyszukiwarka ogłoszeń ze wszystkich portali (sprzedaż + wynajem, cała Polska), oferty bezpośrednie z 24h — CRM i wyceny jako dodatek.
 
@@ -157,9 +157,9 @@ Wszystkie Portale w 1 Miejscu
 Oferty z Największych Portali
 Oferty Bezpośrednie z 24h
 Cała Polska, Każde Województwo
-Od 90 zł/mies. za Biuro
-Biuro Jednoosobowe 90 zł
-Plan Firmowy 199 zł, 4 Loginy
+49 zł/mies za Całe Biuro
+4 Loginy w Cenie 49 zł
+Plan Firmowy 49 zł, 4 Loginy
 7 Dni za Darmo dla Firm z NIP
 Bez Umowy i Bez Karty
 Sprzedaż i Wynajem w 1 Miejscu
@@ -172,15 +172,15 @@ Opisy (max 90 znaków — wpisz wszystkie 4):
 ```
 Jedna wyszukiwarka zamiast wszystkich portali — ogłoszenia z całej Polski w 1 miejscu.
 Oferty bezpośrednie od właścicieli z filtrem „ostatnie 24h” — dzwoń przed konkurencją.
-Biuro jednoosobowe 90 zł lub Firmowy 199 zł z 4 loginami. Wyceny PDF i CRM w cenie planu.
+Plan Firmowy 49 zł/mies za całe biuro — 4 loginy dla agentów. Wyceny PDF z logo i CRM w cenie.
 7 dni za darmo dla firm z NIP, bez karty i umowy. Faktura VAT automatycznie po płatności.
 ```
 Ścieżka wyświetlana: `finderdom.pl/Dla-Biur/Wyszukiwarka`
 
 Rozszerzenia:
 - Linki: „Oferta dla biur” → /dla-biur · „Porównanie planów” → /pomoc-plany · „Załóż konto firmowe” → /rejestracja?typ=firma · „Wyszukiwarka ofert” → /szukaj
-- Objaśnienia: „Wszystkie portale” · „Oferty bezpośrednie z 24h” · „Od 90 zł/mies.” · „7 dni za darmo”
-- Ceny: Biuro jednoosobowe — 90 zł/mies — „1 login, wyceny bez limitu” · Plan Firmowy — 199 zł/mies — „Całe biuro, 4 loginy”
+- Objaśnienia: „Wszystkie portale” · „Oferty bezpośrednie z 24h” · „49 zł/mies za całe biuro” · „7 dni za darmo”
+- Ceny: Plan Firmowy — 49 zł/mies — „Całe biuro, 4 loginy, kolejny 29 zł” · Plan Osobisty — 25 zł/mies — „10 wycen PDF w cenie”
 
 ---
 
@@ -231,8 +231,8 @@ Dodatkowo tylko w Kampanii 2: `ile jest warte moje mieszkanie`, `wycena mieszkan
 
 | Nazwa w Google Ads | Kategoria | Wartość | Liczenie | Etykieta → wklej do `scripts/gads.js` jako |
 |---|---|---|---|---|
-| Zakup wyceny PDF | Zakup | 35 zł (ze strony) | Każda | `valuation` |
-| Zakup planu | Zakup | ze strony (45/199) | Każda | `plan` |
+| Zakup wyceny PDF | Zakup | 10 zł (ze strony) | Każda | `valuation` |
+| Zakup planu | Zakup | ze strony (25/49) | Każda | `plan` |
 | Rejestracja firmowa | Zgłoszenie / lead | 20 zł (umowna) | Jedna | `signup_business` |
 | Rejestracja prywatna | Rejestracja | 5 zł (umowna) | Jedna | `signup` |
 
@@ -270,9 +270,9 @@ FinderDom zbiera ogłoszenia z Otodom, OLX, Morizon, Gratki i pozostałych porta
 ✅ Wyszukiwanie AI — opisz, czego szukasz, filtry ustawią się same
 ✅ Analiza AI ceny — okazja czy zawyżka? Porównanie z medianą okolicy i transakcjami z RCN
 ✅ Alerty o nowych ofertach, kalkulator raty kredytu
-✅ Wycena PDF Twojej nieruchomości w 2 minuty — 35 zł
+✅ Wycena PDF Twojej nieruchomości w 2 minuty — 10 zł
 👉 https://www.finderdom.pl/?utm_source=youtube&utm_medium=video&utm_campaign=prywatni
-Plan Osobisty 45 zł / 30 dni — bez umowy, anulujesz kiedy chcesz.
+Plan Osobisty 25 zł / 30 dni — bez umowy, anulujesz kiedy chcesz.
 ```
 4. **Widoczność:** „Niepubliczny” (unlisted) wystarczy do reklam; „Publiczny”, jeśli chcesz też ruch organiczny z YouTube.
 5. **Miniatura:** `https://www.finderdom.pl/media/finderdom-prywatni-poster.jpg` (pobierz i wgraj) albo własna.
@@ -301,12 +301,12 @@ Wyświetlany URL:  finderdom.pl
 Wezwanie do działania (10 zn.):  Sprawdź
 Nagłówek (15 zn.):              Nie przepłać
 Długi nagłówek (90 zn.):        Wszystkie ogłoszenia z Otodom, OLX, Morizon i Gratki w jednym miejscu. AI oceni, czy cena to okazja.
-Opis (70 zn.):                  Wyszukiwanie AI, alerty, kalkulator raty i wycena PDF za 35 zł.
+Opis (70 zn.):                  Wyszukiwanie AI, alerty, kalkulator raty i wycena PDF za 10 zł.
 ```
 Wariant B (test A/B, drugi zestaw tekstów):
 ```
 Nagłówek:        Ile warte jest Twoje M?
-Długi nagłówek:  Wycena mieszkania w 2 minuty — raport PDF z aktów notarialnych za 35 zł. Plan Osobisty 45 zł/mies.
+Długi nagłówek:  Wycena mieszkania w 2 minuty — raport PDF z aktów notarialnych za 10 zł. Plan Osobisty 25 zł/mies.
 Opis:            Sprawdź wartość zanim sprzedasz. Bez umowy, anulujesz kiedy chcesz.
 CTA:             Wyceń teraz        URL: https://www.finderdom.pl/wycena?utm_source=google&utm_medium=video&utm_campaign=wycena
 ```
@@ -338,7 +338,7 @@ cała Polska w jednym abonamencie, bez pakietów regionalnych.
 ✅ Wyceny PDF bez limitu z transakcjami z RCN — gotowy argument na spotkanie z właścicielem
 ✅ Leady od właścicieli zamawiających wycenę w Twoim regionie
 👉 https://www.finderdom.pl/dla-biur?utm_source=youtube&utm_medium=video&utm_campaign=biura
-Biuro jednoosobowe 90 zł/mies · Plan Firmowy 199 zł/mies (4 loginy dla agentów) · 7 dni za darmo, bez karty.
+Plan Firmowy 49 zł/mies za całe biuro (4 loginy dla agentów, kolejny 29 zł) · 7 dni za darmo, bez karty.
 ```
 4. **Widoczność:** „Niepubliczny” (unlisted). **Miniatura:** `https://www.finderdom.pl/media/finderdom-biura-poster.jpg`.
 5. Skopiuj link (`https://youtu.be/...`).
@@ -364,7 +364,7 @@ Biuro jednoosobowe 90 zł/mies · Plan Firmowy 199 zł/mies (4 loginy dla agent�
 URL końcowy:      https://www.finderdom.pl/dla-biur?utm_source=google&utm_medium=video&utm_campaign=biura
 Wyświetlany URL:  finderdom.pl/dla-biur
 Wezwanie do działania (10 zn.):  Testuj 7 dni
-Nagłówek (15 zn.):              Całe biuro 199 zł
+Nagłówek (15 zn.):              Całe biuro 49 zł
 Długi nagłówek (90 zn.):        Wszystkie portale, cała Polska, 4 loginy dla agentów, CRM i wyceny PDF bez limitu — 7 dni za darmo.
 Opis (70 zn.):                  Duplikaty, liczba pośredników i oferty bezpośrednie z telefonem właściciela.
 ```
@@ -372,14 +372,14 @@ Wariant B (test A/B):
 ```
 Nagłówek:        Oferty na wyłączność
 Długi nagłówek:  Zobacz, u ilu pośredników wisi ta sama nieruchomość i gdzie właściciel sprzedaje sam. Dzwoń pierwszy.
-Opis:            Pośrednik solo 90 zł/mies, zespół 199 zł/mies. Bez umowy, faktura VAT.
+Opis:            49 zł/mies za całe biuro, 4 loginy. Bez umowy, faktura VAT.
 CTA:             Sprawdź         URL: https://www.finderdom.pl/dla-biur?utm_source=google&utm_medium=video&utm_campaign=biura-wylacznosc
 ```
 
 ### Krok 5 — pomiar
 - Odtworzenie filmu na `/dla-biur` wysyła zdarzenie GA4 `video_play` z tytułem `biura` (prywatni → `prywatni`), więc w GA4 widzisz
   osobno, ilu pośredników ogląda swój film.
-- Konwersja główna: **rejestracja firmowa** (`/rejestracja?typ=firma` → sukces), wtórna: zakup planu 90/199 zł — te same działania co w Kampanii 2.
+- Konwersja główna: **rejestracja firmowa** (`/rejestracja?typ=firma` → sukces), wtórna: zakup planu 90/49 zł — te same działania co w Kampanii 2.
 - Po 2 tygodniach: VTR < 15 % lub CPV > 0,40 zł → skróć do 45–60 s (duplikaty → telefony właścicieli → wycena PDF → „7 dni za darmo”).
   Jeśli rejestracje firmowe są, ale drogie (> 60 zł/szt.), zawęź kierowanie tylko do segmentu niestandardowego (pkt. Krok 3) i godzin 9–17.
 
@@ -407,8 +407,8 @@ Duplikaty i historia ceny
 Alternatywa dla Nbot
 CRM dla zespołu w cenie
 Wyceny PDF z Twoim logo
-Cała Polska 199 zł/mies.
-Solo 90 zł · zespół 199 zł
+Cała Polska 49 zł/mies.
+Całe biuro 49 zł/mies
 7 dni za darmo, bez karty
 Nowe oferty co godzinę
 Archiwum ofert z telefonami
@@ -417,7 +417,7 @@ Opisy (≤90 zn.):
 ```
 Ogłoszenia z Otodom, OLX, Gratki, Morizon i 10 portali. Oferty bezpośrednie z telefonem właściciela.
 Zobacz, u ilu pośredników wisi ta sama nieruchomość i w jakich cenach. Dzwoń pierwszy po wyłączność.
-Jeden abonament na całą Polskę: 90 zł pośrednik, 199 zł całe biuro (4 loginy). Faktura VAT, bez umowy.
+Jeden abonament na całą Polskę: 49 zł za całe biuro (4 loginy). Faktura VAT, bez umowy.
 Wyceny PDF z logo Twojego biura bez limitu, CRM zespołu, alerty nowych ofert. 7 dni za darmo.
 ```
 

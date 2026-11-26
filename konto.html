@@ -177,7 +177,7 @@ gtag('set', 'url_passthrough', false);
       <!-- 🎨 Logo i dane biura na wycenach PDF (white-label) — tylko konta firmowe -->
       <div class="card biz-only" id="brandCard" style="display:none;margin-top:16px">
         <h2>🎨 Logo biura na wycenach PDF</h2>
-        <p style="margin:0 0 14px;font-size:13px;color:#8ba3d4;line-height:1.5">Wycena PDF generowana z karty oferty (przycisk „Wyceń tę nieruchomość” w planach Biuro jednoosobowe i Firmowy) będzie miała <b style="color:#fff">Twoje logo i dane biura</b> — bez oznaczeń FinderDom. Gotowa do pokazania właścicielowi.</p>
+        <p style="margin:0 0 14px;font-size:13px;color:#8ba3d4;line-height:1.5">Wycena PDF generowana z karty oferty (przycisk „Wyceń tę nieruchomość” w Planie Firmowym) będzie miała <b style="color:#fff">Twoje logo i dane biura</b> — bez oznaczeń FinderDom. Gotowa do pokazania właścicielowi.</p>
         <div id="brandAgentNote" style="display:none;font-size:13px;color:#8ba3d4">Logo i dane biura ustawia właściciel konta firmowego. Twoje wyceny PDF używają tych samych danych.</div>
         <form id="brandForm" class="inv-form" autocomplete="off">
           <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
@@ -237,50 +237,37 @@ gtag('set', 'url_passthrough', false);
             <div class="p-desc">Tylko podgląd — 5 pierwszych ofert, bez linków do ogłoszeń i analizy AI.</div>
             <ul class="p-list">
               <li>Podgląd 5 ofert w wyszukiwarce</li>
-              <li>Wycena PDF 35 zł / szt.</li>
+              <li>Wycena PDF 10 zł / szt.</li>
             </ul>
             <button type="button" class="p-btn" data-buy="free" disabled>Bez planu</button>
           </div>
           <div class="plan recommended" data-plan="individual">
             <div class="plan-tag">Polecane</div>
             <div class="p-name">Osobisty</div>
-            <div class="p-price">45 zł <span class="m">/30 dni</span></div>
+            <div class="p-price">25 zł <span class="m">/30 dni</span></div>
             <div class="p-desc">Dla osób prywatnych szukających mieszkania lub domu.</div>
             <ul class="p-list">
               <li>Analiza AI ceny w promieniu 5 km</li>
               <li>Ulubione oferty</li>
               <li>Zaawansowane filtry</li>
               <li>Bez reklam</li>
-              <li><strong>10 wycen PDF miesięcznie</strong> w cenie, kolejne 35 zł/szt.</li>
+              <li><strong>10 wycen PDF miesięcznie</strong> w cenie, kolejne 10 zł/szt.</li>
               <li><strong>🗄️ Archiwum z telefonami właścicieli</strong> — oferty, które zniknęły z portali; zadzwoń, zanim trafią do pośrednika</li>
             </ul>
-            <button type="button" class="p-btn pay" data-buy="individual">Zapłać 45 zł</button>
-          </div>
-          <div class="plan" data-plan="solo">
-            <div class="p-name">Biuro jednoosobowe</div>
-            <div class="p-price">90 zł <span class="m">/30 dni</span></div>
-            <div class="p-desc">Dla pośrednika pracującego samodzielnie — wszystko co w Firmowym, na 1 login.</div>
-            <ul class="p-list">
-              <li>Wszystko z planu Osobistego</li>
-              <li>CRM statusów i notatek na ofertach</li>
-              <li>Wyceny PDF <strong>bez limitu</strong> w cenie</li>
-              <li>Leady od właścicieli</li>
-              <li>1 login (bez agentów) · Faktury VAT</li>
-            </ul>
-            <button type="button" class="p-btn pay" data-buy="solo">Zapłać 90 zł</button>
+            <button type="button" class="p-btn pay" data-buy="individual">Zapłać 25 zł</button>
           </div>
           <div class="plan" data-plan="business">
-            <div class="p-name">Firmowy B2B</div>
-            <div class="p-price">199 zł <span class="m">/30 dni</span></div>
-            <div class="p-desc">Dla biur nieruchomości z zespołem agentów.</div>
+            <div class="p-name">Firmowy — całe biuro</div>
+            <div class="p-price">49 zł <span class="m">/30 dni</span></div>
+            <div class="p-desc">Dla pośredników i biur nieruchomości — cała Polska, konto główne + 4 loginy dla agentów.</div>
             <ul class="p-list">
-              <li>Wszystko z planu Biuro jednoosobowe</li>
-              <li>TeamMode (CRM) — do <strong>4 agentów w cenie</strong></li>
-              <li>Każdy dodatkowy agent: <strong>+55 zł/mies</strong></li>
-              <li>Wyceny PDF bez limitu</li>
-              <li>Faktury VAT</li>
+              <li>Wszystko z planu Osobistego</li>
+              <li>CRM statusów i notatek dla zespołu — <strong>4 loginy dla agentów w cenie</strong></li>
+              <li>Każdy kolejny login: <strong>+29 zł/mies</strong></li>
+              <li>Wyceny PDF <strong>z logo biura, bez limitu</strong></li>
+              <li>Leady od właścicieli · Faktury VAT</li>
             </ul>
-            <button type="button" class="p-btn pay" data-buy="business">Zapłać 199 zł</button>
+            <button type="button" class="p-btn pay" data-buy="business">Zapłać 49 zł</button>
           </div>
         </div>
         <div class="pay-info">
@@ -452,7 +439,7 @@ gtag('set', 'url_passthrough', false);
         const btn = p.querySelector('.p-btn');
         const promoPrice = u.promo && u.promo[p.dataset.plan];
         if (promoPrice && (p.dataset.plan !== u.tier || u.is_trial)) {
-          const std = { individual: 45, solo: 90, business: 199 }[p.dataset.plan];
+          const std = { individual: 25, solo: 49, business: 49 }[p.dataset.plan];
           const priceEl = p.querySelector('.p-price');
           if (priceEl) priceEl.innerHTML = `<span style="text-decoration:line-through;opacity:.55;font-size:.6em;margin-right:6px">${std} zł</span>${promoPrice} zł <span class="m">/ 1. miesiąc</span>`;
           btn.textContent = `Zapłać ${promoPrice} zł (cena specjalna)`;

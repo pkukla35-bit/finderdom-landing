@@ -5,7 +5,7 @@ window.FD_GADS = {
   id: 'AW-18518225811',
   labels: {
     valuation: '0wptCKau5KAdEJPnlv5E',        // zakup wyceny PDF (35 zł) — konto Ads 485-628-9752
-    plan: '',             // zakup planu Osobisty 45 zł / Firmowy 199 zł
+    plan: '',             // zakup planu Osobisty 25 zł / Firmowy 49 zł
     signup_business: '',  // rejestracja konta firmowego (lead)
     signup: '',           // rejestracja konta prywatnego
   },

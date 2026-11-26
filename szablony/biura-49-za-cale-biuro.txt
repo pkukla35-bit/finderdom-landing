@@ -1,23 +1,22 @@
-Temat: Wszystkie portale i województwa — 90 zł/mies dla pośrednika, 199 zł za całe biuro (4 loginy)
+Temat: Wszystkie portale i województwa — 49 zł/mies za całe biuro (4 loginy dla agentów)
 
 Dzień dobry,
 
-ile Państwa biuro płaci dziś za dostęp do ofert? Zwykle wygląda to tak: osobny pakiet na każde województwo i osobny login dla każdego agenta. Zbudowaliśmy FinderDom.pl, żeby to uprościć — i policzyć inaczej: jeden abonament na całą Polskę, w dwóch wariantach.
+ile Państwa biuro płaci dziś za dostęp do ofert? Zwykle wygląda to tak: osobny pakiet na każde województwo i osobny login dla każdego agenta. Zbudowaliśmy FinderDom.pl, żeby to uprościć — i policzyć inaczej: jeden abonament na całą Polskę, dla całego biura.
 
-  BIURO JEDNOOSOBOWE — 90 zł/mies: 1 login · CRM · leady · wyceny PDF bez limitu
-  PLAN FIRMOWY — 199 zł/mies: konto główne + 4 loginy dla agentów (niecałe 50 zł na pośrednika), kolejny agent 55 zł
+  PLAN FIRMOWY — 49 zł/mies: cała Polska · konto główne + 4 loginy dla agentów · CRM · leady · wyceny PDF z logo biura bez limitu · kolejny login 29 zł
 
-CO JEST W ŚRODKU (w obu planach):
+CO JEST W ŚRODKU:
 
 • WSZYSTKIE WOJEWÓDZTWA W JEDNYM ABONAMENCIE
   Otodom, OLX, Morizon, Gratka i pozostałe portale z całej Polski w jednej wyszukiwarce. Bez pakietów regionalnych, bez dopłat za kolejne miasto.
   Wyszukiwarka w widoku dla biur (bez logowania): https://www.finderdom.pl/szukaj?widok=biuro
 
-• DWA WARIANTY, TE SAME FUNKCJE
-  Pośrednik pracujący samodzielnie: Biuro jednoosobowe 90 zł/mies (1 login). Biuro z zespołem: Plan Firmowy 199 zł/mies — konto główne + 4 loginy dla agentów (199 : 4 = niecałe 50 zł na pośrednika), piąty i kolejny agent 55 zł/mies. Z planu 90 zł można w każdej chwili przejść na 199 zł.
+• JEDEN PLAN DLA CAŁEGO BIURA
+  49 zł/mies — konto główne + 4 loginy dla agentów (niecałe 10 zł na osobę), piąty i kolejny login 29 zł/mies. Pośrednik pracujący samodzielnie płaci tyle samo i ma loginy w zapasie na przyszły zespół.
 
 • WYCENY PDF BEZ LIMITU
-  Raport wyceny z realnymi cenami transakcyjnymi z Rejestru Cen Nieruchomości (akty notarialne) — dla klientów sprzedających, do pozyskiwania ofert. Dla osób prywatnych kosztuje 35 zł; w obu planach dla pośredników bez limitu w cenie.
+  Raport wyceny z realnymi cenami transakcyjnymi z Rejestru Cen Nieruchomości (akty notarialne) — dla klientów sprzedających, do pozyskiwania ofert. Dla osób prywatnych kosztuje 10 zł; w Planie Firmowym bez limitu w cenie — z logo i danymi Państwa biura.
   Przykładowy raport: https://www.finderdom.pl/przykladowa-wycena.pdf
 
 • OFERTY BEZPOŚREDNIE OD WŁAŚCICIELI
@@ -50,7 +49,7 @@ CO JEST W ŚRODKU (w obu planach):
 • TYGODNIOWE RAPORTY RYNKOWE
   Mediany zł/m², dzielnice, ceny ofertowe vs transakcyjne dla 20 miast: https://www.finderdom.pl/raporty
 
-7 DNI ZA DARMO dla firm z NIP — bez karty, bez umowy, pełny dostęp. Po okresie próbnym wybierają Państwo 90 zł (1 login) lub 199 zł (zespół). Faktura VAT automatycznie.
+7 DNI ZA DARMO dla firm z NIP — bez karty, bez umowy, pełny dostęp. Po okresie próbnym 49 zł/mies za całe biuro. Faktura VAT automatycznie.
 Rejestracja: https://www.finderdom.pl/dla-biur
 🎬 Zobacz 4-minutowy film, jak to działa dla biur: https://www.finderdom.pl/dla-biur?utm_source=email&utm_medium=manual&utm_campaign=biura-film#film-biura
 🆕 NOWOŚĆ: wycena PDF z logo i danymi Twojego biura — jeden klik na karcie oferty, raport bez oznaczeń FinderDom, gotowy dla właściciela. W cenie planu, bez limitu.

@@ -494,7 +494,7 @@ gtag('set', 'url_passthrough', false);
       <div class="chip-group">
         <div class="chip" id="chipArchive" title="Wygasłe oferty właścicieli z ostatnich 90 dni — z telefonem">🗄️ Wygasłe oferty prywatne</div>
       </div>
-      <div style="font-size:11px;color:#8ba3d4;margin-top:6px;line-height:1.4">Oferty właścicieli, które zniknęły z portali w ostatnich 90 dniach — z numerem telefonu. Właściciel często wciąż sprzedaje: zadzwoń, zanim nieruchomość trafi do pośrednika. Plan Osobisty (45 zł) oraz plany dla biur.</div>
+      <div style="font-size:11px;color:#8ba3d4;margin-top:6px;line-height:1.4">Oferty właścicieli, które zniknęły z portali w ostatnich 90 dniach — z numerem telefonu. Właściciel często wciąż sprzedaje: zadzwoń, zanim nieruchomość trafi do pośrednika. Plan Osobisty (25 zł) oraz plany dla biur.</div>
     </div>
 
     <!-- (Usunięto sekcję Uzbrojenie działki: WODA/PRĄD/GAZ/KANALIZACJA/WARUNKI ZABUDOWY —
@@ -610,7 +610,7 @@ gtag('set', 'url_passthrough', false);
     </div>
     <!-- Info bar: aktywny promień geo-search -->
     <div id="demoInfo" style="display:none;background:linear-gradient(135deg,rgba(79,70,229,0.14),rgba(255,184,0,0.08));border:1px solid rgba(255,184,0,0.4);color:#c5d0e6;border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:14px;line-height:1.5">
-      🏢 <b style="color:#FFB800">Widok dla biur (podgląd)</b> — tak wygląda wyszukiwarka z CRM na planie Biuro jednoosobowe / Firmowy: statusy i notatki na każdej ofercie, filtry CRM, wspólne oznaczenia dla całego zespołu. W podglądzie oznaczenia zapisują się tylko w tej przeglądarce.
+      🏢 <b style="color:#FFB800">Widok dla biur (podgląd)</b> — tak wygląda wyszukiwarka z CRM w Planie Firmowym: statusy i notatki na każdej ofercie, filtry CRM, wspólne oznaczenia dla całego zespołu. W podglądzie oznaczenia zapisują się tylko w tej przeglądarce.
       <a href="/rejestracja?typ=firma" style="color:#FFB800;font-weight:800;white-space:nowrap">Załóż konto firmowe — 7 dni za darmo →</a>
     </div>
     <div id="dateInfo" style="display:none;background:rgba(255,184,0,0.08);border:1px solid rgba(255,184,0,0.35);color:#c5d0e6;border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:14px;display:none"></div>
@@ -1945,14 +1945,14 @@ function paywallCardHtml() {
   const logged = !!localStorage.getItem('finderdom_token');
   const totalTxt = total > shown ? `${shown} z ${total.toLocaleString('pl-PL')}` : `${shown}`;
   const btns = logged
-    ? `<a href="/konto" class="pw-btn">💎 Wykup plan Osobisty — 45 zł/mies</a><a href="/dla-biur" class="pw-btn pw-outline">🏢 Biuro? Plan Firmowy — 7 dni za darmo</a>`
-    : `<a href="/rejestracja" class="pw-btn">💎 Załóż konto i odblokuj — 45 zł/mies</a><a href="/logowanie" class="pw-btn pw-outline">Mam już konto — zaloguj</a>`;
+    ? `<a href="/konto" class="pw-btn">💎 Wykup plan Osobisty — 25 zł/mies</a><a href="/dla-biur" class="pw-btn pw-outline">🏢 Biuro? Plan Firmowy — 7 dni za darmo</a>`
+    : `<a href="/rejestracja" class="pw-btn">💎 Załóż konto i odblokuj — 25 zł/mies</a><a href="/logowanie" class="pw-btn pw-outline">Mam już konto — zaloguj</a>`;
   return `<div class="paywall-card" style="grid-column:1/-1">
     <div class="pw-icon">🔒</div>
     <div class="pw-title">Pokazujemy ${totalTxt} ofert</div>
-    <div class="pw-sub">Odblokuj <b>wszystkie oferty ze wszystkich portali</b>, analizę AI (okazja / zawyżona), linki do ogłoszeń, ulubione i alerty cenowe. Plan Osobisty <b>45 zł za 30 dni</b> — bez umowy, anulujesz kiedy chcesz.</div>
+    <div class="pw-sub">Odblokuj <b>wszystkie oferty ze wszystkich portali</b>, analizę AI (okazja / zawyżona), linki do ogłoszeń, ulubione i alerty cenowe. Plan Osobisty <b>25 zł za 30 dni</b> — bez umowy, anulujesz kiedy chcesz.</div>
     <div class="pw-btns">${btns}</div>
-    <div class="pw-note">Wycena PDF z aktami notarialnymi dostępna bez planu — <a href="/wycena">35 zł za raport</a>.</div>
+    <div class="pw-note">Wycena PDF z aktami notarialnymi dostępna bez planu — <a href="/wycena">10 zł za raport</a>.</div>
     <div class="pw-note">ℹ️ FinderDom to wyszukiwarka ogłoszeń z Otodom, OLX, Morizon, Gratki i innych portali — nie mamy własnych ofert „na wyłączność”. Płacisz za wszystkie portale w jednym miejscu, analizę AI ceny, alerty i wyceny PDF.</div>
   </div>`;
 }
@@ -1962,7 +1962,7 @@ function renderPage() {
   const pager = document.getElementById('pager');
   if (CURRENT_FILTERED.length === 0) {
     if (window.ARCHIVE_MODE && window.__archiveLocked) {
-      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🗄️</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Archiwum wygasłych ofert prywatnych</div>Oferty właścicieli, które zniknęły z portali w ostatnich 90 dniach — <b style="color:#fff">z numerem telefonu właściciela</b>. Właściciel często wciąż sprzedaje, a ogłoszenie jeszcze nie trafiło do pośrednika — <b style="color:#fff">zadzwoń pierwszy/pierwsza</b>.<br><br>Dostępne w planie <b style="color:#FFB800">Osobistym (45 zł / 30 dni)</b> oraz planach dla biur <b style="color:#FFB800">Biuro jednoosobowe (90 zł)</b> i <b style="color:#FFB800">Firmowy (199 zł)</b>.<br><br><a href="/konto" class="paywall-btn" style="display:inline-block">👤 Plan Osobisty — 45 zł →</a> &nbsp; <a href="/dla-biur" class="paywall-btn" style="display:inline-block;background:transparent;border:1px solid rgba(255,184,0,.5)">🏢 Dla biur — 7 dni za darmo →</a></div>';
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🗄️</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Archiwum wygasłych ofert prywatnych</div>Oferty właścicieli, które zniknęły z portali w ostatnich 90 dniach — <b style="color:#fff">z numerem telefonu właściciela</b>. Właściciel często wciąż sprzedaje, a ogłoszenie jeszcze nie trafiło do pośrednika — <b style="color:#fff">zadzwoń pierwszy/pierwsza</b>.<br><br>Dostępne w planie <b style="color:#FFB800">Osobistym (25 zł / 30 dni)</b> oraz planach dla biur <b style="color:#FFB800">Biuro jednoosobowe (90 zł)</b> i <b style="color:#FFB800">Firmowy (49 zł)</b>.<br><br><a href="/konto" class="paywall-btn" style="display:inline-block">👤 Plan Osobisty — 25 zł →</a> &nbsp; <a href="/dla-biur" class="paywall-btn" style="display:inline-block;background:transparent;border:1px solid rgba(255,184,0,.5)">🏢 Dla biur — 7 dni za darmo →</a></div>';
     } else {
       grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#8ba3d4"><div style="font-size:48px;margin-bottom:12px">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Brak wyników</div>' + (window.ARCHIVE_MODE ? 'W archiwum nie ma jeszcze wygasłych ofert prywatnych dla tych filtrów — zbieramy je od 5.11.2026' : 'Zmień filtry aby zobaczyć więcej ofert') + '</div>';
     }
@@ -1987,7 +1987,7 @@ function renderPage() {
     if (l.phone) {
       phoneHtml = `<div class="card-phone" onclick="event.preventDefault();event.stopPropagation();window.location.href='tel:${l.phone}'" title="Zadzwoń do właściciela">📞 ${fmtPhone(l.phone)} <span class="card-phone-sub">właściciel</span></div>`;
     } else if (l.phone_masked) {
-      phoneHtml = `<div class="card-phone card-phone-locked" onclick="event.preventDefault();event.stopPropagation();window.location.href='/dla-biur'" title="Numer właściciela w planie Biuro jednoosobowe / Firmowy">📞 ${l.phone_masked} <span class="card-phone-sub">🔒 numer w planie dla biur</span></div>`;
+      phoneHtml = `<div class="card-phone card-phone-locked" onclick="event.preventDefault();event.stopPropagation();window.location.href='/dla-biur'" title="Numer właściciela w Planie Firmowym">📞 ${l.phone_masked} <span class="card-phone-sub">🔒 numer w planie dla biur</span></div>`;
     } else if (l.seller_type === 'prywatna' && l.url) {
       // plan z dostępem do numerów, ale portal (OLX, Adresowo) pokazuje numer dopiero po zalogowaniu u siebie — nie da się go pobrać
       phoneHtml = `<div class="card-phone card-phone-locked" style="opacity:.75" onclick="event.preventDefault();event.stopPropagation();window.open('${l.url}','_blank','noopener')" title="Ten portal ukrywa numer za logowaniem — otwórz ogłoszenie u źródła">📞 numer tylko na ${l.portal || 'portalu'} <span class="card-phone-sub">otwórz ogłoszenie →</span></div>`;

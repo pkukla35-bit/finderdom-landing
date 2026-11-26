@@ -13,7 +13,7 @@ piszę z FinderDom.pl — wyszukiwarki ogłoszeń nieruchomości, która zbiera 
 • CRM dla zespołu, analiza AI ceny i wyceny PDF bez limitu z realnymi transakcjami z Rejestru Cen Nieruchomości. Cała Polska w jednej cenie.
 
 Widok dla biur (bez logowania): https://www.finderdom.pl/szukaj?widok=biuro
-Plany: Biuro jednoosobowe 90 zł/mies (1 login) · Firmowy 199 zł/mies (konto główne + 4 loginy). 7 dni za darmo dla firm z NIP, bez karty, bez umowy: https://www.finderdom.pl/dla-biur
+Plan Firmowy 49 zł/mies za całe biuro (cała Polska, konto główne + 4 loginy dla agentów, CRM dla zespołu, wyceny PDF z logo bez limitu; kolejny login 29 zł). 7 dni za darmo dla firm z NIP, bez karty, bez umowy: https://www.finderdom.pl/dla-biur
 🎬 Zobacz 4-minutowy film, jak to działa dla biur: https://www.finderdom.pl/dla-biur?utm_source=email&utm_medium=manual&utm_campaign=biura-film#film-biura
 🆕 NOWOŚĆ: wycena PDF z logo i danymi Twojego biura — jeden klik na karcie oferty, raport bez oznaczeń FinderDom, gotowy dla właściciela. W cenie planu, bez limitu.
 

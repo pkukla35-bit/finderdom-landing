@@ -89,12 +89,12 @@ async def _stripe_cfg():
         stripe.api_key = _STRIPE_RT["secret"]
     return _STRIPE_RT["secret"], _STRIPE_RT["whsec"]
 
-PLANS = {"individual": 45, "solo": 90, "business": 199}
+PLANS = {"individual": 25, "solo": 49, "business": 49}  # 24.11: Osobisty 25, Firmowy 49 (cała Polska, 4 loginy); solo = wycofany z oferty, zostaje dla istniejących kont
 ARCHIVE_PRIVATE_DAYS = 90   # wygasłe oferty PRYWATNE zostają w archiwum (dla biur) tyle dni po zniknięciu z portalu  # gross PLN per 30 days
 PLAN_LABELS = {"individual": "Osobisty", "solo": "Biuro jednoosobowe", "business": "Firmowy"}
 # Plany „biurowe”: pełne funkcje B2B (CRM, leady, wyceny bez limitu). Solo = 1 login (bez agentów), Firmowy = 4 loginy w cenie.
 BUSINESS_TIERS = {"business", "solo"}
-VALUATION_PRICE = 35  # PLN one-time per property valuation PDF
+VALUATION_PRICE = 10  # PLN one-time per property valuation PDF (24.11: było 35)
 
 # Email (Emergent managed Resend)
 EMAIL_BASE_URL = "https://integrations.emergentagent.com"  # constant, NOT env
@@ -809,8 +809,8 @@ async def claim_lead(token: str, user: dict = Depends(current_user)):
 
 # --- Team Management (Firmowy multi-agent) ---
 
-AGENT_LIMIT_INCLUDED = 4   # Plan Firmowy 199 zł/mies zawiera do 4 agentów w cenie
-EXTRA_AGENT_PRICE = 55     # 5. i każdy kolejny agent = 55 zł/mies
+AGENT_LIMIT_INCLUDED = 4   # Plan Firmowy 49 zł/mies zawiera do 4 agentów w cenie
+EXTRA_AGENT_PRICE = 29     # 5. i każdy kolejny agent = 29 zł/mies (było 55)
 
 
 async def _check_agent_limit(user: dict) -> None:
@@ -825,14 +825,14 @@ async def _check_agent_limit(user: dict) -> None:
     if active_agents + pending_invites + 1 > AGENT_LIMIT_INCLUDED + extra_paid:
         raise HTTPException(
             402,
-            f"Osiągnięto limit agentów w planie Firmowy ({AGENT_LIMIT_INCLUDED} w cenie 199 zł). "
+            f"Osiągnięto limit agentów w planie Firmowy ({AGENT_LIMIT_INCLUDED} w cenie 49 zł). "
             f"Aktualnie: {active_agents} agentów + {pending_invites} zaproszeń oczekujących. "
             f"Aby dodać więcej, opłać {EXTRA_AGENT_PRICE} zł/mies za każdego dodatkowego agenta. "
             f"Kontakt: kontakt@finderdom.pl"
         )
 
 
-SOLO_NO_AGENTS_MSG = "Plan Biuro jednoosobowe (90 zł) to 1 login. Dodawanie agentów wymaga Planu Firmowego (199 zł, 4 loginy w cenie) — zmień plan w Moje konto → Subskrypcja."
+SOLO_NO_AGENTS_MSG = "Plan Biuro jednoosobowe to 1 login. Dodawanie agentów wymaga Planu Firmowego (49 zł, 4 loginy w cenie) — zmień plan w Moje konto → Subskrypcja."
 
 
 async def _require_business_master(user: dict) -> None:
@@ -2595,7 +2595,7 @@ async def listings_scraped_endpoint(
             if not archive_ok:
                 return {"listings": [], "count": 0, "total_count": 0, "offset": 0, "limit": limit, "lite": bool(lite), "filtered": True,
                         "locked": True, "archive": True, "archive_locked": True,
-                        "message": "Archiwum wygasłych ofert prywatnych (z telefonami właścicieli) jest dostępne w planie Osobistym oraz planach Biuro jednoosobowe i Firmowy."}
+                        "message": "Archiwum wygasłych ofert prywatnych (z telefonami właścicieli) jest dostępne w planie Osobistym i Firmowym."}
             query = {"is_stale": True, "seller_type": "prywatna", "price": {"$gt": 1000}}
         elif city or type or transaction or (lat and lng and radius_km):
             query = {"scraped_via": {"$in": ["scrapingbee", "apify", "nol-direct", "portal-direct", "olx-direct"]}, "is_stale": {"$ne": True}, "price": {"$gt": 1000}}
@@ -3923,30 +3923,30 @@ MAIL_TEMPLATES: Dict[str, dict] = {
         "intro": "Dzięki za założenie konta! FinderDom zbiera ogłoszenia z Otodom, OLX, Morizon, Gratki i pozostałych portali z całej Polski w jednej wyszukiwarce. Bez planu widzisz podgląd pierwszych 5 ofert — pełny dostęp odblokowuje subskrypcja:",
         "bullets": [
             "<b>Wyszukiwarka wszystkich portali</b> — mieszkania, domy, działki i lokale, cała Polska, filtr „tylko od właściciela” (bez prowizji pośrednika).",
-            "<b>Plan Osobisty — 45 zł za 30 dni</b>: wszystkie oferty, linki do ogłoszeń i numery kontaktowe, analiza AI (okazja / w normie / zawyżona), podobne oferty w okolicy, ulubione i alerty cenowe. Bez umowy, anulujesz kiedy chcesz.",
-            "<b>Wycena PDF — 35 zł</b> (bez planu): realna wartość nieruchomości na podstawie aktów notarialnych z Rejestru Cen Nieruchomości, w 2 minuty.",
+            "<b>Plan Osobisty — 25 zł za 30 dni</b>: wszystkie oferty, linki do ogłoszeń i numery kontaktowe, analiza AI (okazja / w normie / zawyżona), podobne oferty w okolicy, ulubione i alerty cenowe. Bez umowy, anulujesz kiedy chcesz.",
+            "<b>Wycena PDF — 10 zł</b> (bez planu): realna wartość nieruchomości na podstawie aktów notarialnych z Rejestru Cen Nieruchomości, w 2 minuty.",
         ],
-        "cta": "💎 Odblokuj pełną wyszukiwarkę — 45 zł/mies", "url": "/konto",
+        "cta": "💎 Odblokuj pełną wyszukiwarkę — 25 zł/mies", "url": "/konto",
         "ps": "Subskrypcję aktywujesz w zakładce „Moje konto” — płatność BLIK, kartą, Apple/Google Pay. Jedna dobrze wynegocjowana oferta zwraca ją wielokrotnie.",
     },
     "p2": {
-        "audience": "personal", "day": 4, "auto": False, "name": "Marketing — Wycena PDF za 35 zł",
-        "subject": "Czy ta cena jest uczciwa? Sprawdź w 2 minuty za 35 zł",
+        "audience": "personal", "day": 4, "auto": False, "name": "Marketing — Wycena PDF za 10 zł",
+        "subject": "Czy ta cena jest uczciwa? Sprawdź w 2 minuty za 10 zł",
         "title": "Zawyżenie o 3% przy mieszkaniu za 600 000 zł to 18 000 zł",
         "intro": "Zanim zdecydujesz się na zakup (albo wystawisz swoją nieruchomość), sprawdź, ile jest naprawdę warta. Nasz raport PDF opiera się nie na cenach ofertowych, ale na prawdziwych transakcjach z Rejestru Cen Nieruchomości.",
         "bullets": [
             "<b>Realna wartość rynkowa</b> i zakres min–max dla Twojej nieruchomości.",
             "<b>Porównanie z aktami notarialnymi</b> z okolicy — ceny, za które faktycznie sprzedano podobne mieszkania i domy.",
             "<b>Podobne oferty</b> w promieniu kilku kilometrów i <b>opinia AI o cenie</b>.",
-            "<b>Bez abonamentu</b> — płacisz 35 zł BLIK-iem lub kartą i od razu pobierasz PDF.",
+            "<b>Bez abonamentu</b> — płacisz 10 zł BLIK-iem lub kartą i od razu pobierasz PDF.",
         ],
-        "cta": "💎 Wyceń nieruchomość za 35 zł", "url": "/wycena",
+        "cta": "💎 Wyceń nieruchomość za 10 zł", "url": "/wycena",
         "ps": "Działa dla mieszkań, domów, działek i lokali. Raport możesz pokazać sprzedającemu podczas negocjacji.",
     },
     "p3": {
-        "audience": "personal", "day": 10, "auto": False, "name": "Marketing — Plan Osobisty 45 zł",
-        "subject": "Analiza AI, alerty cenowe i podobne oferty — 45 zł/mies, anulujesz kiedy chcesz",
-        "title": "Szukasz dalej? Odblokuj pełną analizę za 45 zł miesięcznie",
+        "audience": "personal", "day": 10, "auto": False, "name": "Marketing — Plan Osobisty 25 zł",
+        "subject": "Analiza AI, alerty cenowe i podobne oferty — 25 zł/mies, anulujesz kiedy chcesz",
+        "title": "Szukasz dalej? Odblokuj pełną analizę za 25 zł miesięcznie",
         "intro": "Darmowe konto pokazuje oferty. Plan Osobisty pokazuje, które z nich są naprawdę warte uwagi — i pilnuje za Ciebie zmian cen.",
         "bullets": [
             "<b>Analiza AI</b> przy każdej ofercie: okazja / w normie / zawyżona.",
@@ -3955,7 +3955,7 @@ MAIL_TEMPLATES: Dict[str, dict] = {
             "<b>Zaawansowane filtry</b>: rok budowy, standard, komunikacja. Bez reklam.",
         ],
         "cta": "👤 Zobacz plan Osobisty", "url": "/konto",
-        "ps": "45 zł za 30 dni, bez umowy. Jedna dobrze wynegocjowana oferta zwraca to kilkaset razy.",
+        "ps": "25 zł za 30 dni, bez umowy. Jedna dobrze wynegocjowana oferta zwraca to kilkaset razy.",
     },
     "b1": {
         "audience": "business", "day": 0, "auto": True, "name": "Po rejestracji — Konto firmowe: jak zacząć",
@@ -3975,13 +3975,13 @@ MAIL_TEMPLATES: Dict[str, dict] = {
     },
     "b2": {
         "audience": "business", "day": 5, "auto": True, "name": "Dzień 5 — Powiadomienie: trial kończy się za 2 dni",
-        "subject": "Za 2 dni kończy się Twój okres próbny — od 90 zł/mies",
-        "title": "Wszystkie województwa, CRM, wyceny w cenie — 90 zł (1 login) lub 199 zł (całe biuro)",
-        "intro": "Twoje 7 dni Premium Firmowy dobiega końca. Jeśli FinderDom pomógł Ci choć przy jednej ofercie, policz: jeden pozyskany klient to 2 000–5 000 zł prowizji. Pracujesz sam — Biuro jednoosobowe za 90 zł/mies. Masz zespół — Plan Firmowy za 199 zł, czyli 6,50 zł dziennie za całe biuro.",
+        "subject": "Za 2 dni kończy się Twój okres próbny — 49 zł/mies za całe biuro",
+        "title": "Cała Polska, 4 loginy, CRM i wyceny PDF z Twoim logo — 49 zł/mies za całe biuro",
+        "intro": "Twoje 7 dni Premium Firmowy dobiega końca. Jeśli FinderDom pomógł Ci choć przy jednej ofercie, policz: jeden pozyskany klient to 2 000–5 000 zł prowizji. Plan Firmowy to 49 zł/mies za całe biuro — czyli 1,65 zł dziennie.",
         "bullets": [
             "<b>Wszystkie województwa</b> — bez pakietów regionalnych i dopłat za kolejne miasto.",
-            "<b>Biuro jednoosobowe 90 zł</b> — 1 login z CRM, leadami i wycenami bez limitu. <b>Firmowy 199 zł</b> — aż 4 loginy dla agentów, każdy kolejny 55 zł/mies.",
-            "<b>Wyceny PDF bez limitu</b> w cenie obu planów — każda warta 35 zł.",
+            "<b>Plan Firmowy 49 zł</b> — konto główne + 4 loginy dla agentów, CRM, leady i wyceny bez limitu. Każdy kolejny agent 29 zł/mies.",
+            "<b>Wyceny PDF z logo biura bez limitu</b> w cenie planu.",
             "<b>Leady od właścicieli + CRM</b>. Faktura VAT automatycznie.",
         ],
         "cta": "💳 Wybierz plan i przedłuż dostęp", "url": "/konto",
@@ -3989,7 +3989,7 @@ MAIL_TEMPLATES: Dict[str, dict] = {
     },
     "bcold": {
         "audience": "business", "day": 0, "auto": False, "name": "Marketing — Oferta dla biura nieruchomości (do wysyłki ręcznej)",
-        "subject": "Wszystkie portale, 4 loginy dla agentów i wyceny z aktów notarialnych — 199 zł/mies za całe biuro",
+        "subject": "Wszystkie portale, 4 loginy dla agentów i wyceny z aktów notarialnych — 49 zł/mies za całe biuro",
         "title": "Jedna wyszukiwarka zamiast wszystkich portali osobno — dla całego Twojego biura",
         "intro": "Dzień dobry, piszę z FinderDom.pl — polskiego agregatora ogłoszeń nieruchomości. Zbieramy oferty z Otodom, OLX, Morizon, Gratki i pozostałych portali z całej Polski w jednym miejscu i dodajemy narzędzia, których biura używają na co dzień. Pozwalam sobie przesłać krótką informację o ofercie dla biur:",
         "bullets": [
@@ -3997,11 +3997,11 @@ MAIL_TEMPLATES: Dict[str, dict] = {
             "<b>⭐ Alert wyłączności (NOWOŚĆ)</b> — oznaczasz ofertę „Moja oferta”, dostajesz e-mail, gdy pojawi się u innego pośrednika albo właściciel wystawi ją sam.",
             "<b>📈 Historia ceny na wszystkich portalach (NOWOŚĆ)</b> — wykres najniższej ceny w czasie; 📞 telefony właścicieli i 🗄️ 90-dniowe archiwum; 🤖 wyszukiwanie AI.",
             "<b>Wszystkie województwa w cenie</b> — bez pakietów regionalnych i dopłat za kolejne miasto.",
-            "<b>Aż 4 loginy dla agentów</b> w jednym abonamencie (każdy kolejny 55 zł/mies), wspólna baza i CRM statusów ofert.",
+            "<b>Aż 4 loginy dla agentów</b> w jednym abonamencie (każdy kolejny 29 zł/mies), wspólna baza i CRM statusów ofert.",
             "<b>Oferty bezpośrednie od właścicieli</b> z filtrem „ostatnie 24h” — zanim zadzwoni konkurencja.",
             "<b>Wyceny PDF bez limitu w cenie</b> — z realnymi transakcjami z Rejestru Cen Nieruchomości, argument nie do podważenia na spotkaniu z właścicielem.",
             "<b>Leady od właścicieli</b>, którzy zamawiają wycenę i proszą o kontakt agenta z okolicy.",
-            "<b>199 zł/mies za całe biuro</b> — 7 dni za darmo dla firm z NIP, bez karty i bez umowy. Faktura VAT automatycznie.",
+            "<b>49 zł/mies za całe biuro</b> — 7 dni za darmo dla firm z NIP, bez karty i bez umowy. Faktura VAT automatycznie.",
         ],
         "cta": "🏢 Zobacz ofertę i wypróbuj 7 dni za darmo", "url": "/dla-biur",
         "ps": "Jeśli ta wiadomość trafiła do Państwa przez pomyłkę lub nie życzą sobie Państwo kolejnych informacji, wystarczy odpowiedzieć „nie” — więcej nie napiszę. Pozdrawiam, Paweł Kukla, FinderDom.pl, kontakt@finderdom.pl",
@@ -4009,9 +4009,9 @@ MAIL_TEMPLATES: Dict[str, dict] = {
 
 piszę z FinderDom.pl — polskiego agregatora ogłoszeń nieruchomości. Zbieramy oferty z Otodom, OLX, Morizon, Gratki i pozostałych portali z całej Polski w jednym miejscu i dodajemy narzędzia, których biura używają na co dzień.
 
-Oferta dla biur nieruchomości — Plan Firmowy 199 zł/mies za całe biuro:
+Oferta dla biur nieruchomości — Plan Firmowy 49 zł/mies za całe biuro:
 • Wszystkie województwa w cenie — bez pakietów regionalnych.
-• Aż 4 loginy dla agentów w jednym abonamencie (każdy kolejny 55 zł/mies), wspólna baza i CRM statusów ofert.
+• Aż 4 loginy dla agentów w jednym abonamencie (każdy kolejny 29 zł/mies), wspólna baza i CRM statusów ofert.
 • Oferty bezpośrednie od właścicieli z filtrem „ostatnie 24h”.
 • Wyceny PDF bez limitu w cenie — z realnymi transakcjami z Rejestru Cen Nieruchomości.
 • Leady od właścicieli, którzy zamawiają wycenę i proszą o kontakt agenta.
@@ -4038,7 +4038,7 @@ FinderDom.pl · kontakt@finderdom.pl""",
             "<b>🤖 Wyszukiwanie AI</b> — wpisz „dom do 1,2 mln 25 km od Warszawy, od właściciela, bez zawyżonych” i filtry ustawią się same. Do tego <b>📞 telefony właścicieli</b> i <b>🗄️ 90-dniowe archiwum</b> wygasłych ofert prywatnych.",
         ],
         "cta": "🏢 Zobacz widok dla biur", "url": "/szukaj?widok=biuro",
-        "ps": "Biuro jednoosobowe 90 zł/mies, Plan Firmowy 199 zł/mies za 4 loginy — 7 dni za darmo dla firm z NIP, bez karty. Jeśli nie życzą sobie Państwo kolejnych wiadomości, wystarczy odpowiedzieć „nie”. Pozdrawiam, Paweł Kukla, FinderDom.pl",
+        "ps": "Plan Firmowy 49 zł/mies za całe biuro (4 loginy) — 7 dni za darmo dla firm z NIP, bez karty. Jeśli nie życzą sobie Państwo kolejnych wiadomości, wystarczy odpowiedzieć „nie”. Pozdrawiam, Paweł Kukla, FinderDom.pl",
         "text": """Dzień dobry,
 
 piszę z FinderDom.pl — wyszukiwarki ogłoszeń nieruchomości ze wszystkich portali. Dodaliśmy pięć rzeczy, o które biura prosiły najczęściej — wszystko w widoku „Dla biur” i na stronie każdej oferty:
@@ -4050,7 +4050,7 @@ piszę z FinderDom.pl — wyszukiwarki ogłoszeń nieruchomości ze wszystkich p
 • 🤖 Wyszukiwanie AI — opisz nieruchomość własnymi słowami, filtry ustawią się same. Do tego telefony właścicieli i 90-dniowe archiwum wygasłych ofert prywatnych.
 
 Widok dla biur: https://www.finderdom.pl/szukaj?widok=biuro
-Plany: Biuro jednoosobowe 90 zł/mies, Firmowy 199 zł/mies (4 loginy) — 7 dni za darmo dla firm z NIP, bez karty: https://www.finderdom.pl/dla-biur
+Plan Firmowy 49 zł/mies za całe biuro (4 loginy) — 7 dni za darmo dla firm z NIP, bez karty: https://www.finderdom.pl/dla-biur
 
 Jeśli nie życzą sobie Państwo kolejnych wiadomości, wystarczy odpowiedzieć „nie”.
 
@@ -4070,13 +4070,13 @@ FinderDom.pl · kontakt@finderdom.pl""",
             "<b>🔨 Przetargi i licytacje</b> — oferty komornicze, syndyka i przetargi gmin z ceną wywoławczą i terminem, w tej samej wyszukiwarce.",
         ],
         "cta": "✨ Wypróbuj Wyszukiwanie AI", "url": "/szukaj",
-        "ps": "Plan Osobisty 45 zł za 30 dni: pełne wyniki, linki do ogłoszeń, analiza AI ceny, archiwum z telefonami i wyceny PDF bez limitu. Bez umowy, anulujesz kiedy chcesz.",
+        "ps": "Plan Osobisty 25 zł za 30 dni: pełne wyniki, linki do ogłoszeń, analiza AI ceny, archiwum z telefonami i 10 wycen PDF miesięcznie w cenie. Bez umowy, anulujesz kiedy chcesz.",
     },
     "b3": {
         "audience": "business", "day": 12, "auto": False, "name": "Marketing — Po trialu: wróć do nas",
         "subject": "Konkurencja już widzi oferty bezpośrednie z ostatnich 24h. A Ty?",
         "title": "Wróć do FinderDom — oferta dla biur jest wciąż otwarta",
-        "intro": "Twój okres próbny się skończył, ale konto i dane zostały. Przypominamy, co dostaje biuro w Planie Firmowym za 199 zł miesięcznie:",
+        "intro": "Twój okres próbny się skończył, ale konto i dane zostały. Przypominamy, co dostaje biuro w Planie Firmowym za 49 zł miesięcznie:",
         "bullets": [
             "<b>Oferty bezpośrednie od właścicieli</b> z filtrem „ostatnie 24h” — zanim zadzwoni konkurencja.",
             "<b>Cała Polska i 4 loginy dla agentów</b> w jednej cenie.",
@@ -5460,9 +5460,9 @@ FAKTY O FINDERDOM.PL:
 - Wyszukiwarka (/szukaj) zbiera ogłoszenia z Otodom, OLX, Morizon, Gratka, Domiporta, Adresowo, nieruchomosci-online — mieszkania, domy, działki, lokale; sprzedaż i wynajem; cała Polska (16 województw). Duplikaty tej samej oferty z kilku portali są łączone w jedną kartę („od … zł”, lista portali).
 - Filtry: miasto + promień (km), rodzaj nieruchomości, rynek (pierwotny/wtórny), typ budynku, kto oferuje (prywatna/biuro), cena, metraż, pokoje, data dodania. Przy każdej ofercie analiza AI ceny (okazja / typowa / zawyżona) i podobne oferty w okolicy. Filtr „tylko od właściciela” = oferty bez pośrednika.
 - Konta: Osobiste (bez NIP) lub Firmowe (NIP + nazwa firmy). Rejestracja: /rejestracja. Logowanie: /logowanie. Reset hasła: link „Nie pamiętasz hasła?” na stronie logowania (e-mail z linkiem ważnym 1 godzinę). Zmiana hasła: /konto → Profil.
-- Plany: Bez planu (0 zł) = podgląd pierwszych 5 ofert + podstawowe filtry. Osobisty 45 zł / 30 dni = wszystkie oferty, analiza AI, podobne oferty, ulubione i alerty, bez reklam, wyceny PDF bez limitu przez cały miesiąc w cenie. Biuro jednoosobowe (Solo) 90 zł/mies = 1 login, CRM, leady, wyceny PDF bez limitu. Firmowy 199 zł/mies = konto główne + 4 loginy dla agentów, CRM, leady, wyceny PDF bez limitu; każdy kolejny agent 55 zł/mies. Firmy z NIP: 7 dni za darmo bez karty, po okresie próbnym wybierasz plan. Płatność kartą/BLIK przez Stripe, anulujesz kiedy chcesz. Faktura VAT automatycznie na podstawie NIP.
+- Plany: Bez planu (0 zł) = podgląd pierwszych 5 ofert + podstawowe filtry. Osobisty 25 zł / 30 dni = wszystkie oferty, analiza AI, podobne oferty, ulubione i alerty, bez reklam, 10 wycen PDF miesięcznie w cenie (kolejne 10 zł/szt.). Konto prywatne bez planu: 10 bezpłatnych wycen PDF łącznie, potem 10 zł/szt. Firmowy 49 zł/mies = konto główne + 4 loginy dla agentów, CRM, leady, wyceny PDF bez limitu; każdy kolejny agent 29 zł/mies. Firmy z NIP: 7 dni za darmo bez karty, po okresie próbnym wybierasz plan. Płatność kartą/BLIK przez Stripe, anulujesz kiedy chcesz. Faktura VAT automatycznie na podstawie NIP.
 - CRM (dla kont firmowych): statusy na kartach ofert: Był kontakt, Umówione, Bez pośrednika, Nieaktualna, Zły kontakt, Kontakt później; filtry CRM; wspólna baza dla zespołu. Podgląd widoku dla biur bez logowania: /szukaj?widok=biuro.
-- Wycena PDF (/wycena): 35 zł za raport bez konta i abonamentu — realna wartość rynkowa, zakres min–max, porównanie z transakcjami z Rejestru Cen Nieruchomości (akty notarialne), podobne oferty, opinia AI. W każdym opłaconym planie (Osobisty, Solo, Firmowy) wyceny PDF bez limitu w cenie. PDF do pobrania od razu po płatności (nie wysyłamy PDF e-mailem).
+- Wycena PDF (/wycena): 10 zł za raport bez konta i abonamentu — realna wartość rynkowa, zakres min–max, porównanie z transakcjami z Rejestru Cen Nieruchomości (akty notarialne), podobne oferty, opinia AI. W każdym opłaconym planie (Osobisty, Solo, Firmowy) wyceny PDF bez limitu w cenie. PDF do pobrania od razu po płatności (nie wysyłamy PDF e-mailem).
 - Kredyt: kalkulator raty i zdolności (/kredyt), partner główny Lendi (porównanie ofert banków).
 - Leady dla biur: osoby zamawiające wycenę mogą zostawić telefon — lead trafia do biur z regionu.
 - Kontakt: kontakt@finderdom.pl, odpowiedź do 24 h w dni robocze (pn–pt 9–18). Formularz: /kontakt. Pomoc: /pomoc. Dla biur: /dla-biur. Dla prywatnych: /dla-prywatnych.
@@ -5470,7 +5470,7 @@ FAKTY O FINDERDOM.PL:
 - Ogłoszenia pochodzą z portali — FinderDom nie jest pośrednikiem i nie publikuje własnych ogłoszeń; do kontaktu ze sprzedającym służy link do ogłoszenia na portalu źródłowym. FinderDom NIE ma ofert „na wyłączność” — te same ogłoszenia są na portalach źródłowych; wartość planu to wszystkie portale w jednym miejscu, łączenie duplikatów, analiza AI ceny, podobne oferty, filtry, ulubione/alerty i wyceny PDF. Tak jest opisane przed zakupem.
 
 PŁATNOŚCI, REZYGNACJA I ZWROTY (odpowiadasz na to SAM, uprzejmie i stanowczo, bez przekazywania sprawy zespołowi):
-- Każdy plan to JEDNORAZOWA opłata za 30 dni (Osobisty 45 zł, Solo 90 zł, Firmowy 199 zł). Nie ma automatycznego odnawiania ani umowy — po 30 dniach plan sam wygasa, żadne kolejne opłaty nie są pobierane. „Rezygnacja” nie wymaga żadnych działań; dostęp działa do końca opłaconego okresu (data w /konto).
+- Każdy plan to JEDNORAZOWA opłata za 30 dni (Osobisty 25 zł, Firmowy 49 zł). Nie ma automatycznego odnawiania ani umowy — po 30 dniach plan sam wygasa, żadne kolejne opłaty nie są pobierane. „Rezygnacja” nie wymaga żadnych działań; dostęp działa do końca opłaconego okresu (data w /konto).
 - Plan aktywuje się natychmiast po płatności na żądanie klienta (klik „Zapłać”) i od tej chwili jest w użyciu. Zgodnie z §7 Regulaminu (/regulamin) i art. 38 pkt 13 ustawy o prawach konsumenta prawo odstąpienia od umowy w takim przypadku NIE przysługuje — zwrot wpłaconej kwoty nie jest możliwy. Nie obiecuj zwrotu, nie proponuj „sprawdzenia z zespołem” ani nie zbieraj kontaktu w sprawie zwrotu.
 - „Nie widzę ofert, których nie ma na innych portalach” / „oferty są te same co na Otodom/OLX” — wyjaśnij, że FinderDom jest agregatorem (patrz fakty wyżej), nie obiecuje ofert niedostępnych gdzie indziej i nie jest to podstawa do zwrotu; zaproponuj, jak wyciągnąć maksimum z planu (alerty dla miejscowości, filtr „tylko od właściciela”, analiza AI ceny, wyceny PDF w cenie).
 - Faktura VAT jest w /konto po każdej płatności. Problem techniczny z płatnością (zapłacono, plan nieaktywny; podwójna płatność) — to jedyny przypadek, w którym zbierasz kontakt (e-mail + w miarę możliwości numer/ID płatności) dla zespołu.
@@ -5817,7 +5817,7 @@ async def chat_message(body: ChatMessageReq, request: Request, credentials: HTTP
         if user is None:
             reply = f"Wyszukiwanie ofert w czacie jest dostępne dla zalogowanych użytkowników z planem płatnym. Możesz za to skorzystać z wyszukiwarki (podgląd 5 ofert bez planu): {search_link} — albo założyć konto: /rejestracja"
         else:
-            reply = f"Wyszukiwanie ofert w czacie jest częścią planów płatnych (Osobisty 45 zł/30 dni, Solo 90 zł, Firmowy 199 zł) — plan wybierzesz w /konto. Bez planu zobaczysz podgląd 5 ofert w wyszukiwarce: {search_link}"
+            reply = f"Wyszukiwanie ofert w czacie jest częścią planów płatnych (Osobisty 25 zł/30 dni, Firmowy 49 zł) — plan wybierzesz w /konto. Bez planu zobaczysz podgląd 5 ofert w wyszukiwarce: {search_link}"
         search = None
     if search:
         try:
@@ -6977,8 +6977,8 @@ async def _render_valuation_pdf(val_type: str, md: dict, session_id: str, brand:
 
 
 BUSINESS_TRIAL_VALUATIONS = 3  # w okresie próbnym; opłacony Plan Firmowy = bez limitu
-INDIVIDUAL_MONTHLY_VALUATIONS = 10  # Plan Osobisty (45 zł): 10 wycen PDF w miesiącu w cenie, kolejne 35 zł/szt. (23.11: było 3)
-PRIVATE_FREE_VALUATIONS = 10  # 23.11: konto prywatne bez planu — 10 bezpłatnych wycen PDF (łącznie), potem 35 zł/szt.
+INDIVIDUAL_MONTHLY_VALUATIONS = 10  # Plan Osobisty (25 zł): 10 wycen PDF w miesiącu w cenie, kolejne 10 zł/szt. (23.11: było 3)
+PRIVATE_FREE_VALUATIONS = 10  # 23.11: konto prywatne bez planu — 10 bezpłatnych wycen PDF (łącznie), potem 10 zł/szt.
 
 
 def _month_start_utc() -> datetime:
@@ -6987,12 +6987,12 @@ def _month_start_utc() -> datetime:
 
 
 async def _valuation_quota(user: dict) -> dict:
-    """Ile wycen PDF w cenie planu ma użytkownik: business/solo/individual = bez limitu (trial firmowy: 3), free = 0."""
+    """Ile wycen PDF w cenie planu ma użytkownik: business/solo = bez limitu (trial firmowy: 3), individual = 10/mies., konto prywatne bez planu = 10 łącznie."""
     tier = await effective_tier_async(user)
     is_admin = (user.get("email") or "").lower() in ADMIN_EMAILS
     db = database()
     owner_id = str(user.get("master_id") or user["_id"])
-    # 4.11: opłacony plan Osobisty (45 zł) = wyceny PDF bez limitu przez cały miesiąc (wcześniej 3/mies.)
+    # 4.11: opłacony plan Osobisty (25 zł) = wyceny PDF bez limitu przez cały miesiąc (wcześniej 3/mies.)
     if is_admin or (tier in BUSINESS_TIERS and not user.get("is_trial")) or tier == "individual":
         return {"tier": tier, "included": True, "unlimited": True, "limit": None, "used": 0, "remaining": None, "resets_at": None}
     if tier in BUSINESS_TIERS:  # trial firmowy
@@ -7006,7 +7006,7 @@ async def _valuation_quota(user: dict) -> dict:
         return {"tier": tier, "included": True, "unlimited": False, "limit": INDIVIDUAL_MONTHLY_VALUATIONS, "used": used,
                 "remaining": max(0, INDIVIDUAL_MONTHLY_VALUATIONS - used), "resets_at": nxt.isoformat()}
     if user.get("account_type") != "business":
-        # konto prywatne bez planu: 10 bezpłatnych wycen (łącznie), potem 35 zł/szt. przez Stripe
+        # konto prywatne bez planu: 10 bezpłatnych wycen (łącznie), potem 10 zł/szt. przez Stripe
         used = await db.valuation_log.count_documents({"owner_id": owner_id, "source": "business"})
         return {"tier": tier, "included": used < PRIVATE_FREE_VALUATIONS, "unlimited": False, "limit": PRIVATE_FREE_VALUATIONS, "used": used,
                 "remaining": max(0, PRIVATE_FREE_VALUATIONS - used), "resets_at": None, "private_free": True}
@@ -7030,12 +7030,12 @@ async def valuation_business(body: BusinessValuationReq, user: dict = Depends(cu
     q = await _valuation_quota(user)
     if not q["included"]:
         if q.get("private_free"):
-            raise HTTPException(402, f"Wykorzystałeś {PRIVATE_FREE_VALUATIONS} bezpłatnych wycen. Kolejne 35 zł/szt. albo plan Osobisty (45 zł/mies.) — wyceny bez limitu.")
-        raise HTTPException(402, "Wyceny PDF bez limitu są w cenie każdego opłaconego planu: Osobisty (45 zł), Biuro jednoosobowe (90 zł), Firmowy (199 zł)")
+            raise HTTPException(402, f"Wykorzystałeś {PRIVATE_FREE_VALUATIONS} bezpłatnych wycen. Kolejne 10 zł/szt. albo plan Osobisty (25 zł/mies.) — 10 wycen miesięcznie w cenie.")
+        raise HTTPException(402, "Wyceny PDF są w cenie planów: Osobisty (25 zł — 10 wycen/mies.) i Firmowy (49 zł — bez limitu). Bez planu: 10 zł za wycenę.")
     if not q["unlimited"] and q["remaining"] <= 0:
         if q.get("trial"):
-            raise HTTPException(402, f"W okresie próbnym masz {BUSINESS_TRIAL_VALUATIONS} wyceny. Opłać plan Biuro jednoosobowe (90 zł) lub Firmowy (199 zł) — wyceny bez limitu.")
-        raise HTTPException(402, f"Wykorzystałeś {INDIVIDUAL_MONTHLY_VALUATIONS} bezpłatnych wycen w tym miesiącu. Kolejne wyceny 35 zł/szt. albo plan Biuro jednoosobowe (90 zł) — bez limitu.")
+            raise HTTPException(402, f"W okresie próbnym masz {BUSINESS_TRIAL_VALUATIONS} wyceny. Opłać Plan Firmowy (49 zł) — wyceny bez limitu.")
+        raise HTTPException(402, f"Wykorzystałeś {INDIVIDUAL_MONTHLY_VALUATIONS} bezpłatnych wycen w tym miesiącu. Kolejne wyceny 10 zł/szt. (konto firmowe z Planem Firmowym 49 zł — bez limitu).")
     db = database()
     owner_id = str(user.get("master_id") or user["_id"])
     tier = q["tier"]
@@ -7043,7 +7043,7 @@ async def valuation_business(body: BusinessValuationReq, user: dict = Depends(cu
     brand = None
     if body.white_label:
         if tier not in BUSINESS_TIERS and (user.get("email") or "").lower() not in ADMIN_EMAILS:
-            raise HTTPException(403, "Wycena z logo biura jest w planach Biuro jednoosobowe (90 zł) i Firmowy (199 zł)")
+            raise HTTPException(403, "Wycena z logo biura jest w Planie Firmowym (49 zł)")
         master = await _brand_master_doc(user)
         bp = _brand_public(master, False)
         brand = {"name": bp["name"] or email, "phone": bp["phone"], "email": bp["email"], "www": bp["www"], "logo": bp["logo"]}

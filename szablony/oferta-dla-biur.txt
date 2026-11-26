@@ -2,9 +2,9 @@ Dzień dobry,
 
 piszę z FinderDom.pl — polskiego agregatora ogłoszeń nieruchomości. Zbieramy oferty z Otodom, OLX, Morizon, Gratki i pozostałych portali z całej Polski w jednym miejscu i dodajemy narzędzia, których biura używają na co dzień.
 
-Oferta dla biur nieruchomości — Plan Firmowy 199 zł/mies za całe biuro:
+Oferta dla biur nieruchomości — Plan Firmowy 49 zł/mies za całe biuro:
 • Wszystkie województwa w cenie — bez pakietów regionalnych.
-• Aż 4 loginy dla agentów w jednym abonamencie (każdy kolejny 55 zł/mies), wspólna baza i CRM statusów ofert.
+• Aż 4 loginy dla agentów w jednym abonamencie (każdy kolejny 29 zł/mies), wspólna baza i CRM statusów ofert.
 • Oferty bezpośrednie od właścicieli z filtrem „ostatnie 24h”.
 • Wyceny PDF bez limitu w cenie — z realnymi transakcjami z Rejestru Cen Nieruchomości.
 • Leady od właścicieli, którzy zamawiają wycenę i proszą o kontakt agenta.

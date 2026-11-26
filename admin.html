@@ -598,14 +598,14 @@ async function loadTimeseries(){
 function tierTag(tier, isTrial){
   const map = {free:'tag-free', individual:'tag-individual', solo:'tag-business', business:'tag-business'};
   const cls = map[tier] || 'tag-free';
-  const label = tier === 'free' ? 'FREE' : tier === 'individual' ? 'INDIVIDUAL' : tier === 'business' ? 'BUSINESS' : tier === 'solo' ? 'SOLO (90 zł)' : tier.toUpperCase();
+  const label = tier === 'free' ? 'FREE' : tier === 'individual' ? 'INDIVIDUAL' : tier === 'business' ? 'BUSINESS' : tier === 'solo' ? 'SOLO (wycofany)' : tier.toUpperCase();
   const trialBadge = isTrial ? '<span class="tag tag-trial" style="margin-left:6px">TRIAL</span>' : '';
   return `<span class="tag ${cls}">${label}</span>${trialBadge}`;
 }
 
 // Admin: ręczne nadanie planu (free / individual / solo / business), bezterminowo lub na N dni
 async function grantTier(id, email){
-  const tier = prompt(`Plan dla ${email}:\n- business (Firmowy 199 zł)\n- solo (Biuro jednoosobowe 90 zł)\n- individual (Osobisty)\n- free (odbierz plan)`, 'business');
+  const tier = prompt(`Plan dla ${email}:\n- business (Firmowy 49 zł)\n- solo (Biuro jednoosobowe — wycofany, 49 zł)\n- individual (Osobisty)\n- free (odbierz plan)`, 'business');
   if (!tier || !['business','solo','individual','free'].includes(tier.trim())) return;
   let days = null;
   if (tier.trim() !== 'free') {
@@ -625,11 +625,11 @@ async function grantTier(id, email){
 // Admin: indywidualna cena na PIERWSZĄ płatność (klient widzi ją w Koncie, Stripe pobiera tyle; po opłaceniu znika)
 async function setPromo(id, email, current){
   const cur = current || {};
-  const b = prompt(`🎁 Cena specjalna dla ${email}\n\nFirmowy (standard 199 zł) — podaj cenę w zł za 1. miesiąc, 0 = bez promocji:`, cur.business || '');
+  const b = prompt(`🎁 Cena specjalna dla ${email}\n\nFirmowy (standard 49 zł) — podaj cenę w zł za 1. miesiąc, 0 = bez promocji:`, cur.business || '');
   if (b === null) return;
-  const s = prompt('Biuro jednoosobowe (standard 90 zł) — cena w zł za 1. miesiąc, 0 = bez promocji:', cur.solo || '');
+  const s = prompt('Biuro jednoosobowe (wycofany, standard 49 zł) — cena w zł za 1. miesiąc, 0 = bez promocji:', cur.solo || '');
   if (s === null) return;
-  const i = prompt('Osobisty (standard 45 zł) — cena w zł za 1. miesiąc, 0 = bez promocji:', cur.individual || '');
+  const i = prompt('Osobisty (standard 25 zł) — cena w zł za 1. miesiąc, 0 = bez promocji:', cur.individual || '');
   if (i === null) return;
   const num = v => { const n = parseInt(String(v).replace(/[^\d]/g, ''), 10); return n > 0 ? n : null; };
   const body = { business: num(b), solo: num(s), individual: num(i) };

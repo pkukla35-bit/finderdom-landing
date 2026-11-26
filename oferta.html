@@ -429,7 +429,7 @@ gtag('set', 'url_passthrough', false);
         <li>Ulubione oferty i alerty cenowe</li>
       </ul>
       <a href="/konto" class="lock-cta">💎 Opłać subskrypcję miesięczną</a>
-      <div class="lock-price">Osobisty <strong>45 zł</strong> / 30 dni <small>· Firmowy 199 zł</small></div>
+      <div class="lock-price">Osobisty <strong>25 zł</strong> / 30 dni <small>· Firmowy 49 zł</small></div>
       <div class="lock-login" id="lockAiLogin">
         Masz konto? <a href="/logowanie">Zaloguj się</a>
       </div>
@@ -452,7 +452,7 @@ gtag('set', 'url_passthrough', false);
 
   <!-- Right: Sidebar -->
   <aside class="sidebar">
-    <!-- 📄 Wycena PDF z logo biura (white-label) — tylko plany Biuro jednoosobowe / Firmowy; wypełnia renderBizValuationBox() -->
+    <!-- 📄 Wycena PDF z logo biura (white-label) — tylko konta firmowe z planem (business/solo); wypełnia renderBizValuationBox() -->
     <div class="contact-card" id="valBizBox" style="display:none;border-color:rgba(96,165,250,0.35)">
       <div class="contact-title" style="color:#93c5fd">📄 Wyceń tę nieruchomość</div>
       <div id="valBizLogo" style="display:none;background:#fff;border-radius:12px;padding:10px 14px;margin-bottom:12px;text-align:center"><img alt="logo biura" style="max-height:48px;max-width:100%;object-fit:contain"></div>
@@ -499,7 +499,7 @@ gtag('set', 'url_passthrough', false);
   <h3>Zobacz Podobne Oferty w Okolicy</h3>
   <p class="lock-sub">Znajdź lepsze oferty w tej samej lokalizacji, żeby nie przepłacać. Baza aktualizowana codziennie.</p>
   <a href="/konto" class="lock-cta">💎 Opłać subskrypcję miesięczną</a>
-  <div class="lock-price">Osobisty <strong>45 zł</strong> / 30 dni <small>· Firmowy 199 zł</small></div>
+  <div class="lock-price">Osobisty <strong>25 zł</strong> / 30 dni <small>· Firmowy 49 zł</small></div>
   <div class="lock-login" id="lockSimLogin">
     Masz konto? <a href="/logowanie">Zaloguj się</a>
   </div>
@@ -698,7 +698,7 @@ async function loadOffer() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = m ? m[1] : 'wycena.pdf'; a.click();
   }
 
-  // 📄 Wycena dla konta PRYWATNEGO (bez logo biura): 10 bezpłatnych wycen, potem 35 zł (modal Stripe); plan Osobisty = bez limitu. 23.11
+  // 📄 Wycena dla konta PRYWATNEGO (bez logo biura): 10 bezpłatnych wycen, potem 10 zł (modal Stripe); plan Osobisty = bez limitu. 23.11
   async function renderPrivateValuationBox(u){
     const box = document.getElementById('valBizBox');
     let q = null;
@@ -713,14 +713,14 @@ async function loadOffer() {
       btn.textContent = '📄 Generuj wycenę PDF';
     } else if (q.included) {
       hint.innerHTML = q.private_free
-        ? '<strong>' + free + ' z ' + q.limit + '</strong> bezpłatnych wycen do wykorzystania. Potem 35 zł/szt. albo plan Osobisty (45 zł/mies.) — 10 wycen miesięcznie w cenie.'
-        : '<strong>' + free + ' z ' + q.limit + '</strong> wycen w tym miesiącu w cenie planu Osobistego. Kolejne 35 zł/szt.';
+        ? '<strong>' + free + ' z ' + q.limit + '</strong> bezpłatnych wycen do wykorzystania. Potem 10 zł/szt. albo plan Osobisty (25 zł/mies.) — 10 wycen miesięcznie w cenie.'
+        : '<strong>' + free + ' z ' + q.limit + '</strong> wycen w tym miesiącu w cenie planu Osobistego. Kolejne 10 zł/szt.';
       btn.textContent = '📄 Generuj wycenę PDF (w cenie)';
     } else {
       hint.innerHTML = q.private_free
-        ? 'Wykorzystałeś ' + q.limit + ' bezpłatnych wycen. Kolejne 35 zł/szt. albo <a href="/konto" style="color:#93c5fd">plan Osobisty</a> — 10 wycen miesięcznie w cenie.'
-        : 'Wykorzystałeś ' + q.limit + ' wycen w tym miesiącu. Kolejne 35 zł/szt.';
-      btn.textContent = '📄 Wycena PDF — 35 zł';
+        ? 'Wykorzystałeś ' + q.limit + ' bezpłatnych wycen. Kolejne 10 zł/szt. albo <a href="/konto" style="color:#93c5fd">plan Osobisty</a> — 10 wycen miesięcznie w cenie.'
+        : 'Wykorzystałeś ' + q.limit + ' wycen w tym miesiącu. Kolejne 10 zł/szt.';
+      btn.textContent = '📄 Wycena PDF — 10 zł';
     }
     box.style.display = '';
     btn.addEventListener('click', async () => {
@@ -736,7 +736,7 @@ async function loadOffer() {
         renderPrivateValuationBox(u);  // odśwież licznik
       } catch (err) {
         msg.textContent = '❌ ' + err.message; msg.style.color = '#f87171'; msg.style.display = '';
-        if (/35 zł/.test(err.message)) openValuationModal();
+        if (/10 zł/.test(err.message)) openValuationModal();
       } finally { btn.disabled = false; }
     }, { once: true });
   }
@@ -758,7 +758,7 @@ async function loadOffer() {
         ? '<strong>💡</strong> Logo biura ustawia właściciel konta firmowego w <a href="/konto" style="color:#93c5fd">Moje konto → Profil</a>.'
         : '<strong>💡</strong> Dodaj logo i telefon biura w <a href="/konto" style="color:#93c5fd">Moje konto → Profil</a> — pojawią się na okładce i w stopce każdej wyceny.';
     } else {
-      hint.innerHTML = 'W cenie planu' + (u.tier === 'business' ? ' Firmowego' : ' Biuro jednoosobowe') + ' — bez limitu wycen.';
+      hint.innerHTML = 'W cenie Planu Firmowego — bez limitu wycen.';
     }
     box.style.display = '';
     document.getElementById('valBizBtn').addEventListener('click', async () => {
@@ -1374,7 +1374,7 @@ async function initCrmBar(offerId) {
       cur = demoLoad()[offerId] || null;
       const demoNote = document.createElement('div');
       demoNote.style.cssText = 'font-size:12px;color:#c5d0e6;margin-bottom:10px;line-height:1.45';
-      demoNote.innerHTML = '🔎 <b style="color:#FFB800">Podgląd widoku dla biur</b> — na planie Biuro jednoosobowe / Firmowy statusy i notatki widzi cały Twój zespół. Tu zapisują się tylko w tej przeglądarce. <a href="/rejestracja?typ=firma" style="color:#FFB800;font-weight:800">Załóż konto firmowe — 7 dni za darmo →</a>';
+      demoNote.innerHTML = '🔎 <b style="color:#FFB800">Podgląd widoku dla biur</b> — w Planie Firmowym statusy i notatki widzi cały Twój zespół. Tu zapisują się tylko w tej przeglądarce. <a href="/rejestracja?typ=firma" style="color:#FFB800;font-weight:800">Załóż konto firmowe — 7 dni za darmo →</a>';
       const barEl = el('crmBar');
       if (barEl) barEl.insertBefore(demoNote, barEl.firstChild);
     }
@@ -1706,15 +1706,15 @@ async function renderOffer(l, all) {
       el('ctaOtodom').href = '/rejestracja?typ=firma'; el('ctaOtodom').removeAttribute('target');
       el('ctaOtodom').textContent = '🏢 Załóż konto firmowe — 7 dni za darmo';
       const ctaHint0 = document.getElementById('ctaHint');
-      if (ctaHint0) ctaHint0.innerHTML = '<strong>🏢 Widok dla biur</strong> — na planie Biuro jednoosobowe (90 zł) lub Firmowym (199 zł) masz link do portalu, telefon, analizę AI, CRM i wyceny PDF bez limitu.';
+      if (ctaHint0) ctaHint0.innerHTML = '<strong>🏢 Widok dla biur</strong> — w Planie Firmowym (49 zł/mies za całe biuro) masz link do portalu, telefon, analizę AI, CRM i wyceny PDF bez limitu.';
     } else {
     const dest = logged ? '/konto' : '/rejestracja';
     el('sourceLink').href = dest; el('sourceLink').removeAttribute('target');
-    el('sourceLink').textContent = '🔒 Link do ogłoszenia — w planie 45 zł/mies';
+    el('sourceLink').textContent = '🔒 Link do ogłoszenia — w planie 25 zł/mies';
     el('ctaOtodom').href = dest; el('ctaOtodom').removeAttribute('target');
-    el('ctaOtodom').textContent = logged ? '💎 Odblokuj link do ogłoszenia — 45 zł/mies' : '💎 Załóż konto i odblokuj link — 45 zł/mies';
+    el('ctaOtodom').textContent = logged ? '💎 Odblokuj link do ogłoszenia — 25 zł/mies' : '💎 Załóż konto i odblokuj link — 25 zł/mies';
     const ctaHint = document.getElementById('ctaHint');
-    if (ctaHint) ctaHint.innerHTML = '<strong>🔒 Bez planu</strong> widzisz ofertę, ale link do portalu, numer telefonu i analiza AI są w planie Osobistym (45 zł/30 dni) lub Firmowym.';
+    if (ctaHint) ctaHint.innerHTML = '<strong>🔒 Bez planu</strong> widzisz ofertę, ale link do portalu, numer telefonu i analiza AI są w planie Osobistym (25 zł/30 dni) lub Firmowym.';
     }
   } else if (l.source_url) {
     el('sourceLink').href = l.source_url;
@@ -2284,7 +2284,7 @@ loadOffer();
 <script src="/scripts/ads.js" defer></script>
 <script src="/scripts/kredyt.js?v=8" defer></script>
 
-<!-- Modal Wycena Premium (35 zł) -->
+<!-- Modal Wycena Premium (10 zł) -->
 <div class="val-modal-bg" id="valModal">
   <div class="val-modal">
     <button type="button" class="close-x" onclick="closeValuationModal()">×</button>
@@ -2299,7 +2299,7 @@ loadOffer();
     <div id="valErr" class="val-err"></div>
     <label for="valEmail">Twój email (na który wyślemy potwierdzenie)</label>
     <input type="email" id="valEmail" placeholder="twoj@email.pl" autocomplete="email" required>
-    <button type="button" class="val-btn" id="valBuyBtn" onclick="startValuationCheckout()">Zapłać 35 zł kartą / BLIK →</button>
+    <button type="button" class="val-btn" id="valBuyBtn" onclick="startValuationCheckout()">Zapłać 10 zł kartą / BLIK →</button>
     <div id="valQuotaHint" style="font-size:12px;color:#8ba3d4;margin-top:6px;text-align:center"></div>
     <div class="val-small">Płatność bezpieczna przez Stripe. Po opłacie automatycznie wygenerujemy PDF.</div>
   </div>
@@ -2307,7 +2307,7 @@ loadOffer();
 
 <script>
 
-  // Wycena w cenie planu: Firmowy/Solo bez limitu (trial 3), Osobisty 45 zł = 6 wycen w miesiącu — liczy serwer (/api/valuation/quota)
+  // Wycena w cenie planu: Firmowy/Solo bez limitu (trial 3), Osobisty 25 zł = 10 wycen w miesiącu, konto prywatne bez planu 10 łącznie — liczy serwer (/api/valuation/quota)
   let __valQuota = null;
   async function loadValuationQuota(){
     const t = localStorage.getItem('finderdom_token'); if (!t) { __valQuota = null; return null; }
@@ -2331,15 +2331,15 @@ loadOffer();
     } catch(e){}
     m.classList.add('show');
     setTimeout(() => document.getElementById('valEmail').focus(), 100);
-    // przycisk: w cenie planu (Firmowy/Solo bez limitu, Osobisty 3/mies.) albo płatność 35 zł
+    // przycisk: w cenie planu (Firmowy bez limitu, Osobisty 10/mies.) albo płatność 10 zł
     const bb = document.getElementById('valBuyBtn');
     if (bb) {
       bb.textContent = 'Sprawdzam Twój plan…';
       loadValuationQuota().then(() => {
-        bb.textContent = quotaIncluded() ? ('📄 Generuj wycenę PDF — ' + quotaLabel() + ' →') : 'Zapłać 35 zł kartą / BLIK →';
+        bb.textContent = quotaIncluded() ? ('📄 Generuj wycenę PDF — ' + quotaLabel() + ' →') : 'Zapłać 10 zł kartą / BLIK →';
         const hint = document.getElementById('valQuotaHint');
         if (hint) hint.textContent = (__valQuota && __valQuota.included && !__valQuota.unlimited && __valQuota.remaining <= 0)
-          ? 'Wykorzystałeś ' + __valQuota.limit + (__valQuota.private_free ? ' bezpłatnych wycen' : ' wycen w cenie planu' + (__valQuota.trial ? '' : ' w tym miesiącu')) + ' — kolejne 35 zł/szt.' : '';
+          ? 'Wykorzystałeś ' + __valQuota.limit + (__valQuota.private_free ? ' bezpłatnych wycen' : ' wycen w cenie planu' + (__valQuota.trial ? '' : ' w tym miesiącu')) + ' — kolejne 10 zł/szt.' : '';
       });
     }
   }

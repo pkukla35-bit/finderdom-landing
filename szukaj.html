@@ -487,7 +487,9 @@ gtag('set', 'url_passthrough', false);
         <div class="chip" data-seller="prywatna">👨‍👩‍👧 Prywatna (bez prowizji)</div>
         <div class="chip" data-seller="posrednik">🏢 Pośrednik</div>
         <div class="chip" data-seller="przetarg" title="Przetargi, licytacje komornicze i sprzedaż przez syndyka (listaprzetargow.pl) — cena wywoławcza">🔨 Przetargi i licytacje</div>
+        <div class="chip" data-seller="finderdom" id="chipFinderdom" title="Ogłoszenia dodane bezpośrednio na FinderDom przez właścicieli — telefon widoczny po zalogowaniu">📣 Ogłoszenia FinderDom</div>
       </div>
+      <a href="/dodaj-ogloszenie" class="muted" style="display:block;margin-top:8px;font-size:12px;color:#FFB800;text-decoration:none">➕ Masz nieruchomość? Dodaj ogłoszenie za 0 zł →</a>
     </div>
 
     <div class="filter-group" id="archiveGroup">
@@ -2282,6 +2284,8 @@ function renderPager(totalPages) {
   }));
 }
 
+// ?kto=finderdom|prywatna|posrednik|przetarg — preselekcja chipa „Kto oferuje” (linki z /dla-wlascicieli, /dodaj-ogloszenie)
+(function(){ const kto = new URLSearchParams(location.search).get('kto'); if (!kto) return; document.querySelectorAll('.chip[data-seller]').forEach(x => x.classList.remove('active')); document.querySelector(`.chip[data-seller="${kto}"]`)?.classList.add('active'); })();
 // Load on start
 loadListings();
 
@@ -2943,7 +2947,7 @@ document.getElementById('heroSearchBtn')?.addEventListener('click', refetchFromA
 // ============================================================================
 const AI_TAG_LABELS = {
   type: { mieszkanie: '🏢 Mieszkanie', dom: '🏠 Dom', dzialka: '🌳 Działka', lokal: '🏪 Lokal', pokoj: '🚪 Pokój', '': '🏘️ Wszystkie typy' },
-  seller: { prywatna: '👤 Od właściciela', posrednik: '🏢 Od pośrednika', przetarg: '🔨 Przetargi' },
+  seller: { prywatna: '👤 Od właściciela', posrednik: '🏢 Od pośrednika', przetarg: '🔨 Przetargi', finderdom: '📣 Ogłoszenia FinderDom' },
   date: { today: '📅 Dziś', '3d': '📅 Ostatnie 3 dni', '7d': '📅 Ostatnie 7 dni', '30d': '📅 Ostatnie 30 dni' },
   verdict: { deal: '🔥 Tylko okazje', 'hide-over': '🚫 Bez zawyżonych' },
   portals: { unique: '🎯 Tylko unikalne', multi: '🌐 Multi-portal' },

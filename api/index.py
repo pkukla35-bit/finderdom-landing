@@ -2677,6 +2677,8 @@ async def listings_scraped_endpoint(
                 query["seller_type"] = "posrednik"
             elif st in ("przetarg", "licytacja"):   # 🔨 listaprzetargow.pl — przetargi, licytacje komornicze, syndyk
                 query["seller_type"] = "przetarg"
+            elif st == "finderdom":   # 📣 ogłoszenia właścicieli dodane bezpośrednio na FinderDom (/dodaj-ogloszenie)
+                query["source"] = "finderdom"
         # Filter po rynku (pierwotny / wtorny) — na pełnej bazie, nie tylko na batchu 1000
         # ~90% ofert (OLX, Adresowo, OdWłaściciela, Otodom z list) nie ma market_type w DB — brak oznaczenia = rynek wtórny
         # (pierwotny rozpoznajemy pozytywnie: deweloper / stan deweloperski / rok budowy). „Wtórny” = wszystko poza pierwotnym.

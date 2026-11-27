@@ -1583,7 +1583,7 @@ async function renderOffer(l, all) {
           const note = document.createElement('div');
           note.id = 'staleNote';
           note.style.cssText = 'position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.9);color:#fff;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;max-width:90%;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:5';
-          note.innerHTML = '⚠️ Zdjęcia niedostępne — oferta może być już nieaktualna. Sprawdź na źródłowym portalu.';
+          note.innerHTML = window.__ownerListing ? '📷 Właściciel nie dodał jeszcze zdjęć.' : '⚠️ Zdjęcia niedostępne — oferta może być już nieaktualna. Sprawdź na źródłowym portalu.';
           emojiEl.parentElement.appendChild(note);
         }
       }

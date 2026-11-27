@@ -635,6 +635,7 @@ gtag('set', 'url_passthrough', false);
       <div id="wbText">🔎 <b>Szukasz mieszkania w Krakowie?</b> Dodaj swoje poszukiwanie do bazy — <b>właściciele i biura z tego regionu</b> dostaną je e-mailem i zadzwonią do Ciebie z ofertami. Nie musisz mieć konta.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px" id="wbBtns"><button type="button" class="wb-btn" id="wbOpen">➕ Tak, dodaj moje poszukiwanie</button><button type="button" class="wb-sec" id="wbLater">Nie teraz</button><a href="/poszukiwania" style="align-self:center;color:#8ba3d4;font-size:12px">Zobacz bazę poszukiwań →</a></div>
       <div class="wb-form" id="wbForm">
+        <input id="wbCity" maxlength="80" placeholder="Miejscowość *" autocomplete="address-level2" list="cityList" oninput="this.dataset.auto='0'">
         <input id="wbName" maxlength="40" placeholder="Imię *" autocomplete="given-name">
         <input id="wbPhone" type="tel" maxlength="20" placeholder="Telefon *" autocomplete="tel">
         <input id="wbEmail" type="email" maxlength="120" placeholder="E-mail * (na pasujące oferty)" autocomplete="email">
@@ -2315,11 +2316,12 @@ const WB = { ctx: null };
 function updateWantedBar(ctx) {
   const bar = document.getElementById('wantedBar'); if (!bar) return;
   WB.ctx = ctx;
-  const hide = !ctx.city || window.ARCHIVE_MODE || sessionStorage.getItem('fd_wb_later') || (Date.now() - parseInt(localStorage.getItem('fd_wb_done') || '0', 10) < 30 * 864e5);
+  const hide = window.ARCHIVE_MODE || sessionStorage.getItem('fd_wb_later') || (Date.now() - parseInt(localStorage.getItem('fd_wb_done') || '0', 10) < 30 * 864e5);
   bar.style.display = hide ? 'none' : 'block';
   if (hide) return;
   const TYPE_GEN = { mieszkanie: 'mieszkania', dom: 'domu', dzialka: 'działki', lokal: 'lokalu' };
-  const what = (ctx.trans === 'wynajem' ? 'Szukasz do wynajęcia ' : 'Szukasz ') + (TYPE_GEN[ctx.type] || 'nieruchomości') + ' — ' + ctx.city + (ctx.price_to ? ', do ' + Math.round(ctx.price_to).toLocaleString('pl-PL') + ' zł' : '') + '?';
+  const what = (ctx.trans === 'wynajem' ? 'Szukasz do wynajęcia ' : 'Szukasz ') + (TYPE_GEN[ctx.type] || 'nieruchomości') + (ctx.city ? ' — ' + ctx.city : '') + (ctx.price_to ? ', do ' + Math.round(ctx.price_to).toLocaleString('pl-PL') + ' zł' : '') + '?';
+  const ci = document.getElementById('wbCity'); if (ci && ctx.city && (!ci.value || ci.dataset.auto === '1')) { ci.value = ctx.city; ci.dataset.auto = '1'; }
   const esc = (x) => String(x).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   document.getElementById('wbText').innerHTML = '🔎 <b>' + esc(what) + '</b> Dodaj swoje poszukiwanie do bazy — <b>właściciele i biura z tego regionu</b> dostaną je e-mailem i zadzwonią do Ciebie z ofertami. Dostaniesz też e-mail o każdej nowej pasującej ofercie. Nie musisz mieć konta.';
   const pr = document.getElementById('wbPrice'); if (pr && ctx.price_to && !pr.value) pr.value = Math.round(ctx.price_to);
@@ -2334,9 +2336,9 @@ function updateWantedBar(ctx) {
   document.getElementById('wbSave').onclick = async () => {
     const ctx = WB.ctx || {}; const msg = document.getElementById('wbMsg'); const v = (id) => (document.getElementById(id).value || '').trim();
     const token = localStorage.getItem('finderdom_token');
-    const body = { transaction: ctx.trans === 'wynajem' ? 'wynajem' : 'sprzedaz', type: ctx.type || 'mieszkanie', city: ctx.city, radius_km: Math.min(100, parseInt(document.getElementById('heroRadiusKm')?.value || '10', 10) || 10),
+    const body = { transaction: ctx.trans === 'wynajem' ? 'wynajem' : 'sprzedaz', type: ctx.type || 'mieszkanie', city: v('wbCity') || ctx.city || '', radius_km: Math.min(100, parseInt(document.getElementById('heroRadiusKm')?.value || '10', 10) || 10),
       price_to: parseFloat(v('wbPrice')) || 0, area_from: ctx.area_from || null, rooms: ctx.rooms || [], note: '', name: v('wbName'), phone: v('wbPhone'), email: v('wbEmail') || null, consent: document.getElementById('wbConsent').checked };
-    if (!body.name || !body.phone || !body.price_to || (!token && !body.email)) { msg.style.color = '#f87171'; msg.textContent = 'Uzupełnij imię, telefon, ' + (token ? '' : 'e-mail ') + 'i budżet.'; return; }
+    if (!body.city || !body.name || !body.phone || !body.price_to || (!token && !body.email)) { msg.style.color = '#f87171'; msg.textContent = 'Uzupełnij miejscowość, imię, telefon, ' + (token ? '' : 'e-mail ') + 'i budżet.'; return; }
     if (!body.consent) { msg.style.color = '#f87171'; msg.textContent = 'Zaznacz zgodę na kontakt.'; return; }
     const btn = document.getElementById('wbSave'); btn.disabled = true; msg.style.color = '#8ba3d4'; msg.textContent = 'Zapisuję…';
     try {

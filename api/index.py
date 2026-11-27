@@ -2255,7 +2255,7 @@ async def listing_single(listing_id: str, request: Request, response: Response):
         paid = await _paid_user_from_request(request)
         if doc.get("source") == "finderdom":
             # 🏠 ogłoszenie właściciela dodane na FinderDom: kontakt widzi każdy ZALOGOWANY (także bez planu); niezalogowany — tylko zachęta
-            doc.pop("owner_email", None)
+            doc.pop("owner_email", None); doc.pop("owner_id", None)
             viewer = paid or await _user_from_request(request)
             if viewer is None:
                 doc.pop("phone", None); doc["contact_requires_login"] = True
@@ -2894,6 +2894,7 @@ async def listings_scraped_endpoint(
         locked = paid is None
         # 📞 Telefon właściciela (tylko oferty prywatne): pełny numer dla planów Solo/Firmowy; pozostali (gość/Free/Osobisty) widzą zamaskowany
         for d in docs:
+            d.pop("owner_email", None); d.pop("owner_id", None)   # 🏠 dane właściciela ogłoszenia FinderDom nigdy nie wychodzą z listy
             ph = d.pop("phone", None)
             if d.get("seller_type") != "prywatna" or not ph:
                 continue

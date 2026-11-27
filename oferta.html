@@ -1711,7 +1711,6 @@ async function renderOffer(l, all) {
     if (ctaHint) ctaHint.innerHTML = '<strong>🏠 Oferta bezpośrednio od właściciela</strong>, dodana na FinderDom — bez prowizji pośrednika. Numer telefonu widzi każdy zalogowany użytkownik (darmowe konto).';
     const descP = document.querySelector('.description p[style*="italic"]');
     if (descP) descP.remove();
-    if (!l.phone && window.__contactRequiresLogin) specs.push({label:'📞 Telefon właściciela', val: `<a href="/logowanie?next=${encodeURIComponent(location.pathname + location.search)}" style="color:#FFB800;font-weight:800">🔓 zaloguj się, aby zobaczyć</a>`});
   } else if (!l.source_url && (window.__listingLocked || !window.__isPremium)) {
     // 🔒 bez planu: link do ogłoszenia ukryty — CTA do planu
     const logged = !!localStorage.getItem('finderdom_token');
@@ -2053,6 +2052,7 @@ async function renderOffer(l, all) {
 
   // Specs grid
   const specs = [];
+  if (window.__ownerListing && !l.phone && window.__contactRequiresLogin) specs.push({label:'📞 Telefon właściciela', val: `<a href="/logowanie?next=${encodeURIComponent(location.pathname + location.search)}" style="color:#FFB800;font-weight:800">🔓 zaloguj się, aby zobaczyć</a>`});
   specs.push({label:'Powierzchnia', val: (l.area_m2 && l.area_m2 > 0) ? (l.area_m2 + ' m²') : '— m²'});
   if (l.rooms > 0) specs.push({label:'Pokoje', val: l.rooms + (l.rooms === 1 ? ' pokój' : (l.rooms < 5 ? ' pokoje' : ' pokoi'))});
   if (l.floor > 0 || l.max_floor > 0) {

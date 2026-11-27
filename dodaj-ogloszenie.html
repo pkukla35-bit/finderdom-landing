@@ -242,6 +242,7 @@ async function api(path, opts={}) {
   if (!r.ok) throw new Error(d.detail || ('Błąd ' + r.status));
   return d;
 }
+function esc(x){ return String(x==null?'':x).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function money(v){ return Math.round(v).toLocaleString('pl-PL') + ' zł'; }
 function show(id, cls, text){ const el=document.getElementById(id); el.className='msg '+cls; el.textContent=text; }
 function needLogin(target){
@@ -304,7 +305,7 @@ document.getElementById('file').onchange = async (e) => {
 async function loadMine(){
   if (!TOKEN) return;
   try { const d=await api('/api/my/listings'); const box=document.getElementById('mine'); box.style.display = d.items.length?'':'none';
-    document.getElementById('mineList').innerHTML = d.items.map(l=>`<div class="item"><img src="${l.image||'/favicon.svg'}" alt=""><div class="t"><b>${l.title} <span class="badge ${l.status==='active'?'':'off'}">${l.status==='active'?'aktywne':(l.status==='hidden'?'ukryte':'wygasło')}</span></b><span>${money(l.price)} · ${l.city}${l.district?', '+l.district:''} · ${l.transaction_type==='wynajem'?'wynajem':'sprzedaż'} · ważne do ${(l.expires_at||'').slice(0,10)} · ${(l.images||[]).length} zdj.</span></div>
+    document.getElementById('mineList').innerHTML = d.items.map(l=>`<div class="item"><img src="${l.image||'/favicon.svg'}" alt=""><div class="t"><b>${esc(l.title)} <span class="badge ${l.status==='active'?'':'off'}">${l.status==='active'?'aktywne':(l.status==='hidden'?'ukryte':'wygasło')}</span></b><span>${money(l.price)} · ${esc(l.city)}${l.district?', '+esc(l.district):''} · ${l.transaction_type==='wynajem'?'wynajem':'sprzedaż'} · ważne do ${(l.expires_at||'').slice(0,10)} · ${(l.images||[]).length} zdj.</span></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap"><a class="btn sec sm" href="/oferta?id=${l.external_id}">👁 Podgląd</a><button class="btn sec sm" onclick="editL('${l.id}')">✏️ Edytuj</button><button class="btn sec sm" onclick="act('${l.id}','refresh')">🔄 Odśwież</button><button class="btn sec sm" onclick="act('${l.id}','${l.status==='active'?'hide':'show'}')">${l.status==='active'?'🙈 Ukryj':'👀 Pokaż'}</button><button class="btn sec sm" onclick="if(confirm('Usunąć ogłoszenie?'))act('${l.id}','delete')">🗑</button></div></div>`).join('');
     window._mine = d.items;
   } catch(e){}

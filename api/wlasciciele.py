@@ -453,6 +453,31 @@ def register(app, ctx: Dict[str, Any]) -> None:
         await db.alerts.update_many({"wanted_id": wanted_id}, {"$set": {"active": False}})
         return {"ok": True}
 
+    @app.get("/api/wlasciciele/listings")
+    async def owners_listings(response: Response, transaction: Optional[str] = None, type: Optional[str] = None,
+                              city: Optional[str] = None, limit: int = 60, skip: int = 0):
+        """Publiczna lista + mapa ogłoszeń właścicieli (bez telefonu i e-maila) — strona /ogloszenia-wlascicieli."""
+        import re as _re
+        db = database(); now = _now()
+        q: Dict[str, Any] = {"source": "finderdom", "status": "active", "expires_at": {"$gt": now}}
+        if transaction in ("sprzedaz", "wynajem"): q["transaction_type"] = transaction
+        if type in TYPES: q["type"] = TYPE_LABEL[type].lower()
+        if city and city.strip(): q["city"] = {"$regex": "^" + _re.escape(city.strip()), "$options": "i"}
+        total = await db.listings.count_documents(q)
+        fields = ("external_id", "title", "city", "district", "type", "transaction_type", "price", "area_m2", "rooms", "floor",
+                  "plot_area_m2", "images", "image", "added_at", "seller_type", "agency_name", "market_type", "lat", "lng")
+        items = []
+        async for d in db.listings.find(q).sort("added_at", -1).skip(max(0, skip)).limit(max(1, min(limit, 100))):
+            it = {k: d.get(k) for k in fields}
+            it["id"] = d["external_id"]; it["url"] = f"/oferta?id={d['external_id']}"
+            if isinstance(it.get("added_at"), datetime): it["added_at"] = it["added_at"].isoformat()
+            items.append(it)
+        pipeline = [{"$match": {"source": "finderdom", "status": "active", "expires_at": {"$gt": now}, "lat": {"$exists": True}}},
+                    {"$group": {"_id": "$city", "n": {"$sum": 1}, "lat": {"$first": "$lat"}, "lng": {"$first": "$lng"}}}, {"$sort": {"n": -1}}, {"$limit": 300}]
+        cities = [{"city": c["_id"], "n": c["n"], "lat": c["lat"], "lng": c["lng"]} async for c in db.listings.aggregate(pipeline)]
+        response.headers["Cache-Control"] = "public, max-age=60, s-maxage=120"
+        return {"total": total, "items": items, "cities": cities}
+
     @app.get("/api/wlasciciele/stats")
     async def owners_stats(response: Response):
         db = database(); now = _now()

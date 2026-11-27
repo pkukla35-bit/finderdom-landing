@@ -169,7 +169,7 @@ gtag('set', 'url_passthrough', false);
 <section class="hero" style="margin-bottom:20px">
   <div class="eyebrow">Mapa poszukiwań</div>
   <h1 style="font-size:clamp(26px,4vw,40px)">Zobacz, <span>czego szukają</span> kupujący i najemcy</h1>
-  <p class="lead">Masz nieruchomość? Sprawdź, czy pasuje do czyichś kryteriów. Szukasz? Dodaj poszukiwanie — właściciele i biura zobaczą je od razu, a Ty dostaniesz e-mail o każdej pasującej ofercie ze wszystkich portali.</p>
+  <p class="lead">Masz nieruchomość? Sprawdź, czy pasuje do czyichś kryteriów. Szukasz? Dodaj poszukiwanie bez zakładania konta — trafi e-mailem do właścicieli pasujących ogłoszeń i do biur z Twojego regionu, a Ty dostaniesz e-mail o każdej pasującej ofercie ze wszystkich portali.</p>
   <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap"><a class="cta-btn" href="#dodaj">🔎 Dodaj poszukiwanie</a><a class="cta-btn outline" href="/dodaj-ogloszenie">🏠 Mam nieruchomość — dodaj ogłoszenie</a><a class="cta-btn outline" href="/ogloszenia-wlascicieli">🗺️ Mapa ogłoszeń właścicieli</a></div>
 </section>
 
@@ -182,7 +182,7 @@ gtag('set', 'url_passthrough', false);
 
 <h2 id="dodaj">Dodaj poszukiwanie</h2>
 <div class="form">
-  <div id="loginBox" class="msg err" style="display:none">Aby dodać poszukiwanie, <a href="/logowanie?next=/poszukiwania" style="color:#fff;font-weight:800">zaloguj się</a> lub <a href="/rejestracja?next=/poszukiwania" style="color:#fff;font-weight:800">załóż darmowe konto</a>.</div>
+  <div id="loginBox" class="msg ok" style="display:none">Nie musisz mieć konta — podaj imię, telefon i e-mail. Właściciele pasujących ogłoszeń i biura z regionu dostaną Twoje poszukiwanie e-mailem, a Ty dostaniesz każdą nową pasującą ofertę ze wszystkich portali. Masz konto? <a href="/logowanie?next=/poszukiwania" style="color:#fff;font-weight:800">Zaloguj się</a>, aby zarządzać poszukiwaniami.</div>
   <div class="row">
     <div><label>Szukam</label><div class="seg" id="segTrans"><button data-v="sprzedaz" class="on">Kupię</button><button data-v="wynajem">Wynajmę</button></div></div>
     <div><label>Rodzaj</label><div class="seg" id="segType"><button data-v="mieszkanie" class="on">Mieszkanie</button><button data-v="dom">Dom</button><button data-v="dzialka">Działka</button><button data-v="lokal">Lokal</button></div></div>
@@ -198,10 +198,11 @@ gtag('set', 'url_passthrough', false);
     <div><label>Pokoje</label><div class="seg" id="segRooms"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button><button data-v="5">5+</button></div></div>
     <div><label>Rynek</label><select id="wMarket"><option value="">dowolny</option><option value="wtorny">wtórny</option><option value="pierwotny">pierwotny</option></select></div>
   </div>
-  <div class="row"><div><label>Imię *</label><input id="wName" maxlength="40" placeholder="np. Anna"></div><div><label>Telefon *</label><input id="wPhone" type="tel" placeholder="600 100 200"></div></div>
+  <div class="row"><div><label>Imię *</label><input id="wName" maxlength="40" placeholder="np. Anna"></div><div><label>Telefon *</label><input id="wPhone" type="tel" placeholder="600 100 200"></div><div id="wEmailBox"><label>E-mail * (na pasujące oferty)</label><input id="wEmail" type="email" maxlength="120" placeholder="anna@przyklad.pl"></div></div>
+  <div class="row"><div><label style="display:flex;gap:8px;align-items:flex-start;text-transform:none;letter-spacing:0;font-weight:500;font-size:12.5px;line-height:1.5"><input type="checkbox" id="wConsent" checked style="width:16px;height:16px;margin-top:2px;flex:0 0 auto"> Zgadzam się na kontakt telefoniczny / e-mail od właścicieli nieruchomości i biur w sprawie tego poszukiwania. Publicznie widać tylko imię i kryteria. <a href="/polityka-prywatnosci">Polityka prywatności</a></label></div></div>
   <div class="row"><div><label>Uwagi (opcjonalnie)</label><input id="wNote" maxlength="600" placeholder="np. z balkonem, nie parter, blisko szkoły, gotówka"></div></div>
   <div class="msg" id="wMsg"></div>
-  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center"><button class="btn" id="wSave" type="button">🔎 Dodaj poszukiwanie</button><span class="muted">Publicznie widać tylko imię i kryteria. Telefon widzą właściciele pasujących ofert i biura z planem.</span></div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center"><button class="btn" id="wSave" type="button">🔎 Dodaj poszukiwanie</button><span class="muted">Telefon widzą tylko właściciele pasujących ofert i biura z planem — dostają je też e-mailem i mogą zadzwonić pierwsi.</span></div>
 </div>
 <div class="mine" id="myW" style="display:none"><h2 style="text-align:left;margin:28px 0 10px">Moje poszukiwania</h2><div id="myWList"></div></div>
 
@@ -273,13 +274,14 @@ function drawMap(cities){
     const m = L.marker([c.lat,c.lng],{icon:L.divIcon({className:'',html:`<div style="width:${r*2}px;height:${r*2}px;border-radius:50%;background:rgba(255,184,0,.85);color:#0B1836;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #fff;font-size:${r>20?15:13}px">${c.n}</div>`,iconSize:[r*2,r*2]})}).addTo(layer);
     m.on('click',()=>{ document.getElementById('fCity').value=c.city; F.city=c.city; F.skip=0; load(); }); m.bindTooltip(`${esc(c.city)}: ${c.n} poszukiwań`); });
 }
+if (TOKEN) document.getElementById('wEmailBox').style.display='none';
 document.getElementById('wSave').onclick = async () => {
-  if (!needLogin('/poszukiwania#dodaj')) return;
   const v=id=>document.getElementById(id).value.trim();
-  const p = {transaction:W.trans, type:W.type, city:v('wCity'), district:v('wDistrict')||null, radius_km:Number(v('wRadius')), price_to:Number(v('wPrice')), area_from:v('wArea')?Number(v('wArea')):null, rooms:[...W.rooms], market:v('wMarket')||null, note:v('wNote'), name:v('wName'), phone:v('wPhone')};
-  if (!p.city||!p.price_to||!p.name||!p.phone) return show('wMsg','err','Uzupełnij: miejscowość, budżet, imię i telefon.');
+  const p = {transaction:W.trans, type:W.type, city:v('wCity'), district:v('wDistrict')||null, radius_km:Number(v('wRadius')), price_to:Number(v('wPrice')), area_from:v('wArea')?Number(v('wArea')):null, rooms:[...W.rooms], market:v('wMarket')||null, note:v('wNote'), name:v('wName'), phone:v('wPhone'), email:v('wEmail')||null, consent:document.getElementById('wConsent').checked};
+  if (!p.city||!p.price_to||!p.name||!p.phone||(!TOKEN&&!p.email)) return show('wMsg','err','Uzupełnij: miejscowość, budżet, imię, telefon' + (TOKEN?'':' i e-mail') + '.');
+  if (!p.consent) return show('wMsg','err','Zaznacz zgodę na kontakt od właścicieli i biur.');
   const btn=document.getElementById('wSave'); btn.disabled=true;
-  try { await api('/api/wanted',{method:'POST',body:JSON.stringify(p)}); show('wMsg','ok','Poszukiwanie dodane! Powiadomiliśmy właścicieli pasujących ogłoszeń. Dostaniesz e-mail o każdej pasującej ofercie — także z portali.'); if (window.gtag) gtag('event','wanted_created'); F.skip=0; load(); loadMy(); }
+  try { const d=await api('/api/wanted',{method:'POST',body:JSON.stringify(p)}); show('wMsg','ok', d.duplicate ? 'To poszukiwanie już jest w bazie.' : 'Poszukiwanie dodane! Powiadomiliśmy właścicieli pasujących ogłoszeń i biura z regionu. Dostaniesz e-mail o każdej pasującej ofercie — także z portali.'); if (window.gtag) gtag('event','wanted_created'); F.skip=0; load(); loadMy(); }
   catch(e){ show('wMsg','err',e.message); } finally { btn.disabled=false; }
 };
 async function loadMy(){ if(!TOKEN) return; try{ const d=await api('/api/my/wanted'); const box=document.getElementById('myW'); box.style.display=d.items.length?'':'none';

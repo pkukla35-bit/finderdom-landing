@@ -137,6 +137,14 @@ gtag('set', 'url_passthrough', false);
   .archive-toggle{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:8px 14px;border-radius:100px;border:1px solid rgba(248,113,113,0.5);background:rgba(248,113,113,0.1);color:#fca5a5;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;transition:background .15s,border-color .15s}
   .archive-toggle:hover{background:rgba(248,113,113,0.2);border-color:#f87171}
   .archive-toggle.on{background:#f87171;border-color:#f87171;color:#1a0505}
+  .wanted-bar{display:none;background:linear-gradient(135deg,rgba(74,222,128,0.10),rgba(255,184,0,0.08));border:1px solid rgba(74,222,128,0.4);color:#c5d0e6;border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:14px;line-height:1.5;position:relative}
+  .wanted-bar b{color:#fff}
+  .wanted-bar .wb-x{position:absolute;top:6px;right:8px;background:none;border:0;color:#8ba3d4;font-size:16px;cursor:pointer;padding:4px 8px}
+  .wanted-bar .wb-btn{background:linear-gradient(135deg,#4ade80,#22c55e);color:#052e16;border:0;border-radius:9px;padding:9px 14px;font-weight:800;font-size:13px;cursor:pointer;min-height:40px}
+  .wanted-bar .wb-sec{background:transparent;border:1px solid rgba(255,255,255,0.2);color:#c5d0e6;border-radius:9px;padding:9px 12px;font-weight:700;font-size:13px;cursor:pointer;min-height:40px}
+  .wanted-bar .wb-form{display:none;margin-top:10px;gap:8px;flex-wrap:wrap;align-items:center}
+  .wanted-bar .wb-form input{background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.14);border-radius:9px;color:#fff;padding:9px 11px;font-size:13px;min-height:40px;flex:1;min-width:140px}
+  .wanted-bar .wb-form label{display:flex;gap:6px;align-items:flex-start;font-size:11.5px;color:#8ba3d4;flex-basis:100%}
   .archive-info{display:none;background:linear-gradient(135deg,rgba(248,113,113,0.14),rgba(255,184,0,0.06));border:1px solid rgba(248,113,113,0.45);color:#c5d0e6;border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:14px;line-height:1.5}
   .archive-info b{color:#fca5a5}
   .archive-info a{color:#FFB800;font-weight:800;white-space:nowrap}
@@ -620,6 +628,21 @@ gtag('set', 'url_passthrough', false);
     <div class="archive-info" id="archiveInfo">
       🗄️ <b>Przeglądasz archiwum wygasłych ofert prywatnych</b> — ogłoszenia właścicieli, które zniknęły z portali w ostatnich 90 dniach, z numerem telefonu. Właściciel często wciąż sprzedaje: zadzwoń, zanim nieruchomość trafi do pośrednika.
       <a href="#" id="archiveBack">← Wróć do aktywnych ofert</a>
+    </div>
+    <!-- 🔎 Baza poszukiwań: po wyszukaniu z miastem pytamy, czy dodać kryteria do bazy (właściciele + biura z regionu dostają e-mail) -->
+    <div class="wanted-bar" id="wantedBar">
+      <button type="button" class="wb-x" id="wbClose" title="Nie teraz">✕</button>
+      <div id="wbText">🔎 <b>Szukasz mieszkania w Krakowie?</b> Dodaj swoje poszukiwanie do bazy — <b>właściciele i biura z tego regionu</b> dostaną je e-mailem i zadzwonią do Ciebie z ofertami. Nie musisz mieć konta.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px" id="wbBtns"><button type="button" class="wb-btn" id="wbOpen">➕ Tak, dodaj moje poszukiwanie</button><button type="button" class="wb-sec" id="wbLater">Nie teraz</button><a href="/poszukiwania" style="align-self:center;color:#8ba3d4;font-size:12px">Zobacz bazę poszukiwań →</a></div>
+      <div class="wb-form" id="wbForm">
+        <input id="wbName" maxlength="40" placeholder="Imię *" autocomplete="given-name">
+        <input id="wbPhone" type="tel" maxlength="20" placeholder="Telefon *" autocomplete="tel">
+        <input id="wbEmail" type="email" maxlength="120" placeholder="E-mail * (na pasujące oferty)" autocomplete="email">
+        <input id="wbPrice" type="number" min="0" step="1000" placeholder="Budżet do (zł) *" style="max-width:170px">
+        <label><input type="checkbox" id="wbConsent" checked style="flex:0;min-width:0;min-height:0;width:16px;height:16px;margin-top:2px"> Zgadzam się na kontakt telefoniczny/e-mail od właścicieli i biur w sprawie tego poszukiwania. Publicznie widać tylko imię i kryteria. <a href="/polityka-prywatnosci" style="color:#8ba3d4">Polityka prywatności</a></label>
+        <button type="button" class="wb-btn" id="wbSave">🔎 Dodaj do bazy poszukiwań</button>
+        <span id="wbMsg" style="font-size:12px"></span>
+      </div>
     </div>
     <div id="radiusInfo" style="display:none;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#c5d0e6;border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:14px"></div>
 
@@ -1347,6 +1370,7 @@ async function loadListings() {
     // Hero "Cena do" — jeśli ostrzejsze niż sidebar price_to
     const heroMax = numVal('heroPrice');
     if (heroMax && (!apiParams.get('price_to') || heroMax < parseFloat(apiParams.get('price_to')))) apiParams.set('price_to', String(heroMax));
+    try { updateWantedBar({ city: preCity, type: preType || 'mieszkanie', trans: preTrans || 'sprzedaz', price_to: parseFloat(apiParams.get('price_to') || '0') || 0, rooms: activeRoomsChips.map(r => parseInt(r, 10)).filter(n => n > 0), area_from: numVal('fAreaFrom') || null }); } catch (e) {}
     // GEO filter: gdy user wpisal miasto + promien (heroRadiusKm), wysylamy lat/lng+radius zamiast city
     // Backend zwraca oferty z bounding box, wiec dla Krakow+50km dostaniemy tez Wieliczka, Skawina, Zabierzów
     // Deep link ?km=20: pole promienia seedowane jest dopiero PO pierwszym fetchu (applyScrapedData → URL params init),
@@ -2286,6 +2310,46 @@ function renderPager(totalPages) {
   }));
 }
 
+// 🔎 Baza poszukiwań — banner nad wynikami (pokazuje się po wyszukaniu z miastem; „Nie teraz” chowa na sesję; po dodaniu — na 30 dni)
+const WB = { ctx: null };
+function updateWantedBar(ctx) {
+  const bar = document.getElementById('wantedBar'); if (!bar) return;
+  WB.ctx = ctx;
+  const hide = !ctx.city || window.ARCHIVE_MODE || sessionStorage.getItem('fd_wb_later') || (Date.now() - parseInt(localStorage.getItem('fd_wb_done') || '0', 10) < 30 * 864e5);
+  bar.style.display = hide ? 'none' : 'block';
+  if (hide) return;
+  const TYPE_GEN = { mieszkanie: 'mieszkania', dom: 'domu', dzialka: 'działki', lokal: 'lokalu' };
+  const what = (ctx.trans === 'wynajem' ? 'Szukasz do wynajęcia ' : 'Szukasz ') + (TYPE_GEN[ctx.type] || 'nieruchomości') + ' w ' + ctx.city + (ctx.price_to ? ' do ' + Math.round(ctx.price_to).toLocaleString('pl-PL') + ' zł' : '') + '?';
+  const esc = (x) => String(x).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  document.getElementById('wbText').innerHTML = '🔎 <b>' + esc(what) + '</b> Dodaj swoje poszukiwanie do bazy — <b>właściciele i biura z tego regionu</b> dostaną je e-mailem i zadzwonią do Ciebie z ofertami. Dostaniesz też e-mail o każdej nowej pasującej ofercie. Nie musisz mieć konta.';
+  const pr = document.getElementById('wbPrice'); if (pr && ctx.price_to && !pr.value) pr.value = Math.round(ctx.price_to);
+  const em = document.getElementById('wbEmail'); if (em) em.style.display = localStorage.getItem('finderdom_token') ? 'none' : '';
+}
+(function initWantedBar() {
+  const bar = document.getElementById('wantedBar'); if (!bar) return;
+  const later = () => { sessionStorage.setItem('fd_wb_later', '1'); bar.style.display = 'none'; };
+  document.getElementById('wbClose').onclick = later;
+  document.getElementById('wbLater').onclick = later;
+  document.getElementById('wbOpen').onclick = () => { document.getElementById('wbForm').style.display = 'flex'; document.getElementById('wbBtns').style.display = 'none'; document.getElementById('wbName').focus(); if (window.gtag) gtag('event', 'wanted_bar_open'); };
+  document.getElementById('wbSave').onclick = async () => {
+    const ctx = WB.ctx || {}; const msg = document.getElementById('wbMsg'); const v = (id) => (document.getElementById(id).value || '').trim();
+    const token = localStorage.getItem('finderdom_token');
+    const body = { transaction: ctx.trans === 'wynajem' ? 'wynajem' : 'sprzedaz', type: ctx.type || 'mieszkanie', city: ctx.city, radius_km: Math.min(100, parseInt(document.getElementById('heroRadiusKm')?.value || '10', 10) || 10),
+      price_to: parseFloat(v('wbPrice')) || 0, area_from: ctx.area_from || null, rooms: ctx.rooms || [], note: '', name: v('wbName'), phone: v('wbPhone'), email: v('wbEmail') || null, consent: document.getElementById('wbConsent').checked };
+    if (!body.name || !body.phone || !body.price_to || (!token && !body.email)) { msg.style.color = '#f87171'; msg.textContent = 'Uzupełnij imię, telefon, ' + (token ? '' : 'e-mail ') + 'i budżet.'; return; }
+    if (!body.consent) { msg.style.color = '#f87171'; msg.textContent = 'Zaznacz zgodę na kontakt.'; return; }
+    const btn = document.getElementById('wbSave'); btn.disabled = true; msg.style.color = '#8ba3d4'; msg.textContent = 'Zapisuję…';
+    try {
+      const r = await fetch('/api/wanted', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {}), body: JSON.stringify(body) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || ('Błąd ' + r.status));
+      localStorage.setItem('fd_wb_done', String(Date.now()));
+      document.getElementById('wbForm').style.display = 'none';
+      document.getElementById('wbText').innerHTML = '✅ <b>Poszukiwanie dodane do bazy.</b> Właściciele pasujących ogłoszeń i biura z regionu dostali e-mail — mogą do Ciebie zadzwonić. Na Twój e-mail wyślemy też każdą nową pasującą ofertę ze wszystkich portali. <a href="/poszukiwania?id=' + encodeURIComponent(d.wanted && d.wanted.id || '') + '" style="color:#FFB800">Zobacz w bazie →</a>';
+      if (window.gtag) gtag('event', 'wanted_created', { source: 'szukaj_bar' });
+    } catch (e) { msg.style.color = '#f87171'; msg.textContent = e.message; btn.disabled = false; }
+  };
+})();
 // ?kto=finderdom|prywatna|posrednik|przetarg — preselekcja chipa „Kto oferuje” (linki z /dla-wlascicieli, /dodaj-ogloszenie)
 (function(){ const kto = new URLSearchParams(location.search).get('kto'); if (!kto) return; document.querySelectorAll('.chip[data-seller]').forEach(x => x.classList.remove('active')); document.querySelector(`.chip[data-seller="${kto}"]`)?.classList.add('active'); })();
 // Load on start

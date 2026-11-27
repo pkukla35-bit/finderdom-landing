@@ -76,6 +76,8 @@ class WantedIn(BaseModel):
     note: str = Field(default="", max_length=600)
     name: str = Field(min_length=2, max_length=40)
     phone: str = Field(min_length=7, max_length=20)
+    email: Optional[str] = Field(default=None, max_length=120)   # wymagany, gdy dodaje osoba niezalogowana
+    consent: bool = True
 
 
 def _clean_phone(p: str) -> str:
@@ -370,15 +372,93 @@ def register(app, ctx: Dict[str, Any]) -> None:
                                "📞 Zobacz kontakt", f"{DOMAIN}/poszukiwania?id={w['_id']}")
             await send_email(to=email, subject=f"Kupujący szuka: {TYPE_LABEL[w['type']]} w {w['city']} do {int(w['price_to']):,} zł".replace(",", " "), html=html)
 
+    # ───────────────── biura: powiadomienia o nowych poszukiwaniach z regionu ─────────────────
+    def _km(a_lat, a_lng, b_lat, b_lng) -> float:
+        import math
+        return 2 * 6371 * math.asin(math.sqrt(math.sin(math.radians(b_lat - a_lat) / 2) ** 2 + math.cos(math.radians(a_lat)) * math.cos(math.radians(b_lat)) * math.sin(math.radians(b_lng - a_lng) / 2) ** 2))
+
+    def _region_of(u: dict) -> dict:
+        r = u.get("wanted_notify") or {}
+        return {"mode": r.get("mode") or "all", "city": r.get("city") or "", "radius_km": int(r.get("radius_km") or 50)}
+
+    def _broker_wants(u: dict, w: dict) -> bool:
+        r = _region_of(u)
+        if r["mode"] == "off": return False
+        if r["mode"] == "all" or not r["city"]: return True
+        if normalize_city(r["city"]) == w.get("city_norm"): return True
+        cc = _coords(r["city"])
+        if cc and w.get("lat") is not None:
+            return _km(cc[0], cc[1], w["lat"], w["lng"]) <= r["radius_km"] + (w.get("radius_km") or 0)
+        return False
+
+    async def _notify_brokers_about_wanted(w: dict):
+        """Nowe „Poszukuję” → mail do biur z aktywnym planem (Firmowy/Solo) z regionu — lead z telefonem."""
+        db = database(); seen = set(); sent = 0
+        cur = db.users.find({"active": {"$ne": False}, "$or": [{"tier": {"$in": list(BUSINESS_TIERS)}}, {"role": "agent"}]}, {"password_hash": 0}).limit(2000)
+        async for u in cur:
+            email = (u.get("email") or "").lower()
+            if not email or email in seen or email == (w.get("email") or "").lower(): continue
+            if (await effective_tier_async(u)) not in BUSINESS_TIERS: continue
+            if not _broker_wants(u, w): continue
+            seen.add(email)
+            r = _region_of(u)
+            where = f"{escape(w['city'])}" + (f", {escape(w['district'])}" if w.get("district") else "") + (f" (+{w['radius_km']} km)" if w.get("radius_km") else "")
+            html = mail_layout("Nowy klient szuka w Twoim regionie 🔎",
+                               f"Na FinderDom pojawiło się nowe poszukiwanie: <b>{escape('Wynajem' if w['transaction']=='wynajem' else 'Kupno')} — {escape(TYPE_LABEL[w['type']])}</b> w {where}.",
+                               [f"Budżet do <b>{int(w['price_to']):,} zł</b>".replace(",", " ") + ("/mies." if w["transaction"] == "wynajem" else ""),
+                                (f"Metraż od {w['area_from']:g} m²" if w.get("area_from") else "Metraż: dowolny") + (f", pokoje: {', '.join(map(str, w['rooms']))}" if w.get("rooms") else "") + (f", rynek {w['market']}" if w.get("market") else ""),
+                                (f"Uwagi: „{escape(w['note'])}”" if w.get("note") else "Bez dodatkowych uwag"),
+                                "Jako biuro z Planem Firmowym widzisz imię i telefon tej osoby — zadzwoń pierwszy, zanim zrobi to konkurencja.",
+                                ("Dostajesz wszystkie poszukiwania z Polski — ustaw region działania w Moje konto → Poszukiwania, aby dostawać tylko ze swojej okolicy." if r["mode"] == "all" or not r["city"] else f"Region: {escape(r['city'])} +{r['radius_km']} km (zmień w Moje konto → Poszukiwania).")],
+                               "📞 Zobacz kontakt klienta", f"{DOMAIN}/poszukiwania?id={w['_id']}")
+            try:
+                await send_email(to=email, subject=f"Lead: {'wynajem' if w['transaction']=='wynajem' else 'kupno'} {TYPE_LABEL[w['type']].lower()} — {w['city']} do {int(w['price_to']):,} zł".replace(",", " "), html=html)
+                sent += 1
+            except Exception as e:
+                logger.warning("wanted→broker mail failed %s: %s", email, str(e)[:120])
+            if sent >= 300: break
+        return sent
+
+    class RegionIn(BaseModel):
+        mode: str = Field(default="all", pattern="^(all|region|off)$")
+        city: str = Field(default="", max_length=80)
+        radius_km: int = Field(default=50, ge=0, le=300)
+
+    @app.get("/api/wlasciciele/region")
+    async def get_region(user: dict = Depends(current_user)):
+        return {"region": _region_of(user), "broker": await _is_broker(user)}
+
+    @app.put("/api/wlasciciele/region")
+    async def put_region(body: RegionIn, user: dict = Depends(current_user)):
+        city = body.city.strip()
+        if body.mode == "region" and not city:
+            raise HTTPException(400, "Podaj miejscowość, wokół której działasz")
+        r = {"mode": body.mode, "city": city[:80], "radius_km": body.radius_km}
+        await database().users.update_one({"_id": user["_id"]}, {"$set": {"wanted_notify": r}})
+        return {"ok": True, "region": r, "known_city": bool(_coords(city)) if city else None}
+
     @app.post("/api/wanted", status_code=201)
-    async def create_wanted(body: WantedIn, user: dict = Depends(current_user)):
+    async def create_wanted(body: WantedIn, request: Request):
+        """Dodanie poszukiwania — zalogowany (e-mail z konta) albo anonimowo (imię + telefon + e-mail)."""
         db = database()
-        if await db.wanted.count_documents({"user_id": str(user["_id"]), "active": True}) >= 10:
-            raise HTTPException(400, "Limit 10 aktywnych poszukiwań na konto")
+        user = await user_from_request(request)
+        email = (user.get("email") if user else (body.email or "")).strip().lower()
+        if not user:
+            if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+                raise HTTPException(400, "Podaj prawidłowy e-mail — wyślemy na niego pasujące oferty")
+            if not body.consent:
+                raise HTTPException(400, "Potrzebna zgoda na kontakt od właścicieli i biur")
+        owner_key = {"user_id": str(user["_id"])} if user else {"email": email}
+        if await db.wanted.count_documents({**owner_key, "active": True}) >= 10:
+            raise HTTPException(400, "Limit 10 aktywnych poszukiwań")
         t, trans = _type(body.type), _trans(body.transaction)
         now = _now(); city = body.city.strip(); cc = _coords(city)
         rooms = sorted({int(r) for r in body.rooms if 0 < int(r) <= 10})
-        w = {"user_id": str(user["_id"]), "email": user.get("email"), "name": body.name.strip(), "phone": _clean_phone(body.phone),
+        # ten sam e-mail + te same kryteria w ciągu godziny → nie dubluj (podwójne kliknięcie / banner w wyszukiwarce)
+        dup = await db.wanted.find_one({"email": email, "active": True, "transaction": trans, "type": t, "city_norm": normalize_city(city), "price_to": float(body.price_to), "created_at": {"$gt": now - timedelta(hours=1)}})
+        if dup:
+            return {"ok": True, "wanted": _wanted_public(dup, True), "duplicate": True}
+        w = {"user_id": str(user["_id"]) if user else None, "email": email, "name": body.name.strip(), "phone": _clean_phone(body.phone),
              "transaction": trans, "type": t, "city": city, "city_norm": normalize_city(city), "district": (body.district or "").strip() or None,
              "radius_km": body.radius_km, "price_to": float(body.price_to), "area_from": body.area_from or None, "rooms": rooms,
              "market": body.market if body.market in ("pierwotny", "wtorny") else None, "note": body.note.strip()[:600],
@@ -387,8 +467,8 @@ def register(app, ctx: Dict[str, Any]) -> None:
         res = await db.wanted.insert_one(w); w["_id"] = res.inserted_id
         # alert e-mail na oferty ze WSZYSTKICH portali (istniejący system alertów)
         try:
-            if user.get("email") and await db.alerts.count_documents({"email": user["email"], "active": True}) < 20:
-                await db.alerts.insert_one({"email": user["email"], "user_id": str(user["_id"]), "type": t, "city": city, "transaction": trans,
+            if email and await db.alerts.count_documents({"email": email, "active": True}) < 20:
+                await db.alerts.insert_one({"email": email, "user_id": str(user["_id"]) if user else None, "type": t, "city": city, "transaction": trans,
                                             "price_to": float(body.price_to), "area_from": body.area_from or None, "rooms_from": (rooms[0] if rooms else None),
                                             "source_offer_id": None, "wanted_id": str(res.inserted_id), "active": True, "created_at": now,
                                             "last_checked_iso": now.isoformat(), "last_sent_at": None, "sent_count": 0})
@@ -398,6 +478,10 @@ def register(app, ctx: Dict[str, Any]) -> None:
             await _notify_owners_about_wanted(w)
         except Exception as e:
             logger.warning("wanted→owners mail failed: %s", str(e)[:120])
+        try:
+            await _notify_brokers_about_wanted(w)
+        except Exception as e:
+            logger.warning("wanted→brokers mail failed: %s", str(e)[:120])
         return {"ok": True, "wanted": _wanted_public(w, True)}
 
     @app.get("/api/wanted")

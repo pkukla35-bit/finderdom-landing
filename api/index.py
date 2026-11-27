@@ -4377,6 +4377,11 @@ async def alert_off(id: str = "", t: str = ""):
     if not a:
         raise HTTPException(404, "Alert nie istnieje")
     await database().alerts.update_one({"_id": oid}, {"$set": {"active": False, "disabled_at": datetime.now(timezone.utc)}})
+    if a.get("wanted_id"):   # alert powstał z „Poszukuję” → zdejmij też poszukiwanie z publicznej listy/mapy
+        try:
+            await database().wanted.update_one({"_id": ObjectId(a["wanted_id"])}, {"$set": {"active": False, "deleted_at": datetime.now(timezone.utc)}, "$unset": {"phone": "", "email": ""}})
+        except Exception:
+            pass
     page = f"""<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Alert wyłączony · FinderDom.pl</title></head>
 <body style="margin:0;background:#0B1836;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px">
 <div><div style="font-size:48px">🔕</div><h1 style="font-size:24px;margin:12px 0">Alert wyłączony</h1>

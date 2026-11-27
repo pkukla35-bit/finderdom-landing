@@ -202,6 +202,21 @@ gtag('set', 'url_passthrough', false);
           </div>
         </form>
       </div>
+      <div class="card" id="regionCard" style="display:none;margin-top:16px">
+        <h2>🔎 Leady z poszukiwań</h2>
+        <p style="margin:0 0 14px;font-size:13px;color:#8ba3d4;line-height:1.5">Gdy ktoś doda na FinderDom <b style="color:#fff">poszukiwanie</b> („kupię mieszkanie w Krakowie do 700 tys.”), dostajesz e-mail z kryteriami, a w planie Firmowym widzisz <b style="color:#fff">imię i telefon</b> klienta — <a href="/poszukiwania" style="color:#FFB800">mapa poszukiwań</a>. Ustaw, skąd chcesz dostawać leady.</p>
+        <form id="regionForm" class="inv-form" autocomplete="off">
+          <div class="inv-grid">
+            <label>Powiadomienia<select id="rgMode"><option value="all">Cała Polska (wszystkie poszukiwania)</option><option value="region">Tylko mój region</option><option value="off">Wyłączone</option></select></label>
+            <label>Miejscowość (centrum regionu)<input type="text" id="rgCity" maxlength="80" placeholder="np. Kraków"></label>
+            <label>Promień<select id="rgRadius"><option value="0">tylko ta miejscowość</option><option value="25">+25 km</option><option value="50" selected>+50 km</option><option value="100">+100 km</option><option value="200">+200 km</option></select></label>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+            <button type="submit" class="btn-outline" id="rgSaveBtn">Zapisz</button>
+            <span id="rgMsg" style="font-size:13px;color:#8ba3d4"></span>
+          </div>
+        </form>
+      </div>
       <div class="card" style="margin-top:16px">
         <h2>🔒 Zmień hasło</h2>
         <form id="pwForm" class="inv-form" autocomplete="off">
@@ -398,7 +413,7 @@ gtag('set', 'url_passthrough', false);
         document.getElementById('pCompany').textContent = u.company_name || '—';
         document.getElementById('pNip').textContent = u.nip || '—';
       }
-      loadBrand(u);
+      loadBrand(u); loadRegion(u);
       // Show Leady tab for active Firmowy / Biuro jednoosobowe subscribers; Zespół only for Firmowy
       if (u.tier === 'business' || u.tier === 'solo'){
         document.querySelectorAll('.biz-only-tab').forEach(el => el.style.display = '');
@@ -533,6 +548,30 @@ gtag('set', 'url_passthrough', false);
     if (src) { box.innerHTML = '<img src="' + src + '" alt="logo biura" style="max-width:92%;max-height:84%;object-fit:contain">'; rm.style.display = ''; }
     else { box.innerHTML = '<span style="font-size:12px;color:#6b7280">brak logo</span>'; rm.style.display = 'none'; }
   }
+  async function loadRegion(u){
+    if (u.account_type !== 'business' && u.tier !== 'business' && u.tier !== 'solo') return;
+    const card = document.getElementById('regionCard'); card.style.display = '';
+    try {
+      const r = await fetch('/api/wlasciciele/region', { headers: { 'Authorization': 'Bearer ' + token } });
+      if (!r.ok) return;
+      const d = await r.json(); const g = d.region || {};
+      document.getElementById('rgMode').value = g.mode || 'all';
+      document.getElementById('rgCity').value = g.city || '';
+      document.getElementById('rgRadius').value = String(g.radius_km != null ? g.radius_km : 50);
+    } catch (e) { /* offline */ }
+  }
+  document.getElementById('regionForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('rgMsg'); msg.textContent = 'Zapisuję…'; msg.style.color = '#8ba3d4';
+    try {
+      const r = await fetch('/api/wlasciciele/region', { method: 'PUT', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: document.getElementById('rgMode').value, city: document.getElementById('rgCity').value.trim(), radius_km: Number(document.getElementById('rgRadius').value) }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || 'Błąd zapisu');
+      msg.textContent = d.known_city === false ? '✅ Zapisano. Tej miejscowości nie mamy na mapie — dopasujemy po nazwie; wpisz najbliższe duże miasto, aby działał promień.' : '✅ Zapisano';
+      msg.style.color = '#4ade80';
+    } catch (err) { msg.textContent = '❌ ' + err.message; msg.style.color = '#f87171'; }
+  });
   async function loadBrand(u){
     // Konto firmowe albo aktywny plan Biuro jednoosobowe / Firmowy (także konto osobiste z takim planem / admin)
     if (u.account_type !== 'business' && u.tier !== 'business' && u.tier !== 'solo') return;

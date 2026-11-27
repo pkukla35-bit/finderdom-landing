@@ -198,7 +198,7 @@ gtag('set', 'url_passthrough', false);
     <div><label>Pokoje</label><div class="seg" id="segRooms"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button><button data-v="5">5+</button></div></div>
     <div><label>Rynek</label><select id="wMarket"><option value="">dowolny</option><option value="wtorny">wtórny</option><option value="pierwotny">pierwotny</option></select></div>
   </div>
-  <div class="row"><div><label>Imię *</label><input id="wName" maxlength="40" placeholder="np. Anna"></div><div><label>Telefon *</label><input id="wPhone" type="tel" placeholder="600 100 200"></div><div id="wEmailBox"><label>E-mail * (na pasujące oferty)</label><input id="wEmail" type="email" maxlength="120" placeholder="anna@przyklad.pl"></div></div>
+  <div class="row"><div><label>Imię *</label><input id="wName" maxlength="40" placeholder="np. Anna"></div><div><label>Telefon *</label><input id="wPhone" type="tel" placeholder="600 100 200"></div><div><label>E-mail * (na pasujące oferty)</label><input id="wEmail" type="email" maxlength="120" placeholder="anna@przyklad.pl"></div></div>
   <div class="row"><div><label style="display:flex;gap:8px;align-items:flex-start;text-transform:none;letter-spacing:0;font-weight:500;font-size:12.5px;line-height:1.5"><input type="checkbox" id="wConsent" checked style="width:16px;height:16px;margin-top:2px;flex:0 0 auto"> Zgadzam się na kontakt telefoniczny / e-mail od właścicieli nieruchomości i biur w sprawie tego poszukiwania. Publicznie widać tylko imię i kryteria. <a href="/polityka-prywatnosci">Polityka prywatności</a></label></div></div>
   <div class="row"><div><label>Uwagi (opcjonalnie)</label><input id="wNote" maxlength="600" placeholder="np. z balkonem, nie parter, blisko szkoły, gotówka"></div></div>
   <div class="msg" id="wMsg"></div>
@@ -274,11 +274,11 @@ function drawMap(cities){
     const m = L.marker([c.lat,c.lng],{icon:L.divIcon({className:'',html:`<div style="width:${r*2}px;height:${r*2}px;border-radius:50%;background:rgba(255,184,0,.85);color:#0B1836;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #fff;font-size:${r>20?15:13}px">${c.n}</div>`,iconSize:[r*2,r*2]})}).addTo(layer);
     m.on('click',()=>{ document.getElementById('fCity').value=c.city; F.city=c.city; F.skip=0; load(); }); m.bindTooltip(`${esc(c.city)}: ${c.n} poszukiwań`); });
 }
-if (TOKEN) document.getElementById('wEmailBox').style.display='none';
+try { const ue = JSON.parse(localStorage.getItem('finderdom_user')||'{}').email; if (ue) document.getElementById('wEmail').value = ue; } catch(e) {}
 document.getElementById('wSave').onclick = async () => {
   const v=id=>document.getElementById(id).value.trim();
   const p = {transaction:W.trans, type:W.type, city:v('wCity'), district:v('wDistrict')||null, radius_km:Number(v('wRadius')), price_to:Number(v('wPrice')), area_from:v('wArea')?Number(v('wArea')):null, rooms:[...W.rooms], market:v('wMarket')||null, note:v('wNote'), name:v('wName'), phone:v('wPhone'), email:v('wEmail')||null, consent:document.getElementById('wConsent').checked};
-  if (!p.city||!p.price_to||!p.name||!p.phone||(!TOKEN&&!p.email)) return show('wMsg','err','Uzupełnij: miejscowość, budżet, imię, telefon' + (TOKEN?'':' i e-mail') + '.');
+  if (!p.city||!p.price_to||!p.name||!p.phone||!p.email) return show('wMsg','err','Uzupełnij: miejscowość, budżet, imię, telefon i e-mail.');
   if (!p.consent) return show('wMsg','err','Zaznacz zgodę na kontakt od właścicieli i biur.');
   const btn=document.getElementById('wSave'); btn.disabled=true;
   try { const d=await api('/api/wanted',{method:'POST',body:JSON.stringify(p)}); show('wMsg','ok', d.duplicate ? 'To poszukiwanie już jest w bazie.' : 'Poszukiwanie dodane! Powiadomiliśmy właścicieli pasujących ogłoszeń i biura z regionu. Dostaniesz e-mail o każdej pasującej ofercie — także z portali.'); if (window.gtag) gtag('event','wanted_created'); F.skip=0; load(); loadMy(); }

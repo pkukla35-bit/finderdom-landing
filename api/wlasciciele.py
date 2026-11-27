@@ -442,12 +442,11 @@ def register(app, ctx: Dict[str, Any]) -> None:
         """Dodanie poszukiwania — zalogowany (e-mail z konta) albo anonimowo (imię + telefon + e-mail)."""
         db = database()
         user = await user_from_request(request)
-        email = (user.get("email") if user else (body.email or "")).strip().lower()
-        if not user:
-            if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
-                raise HTTPException(400, "Podaj prawidłowy e-mail — wyślemy na niego pasujące oferty")
-            if not body.consent:
-                raise HTTPException(400, "Potrzebna zgoda na kontakt od właścicieli i biur")
+        email = ((body.email or "").strip() or (user.get("email") if user else "") or "").strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise HTTPException(400, "Podaj prawidłowy e-mail — wyślemy na niego pasujące oferty")
+        if not body.consent:
+            raise HTTPException(400, "Potrzebna zgoda na kontakt od właścicieli i biur")
         owner_key = {"user_id": str(user["_id"])} if user else {"email": email}
         if await db.wanted.count_documents({**owner_key, "active": True}) >= 10:
             raise HTTPException(400, "Limit 10 aktywnych poszukiwań")

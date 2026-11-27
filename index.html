@@ -873,7 +873,7 @@ gtag('set', 'url_passthrough', false);
     const el = document.getElementById('headerAuth');
     if (!el) return;
     const token = localStorage.getItem('finderdom_token');
-    const pomocLink = '<a href="/raporty" class="a-nav" title="Tygodniowe raporty cen">📊 Raporty</a><a href="/blog" class="a-nav" title="Blog i porady">📝 Blog</a><a href="/pomoc" class="a-nav" title="Centrum pomocy">💬 Pomoc</a>';
+    const pomocLink = '<a href="/dla-wlascicieli" class="a-nav" title="Dodaj ogłoszenie za darmo lub poszukiwanie">📣 Sprzedam / Poszukuję</a><a href="/raporty" class="a-nav" title="Tygodniowe raporty cen">📊 Raporty</a><a href="/blog" class="a-nav" title="Blog i porady">📝 Blog</a><a href="/pomoc" class="a-nav" title="Centrum pomocy">💬 Pomoc</a>';
     if (token) {
       el.innerHTML = pomocLink + '<a href="/konto" class="a-cta">👤 Moje konto</a>';
     } else {

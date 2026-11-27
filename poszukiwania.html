@@ -169,7 +169,7 @@ gtag('set', 'url_passthrough', false);
 <section class="hero" style="margin-bottom:20px">
   <div class="eyebrow">Mapa poszukiwań</div>
   <h1 style="font-size:clamp(26px,4vw,40px)">Zobacz, <span>czego szukają</span> kupujący i najemcy</h1>
-  <p class="lead">Masz nieruchomość? Sprawdź, czy pasuje do czyichś kryteriów. Szukasz? Dodaj poszukiwanie bez zakładania konta — trafi e-mailem do właścicieli pasujących ogłoszeń i do biur z Twojego regionu, a Ty dostaniesz e-mail o każdej pasującej ofercie ze wszystkich portali.</p>
+  <p class="lead">Masz nieruchomość? Sprawdź, czy pasuje do czyichś kryteriów. Szukasz? Dodaj poszukiwanie (w Planie Osobistym, 25 zł / 30 dni) — trafi e-mailem do właścicieli pasujących ogłoszeń i do biur z Twojego regionu, a Ty dostaniesz e-mail o każdej pasującej ofercie ze wszystkich portali.</p>
   <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap"><a class="cta-btn" href="#dodaj">🔎 Dodaj poszukiwanie</a><a class="cta-btn outline" href="/dodaj-ogloszenie">🏠 Mam nieruchomość — dodaj ogłoszenie</a><a class="cta-btn outline" href="/ogloszenia-wlascicieli">🗺️ Mapa ogłoszeń właścicieli</a></div>
 </section>
 
@@ -182,7 +182,7 @@ gtag('set', 'url_passthrough', false);
 
 <h2 id="dodaj">Dodaj poszukiwanie</h2>
 <div class="form">
-  <div id="loginBox" class="msg ok" style="display:none">Nie musisz mieć konta — podaj imię, telefon i e-mail. Właściciele pasujących ogłoszeń i biura z regionu dostaną Twoje poszukiwanie e-mailem, a Ty dostaniesz każdą nową pasującą ofertę ze wszystkich portali. Masz konto? <a href="/logowanie?next=/poszukiwania" style="color:#fff;font-weight:800">Zaloguj się</a>, aby zarządzać poszukiwaniami.</div>
+  <div id="loginBox" class="msg ok" style="display:none">Baza poszukiwań jest częścią <b>Planu Osobistego (25 zł / 30 dni)</b> i planów dla biur. <a href="/logowanie?next=/poszukiwania%23dodaj" style="color:#fff;font-weight:800">Zaloguj się</a> lub <a href="/rejestracja?next=/poszukiwania%23dodaj" style="color:#fff;font-weight:800">załóż konto</a>, aktywuj plan — i dodaj poszukiwanie. Właściciele pasujących ogłoszeń i biura z regionu dostaną je e-mailem, a Ty — każdą nową pasującą ofertę ze wszystkich portali.</div>
   <div class="row">
     <div><label>Szukam</label><div class="seg" id="segTrans"><button data-v="sprzedaz" class="on">Kupię</button><button data-v="wynajem">Wynajmę</button></div></div>
     <div><label>Rodzaj</label><div class="seg" id="segType"><button data-v="mieszkanie" class="on">Mieszkanie</button><button data-v="dom">Dom</button><button data-v="dzialka">Działka</button><button data-v="lokal">Lokal</button></div></div>
@@ -277,13 +277,14 @@ function drawMap(cities){
 }
 try { const ue = JSON.parse(localStorage.getItem('finderdom_user')||'{}').email; if (ue) document.getElementById('wEmail').value = ue; } catch(e) {}
 document.getElementById('wSave').onclick = async () => {
+  if (!needLogin('/poszukiwania#dodaj')) return;
   const v=id=>document.getElementById(id).value.trim();
   const p = {transaction:W.trans, type:W.type, city:v('wCity'), district:v('wDistrict')||null, radius_km:Number(v('wRadius')), price_to:Number(v('wPrice')), area_from:v('wArea')?Number(v('wArea')):null, area_to:v('wAreaTo')?Number(v('wAreaTo')):null, rooms:[...W.rooms], market:v('wMarket')||null, note:v('wNote'), name:v('wName'), phone:v('wPhone'), email:v('wEmail')||null, consent:document.getElementById('wConsent').checked};
   if (!p.city||!p.price_to||!p.name||!p.phone||!p.email) return show('wMsg','err','Uzupełnij: miejscowość, budżet, imię, telefon i e-mail.');
   if (!p.consent) return show('wMsg','err','Zaznacz zgodę na kontakt od właścicieli i biur.');
   const btn=document.getElementById('wSave'); btn.disabled=true;
   try { const d=await api('/api/wanted',{method:'POST',body:JSON.stringify(p)}); show('wMsg','ok', d.duplicate ? 'To poszukiwanie już jest w bazie.' : 'Poszukiwanie dodane! Powiadomiliśmy właścicieli pasujących ogłoszeń i biura z regionu. Dostaniesz e-mail o każdej pasującej ofercie — także z portali.'); if (window.gtag) gtag('event','wanted_created'); F.skip=0; load(); loadMy(); }
-  catch(e){ show('wMsg','err',e.message); } finally { btn.disabled=false; }
+  catch(e){ if (/Planu Osobistego/.test(e.message)) { const el=document.getElementById('wMsg'); el.className='msg err'; el.innerHTML='🔒 Baza poszukiwań jest w <b>Planie Osobistym — 25 zł / 30 dni</b> (albo w planach dla biur). <a href="/konto?plan=individual" style="color:#fff;font-weight:800">Aktywuj plan w Moje konto →</a>'; } else show('wMsg','err',e.message); } finally { btn.disabled=false; }
 };
 async function loadMy(){ if(!TOKEN) return; try{ const d=await api('/api/my/wanted'); const box=document.getElementById('myW'); box.style.display=d.items.length?'':'none';
   document.getElementById('myWList').innerHTML=d.items.map(w=>`<div class="item"><div class="t"><b>${w.transaction==='wynajem'?'Wynajmę':'Kupię'} · ${esc(w.type_label)} · ${esc(w.city)}</b><span>do ${money(w.price_to)}${w.area_from?' · od '+w.area_from+' m²':''}${w.area_to?' · do '+w.area_to+' m²':''}${w.rooms.length?' · '+w.rooms.join(', ')+' pok.':''} · dodano ${(w.created_at||'').slice(0,10)}</span></div><button class="btn sec sm" onclick="delW('${w.id}')">🗑 Usuń</button></div>`).join(''); }catch(e){} }

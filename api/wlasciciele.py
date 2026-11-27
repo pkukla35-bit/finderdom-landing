@@ -446,18 +446,20 @@ def register(app, ctx: Dict[str, Any]) -> None:
         await database().users.update_one({"_id": user["_id"]}, {"$set": {"wanted_notify": r}})
         return {"ok": True, "region": r, "known_city": bool(_coords(city)) if city else None}
 
+    PAID_TIERS = {"individual"} | set(BUSINESS_TIERS)
+
     @app.post("/api/wanted", status_code=201)
-    async def create_wanted(body: WantedIn, request: Request):
-        """Dodanie poszukiwania — zalogowany (e-mail z konta) albo anonimowo (imię + telefon + e-mail)."""
+    async def create_wanted(body: WantedIn, user: dict = Depends(current_user)):
+        """Dodanie poszukiwania — tylko zalogowany z aktywnym planem (Osobisty 25 zł / Firmowy). Baza poszukiwań = funkcja płatna."""
         db = database()
-        user = await user_from_request(request)
-        email = ((body.email or "").strip() or (user.get("email") if user else "") or "").strip().lower()
+        if (await effective_tier_async(user)) not in PAID_TIERS and (user.get("email") or "").lower() not in ADMIN_EMAILS:
+            raise HTTPException(402, "Dodanie poszukiwania wymaga Planu Osobistego (25 zł / 30 dni) lub planu dla biur. Aktywuj plan w Moje konto.")
+        email = ((body.email or "").strip() or user.get("email") or "").strip().lower()
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
             raise HTTPException(400, "Podaj prawidłowy e-mail — wyślemy na niego pasujące oferty")
         if not body.consent:
             raise HTTPException(400, "Potrzebna zgoda na kontakt od właścicieli i biur")
-        owner_key = {"user_id": str(user["_id"])} if user else {"email": email}
-        if await db.wanted.count_documents({**owner_key, "active": True}) >= 10:
+        if await db.wanted.count_documents({"user_id": str(user["_id"]), "active": True}) >= 10:
             raise HTTPException(400, "Limit 10 aktywnych poszukiwań")
         t, trans = _type(body.type), _trans(body.transaction)
         now = _now(); city = body.city.strip(); cc = _coords(city)
@@ -466,7 +468,7 @@ def register(app, ctx: Dict[str, Any]) -> None:
         dup = await db.wanted.find_one({"email": email, "active": True, "transaction": trans, "type": t, "city_norm": normalize_city(city), "price_to": float(body.price_to), "created_at": {"$gt": now - timedelta(hours=1)}})
         if dup:
             return {"ok": True, "wanted": _wanted_public(dup, True), "duplicate": True}
-        w = {"user_id": str(user["_id"]) if user else None, "email": email, "name": body.name.strip(), "phone": _clean_phone(body.phone),
+        w = {"user_id": str(user["_id"]), "email": email, "name": body.name.strip(), "phone": _clean_phone(body.phone),
              "transaction": trans, "type": t, "city": city, "city_norm": normalize_city(city), "district": (body.district or "").strip() or None,
              "radius_km": body.radius_km, "price_to": float(body.price_to), "area_from": body.area_from or None, "area_to": body.area_to or None, "rooms": rooms,
              "market": body.market if body.market in ("pierwotny", "wtorny") else None, "note": body.note.strip()[:600],
@@ -476,7 +478,7 @@ def register(app, ctx: Dict[str, Any]) -> None:
         # alert e-mail na oferty ze WSZYSTKICH portali (istniejący system alertów)
         try:
             if email and await db.alerts.count_documents({"email": email, "active": True}) < 20:
-                await db.alerts.insert_one({"email": email, "user_id": str(user["_id"]) if user else None, "type": t, "city": city, "transaction": trans,
+                await db.alerts.insert_one({"email": email, "user_id": str(user["_id"]), "type": t, "city": city, "transaction": trans,
                                             "price_to": float(body.price_to), "area_from": body.area_from or None, "area_to": body.area_to or None, "rooms_from": (rooms[0] if rooms else None),
                                             "source_offer_id": None, "wanted_id": str(res.inserted_id), "active": True, "created_at": now,
                                             "last_checked_iso": now.isoformat(), "last_sent_at": None, "sent_count": 0})

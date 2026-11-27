@@ -268,6 +268,7 @@ gtag('set', 'url_passthrough', false);
               <li>Bez reklam</li>
               <li><strong>10 wycen PDF miesięcznie</strong> w cenie, kolejne 10 zł/szt.</li>
               <li><strong>🗄️ Archiwum z telefonami właścicieli</strong> — oferty, które zniknęły z portali; zadzwoń, zanim trafią do pośrednika</li>
+              <li><strong>🔎 Baza „Poszukuję”</strong> — Twoje kryteria trafiają e-mailem do właścicieli i biur z regionu, którzy dzwonią z ofertami</li>
             </ul>
             <button type="button" class="p-btn pay" data-buy="individual">Zapłać 25 zł</button>
           </div>
@@ -734,6 +735,9 @@ gtag('set', 'url_passthrough', false);
     });
   });
   if (location.hash === '#alerty') { const t = document.querySelector('.tab[data-tab="alerts"]'); if (t) t.click(); }
+  // ?plan=individual|business — wejście z paywalla (np. baza „Poszukuję”): zakładka Subskrypcja + podświetlony plan
+  (function(){ const want = new URLSearchParams(location.search).get('plan'); if (!want) return; const t = document.querySelector('.tab[data-tab="subscription"]'); if (t) t.click();
+    setTimeout(() => { const card = document.querySelector('.plan[data-plan="' + want + '"]'); if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.style.boxShadow = '0 0 0 3px #FFB800'; } }, 300); })();
 
   async function loadWatches(){
     const list = document.getElementById('watchList');

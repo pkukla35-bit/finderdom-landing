@@ -2360,7 +2360,7 @@ function updateWantedBar(ctx) {
   const TYPE_GEN = { mieszkanie: 'mieszkania', dom: 'domu', dzialka: 'działki', lokal: 'lokalu' };
   const what = (ctx.trans === 'wynajem' ? 'Szukasz do wynajęcia ' : 'Szukasz ') + (TYPE_GEN[ctx.type] || 'nieruchomości') + (ctx.city ? ' — ' + ctx.city : '') + (ctx.price_to ? ', do ' + Math.round(ctx.price_to).toLocaleString('pl-PL') + ' zł' : '') + '?';
   const esc = (x) => String(x).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  document.getElementById('wbText').innerHTML = '🔎 <b>' + esc(what) + '</b> Dodaj swoje poszukiwanie do bazy — <b>właściciele i biura z tego regionu</b> dostaną je e-mailem i zadzwonią do Ciebie z ofertami. Dostaniesz też e-mail o każdej nowej pasującej ofercie ze wszystkich portali. Nie musisz mieć konta.';
+  document.getElementById('wbText').innerHTML = '🔎 <b>' + esc(what) + '</b> Dodaj swoje poszukiwanie do bazy — <b>właściciele i biura z tego regionu</b> dostaną je e-mailem i zadzwonią do Ciebie z ofertami. Dostaniesz też e-mail o każdej nowej pasującej ofercie ze wszystkich portali. <span style="color:#FFB800">W Planie Osobistym (25 zł / 30 dni)</span>.';
   // prefill z filtrów — dopóki użytkownik sam nie zmienił pól formularza
   if (!WB.touched) {
     WB.trans = ctx.trans === 'wynajem' ? 'wynajem' : 'sprzedaz'; wbSetSeg('wbTrans', WB.trans);
@@ -2380,6 +2380,8 @@ function updateWantedBar(ctx) {
   const later = () => { wbStore.set('sessionStorage', 'fd_wb_later', '1'); updateWantedBar(WB.ctx || {}); };
   document.getElementById('wbClose').onclick = later;
   document.getElementById('wbLater').onclick = later;
+  // powrót po logowaniu: odtwórz wpisane dane i otwórz formularz
+  try { const dr = JSON.parse(sessionStorage.getItem('fd_wb_draft') || 'null'); if (dr && wbStore.get('localStorage', 'finderdom_token')) { sessionStorage.removeItem('fd_wb_draft'); WB.touched = true; WB.trans = dr.transaction; WB.type = dr.type; WB.rooms = new Set(dr.rooms || []); wbSetSeg('wbTrans', WB.trans); wbSetSeg('wbType', WB.type); document.querySelectorAll('#wbRooms button').forEach(b => b.classList.toggle('on', WB.rooms.has(parseInt(b.dataset.v, 10)))); const put = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; }; put('wbCity', dr.city); put('wbDistrict', dr.district); put('wbRadius', dr.radius_km); put('wbPrice', dr.price_to); put('wbArea', dr.area_from); put('wbAreaTo', dr.area_to); put('wbMarket', dr.market); put('wbNote', dr.note); put('wbName', dr.name); put('wbPhone', dr.phone); put('wbEmail', dr.email); setTimeout(() => { document.getElementById('wbOpen')?.click(); document.getElementById('szukamBox')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); } } catch (e) {}
   const open = () => { wbStore.del('sessionStorage', 'fd_wb_later'); wbStore.del('localStorage', 'fd_wb_done'); updateWantedBar(WB.ctx || {}); document.getElementById('wbForm').style.display = 'flex'; document.getElementById('wbBtns').style.display = 'none'; (document.getElementById('wbCity').value ? document.getElementById('wbPrice') : document.getElementById('wbCity')).focus(); if (window.gtag) gtag('event', 'wanted_bar_open'); };
   document.getElementById('wbOpen').onclick = open;
   document.getElementById('wbExpand').onclick = open;
@@ -2395,11 +2397,14 @@ function updateWantedBar(ctx) {
       name: v('wbName'), phone: v('wbPhone'), email: v('wbEmail') || null, consent: document.getElementById('wbConsent').checked };
     if (!body.city || !body.name || !body.phone || !body.price_to || !body.email) { msg.style.color = '#f87171'; msg.textContent = 'Uzupełnij miejscowość, budżet, imię, telefon i e-mail.'; return; }
     if (!body.consent) { msg.style.color = '#f87171'; msg.textContent = 'Zaznacz zgodę na kontakt.'; return; }
+    if (!token) { try { sessionStorage.setItem('fd_wb_draft', JSON.stringify(body)); } catch (e) {} location.href = '/logowanie?next=' + encodeURIComponent(location.pathname + location.search); return; }
     const btn = document.getElementById('wbSave'); btn.disabled = true; msg.style.color = '#8ba3d4'; msg.textContent = 'Zapisuję…';
     try {
-      const r = await fetch('/api/wanted', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {}), body: JSON.stringify(body) });
+      const r = await fetch('/api/wanted', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify(body) });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.detail || ('Błąd ' + r.status));
+      if (r.status === 402) { msg.innerHTML = '🔒 Baza poszukiwań jest w <b>Planie Osobistym — 25 zł / 30 dni</b> (albo w planach dla biur). <a href="/konto?plan=individual" style="color:#FFB800;font-weight:800">Aktywuj plan →</a> — po aktywacji wróć tu i kliknij „Dodaj”.'; msg.style.color = '#c5d0e6'; btn.disabled = false; return; }
+      if (r.status === 401) { location.href = '/logowanie?next=' + encodeURIComponent(location.pathname + location.search); return; }
+      if (!r.ok) throw new Error((typeof d.detail === 'string' && d.detail) || ('Błąd ' + r.status));
       wbStore.set('localStorage', 'fd_wb_done', String(Date.now()));
       document.getElementById('wbForm').style.display = 'none';
       document.getElementById('wbText').innerHTML = '✅ <b>Poszukiwanie dodane do bazy.</b> Właściciele pasujących ogłoszeń i biura z regionu dostali e-mail — mogą do Ciebie zadzwonić. Na Twój e-mail wyślemy też każdą nową pasującą ofertę ze wszystkich portali. <a href="/poszukiwania?id=' + encodeURIComponent(d.wanted && d.wanted.id || '') + '" style="color:#FFB800">Zobacz w bazie →</a>';

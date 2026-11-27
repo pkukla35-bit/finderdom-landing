@@ -36,6 +36,30 @@
       "destination": "/api/index"
     },
     {
+      "source": "/api/my/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/wanted",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/wanted/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/photo/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/ai/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/wlasciciele/:path*",
+      "destination": "/api/index"
+    },
+    {
       "source": "/api/chat/:path*",
       "destination": "/api/index"
     },

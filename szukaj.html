@@ -639,7 +639,7 @@ gtag('set', 'url_passthrough', false);
         <input id="wbPhone" type="tel" maxlength="20" placeholder="Telefon *" autocomplete="tel">
         <input id="wbEmail" type="email" maxlength="120" placeholder="E-mail * (na pasujące oferty)" autocomplete="email">
         <input id="wbPrice" type="number" min="0" step="1000" placeholder="Budżet do (zł) *" style="max-width:170px">
-        <label><input type="checkbox" id="wbConsent" checked style="flex:0;min-width:0;min-height:0;width:16px;height:16px;margin-top:2px"> Zgadzam się na kontakt telefoniczny/e-mail od właścicieli i biur w sprawie tego poszukiwania. Publicznie widać tylko imię i kryteria. <a href="/polityka-prywatnosci" style="color:#8ba3d4">Polityka prywatności</a></label>
+        <label><input type="checkbox" id="wbConsent" checked style="flex:0 0 16px;min-width:16px;min-height:16px;width:16px;height:16px;padding:0;margin:2px 0 0;accent-color:#4ade80"> Zgadzam się na kontakt telefoniczny/e-mail od właścicieli i biur w sprawie tego poszukiwania. Publicznie widać tylko imię i kryteria. <a href="/polityka-prywatnosci" style="color:#8ba3d4">Polityka prywatności</a></label>
         <button type="button" class="wb-btn" id="wbSave">🔎 Dodaj do bazy poszukiwań</button>
         <span id="wbMsg" style="font-size:12px"></span>
       </div>
@@ -2319,7 +2319,7 @@ function updateWantedBar(ctx) {
   bar.style.display = hide ? 'none' : 'block';
   if (hide) return;
   const TYPE_GEN = { mieszkanie: 'mieszkania', dom: 'domu', dzialka: 'działki', lokal: 'lokalu' };
-  const what = (ctx.trans === 'wynajem' ? 'Szukasz do wynajęcia ' : 'Szukasz ') + (TYPE_GEN[ctx.type] || 'nieruchomości') + ' w ' + ctx.city + (ctx.price_to ? ' do ' + Math.round(ctx.price_to).toLocaleString('pl-PL') + ' zł' : '') + '?';
+  const what = (ctx.trans === 'wynajem' ? 'Szukasz do wynajęcia ' : 'Szukasz ') + (TYPE_GEN[ctx.type] || 'nieruchomości') + ' — ' + ctx.city + (ctx.price_to ? ', do ' + Math.round(ctx.price_to).toLocaleString('pl-PL') + ' zł' : '') + '?';
   const esc = (x) => String(x).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   document.getElementById('wbText').innerHTML = '🔎 <b>' + esc(what) + '</b> Dodaj swoje poszukiwanie do bazy — <b>właściciele i biura z tego regionu</b> dostaną je e-mailem i zadzwonią do Ciebie z ofertami. Dostaniesz też e-mail o każdej nowej pasującej ofercie. Nie musisz mieć konta.';
   const pr = document.getElementById('wbPrice'); if (pr && ctx.price_to && !pr.value) pr.value = Math.round(ctx.price_to);

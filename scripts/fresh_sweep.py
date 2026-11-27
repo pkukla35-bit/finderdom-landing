@@ -85,12 +85,34 @@ def next_tour_pl(now=None):
     return nxt
 
 
-def wait_and_dispatch_next(db, job_started_at: float = None) -> None:
-    """Koniec jobu-lidera (Otodom mieszkanie/sprzedaz): jeśli następna granica :00/:30 mieści się w oknie 7–21 PL
-    i da się na nią poczekać (≤70 min), czekamy i odpalamy kolejną turę. Po 21:00 pętla gaśnie; rano wznawia ją
-    poranny pełny import albo backstop w backendzie."""
-    if os.environ.get("FRESH_NO_LOOP") == "1":
+_LOOP_DONE = False
+
+
+def claim_tour(db, nxt_iso: str, who: str) -> bool:
+    """Atomowo rezerwuje turę `nxt_iso` dla tego jobu (settings.fresh_sweep.claimed_tour). Pierwszy kończący się lekki job
+    (OLX, portale, Otodom…) zostaje liderem tury; pozostałe kończą od razu. Dzięki temu pętla nie umiera, gdy Otodom
+    jeszcze biegnie i tura dostaje dla niego „running-skip”. 27.11"""
+    try:
+        r = db.settings.update_one({"_id": "fresh_sweep", "claimed_tour": {"$ne": nxt_iso}},
+                                   {"$set": {"claimed_tour": nxt_iso, "claimed_by": who, "claimed_at": datetime.now(timezone.utc).isoformat()}})
+        if r.matched_count:
+            return True
+        if not db.settings.find_one({"_id": "fresh_sweep"}, {"_id": 1}):
+            db.settings.update_one({"_id": "fresh_sweep"}, {"$set": {"claimed_tour": nxt_iso, "claimed_by": who}}, upsert=True)
+            return True
+        return False
+    except Exception as e:
+        log.warning("fresh: claim failed (%s) — nie czekam", str(e)[:80]); return False
+
+
+def wait_and_dispatch_next(db, job_started_at: float = None, who: str = "otodom") -> None:
+    """Koniec lekkiego jobu: jeśli następna granica :00/:30 mieści się w oknie 7–21 PL i da się na nią poczekać (≤70 min),
+    pierwszy job, który ją zarezerwuje (claim_tour), czeka i odpala kolejną turę. Po 21:00 pętla gaśnie; rano wznawia ją
+    poranny pełny import albo backstop w backendzie. Wywołanie jest jednorazowe na proces (łańcuch main() w jednym jobie)."""
+    global _LOOP_DONE
+    if os.environ.get("FRESH_NO_LOOP") == "1" or _LOOP_DONE:
         return
+    _LOOP_DONE = True
     from zoneinfo import ZoneInfo
     now = datetime.now(ZoneInfo("Europe/Warsaw"))
     nxt = next_tour_pl(now)
@@ -99,6 +121,8 @@ def wait_and_dispatch_next(db, job_started_at: float = None) -> None:
     budget = (110 * 60 - (time.time() - job_started_at)) if job_started_at else MAX_WAIT_S
     if wait > min(MAX_WAIT_S, budget):
         log.info("fresh: następna tura %s PL — za daleko (%.0f min), kończę bez pętli", nxt.strftime("%H:%M"), wait / 60); return
-    log.info("fresh: czekam %d s do tury %s PL", int(wait), nxt.strftime("%H:%M"))
+    if not claim_tour(db, nxt.isoformat(), who):
+        log.info("fresh: turę %s PL prowadzi już inny job — kończę", nxt.strftime("%H:%M")); return
+    log.info("fresh: [%s] czekam %d s do tury %s PL", who, int(wait), nxt.strftime("%H:%M"))
     time.sleep(max(0, wait))
-    dispatch_all(db, f"loop-30min {nxt.strftime('%H:%M')}")
+    dispatch_all(db, f"loop-30min {nxt.strftime('%H:%M')} ({who})")

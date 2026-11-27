@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
+
+_JOB_STARTED_AT = time.time()
 from pymongo import MongoClient, UpdateOne
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -246,6 +248,13 @@ def main():
             if new == 0 and page >= 2 and zero_streak >= (4 if deep else 2): log.info("  → brak nowych, następne miasto"); break
             time.sleep(a.delay)
     log.info("═══ DONE olx %s/%s: new=%d updated=%d pages=%d ═══", a.transaction, a.property, tot["new"], tot["updated"], tot["pages"])
+    # ⏰ Odświeżanie co 30 min (fresh_sweep): lekki job OLX może zostać liderem następnej tury (claim w Mongo). 27.11
+    if a.regions and a.max_pages <= 2:
+        try:
+            import fresh_sweep
+            fresh_sweep.wait_and_dispatch_next(db, _JOB_STARTED_AT, who=f"olx:{a.property}/{a.transaction}")
+        except Exception as e:
+            log.warning("fresh sweep loop skipped: %s", e)
 
 
 # ── Lokale użytkowe: matryce w .github/workflows nie mają „lokal” (nie da się ich edytować bez uprawnienia „Workflows”

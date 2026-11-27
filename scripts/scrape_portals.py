@@ -24,6 +24,7 @@ log = logging.getLogger("portals")
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
       "Chrome/124.0 Safari/537.36")
 S = requests.Session()
+_JOB_STARTED_AT = time.time()
 S.headers.update({"User-Agent": UA, "Accept-Language": "pl-PL,pl;q=0.9", "Accept": "text/html,*/*;q=0.8"})
 BASE_LABEL = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "działka", "lokal": "lokal"}
 
@@ -1024,6 +1025,13 @@ def main():
         _stale_sweep(coll, a.portal, log)
     except Exception as e:
         log.error("stale-sweep failed: %s", str(e)[:200])
+    # ⏰ Odświeżanie co 30 min (fresh_sweep): lekki job portali może zostać liderem następnej tury (claim w Mongo). 27.11
+    if a.regions and a.max_pages <= 2 and a.portal in ("morizon", "gratka", "domiporta", "adresowo"):
+        try:
+            import fresh_sweep
+            fresh_sweep.wait_and_dispatch_next(db, _JOB_STARTED_AT, who=f"portals:{a.portal}/{a.property}")
+        except Exception as e:
+            log.warning("fresh sweep loop skipped: %s", e)
 
 
 ODW_PHONE_LIMIT = int(os.environ.get("ODW_PHONE_LIMIT", "150"))

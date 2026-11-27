@@ -701,11 +701,11 @@ def main():
     except Exception as e:
         log.error("stale-sweep failed: %s", str(e)[:200])
 
-    # ⏰ Godzinne odświeżanie 9–19 PL: job-lider (mieszkanie/sprzedaz, tryb regiony) odpala kolejną lekką turę importów
-    if args.regions and args.property == "mieszkanie" and TRANSACTION == "sprzedaz":
+    # ⏰ Odświeżanie co 30 min 7–21 PL: każdy lekki job (tryb regiony) próbuje zostać liderem następnej tury (claim w Mongo)
+    if args.regions:
         try:
             import fresh_sweep
-            fresh_sweep.wait_and_dispatch_next(db, _JOB_STARTED_AT)
+            fresh_sweep.wait_and_dispatch_next(db, _JOB_STARTED_AT, who=f"otodom:{args.property}/{TRANSACTION}")
         except Exception as e:
             log.warning("fresh sweep loop skipped: %s", e)
 

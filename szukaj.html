@@ -639,7 +639,7 @@ gtag('set', 'url_passthrough', false);
       <a href="#" id="archiveBack">← Wróć do aktywnych ofert</a>
     </div>
     <!-- 🔎 Baza poszukiwań: pasek nad wynikami — pełny formularz kryteriów (prefill z filtrów), „Nie teraz” zwija do jednej linii -->
-    <div class="szukam-box" id="szukamBox">
+    <div class="szukam-box" id="szukamBox" style="display:block">
       <div id="wbMini" style="display:none;align-items:center;gap:10px;flex-wrap:wrap"><span>🔎 <b>Nie znalazłeś tego, czego szukasz?</b> Dodaj poszukiwanie do bazy — właściciele i biura z regionu zadzwonią do Ciebie.</span><button type="button" class="wb-btn" id="wbExpand" style="min-height:34px;padding:6px 12px">➕ Dodaj poszukiwanie</button></div>
       <div id="wbFull">
         <button type="button" class="wb-x" id="wbClose" title="Zwiń">✕</button>
@@ -2348,9 +2348,11 @@ function updateWantedBar(ctx) {
   const bar = document.getElementById('szukamBox'); if (!bar) return;
   WB.ctx = ctx;
   const done = Date.now() - parseInt(wbStore.get('localStorage', 'fd_wb_done') || '0', 10) < 30 * 864e5;
-  if (window.ARCHIVE_MODE || done) { bar.style.display = 'none'; return; }
+  if (window.ARCHIVE_MODE) { bar.style.display = 'none'; return; }
   bar.style.display = 'block';
-  const mini = !!wbStore.get('sessionStorage', 'fd_wb_later');
+  // po dodaniu poszukiwania (30 dni) albo „Nie teraz” (sesja) → pasek zwinięty do jednej linii, nigdy całkiem ukryty
+  const mini = done || !!wbStore.get('sessionStorage', 'fd_wb_later');
+  const miniTxt = document.querySelector('#wbMini span'); if (miniTxt) miniTxt.innerHTML = done ? '✅ <b>Twoje poszukiwanie jest w bazie.</b> Szukasz czegoś jeszcze? Dodaj kolejne — właściciele i biura z regionu zadzwonią do Ciebie.' : '🔎 <b>Nie znalazłeś tego, czego szukasz?</b> Dodaj poszukiwanie do bazy — właściciele i biura z regionu zadzwonią do Ciebie.';
   document.getElementById('wbMini').style.display = mini ? 'flex' : 'none';
   document.getElementById('wbFull').style.display = mini ? 'none' : 'block';
   bar.classList.toggle('mini', mini);
@@ -2377,7 +2379,7 @@ function updateWantedBar(ctx) {
   const later = () => { wbStore.set('sessionStorage', 'fd_wb_later', '1'); updateWantedBar(WB.ctx || {}); };
   document.getElementById('wbClose').onclick = later;
   document.getElementById('wbLater').onclick = later;
-  const open = () => { wbStore.del('sessionStorage', 'fd_wb_later'); updateWantedBar(WB.ctx || {}); document.getElementById('wbForm').style.display = 'flex'; document.getElementById('wbBtns').style.display = 'none'; (document.getElementById('wbCity').value ? document.getElementById('wbPrice') : document.getElementById('wbCity')).focus(); if (window.gtag) gtag('event', 'wanted_bar_open'); };
+  const open = () => { wbStore.del('sessionStorage', 'fd_wb_later'); wbStore.del('localStorage', 'fd_wb_done'); updateWantedBar(WB.ctx || {}); document.getElementById('wbForm').style.display = 'flex'; document.getElementById('wbBtns').style.display = 'none'; (document.getElementById('wbCity').value ? document.getElementById('wbPrice') : document.getElementById('wbCity')).focus(); if (window.gtag) gtag('event', 'wanted_bar_open'); };
   document.getElementById('wbOpen').onclick = open;
   document.getElementById('wbExpand').onclick = open;
   wbSeg('wbTrans', v => { WB.trans = v; document.getElementById('wbPrice').placeholder = v === 'wynajem' ? 'Czynsz do (zł/mies.) *' : 'Budżet do (zł) *'; });

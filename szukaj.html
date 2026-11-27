@@ -655,7 +655,8 @@ gtag('set', 'url_passthrough', false);
             <input id="wbPrice" type="number" min="0" step="1000" placeholder="Budżet do (zł) *" style="max-width:170px">
           </div>
           <div class="wb-row">
-            <input id="wbArea" type="number" min="0" placeholder="Metraż od (m²)" style="max-width:150px">
+            <input id="wbArea" type="number" min="0" placeholder="Metraż od (m²)" style="max-width:140px">
+            <input id="wbAreaTo" type="number" min="0" placeholder="Metraż do (m²)" style="max-width:140px">
             <span class="wb-lbl">Pokoje</span><div class="wb-seg" id="wbRooms"><button type="button" data-v="1">1</button><button type="button" data-v="2">2</button><button type="button" data-v="3">3</button><button type="button" data-v="4">4</button><button type="button" data-v="5">5+</button></div>
             <select id="wbMarket" style="max-width:170px"><option value="">rynek: dowolny</option><option value="wtorny">rynek wtórny</option><option value="pierwotny">rynek pierwotny</option></select>
           </div>
@@ -1396,7 +1397,7 @@ async function loadListings() {
     // Hero "Cena do" — jeśli ostrzejsze niż sidebar price_to
     const heroMax = numVal('heroPrice');
     if (heroMax && (!apiParams.get('price_to') || heroMax < parseFloat(apiParams.get('price_to')))) apiParams.set('price_to', String(heroMax));
-    try { updateWantedBar({ city: preCity, type: preType || 'mieszkanie', trans: preTrans || 'sprzedaz', price_to: parseFloat(apiParams.get('price_to') || '0') || 0, rooms: activeRoomsChips.map(r => parseInt(r, 10)).filter(n => n > 0), area_from: numVal('fAreaFrom') || null,
+    try { updateWantedBar({ city: preCity, type: preType || 'mieszkanie', trans: preTrans || 'sprzedaz', price_to: parseFloat(apiParams.get('price_to') || '0') || 0, rooms: activeRoomsChips.map(r => parseInt(r, 10)).filter(n => n > 0), area_from: numVal('fAreaFrom') || null, area_to: numVal('fAreaTo') || null,
       market: document.querySelector('.chip.active[data-filter="market_type"]')?.dataset.value || '', radius_km: numVal('heroRadiusKm') || numVal('fRadiusKm') || 0 }); } catch (e) {}
     // GEO filter: gdy user wpisal miasto + promien (heroRadiusKm), wysylamy lat/lng+radius zamiast city
     // Backend zwraca oferty z bounding box, wiec dla Krakow+50km dostaniemy tez Wieliczka, Skawina, Zabierzów
@@ -2366,7 +2367,7 @@ function updateWantedBar(ctx) {
     WB.type = ['mieszkanie', 'dom', 'dzialka', 'lokal'].includes(ctx.type) ? ctx.type : 'mieszkanie'; wbSetSeg('wbType', WB.type);
     WB.rooms = new Set((ctx.rooms || []).map(r => Math.min(5, r))); document.querySelectorAll('#wbRooms button').forEach(b => b.classList.toggle('on', WB.rooms.has(parseInt(b.dataset.v, 10))));
     const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
-    set('wbCity', ctx.city); set('wbPrice', ctx.price_to ? Math.round(ctx.price_to) : ''); set('wbArea', ctx.area_from || '');
+    set('wbCity', ctx.city); set('wbPrice', ctx.price_to ? Math.round(ctx.price_to) : ''); set('wbArea', ctx.area_from || ''); set('wbAreaTo', ctx.area_to || '');
     const mk = document.getElementById('wbMarket'); if (mk) mk.value = (ctx.market === 'pierwotny' || ctx.market === 'wtorny') ? ctx.market : '';
     const rd = document.getElementById('wbRadius'); if (rd && ctx.radius_km) { const opts = [0, 5, 10, 25, 50]; rd.value = String(opts.reduce((a, b) => Math.abs(b - ctx.radius_km) < Math.abs(a - ctx.radius_km) ? b : a)); }
     document.getElementById('wbPrice').placeholder = WB.trans === 'wynajem' ? 'Czynsz do (zł/mies.) *' : 'Budżet do (zł) *';
@@ -2385,12 +2386,12 @@ function updateWantedBar(ctx) {
   wbSeg('wbTrans', v => { WB.trans = v; document.getElementById('wbPrice').placeholder = v === 'wynajem' ? 'Czynsz do (zł/mies.) *' : 'Budżet do (zł) *'; });
   wbSeg('wbType', v => { WB.type = v; });
   document.querySelectorAll('#wbRooms button').forEach(b => { b.onclick = () => { const r = parseInt(b.dataset.v, 10); WB.touched = true; if (WB.rooms.has(r)) { WB.rooms.delete(r); b.classList.remove('on'); } else { WB.rooms.add(r); b.classList.add('on'); } }; });
-  ['wbCity', 'wbDistrict', 'wbRadius', 'wbPrice', 'wbArea', 'wbMarket', 'wbNote'].forEach(id => document.getElementById(id)?.addEventListener('input', () => { WB.touched = true; }));
+  ['wbCity', 'wbDistrict', 'wbRadius', 'wbPrice', 'wbArea', 'wbAreaTo', 'wbMarket', 'wbNote'].forEach(id => document.getElementById(id)?.addEventListener('input', () => { WB.touched = true; }));
   document.getElementById('wbSave').onclick = async () => {
     const msg = document.getElementById('wbMsg'); const v = (id) => (document.getElementById(id).value || '').trim();
     const token = wbStore.get('localStorage', 'finderdom_token');
     const body = { transaction: WB.trans, type: WB.type, city: v('wbCity'), district: v('wbDistrict') || null, radius_km: parseInt(v('wbRadius') || '10', 10) || 0,
-      price_to: parseFloat(v('wbPrice')) || 0, area_from: parseFloat(v('wbArea')) || null, rooms: [...WB.rooms], market: v('wbMarket') || null, note: v('wbNote'),
+      price_to: parseFloat(v('wbPrice')) || 0, area_from: parseFloat(v('wbArea')) || null, area_to: parseFloat(v('wbAreaTo')) || null, rooms: [...WB.rooms], market: v('wbMarket') || null, note: v('wbNote'),
       name: v('wbName'), phone: v('wbPhone'), email: v('wbEmail') || null, consent: document.getElementById('wbConsent').checked };
     if (!body.city || !body.name || !body.phone || !body.price_to || !body.email) { msg.style.color = '#f87171'; msg.textContent = 'Uzupełnij miejscowość, budżet, imię, telefon i e-mail.'; return; }
     if (!body.consent) { msg.style.color = '#f87171'; msg.textContent = 'Zaznacz zgodę na kontakt.'; return; }

@@ -195,6 +195,7 @@ gtag('set', 'url_passthrough', false);
   <div class="row">
     <div><label id="wPriceLbl">Budżet do (zł) *</label><input id="wPrice" type="number" placeholder="np. 650000"></div>
     <div><label>Metraż od (m²)</label><input id="wArea" type="number" placeholder="np. 45"></div>
+    <div><label>Metraż do (m²)</label><input id="wAreaTo" type="number" placeholder="np. 70"></div>
     <div><label>Pokoje</label><div class="seg" id="segRooms"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button><button data-v="5">5+</button></div></div>
     <div><label>Rynek</label><select id="wMarket"><option value="">dowolny</option><option value="wtorny">wtórny</option><option value="pierwotny">pierwotny</option></select></div>
   </div>
@@ -255,7 +256,7 @@ function card(w){
   const c = w.contact_visible ? `<div class="c">📞 <b>${esc(w.phone)}</b>${w.email?` · <a href="mailto:${esc(w.email)}">${esc(w.email)}</a>`:''}</div>`
           : `<div class="c lock">🔒 Kontakt widzą właściciele pasujących ogłoszeń i biura z <a href="/dla-biur">Planem Firmowym</a>. <a href="/dodaj-ogloszenie">Masz taką nieruchomość? Dodaj ogłoszenie</a></div>`;
   return `<div class="wcard" id="w-${w.id}"><div class="k">${trans} · ${w.type_label}</div><h4>${esc(w.city)}${w.district?', '+esc(w.district):''}${w.radius_km?` <span class="muted">+${w.radius_km} km</span>`:''}</h4><div class="p">do ${money(w.price_to)}${w.transaction==='wynajem'?'/mies.':''}</div>
-    <div class="d">${w.area_from?'od '+w.area_from+' m² · ':''}${rooms}${w.market?' · rynek '+w.market:''}${w.note?'<br>„'+esc(w.note)+'”':''}</div><div class="muted">${esc(w.name)} · ${(w.created_at||'').slice(0,10)}</div>${c}</div>`;
+    <div class="d">${w.area_from&&w.area_to?w.area_from+'–'+w.area_to+' m² · ':(w.area_from?'od '+w.area_from+' m² · ':(w.area_to?'do '+w.area_to+' m² · ':''))}${rooms}${w.market?' · rynek '+w.market:''}${w.note?'<br>„'+esc(w.note)+'”':''}</div><div class="muted">${esc(w.name)} · ${(w.created_at||'').slice(0,10)}</div>${c}</div>`;
 }
 async function load(append){
   const q = new URLSearchParams(); if(F.trans) q.set('transaction',F.trans); if(F.type) q.set('type',F.type); if(F.city) q.set('city',F.city); q.set('skip',F.skip); q.set('limit',60);
@@ -277,7 +278,7 @@ function drawMap(cities){
 try { const ue = JSON.parse(localStorage.getItem('finderdom_user')||'{}').email; if (ue) document.getElementById('wEmail').value = ue; } catch(e) {}
 document.getElementById('wSave').onclick = async () => {
   const v=id=>document.getElementById(id).value.trim();
-  const p = {transaction:W.trans, type:W.type, city:v('wCity'), district:v('wDistrict')||null, radius_km:Number(v('wRadius')), price_to:Number(v('wPrice')), area_from:v('wArea')?Number(v('wArea')):null, rooms:[...W.rooms], market:v('wMarket')||null, note:v('wNote'), name:v('wName'), phone:v('wPhone'), email:v('wEmail')||null, consent:document.getElementById('wConsent').checked};
+  const p = {transaction:W.trans, type:W.type, city:v('wCity'), district:v('wDistrict')||null, radius_km:Number(v('wRadius')), price_to:Number(v('wPrice')), area_from:v('wArea')?Number(v('wArea')):null, area_to:v('wAreaTo')?Number(v('wAreaTo')):null, rooms:[...W.rooms], market:v('wMarket')||null, note:v('wNote'), name:v('wName'), phone:v('wPhone'), email:v('wEmail')||null, consent:document.getElementById('wConsent').checked};
   if (!p.city||!p.price_to||!p.name||!p.phone||!p.email) return show('wMsg','err','Uzupełnij: miejscowość, budżet, imię, telefon i e-mail.');
   if (!p.consent) return show('wMsg','err','Zaznacz zgodę na kontakt od właścicieli i biur.');
   const btn=document.getElementById('wSave'); btn.disabled=true;
@@ -285,7 +286,7 @@ document.getElementById('wSave').onclick = async () => {
   catch(e){ show('wMsg','err',e.message); } finally { btn.disabled=false; }
 };
 async function loadMy(){ if(!TOKEN) return; try{ const d=await api('/api/my/wanted'); const box=document.getElementById('myW'); box.style.display=d.items.length?'':'none';
-  document.getElementById('myWList').innerHTML=d.items.map(w=>`<div class="item"><div class="t"><b>${w.transaction==='wynajem'?'Wynajmę':'Kupię'} · ${esc(w.type_label)} · ${esc(w.city)}</b><span>do ${money(w.price_to)}${w.area_from?' · od '+w.area_from+' m²':''}${w.rooms.length?' · '+w.rooms.join(', ')+' pok.':''} · dodano ${(w.created_at||'').slice(0,10)}</span></div><button class="btn sec sm" onclick="delW('${w.id}')">🗑 Usuń</button></div>`).join(''); }catch(e){} }
+  document.getElementById('myWList').innerHTML=d.items.map(w=>`<div class="item"><div class="t"><b>${w.transaction==='wynajem'?'Wynajmę':'Kupię'} · ${esc(w.type_label)} · ${esc(w.city)}</b><span>do ${money(w.price_to)}${w.area_from?' · od '+w.area_from+' m²':''}${w.area_to?' · do '+w.area_to+' m²':''}${w.rooms.length?' · '+w.rooms.join(', ')+' pok.':''} · dodano ${(w.created_at||'').slice(0,10)}</span></div><button class="btn sec sm" onclick="delW('${w.id}')">🗑 Usuń</button></div>`).join(''); }catch(e){} }
 async function delW(id){ if(!confirm('Usunąć poszukiwanie i alert e-mail?')) return; try{ await api('/api/my/wanted/'+id,{method:'DELETE'}); loadMy(); F.skip=0; load(); }catch(e){ alert(e.message); } }
 load(); loadMy();
 </script>

@@ -4258,6 +4258,8 @@ def _alert_label(a: dict) -> str:
         s += f" · do {int(a['price_to']):,} zł".replace(",", " ")
     if a.get("area_from"):
         s += f" · od {int(a['area_from'])} m²"
+    if a.get("area_to"):
+        s += f" · do {int(a['area_to'])} m²"
     if a.get("rooms_from"):
         s += f" · od {int(a['rooms_from'])} pok."
     return s
@@ -4273,6 +4275,8 @@ def _alert_query(a: dict, since_iso: Optional[str]) -> dict:
         q["price"]["$lte"] = float(a["price_to"])
     if a.get("area_from"):
         q["area_m2"] = {"$gte": float(a["area_from"])}
+    if a.get("area_to"):
+        q.setdefault("area_m2", {})["$lte"] = float(a["area_to"])
     if a.get("rooms_from"):
         q["rooms"] = {"$gte": int(a["rooms_from"])}
     if since_iso:

@@ -71,6 +71,7 @@ class WantedIn(BaseModel):
     radius_km: int = Field(default=10, ge=0, le=100)
     price_to: float = Field(gt=0, lt=100_000_000)
     area_from: Optional[float] = Field(default=None, ge=0, lt=100_000)
+    area_to: Optional[float] = Field(default=None, ge=0, lt=100_000)
     rooms: List[int] = Field(default_factory=list)
     market: Optional[str] = None            # pierwotny | wtorny | None = dowolny
     note: str = Field(default="", max_length=600)
@@ -315,12 +316,19 @@ def register(app, ctx: Dict[str, Any]) -> None:
     def _wanted_public(w: dict, with_contact: bool) -> dict:
         out = {"id": str(w["_id"]), "transaction": w["transaction"], "type": w["type"], "type_label": TYPE_LABEL.get(w["type"], w["type"]),
                "city": w["city"], "district": w.get("district"), "radius_km": w.get("radius_km", 0), "price_to": w["price_to"],
-               "area_from": w.get("area_from"), "rooms": w.get("rooms") or [], "market": w.get("market"), "note": w.get("note") or "",
+               "area_from": w.get("area_from"), "area_to": w.get("area_to"), "rooms": w.get("rooms") or [], "market": w.get("market"), "note": w.get("note") or "",
                "name": w.get("name"), "created_at": w["created_at"].isoformat() if isinstance(w.get("created_at"), datetime) else w.get("created_at"),
                "lat": w.get("lat"), "lng": w.get("lng"), "contact_visible": with_contact}
         if with_contact:
             out["phone"], out["email"] = w.get("phone"), w.get("email")
         return out
+
+    def _area_txt(w: dict) -> str:
+        a, b = w.get("area_from"), w.get("area_to")
+        if a and b: return f"Metraż {a:g}–{b:g} m²"
+        if a: return f"Metraż od {a:g} m²"
+        if b: return f"Metraż do {b:g} m²"
+        return "Metraż: dowolny"
 
     def _wanted_matches_listing(w: dict, l: dict) -> bool:
         if w["transaction"] != (l.get("transaction_type") or "sprzedaz"): return False
@@ -328,6 +336,7 @@ def register(app, ctx: Dict[str, Any]) -> None:
         if normalize_city(w["city"]) != normalize_city(l.get("city") or ""): return False
         if l.get("price") and l["price"] > w["price_to"] * 1.05: return False
         if w.get("area_from") and l.get("area_m2") and l["area_m2"] < w["area_from"] * 0.9: return False
+        if w.get("area_to") and l.get("area_m2") and l["area_m2"] > w["area_to"] * 1.1: return False
         if w.get("rooms") and l.get("rooms") and l["rooms"] not in w["rooms"]: return False
         if w.get("market") and l.get("market_type") and l["market_type"] != w["market"]: return False
         return True
@@ -367,7 +376,7 @@ def register(app, ctx: Dict[str, Any]) -> None:
             html = mail_layout("Ktoś szuka takiej nieruchomości jak Twoja 🔎",
                                f"Na FinderDom pojawiło się nowe poszukiwanie, do którego pasuje Twoje ogłoszenie <b>{escape(l.get('title') or '')}</b>.",
                                [f"Szuka: <b>{escape(TYPE_LABEL[w['type']])}</b> — {escape(w['city'])}" + (f", {escape(w['district'])}" if w.get("district") else "") + f", budżet do <b>{int(w['price_to']):,} zł</b>".replace(",", " "),
-                                (f"Metraż od {w['area_from']:g} m²" if w.get("area_from") else "Metraż: dowolny") + (f", pokoje: {', '.join(map(str, w['rooms']))}" if w.get("rooms") else ""),
+                                _area_txt(w) + (f", pokoje: {', '.join(map(str, w['rooms']))}" if w.get("rooms") else ""),
                                 "Jako właściciel pasującego ogłoszenia widzisz telefon tej osoby za darmo — kliknij i zadzwoń pierwszy."],
                                "📞 Zobacz kontakt", f"{DOMAIN}/poszukiwania?id={w['_id']}")
             await send_email(to=email, subject=f"Kupujący szuka: {TYPE_LABEL[w['type']]} w {w['city']} do {int(w['price_to']):,} zł".replace(",", " "), html=html)
@@ -406,7 +415,7 @@ def register(app, ctx: Dict[str, Any]) -> None:
             html = mail_layout("Nowy klient szuka w Twoim regionie 🔎",
                                f"Na FinderDom pojawiło się nowe poszukiwanie: <b>{escape('Wynajem' if w['transaction']=='wynajem' else 'Kupno')} — {escape(TYPE_LABEL[w['type']])}</b> w {where}.",
                                [f"Budżet do <b>{int(w['price_to']):,} zł</b>".replace(",", " ") + ("/mies." if w["transaction"] == "wynajem" else ""),
-                                (f"Metraż od {w['area_from']:g} m²" if w.get("area_from") else "Metraż: dowolny") + (f", pokoje: {', '.join(map(str, w['rooms']))}" if w.get("rooms") else "") + (f", rynek {w['market']}" if w.get("market") else ""),
+                                _area_txt(w) + (f", pokoje: {', '.join(map(str, w['rooms']))}" if w.get("rooms") else "") + (f", rynek {w['market']}" if w.get("market") else ""),
                                 (f"Uwagi: „{escape(w['note'])}”" if w.get("note") else "Bez dodatkowych uwag"),
                                 "Jako biuro z Planem Firmowym widzisz imię i telefon tej osoby — zadzwoń pierwszy, zanim zrobi to konkurencja.",
                                 ("Dostajesz wszystkie poszukiwania z Polski — ustaw region działania w Moje konto → Poszukiwania, aby dostawać tylko ze swojej okolicy." if r["mode"] == "all" or not r["city"] else f"Region: {escape(r['city'])} +{r['radius_km']} km (zmień w Moje konto → Poszukiwania).")],
@@ -459,7 +468,7 @@ def register(app, ctx: Dict[str, Any]) -> None:
             return {"ok": True, "wanted": _wanted_public(dup, True), "duplicate": True}
         w = {"user_id": str(user["_id"]) if user else None, "email": email, "name": body.name.strip(), "phone": _clean_phone(body.phone),
              "transaction": trans, "type": t, "city": city, "city_norm": normalize_city(city), "district": (body.district or "").strip() or None,
-             "radius_km": body.radius_km, "price_to": float(body.price_to), "area_from": body.area_from or None, "rooms": rooms,
+             "radius_km": body.radius_km, "price_to": float(body.price_to), "area_from": body.area_from or None, "area_to": body.area_to or None, "rooms": rooms,
              "market": body.market if body.market in ("pierwotny", "wtorny") else None, "note": body.note.strip()[:600],
              "active": True, "created_at": now, "expires_at": now + timedelta(days=WANTED_DAYS)}
         if cc: w["lat"], w["lng"] = cc
@@ -468,7 +477,7 @@ def register(app, ctx: Dict[str, Any]) -> None:
         try:
             if email and await db.alerts.count_documents({"email": email, "active": True}) < 20:
                 await db.alerts.insert_one({"email": email, "user_id": str(user["_id"]) if user else None, "type": t, "city": city, "transaction": trans,
-                                            "price_to": float(body.price_to), "area_from": body.area_from or None, "rooms_from": (rooms[0] if rooms else None),
+                                            "price_to": float(body.price_to), "area_from": body.area_from or None, "area_to": body.area_to or None, "rooms_from": (rooms[0] if rooms else None),
                                             "source_offer_id": None, "wanted_id": str(res.inserted_id), "active": True, "created_at": now,
                                             "last_checked_iso": now.isoformat(), "last_sent_at": None, "sent_count": 0})
         except Exception as e:
@@ -570,7 +579,7 @@ def register(app, ctx: Dict[str, Any]) -> None:
         async for w in db.wanted.find({}).sort("created_at", -1).limit(max(1, min(limit, 200))):
             wanted.append({"id": str(w["_id"]), "created_at": _dt(w.get("created_at")), "active": bool(w.get("active")), "expires_at": _dt(w.get("expires_at")),
                            "transaction": w.get("transaction"), "type": TYPE_LABEL.get(w.get("type"), w.get("type")), "city": w.get("city"), "district": w.get("district"),
-                           "radius_km": w.get("radius_km"), "price_to": w.get("price_to"), "area_from": w.get("area_from"), "rooms": w.get("rooms") or [], "market": w.get("market"),
+                           "radius_km": w.get("radius_km"), "price_to": w.get("price_to"), "area_from": w.get("area_from"), "area_to": w.get("area_to"), "rooms": w.get("rooms") or [], "market": w.get("market"),
                            "note": w.get("note"), "name": w.get("name"), "phone": w.get("phone"), "email": w.get("email"), "logged_in": bool(w.get("user_id"))})
         listings = []
         async for l in db.listings.find({"source": "finderdom"}).sort("added_at", -1).limit(max(1, min(limit, 200))):

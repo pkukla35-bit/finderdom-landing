@@ -199,11 +199,11 @@ gtag('set', 'url_passthrough', false);
     <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button class="btn sec sm" id="aiBtn" type="button">🤖 Napisz opis AI</button><span class="muted" id="aiHint">AI użyje tylko podanych danych — nic nie zmyśli.</span></div>
   </div></div>
   <div class="row"><div><label>Opis *</label><textarea id="desc" maxlength="4000" placeholder="Tu pojawi się opis z AI — możesz go dowolnie poprawić."></textarea></div></div>
-  <div id="photoSec" style="display:none">
-    <label>Zdjęcia (do 8, pierwsze = główne)</label>
+  <div id="photoSec" style="margin-top:14px">
+    <label>📷 Zdjęcia (do 8, pierwsze = główne)</label>
     <div class="photos" id="photos"></div>
     <input type="file" id="file" accept="image/*" multiple style="display:none">
-    <button class="btn sec sm" type="button" onclick="document.getElementById('file').click()">📷 Dodaj zdjęcia</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button class="btn sec sm" type="button" onclick="document.getElementById('file').click()">📷 Dodaj zdjęcia</button><span class="muted" id="phHint">Ogłoszenia ze zdjęciami mają 5× więcej kontaktów. Zdjęcia wyślemy razem z publikacją.</span></div>
   </div>
   <div class="msg" id="msg"></div>
   <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:16px">
@@ -252,7 +252,7 @@ function needLogin(target){
 </script>
 
 <script>
-const S = {trans:'sprzedaz', type:'mieszkanie', id:null, images:[]};
+const S = {trans:'sprzedaz', type:'mieszkanie', id:null, images:[], pending:[]};
 const PRESET = new URLSearchParams(location.search);
 if (PRESET.get('trans')==='wynajem') S.trans='wynajem';
 if (['mieszkanie','dom','dzialka','lokal'].includes(PRESET.get('type'))) S.type=PRESET.get('type');
@@ -288,16 +288,28 @@ document.getElementById('saveBtn').onclick = async () => {
   const btn=document.getElementById('saveBtn'); btn.disabled=true;
   try {
     if (S.id) { await api('/api/my/listings/'+S.id,{method:'PATCH',body:JSON.stringify(p)}); show('msg','ok','Zapisano zmiany.'); }
-    else { const d=await api('/api/my/listings',{method:'POST',body:JSON.stringify(p)}); S.id=d.listing.id; S.images=[]; show('msg','ok','Ogłoszenie opublikowane! Teraz dodaj zdjęcia — ogłoszenia ze zdjęciami mają 5× więcej kontaktów.'); btn.textContent='💾 Zapisz zmiany'; document.getElementById('newBtn').style.display=''; if (window.gtag) gtag('event','owner_listing_created'); }
-    document.getElementById('photoSec').style.display=''; renderPhotos(); loadMine();
+    else {
+      const d=await api('/api/my/listings',{method:'POST',body:JSON.stringify(p)}); S.id=d.listing.id; S.images=[];
+      if (S.pending.length) { show('msg','ok',`Opublikowano. Wysyłam ${S.pending.length} zdj…`); await uploadPending(); }
+      show('msg','ok', S.images.length ? 'Ogłoszenie opublikowane ze zdjęciami! Widać je już w wyszukiwarce.' : 'Ogłoszenie opublikowane! Dodaj zdjęcia — ogłoszenia ze zdjęciami mają 5× więcej kontaktów.');
+      btn.textContent='💾 Zapisz zmiany'; document.getElementById('newBtn').style.display=''; if (window.gtag) gtag('event','owner_listing_created');
+    }
+    renderPhotos(); loadMine();
   } catch(e){ show('msg','err',e.message); } finally { btn.disabled=false; }
 };
-document.getElementById('newBtn').onclick = () => { S.id=null; S.images=[]; ['title','desc','notes','price','area','rooms','floor','year','plot','street'].forEach(i=>document.getElementById(i).value=''); document.getElementById('photoSec').style.display='none'; document.getElementById('saveBtn').textContent='✅ Opublikuj ogłoszenie'; document.getElementById('newBtn').style.display='none'; document.getElementById('msg').className='msg'; window.scrollTo({top:0,behavior:'smooth'}); };
-function renderPhotos(){ document.getElementById('photos').innerHTML = S.images.map(u=>`<div class="ph"><img src="${u}" alt=""><button class="x" onclick="delPhoto('${u}')">✕</button></div>`).join(''); }
+document.getElementById('newBtn').onclick = () => { S.id=null; S.images=[]; S.pending=[]; ['title','desc','notes','price','area','rooms','floor','year','plot','street'].forEach(i=>document.getElementById(i).value=''); renderPhotos(); document.getElementById('saveBtn').textContent='✅ Opublikuj ogłoszenie'; document.getElementById('newBtn').style.display='none'; document.getElementById('msg').className='msg'; window.scrollTo({top:0,behavior:'smooth'}); };
+function renderPhotos(){
+  const up = S.images.map(u=>`<div class="ph"><img src="${u}" alt=""><button class="x" onclick="delPhoto('${u}')">✕</button></div>`);
+  const pend = S.pending.map((du,i)=>`<div class="ph" title="Zostanie wysłane przy publikacji"><img src="${du}" alt=""><button class="x" onclick="S.pending.splice(${i},1);renderPhotos()">✕</button></div>`);
+  document.getElementById('photos').innerHTML = up.concat(pend).join('');
+  const h=document.getElementById('phHint'); if (h) h.textContent = S.id ? 'Zdjęcia zapisują się od razu.' : 'Ogłoszenia ze zdjęciami mają 5× więcej kontaktów. Zdjęcia wyślemy razem z publikacją.';
+}
 async function delPhoto(u){ try{ const d=await api('/api/my/listings/'+S.id+'/photo?url='+encodeURIComponent(u),{method:'DELETE'}); S.images=d.images; renderPhotos(); }catch(e){ show('msg','err',e.message); } }
+async function uploadPending(){ const q=S.pending.slice(); S.pending=[]; for (const du of q) { try { const d=await api('/api/my/listings/'+S.id+'/photo',{method:'POST',body:JSON.stringify({data_url:du})}); S.images=d.images; renderPhotos(); } catch(err){ show('msg','err','Zdjęcie: '+err.message); } } }
 function shrink(file){ return new Promise((res,rej)=>{ const img=new Image(); const url=URL.createObjectURL(file); img.onload=()=>{ const s=Math.min(1,1280/Math.max(img.width,img.height)); const c=document.createElement('canvas'); c.width=Math.round(img.width*s); c.height=Math.round(img.height*s); c.getContext('2d').drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg',0.85)); }; img.onerror=rej; img.src=url; }); }
 document.getElementById('file').onchange = async (e) => {
-  const files=[...e.target.files].slice(0, 8-S.images.length); if(!files.length) return show('msg','err','Maksymalnie 8 zdjęć.');
+  const files=[...e.target.files].slice(0, 8-S.images.length-S.pending.length); if(!files.length) return show('msg','err','Maksymalnie 8 zdjęć.');
+  if (!S.id) { for (const f of files) { try { S.pending.push(await shrink(f)); } catch(err){ show('msg','err','Nie udało się wczytać zdjęcia.'); } } renderPhotos(); e.target.value=''; return; }
   show('msg','ok',`Wysyłam ${files.length} zdj…`);
   for (const f of files) { try { const du=await shrink(f); const d=await api('/api/my/listings/'+S.id+'/photo',{method:'POST',body:JSON.stringify({data_url:du})}); S.images=d.images; renderPhotos(); } catch(err){ show('msg','err',err.message); return; } }
   show('msg','ok','Zdjęcia dodane.'); e.target.value=''; loadMine();
@@ -314,7 +326,7 @@ async function act(id,a){ try{ await api('/api/my/listings/'+id+'/status?action=
 function editL(id){ const l=(window._mine||[]).find(x=>x.id===id); if(!l) return; S.id=id; S.trans=l.transaction_type; S.type=(l.type||'mieszkanie').split(' ')[0]; seg('segTrans','trans',refreshBoxes); seg('segType','type',refreshBoxes); refreshBoxes();
   const set=(i,val)=>document.getElementById(i).value = (val===null||val===undefined)?'':val;
   set('city',l.city); set('district',l.district); set('street',l.street); set('price',l.price); set('area',l.area_m2); set('rooms',l.rooms); set('floor',l.floor); set('year',l.build_year); set('market',l.market_type||''); set('plot',l.plot_area_m2); set('phone',l.phone); set('title',l.title); set('desc',l.description);
-  S.images=l.images||[]; renderPhotos(); document.getElementById('photoSec').style.display=''; document.getElementById('saveBtn').textContent='💾 Zapisz zmiany'; document.getElementById('newBtn').style.display=''; window.scrollTo({top:0,behavior:'smooth'}); }
+  S.images=l.images||[]; S.pending=[]; renderPhotos(); document.getElementById('saveBtn').textContent='💾 Zapisz zmiany'; document.getElementById('newBtn').style.display=''; window.scrollTo({top:0,behavior:'smooth'}); }
 loadMine();
 </script>
 

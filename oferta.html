@@ -812,6 +812,8 @@ async function loadOffer() {
           const fd = await fastRes.json();
           if (fd.listing) {
             window.__listingLocked = !!fd.locked;
+            window.__ownerListing = !!fd.owner_listing;   // 🏠 ogłoszenie dodane przez właściciela na FinderDom (bez linku do portalu)
+            window.__contactRequiresLogin = !!(fd.listing && fd.listing.contact_requires_login);
             const normalized = normalizeScrapedListing(fd.listing);
             if (normalized) {
               currentListing = normalized;
@@ -1121,7 +1123,7 @@ function normalizeScrapedListing(raw) {
 
 // Wykrywanie portalu z URL (oferta.html)
 // Bez planu API nie zwraca linku (url) — nazwę portalu bierzemy z pola source
-function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania',listaprzetargow:'ListaPrzetargów',okolica:'Okolica',krn:'KRN',allegrolokalnie:'Allegro Lokalnie',sprzedajemy:'Sprzedajemy',lento:'Lento',homeportal:'HomePortal',domy:'Domy.pl',klikmapa:'Klikmapa',szybko:'Szybko'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
+function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania',listaprzetargow:'ListaPrzetargów',okolica:'Okolica',krn:'KRN',allegrolokalnie:'Allegro Lokalnie',sprzedajemy:'Sprzedajemy',lento:'Lento',homeportal:'HomePortal',domy:'Domy.pl',klikmapa:'Klikmapa',szybko:'Szybko',finderdom:'FinderDom'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
 function detectPortalFromUrlOff(url) {
   if (!url) return null;
   const u = String(url).toLowerCase();
@@ -1698,7 +1700,19 @@ async function renderOffer(l, all) {
       : l.agency_name ? `🏢 Kontakt z biurem<span style="display:block;text-transform:none;letter-spacing:0;color:#fff;font-size:13px;margin-top:4px">${escT(l.agency_name)}</span>`
       : '🏢 Kontakt z biurem nieruchomości';
   }
-  if (!l.source_url && (window.__listingLocked || !window.__isPremium)) {
+  if (window.__ownerListing) {
+    // 🏠 Ogłoszenie właściciela na FinderDom: brak portalu źródłowego; kontakt po zalogowaniu (bez planu)
+    el('sourceLink').style.display = 'none';
+    const logged = !!localStorage.getItem('finderdom_token');
+    el('ctaOtodom').href = logged ? (l.phone ? `tel:${String(l.phone).replace(/\s/g,'')}` : '#') : '/logowanie?next=' + encodeURIComponent(location.pathname + location.search);
+    el('ctaOtodom').removeAttribute('target');
+    el('ctaOtodom').textContent = logged ? '📞 Zadzwoń do właściciela' : '🔓 Zaloguj się, aby zobaczyć telefon (za darmo)';
+    const ctaHint = document.getElementById('ctaHint');
+    if (ctaHint) ctaHint.innerHTML = '<strong>🏠 Oferta bezpośrednio od właściciela</strong>, dodana na FinderDom — bez prowizji pośrednika. Numer telefonu widzi każdy zalogowany użytkownik (darmowe konto).';
+    const descP = document.querySelector('.description p[style*="italic"]');
+    if (descP) descP.remove();
+    if (!l.phone && window.__contactRequiresLogin) specs.push({label:'📞 Telefon właściciela', val: `<a href="/logowanie?next=${encodeURIComponent(location.pathname + location.search)}" style="color:#FFB800;font-weight:800">🔓 zaloguj się, aby zobaczyć</a>`});
+  } else if (!l.source_url && (window.__listingLocked || !window.__isPremium)) {
     // 🔒 bez planu: link do ogłoszenia ukryty — CTA do planu
     const logged = !!localStorage.getItem('finderdom_token');
     const biuroDemo = (() => { try { return localStorage.getItem("fd_biuro_demo") === "1" || new URLSearchParams(location.search).get('widok') === 'biuro'; } catch { return false; } })();
@@ -2074,7 +2088,7 @@ async function renderOffer(l, all) {
     // portal (OLX, Adresowo) pokazuje numer dopiero po zalogowaniu u siebie — nie da się go pobrać
     specs.push({label:'📞 Telefon właściciela', val: `<a href="${l.url}" target="_blank" rel="noopener" style="color:#c5d0e6">numer tylko na ${l.portal || 'portalu'} <span style="font-size:11px;color:#8ba3d4">(portal ukrywa numer za logowaniem) →</span></a>`});
   }
-  specs.push({label:'Portal', val: l.portal || 'Otodom'});
+  specs.push({label:'Portal', val: window.__ownerListing ? 'FinderDom — od właściciela' : (l.portal || 'Otodom')});
   specs.push({label:'Dodane', val: l.added_display || '—'});
   if (l.is_original === false) {
     specs.push({label:'Status', val: '📋 KOPIA (zobacz oryginał)'});

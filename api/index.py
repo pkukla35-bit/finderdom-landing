@@ -344,6 +344,25 @@ async def effective_tier_async(user: dict) -> str:
 FREE_PREVIEW_LIMIT = 5  # ile ofert widzi użytkownik bez opłaconego planu
 
 
+async def _user_from_request(request: Request) -> Optional[dict]:
+    """Zalogowany użytkownik (dowolny plan) z nagłówka Authorization albo None."""
+    auth = (request.headers.get("authorization") or "")
+    if not auth.lower().startswith("bearer "):
+        return None
+    try:
+        payload = jwt.decode(auth[7:].strip(), JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access" or not payload.get("sub"):
+            return None
+        user = await (await users_collection()).find_one({"_id": ObjectId(payload["sub"])})
+    except Exception:
+        return None
+    return user if user and user.get("active") is not False else None
+
+
+async def _is_broker_user(user: dict) -> bool:
+    return (user.get("email") or "").lower() in ADMIN_EMAILS or await effective_tier_async(user) in BUSINESS_TIERS
+
+
 async def _paid_user_from_request(request: Request) -> Optional[dict]:
     """Zwraca użytkownika z aktywnym płatnym planem (lub admina) na podstawie nagłówka Authorization; None gdy brak/free."""
     auth = (request.headers.get("authorization") or "")
@@ -2234,6 +2253,15 @@ async def listing_single(listing_id: str, request: Request, response: Response):
             doc["images"] = doc["images_preview"]
         doc.pop("images_preview", None)
         paid = await _paid_user_from_request(request)
+        if doc.get("source") == "finderdom":
+            # 🏠 ogłoszenie właściciela dodane na FinderDom: kontakt widzi każdy ZALOGOWANY (także bez planu); niezalogowany — tylko zachęta
+            doc.pop("owner_email", None)
+            viewer = paid or await _user_from_request(request)
+            if viewer is None:
+                doc.pop("phone", None); doc["contact_requires_login"] = True
+                return {"listing": doc, "locked": False, "owner_listing": True}
+            response.headers["Cache-Control"] = "private, max-age=60"
+            return {"listing": doc, "locked": False, "owner_listing": True, "broker": await _is_broker_user(viewer)}
         if paid is None:
             # 🔒 bez planu: oferta widoczna, ale bez linku do portalu źródłowego
             for k in ("url", "source_url", "offer_url", "phone", "contact_phone"):
@@ -2598,7 +2626,7 @@ async def listings_scraped_endpoint(
                         "message": "Archiwum wygasłych ofert prywatnych (z telefonami właścicieli) jest dostępne w planie Osobistym i Firmowym."}
             query = {"is_stale": True, "seller_type": "prywatna", "price": {"$gt": 1000}}
         elif city or type or transaction or (lat and lng and radius_km):
-            query = {"scraped_via": {"$in": ["scrapingbee", "apify", "nol-direct", "portal-direct", "olx-direct"]}, "is_stale": {"$ne": True}, "price": {"$gt": 1000}}
+            query = {"scraped_via": {"$in": ["scrapingbee", "apify", "nol-direct", "portal-direct", "olx-direct", "owner-form"]}, "is_stale": {"$ne": True}, "price": {"$gt": 1000}}
         else:
             query = {"is_stale": {"$ne": True}, "price": {"$gt": 1000}}
         # GEO filter (bounding box): 1° lat = 111 km; 1° lng = 111 * cos(lat) km
@@ -5110,7 +5138,8 @@ async def _scheduler_tick(source: str, force: bool = False) -> dict:
             await db.settings.update_one({"_id": "scheduler_tick"}, {"$setOnInsert": {"last_at": now.isoformat(), "source": source}}, upsert=True)
     out: dict = {"source": source, "at": now.isoformat()}
     for key, fn in (("imports", _trigger_imports_if_due), ("fresh_sweep", _fresh_sweep_backstop), ("daily_report", _trigger_daily_report_if_due),
-                    ("dup_compute", _trigger_dup_compute_if_due), ("city_sweeps", _trigger_city_sweeps_if_due)):
+                    ("dup_compute", _trigger_dup_compute_if_due), ("city_sweeps", _trigger_city_sweeps_if_due),
+                    ("owner_expire", lambda: _WL_CTX["expire_owner_content"]())):
         try:
             out[key] = await fn()
         except Exception as e:
@@ -9523,3 +9552,21 @@ def build_valuation_pdf(l, all_listings, buyer_email, rcn_stats=None, rcn_houses
 
     doc.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
     return out.getvalue()
+
+
+# ═══════════════════════ 🏠 Sprzedam / Wynajmę + 🔎 Poszukuję (api/wlasciciele.py, 27.11.2026) ═══════════════════════
+import sys as _sys_wl
+_sys_wl.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import wlasciciele as _wl  # noqa: E402
+
+_WL_CTX: Dict[str, Any] = {
+    "database": database, "current_user": current_user, "send_email": send_email,
+    "mail_layout": lambda title, intro, bullets, cta_text, cta_url: _mail_layout(title, intro, bullets, cta_text, cta_url,
+                                                                                  "Wiadomość z FinderDom.pl — ogłoszenia i poszukiwania właścicieli.",
+                                                                                  f"{MAIL_PUBLIC_DOMAIN}/konto", auto=True),
+    "effective_tier_async": effective_tier_async, "BUSINESS_TIERS": BUSINESS_TIERS, "ADMIN_EMAILS": ADMIN_EMAILS,
+    "CITY_COORDS": CITY_COORDS, "normalize_city": _normalize_city_name, "MAIL_PUBLIC_DOMAIN": MAIL_PUBLIC_DOMAIN,
+    "ai_cfg": _ai_cfg, "AI_PROXY_URL": AI_PROXY_URL, "httpx": httpx, "logger": logger, "escape": escape,
+    "user_from_request": _user_from_request,
+}
+_wl.register(app, _WL_CTX)

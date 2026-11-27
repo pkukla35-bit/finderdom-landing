@@ -1123,7 +1123,7 @@ function normalizeScrapedListing(raw) {
 
 // Wykrywanie portalu z URL (oferta.html)
 // Bez planu API nie zwraca linku (url) — nazwę portalu bierzemy z pola source
-function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania',listaprzetargow:'ListaPrzetargów',okolica:'Okolica',krn:'KRN',allegrolokalnie:'Allegro Lokalnie',sprzedajemy:'Sprzedajemy',lento:'Lento',homeportal:'HomePortal',domy:'Domy.pl',klikmapa:'Klikmapa',szybko:'Szybko',finderdom:'FinderDom'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
+function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania',listaprzetargow:'ListaPrzetargów',okolica:'Okolica',krn:'KRN',allegrolokalnie:'Allegro Lokalnie',sprzedajemy:'Sprzedajemy',lento:'Lento',homeportal:'HomePortal',domy:'Domy.pl',klikmapa:'Klikmapa',szybko:'Szybko',domplace:'Domplace',finderdom:'FinderDom'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
 function detectPortalFromUrlOff(url) {
   if (!url) return null;
   const u = String(url).toLowerCase();
@@ -1144,6 +1144,7 @@ function detectPortalFromUrlOff(url) {
   if (u.includes('lento.pl')) return 'Lento';
   if (u.includes('szybko.pl')) return 'Szybko';
   if (u.includes('homeportal.pl')) return 'HomePortal';
+  if (u.includes('domplace.pl')) return 'Domplace';
   if (u.includes('domy.pl')) return 'Domy.pl';
   if (u.includes('klikmapa.pl') || u.includes('beldom.pl')) return 'Klikmapa';
   if (u.includes('kupmieszkania.pl')) return 'KupMieszkania';
@@ -1509,7 +1510,7 @@ async function renderOffer(l, all) {
     ? l.images.filter(Boolean)
     : (l.image_url ? [l.image_url] : []);
   // Fallback: dodaj /api/og-image jako ostatnią próbę (wyciąga zdjęcie z HTML strony oferty)
-  if (l.source_url) {
+  if (l.source_url && !window.__ownerListing) {   // 🏠 ogłoszenia właścicieli: brak portalu źródłowego, bez fallbacku og-image
     galleryImgs.push('/api/og-image?url=' + encodeURIComponent(l.source_url));
   }
   window.__galImgs = galleryImgs;

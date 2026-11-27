@@ -48,6 +48,7 @@ OFFER_PATH = {
     "domy": re.compile(r"/dol\d+$"),
     "klikmapa": re.compile(r"^/oferty/[a-z0-9-]+"),
     "szybko": re.compile(r"/oferta-\d+$"),
+    "domplace": re.compile(r"^/ogloszenie/[a-z0-9-]+-\d+$"),
 }
 
 # Markery w HTML strony oferty (200) oznaczające ofertę zdjętą — tylko jednoznaczne frazy/atrybuty, nie słowa z opisów.

@@ -411,9 +411,12 @@ def register(app, ctx: Dict[str, Any]) -> None:
         user = await user_from_request(request)
         broker = await _is_broker(user)
         total = await db.wanted.count_documents(q)
+        mine = []   # ogłoszenia zalogowanego właściciela — jedno zapytanie, dopasowanie w pamięci (bez N+1)
+        if user and not broker:
+            mine = [l async for l in db.listings.find({"source": "finderdom", "owner_id": str(user["_id"]), "status": "active"}).limit(50)]
         items = []
         async for w in db.wanted.find(q).sort("created_at", -1).skip(max(0, skip)).limit(max(1, min(limit, 100))):
-            items.append(_wanted_public(w, broker or (await _owner_matches(user, w))))
+            items.append(_wanted_public(w, broker or any(_wanted_matches_listing(w, l) for l in mine)))
         # mapa: liczba poszukiwań per miasto (tylko aktywne)
         pipeline = [{"$match": {"active": True, "expires_at": {"$gt": now}, "lat": {"$exists": True}}},
                     {"$group": {"_id": "$city", "n": {"$sum": 1}, "lat": {"$first": "$lat"}, "lng": {"$first": "$lng"}}}, {"$sort": {"n": -1}}, {"$limit": 300}]
@@ -441,11 +444,11 @@ def register(app, ctx: Dict[str, Any]) -> None:
     @app.delete("/api/my/wanted/{wanted_id}")
     async def delete_wanted(wanted_id: str, user: dict = Depends(current_user)):
         db = database()
-        try:
-            r = await db.wanted.update_one({"_id": ObjectId(wanted_id), "user_id": str(user["_id"])}, {"$set": {"active": False}})
+        try:   # usunięcie na wyraźne żądanie autora — kasujemy dane kontaktowe z bazy (RODO), filtr: własny wpis
+            r = await db.wanted.delete_one({"_id": ObjectId(wanted_id), "user_id": str(user["_id"])})
         except Exception:
             r = None
-        if not r or not r.matched_count:
+        if not r or not r.deleted_count:
             raise HTTPException(404, "Nie znaleziono poszukiwania")
         await db.alerts.update_many({"wanted_id": wanted_id}, {"$set": {"active": False}})
         return {"ok": True}

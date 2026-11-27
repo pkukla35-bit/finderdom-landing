@@ -7,7 +7,7 @@ Użycie:
   python scripts/scrape_portals.py --portal morizon --property mieszkanie --transaction sprzedaz [--city krakow] [--max-pages 5]
 Env: MONGODB_URI (lub MONGO_URL), MONGODB_DB
 """
-import argparse, html as htmllib, json, logging, os, re, sys, time
+import argparse, html as htmllib, json, logging, os, re, sys, time, unicodedata
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -795,11 +795,59 @@ def parse_szybko(html: str) -> List[Dict[str, Any]]:
     return out
 
 
+def url_domplace(prop, trans, city, page):
+    """domplace.pl (Nuxt) — publiczne JSON API /api/search?sort=newest (wszystkie kategorie w jednej liście, 50/str.).
+    Filtrowanie rodzaj/transakcja robi parser (propertyCategory, listingType) — dlatego tylko kombinacja mieszkanie/sprzedaz
+    pobiera listę, pozostałe zwracają None (jeden przebieg importuje wszystko)."""
+    if not (prop == "mieszkanie" and trans == "sprzedaz"): return None
+    return f"https://domplace.pl/api/search?sort=newest&pageSize=50&page={page}"
+
+
+_DP_CAT = {0: ("mieszkanie", "mieszkanie"), 1: ("dom", "dom"), 2: ("dzialka", "działka"), 3: ("lokal", "lokal"), 4: ("lokal", "lokal")}
+
+
+def parse_domplace(html: str) -> List[Dict[str, Any]]:
+    try:
+        data = json.loads(html).get("items") or []
+    except Exception:
+        return []
+    out = []
+    for o in data:
+        if o.get("isDemo") or o.get("isHidden") or o.get("currency", "PLN") != "PLN": continue
+        cat = _DP_CAT.get(o.get("propertyCategory"))
+        if not cat: continue
+        loc = [x.strip() for x in str(o.get("location") or "").split(",") if x.strip()]
+        city = loc[0].title() if loc and loc[0].isupper() else (loc[0] if loc else None)
+        district = loc[1].title() if len(loc) > 1 and not loc[1].lower().startswith(("ul.", "al.", "os.")) and not loc[1].endswith("ski") and not loc[1].endswith("cki") else None
+        street = next((x for x in loc[1:] if x.lower().startswith(("ul.", "al.", "os.", "pl."))), None)
+        ct = o.get("ownerCompanyType")
+        seller = "deweloper" if ct == "developer" else ("posrednik" if ct in ("agent", "company") or o.get("ownerCompanyName") else "prywatna")
+        photos = [("https://domplace.pl" + p["url"]) if str(p.get("url", "")).startswith("/") else p.get("url") for p in (o.get("photos") or []) if p.get("url")]
+        desc = re.sub(r"<[^>]+>", " ", str(o.get("description") or ""))
+        out.append({
+            "id": str(o["id"]), "url": f"https://domplace.pl/ogloszenie/{_slug(o.get('title') or 'oferta')}-{o['id']}", "title": (o.get("title") or "").strip(),
+            "price": float(o["price"]) if o.get("price") else None, "area": o.get("areaM2") or o.get("plotArea"), "rooms": o.get("rooms"),
+            "floor": o.get("floor"), "build_year": o.get("buildYear"), "image": photos[0] if photos else None, "images": photos[:12],
+            "loc0": city, "district": district, "street": street, "desc": _txt(desc)[:1500], "seller": seller,
+            "agency": o.get("ownerCompanyName") or None, "lat": o.get("latitude"), "lng": o.get("longitude"),
+            "posted_at": (o.get("createdAt") or "")[:19] + "+00:00" if o.get("createdAt") else None,
+            "market": {0: "pierwotny", 1: "pierwotny", 2: "wtorny"}.get(o.get("finishState")) if cat[0] in ("mieszkanie", "dom") and o.get("finishState") in (0, 1) else None,
+            "_prop": cat[0], "_trans": "wynajem" if (o.get("listingType") == 1 or (o.get("price") or 0) < 20000) else "sprzedaz",
+        })
+    return out
+
+
+def _slug(t: str) -> str:
+    t = unicodedata.normalize("NFKD", t.lower()).encode("ascii", "ignore").decode().replace("ł", "l")
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", t)).strip("-")[:80] or "oferta"
+
+
+PORTALS["domplace"] = {"url": url_domplace, "parse": parse_domplace}
 PORTALS["homeportal"] = {"url": url_homeportal, "parse": parse_homeportal}
 PORTALS["domy"] = {"url": url_domy, "parse": parse_domy}
 PORTALS["klikmapa"] = {"url": url_klikmapa, "parse": parse_klikmapa}
 PORTALS["szybko"] = {"url": url_szybko, "parse": parse_szybko}
-NATIONAL_LIST_PORTALS |= {"homeportal", "domy", "klikmapa", "szybko"}
+NATIONAL_LIST_PORTALS |= {"homeportal", "domy", "klikmapa", "szybko", "domplace"}
 CFFI_PORTALS |= {"sprzedajemy", "lento"}
 NATIONAL_LIST_PORTALS |= {"sprzedajemy", "lento"}
 _CFFI_SESSION = None
@@ -878,13 +926,14 @@ def guess_city(portal: str, it: Dict[str, Any]) -> Optional[str]:
         return toks[0] if toks and toks[0] else None
     elif portal == "listaprzetargow":
         return (it.get("loc0") or "").strip() or None   # „Radom, Południe” → Radom
-    elif portal in ("okolica", "krn", "allegrolokalnie", "sprzedajemy", "lento", "homeportal", "domy", "klikmapa", "szybko"):
+    elif portal in ("okolica", "krn", "allegrolokalnie", "sprzedajemy", "lento", "homeportal", "domy", "klikmapa", "szybko", "domplace"):
         t = (it.get("loc0") or "").strip()              # okolica: „Szczecin, Dąbie, ul. X”; krn: addressLocality; allegro: <address>
         return (t.title() if t.islower() else t) or None
     return None
 
 
 def normalize(portal: str, it: Dict[str, Any], city_name: str, prop: str, trans: str) -> Dict[str, Any]:
+    prop, trans = it.get("_prop") or prop, it.get("_trans") or trans   # domplace: lista mieszana — rodzaj/transakcja z karty
     if city_name in ("Polska",) or city_name.islower():   # tryb regionów (nazwa województwa) / cała Polska
         city_name = guess_city(portal, it) or city_name
     blob = f"{it['title']} {it.get('desc', '')}".lower()
@@ -906,7 +955,7 @@ def normalize(portal: str, it: Dict[str, Any], city_name: str, prop: str, trans:
         "location": ", ".join(x for x in [city_name, it.get("district"), it.get("street")] if x),
         "price": price, "area_m2": area, "price_pm2": round(price / area, 2) if price and area and area > 0 else None,
         "rooms": int(it["rooms"]) if it.get("rooms") else infer_rooms(it.get("title"), it.get("desc")), "floor": it.get("floor"),
-        "image": it.get("image"), "images": [it["image"]] if it.get("image") else [],
+        "image": it.get("image"), "images": (it.get("images") or ([it["image"]] if it.get("image") else [])),
         "description": (it.get("desc") or "")[:2000], "transaction_type": trans, "seller_type": seller,
         "last_seen_at": now_iso, "scraped_via": "portal-direct",
     }
@@ -961,6 +1010,7 @@ def main():
     if a.portal == "listaprzetargow": a.max_pages = max(a.max_pages, 4)  # lista ogólnopolska, 25/str. — 4 strony = ~100 najnowszych
     if a.portal in ("okolica", "krn", "sprzedajemy", "lento"): a.max_pages = max(a.max_pages, 4)   # listy ogólnopolskie 25–40/str.
     if a.portal in ("homeportal", "klikmapa", "szybko"): a.max_pages = max(a.max_pages, 4)         # 10–12 kart/str. (27.11)
+    if a.portal == "domplace": a.max_pages = max(a.max_pages, 3)                                     # 50/str., wszystkie kategorie naraz
     if a.portal == "domy": a.max_pages = max(a.max_pages, 3); a.delay = max(a.delay, 2.0)           # 25/str.; zrywa połączenia przy szybkich zapytaniach
     if a.portal == "allegrolokalnie": a.max_pages = max(a.max_pages, 6)    # 60/str., ale ~90% kart to syndykacja z Gratki (pomijana)
     if a.portal in CFFI_PORTALS: a.delay = max(a.delay, 2.5)                # krn.pl zrywa połączenia przy szybkich zapytaniach
@@ -1059,7 +1109,7 @@ def _verify_adresowo_sellers(coll, prop: str, trans: str) -> None:
 CHAIN_AFTER = {"dzialka": [("lokal", "sprzedaz"), ("lokal", "wynajem")]}
 # Nowe portale (5.11.2026) jadą w zadaniach istniejących portali (ta sama property/transaction):
 PORTAL_CHAIN = {"adresowo": ["odwlasciciela", "allegrolokalnie", "szybko"], "domiporta": ["gethome", "krn", "klikmapa"],
-                "gratka": ["listaprzetargow", "sprzedajemy", "domy"], "morizon": ["okolica", "lento", "homeportal"]}
+                "gratka": ["listaprzetargow", "sprzedajemy", "domy"], "morizon": ["okolica", "lento", "homeportal", "domplace"]}
 # listaprzetargow (5.11): przetargi i licytacje, badge 🔨; okolica/krn/allegrolokalnie (16.11); homeportal/domy/klikmapa/szybko (27.11)
 
 

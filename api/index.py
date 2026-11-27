@@ -9575,6 +9575,6 @@ _WL_CTX: Dict[str, Any] = {
     "effective_tier_async": effective_tier_async, "BUSINESS_TIERS": BUSINESS_TIERS, "ADMIN_EMAILS": ADMIN_EMAILS,
     "CITY_COORDS": CITY_COORDS, "normalize_city": _normalize_city_name, "MAIL_PUBLIC_DOMAIN": MAIL_PUBLIC_DOMAIN,
     "ai_cfg": _ai_cfg, "AI_PROXY_URL": AI_PROXY_URL, "httpx": httpx, "logger": logger, "escape": escape,
-    "user_from_request": _user_from_request,
+    "user_from_request": _user_from_request, "require_admin": require_admin,
 }
 _wl.register(app, _WL_CTX)

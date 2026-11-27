@@ -107,7 +107,7 @@ def register(app, ctx: Dict[str, Any]) -> None:
     effective_tier_async, BUSINESS_TIERS, ADMIN_EMAILS = ctx["effective_tier_async"], ctx["BUSINESS_TIERS"], ctx["ADMIN_EMAILS"]
     CITY_COORDS, normalize_city, DOMAIN, ai_cfg, AI_URL, httpx, logger, escape = (
         ctx["CITY_COORDS"], ctx["normalize_city"], ctx["MAIL_PUBLIC_DOMAIN"], ctx["ai_cfg"], ctx["AI_PROXY_URL"], ctx["httpx"], ctx["logger"], ctx["escape"])
-    user_from_request = ctx["user_from_request"]
+    user_from_request, require_admin = ctx["user_from_request"], ctx["require_admin"]
 
     def _coords(city: str):
         return CITY_COORDS.get(normalize_city(city))
@@ -561,6 +561,54 @@ def register(app, ctx: Dict[str, Any]) -> None:
         cities = [{"city": c["_id"], "n": c["n"], "lat": c["lat"], "lng": c["lng"]} async for c in db.listings.aggregate(pipeline)]
         response.headers["Cache-Control"] = "public, max-age=60, s-maxage=120"
         return {"total": total, "items": items, "cities": cities}
+
+    # ───────────────── panel admina → „Nowości”: poszukiwania i ogłoszenia właścicieli ─────────────────
+    @app.get("/api/admin/wlasciciele")
+    async def admin_wlasciciele(limit: int = 50, admin: dict = Depends(require_admin)):
+        db = database(); now = _now(); d7 = now - timedelta(days=7)
+        def _dt(v): return v.isoformat() if isinstance(v, datetime) else v
+        wanted = []
+        async for w in db.wanted.find({}).sort("created_at", -1).limit(max(1, min(limit, 200))):
+            wanted.append({"id": str(w["_id"]), "created_at": _dt(w.get("created_at")), "active": bool(w.get("active")), "expires_at": _dt(w.get("expires_at")),
+                           "transaction": w.get("transaction"), "type": TYPE_LABEL.get(w.get("type"), w.get("type")), "city": w.get("city"), "district": w.get("district"),
+                           "radius_km": w.get("radius_km"), "price_to": w.get("price_to"), "area_from": w.get("area_from"), "rooms": w.get("rooms") or [], "market": w.get("market"),
+                           "note": w.get("note"), "name": w.get("name"), "phone": w.get("phone"), "email": w.get("email"), "logged_in": bool(w.get("user_id"))})
+        listings = []
+        async for l in db.listings.find({"source": "finderdom"}).sort("added_at", -1).limit(max(1, min(limit, 200))):
+            listings.append({"id": l.get("external_id"), "created_at": l.get("added_at"), "status": l.get("status"), "expires_at": _dt(l.get("expires_at")),
+                             "transaction": l.get("transaction_type"), "type": l.get("type"), "city": l.get("city"), "district": l.get("district"), "title": l.get("title"),
+                             "price": l.get("price"), "area_m2": l.get("area_m2"), "rooms": l.get("rooms"), "photos": len(l.get("images") or []),
+                             "seller_type": l.get("seller_type"), "agency_name": l.get("agency_name"), "phone": l.get("phone"), "owner_email": l.get("owner_email"),
+                             "refreshed_at": _dt(l.get("refreshed_at")), "url": f"/oferta?id={l.get('external_id')}"})
+        brokers_region = await db.users.count_documents({"wanted_notify.mode": "region"})
+        brokers_off = await db.users.count_documents({"wanted_notify.mode": "off"})
+        return {"wanted": {"active": await db.wanted.count_documents({"active": True, "expires_at": {"$gt": now}}), "d7": await db.wanted.count_documents({"created_at": {"$gt": d7}}),
+                           "total": await db.wanted.count_documents({}), "anon": await db.wanted.count_documents({"user_id": None}), "items": wanted},
+                "listings": {"active": await db.listings.count_documents({"source": "finderdom", "status": "active"}), "d7": await db.listings.count_documents({"source": "finderdom", "added_at": {"$gt": d7.isoformat()}}),
+                             "total": await db.listings.count_documents({"source": "finderdom"}), "with_photos": await db.listings.count_documents({"source": "finderdom", "status": "active", "images.0": {"$exists": True}}), "items": listings},
+                "brokers": {"region": brokers_region, "off": brokers_off}}
+
+    @app.post("/api/admin/wlasciciele/wanted/{wanted_id}/toggle")
+    async def admin_toggle_wanted(wanted_id: str, admin: dict = Depends(require_admin)):
+        db = database()
+        w = await db.wanted.find_one({"_id": ObjectId(wanted_id)})
+        if not w: raise HTTPException(404, "Brak poszukiwania")
+        new = not bool(w.get("active"))
+        await db.wanted.update_one({"_id": w["_id"]}, {"$set": {"active": new, "admin_toggled_at": _now()}})
+        await db.alerts.update_many({"wanted_id": wanted_id}, {"$set": {"active": new}})
+        return {"ok": True, "active": new}
+
+    @app.post("/api/admin/wlasciciele/listing/{external_id}/toggle")
+    async def admin_toggle_listing(external_id: str, admin: dict = Depends(require_admin)):
+        db = database()
+        l = await db.listings.find_one({"source": "finderdom", "external_id": external_id})
+        if not l: raise HTTPException(404, "Brak ogłoszenia")
+        new = "hidden" if l.get("status") == "active" else "active"; now = _now()
+        if new == "hidden":
+            await db.listings.update_one({"_id": l["_id"]}, {"$set": {"status": new, "updated_at": now, "is_stale": True, "stale_since": now, "stale_reason": "admin-hidden"}})
+        else:
+            await db.listings.update_one({"_id": l["_id"]}, {"$set": {"status": new, "updated_at": now}, "$unset": {"is_stale": "", "stale_since": "", "stale_reason": ""}})
+        return {"ok": True, "status": new}
 
     @app.get("/api/wlasciciele/stats")
     async def owners_stats(response: Response):

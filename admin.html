@@ -164,6 +164,12 @@
       <span id="featMsg" class="mono" style="color:#8ba3d4;font-size:12px;margin-left:auto"></span>
     </div>
     <div class="stats-grid" id="featCards"></div>
+    <div class="section-title" style="margin-top:28px">📣 Sprzedam / Poszukuję — <span style="color:#8ba3d4;font-weight:600;font-size:13px">ogłoszenia właścicieli i baza poszukiwań</span> <a href="/ogloszenia-wlascicieli" target="_blank" style="font-size:12px;color:#FFB800;margin-left:8px">mapa ogłoszeń ↗</a> <a href="/poszukiwania" target="_blank" style="font-size:12px;color:#FFB800;margin-left:8px">mapa poszukiwań ↗</a></div>
+    <div class="stats-grid" id="wlCards"></div>
+    <div class="section-title" style="margin-top:20px;font-size:15px">🔎 Poszukiwania (najnowsze)</div>
+    <div class="table-wrap"><table><thead><tr><th>Kiedy</th><th>Kto</th><th>Szuka</th><th>Gdzie</th><th>Budżet</th><th>Kryteria</th><th>Status</th><th></th></tr></thead><tbody id="wlWanted"></tbody></table></div>
+    <div class="section-title" style="margin-top:20px;font-size:15px">🏠 Ogłoszenia właścicieli (najnowsze)</div>
+    <div class="table-wrap"><table><thead><tr><th>Kiedy</th><th>Właściciel</th><th>Ogłoszenie</th><th>Cena</th><th>Dane</th><th>Zdjęć</th><th>Status</th><th></th></tr></thead><tbody id="wlListings"></tbody></table></div>
     <div class="section-title" style="margin-top:28px">⭐ Oferty z alertem wyłączności (biura)</div>
     <div class="table-wrap"><table><thead><tr><th>Biuro (e-mail)</th><th>Oferta</th><th>Cena</th><th>Ogłoszeń</th><th>Pośredników</th><th>Ceny kopii</th><th>Biura</th><th>Alerty</th></tr></thead><tbody id="featExcl"></tbody></table></div>
     <div class="section-title" style="margin-top:28px">🔔 Obserwowane ceny (klienci)</div>
@@ -388,6 +394,7 @@ function initTabs(){
 }
 
 async function loadFeatures(){
+  loadWlasciciele();
   const pln = n => (n == null ? '—' : Number(n).toLocaleString('pl-PL') + ' zł');
   const when = iso => iso ? escapeHtml(iso.slice(0,16).replace('T',' ')) : '—';
   try {
@@ -409,6 +416,34 @@ async function loadFeatures(){
       <td><small>${[x.city, x.type, x.price_max ? 'do ' + pln(x.price_max) : '', (x.keywords || []).length ? '📝 ' + x.keywords.join(', ') : ''].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</small></td></tr>`).join('') || '<tr><td colspan="4" style="color:#8ba3d4">Brak zapytań.</td></tr>';
     document.getElementById('featAg').innerHTML = d.agency_names.map(a => `<tr><td>${escapeHtml(a.source)}</td><td>${a.total.toLocaleString('pl-PL')}</td><td>${a.named.toLocaleString('pl-PL')}</td><td>${a.total ? Math.round(a.named / a.total * 100) : 0}%</td></tr>`).join('');
   } catch (e) { document.getElementById('featMsg').textContent = 'Błąd: ' + (e.message || e); }
+}
+async function loadWlasciciele(){
+  const pln = n => (n == null ? '—' : Number(n).toLocaleString('pl-PL') + ' zł');
+  const when = iso => iso ? escapeHtml(String(iso).slice(0,16).replace('T',' ')) : '—';
+  try {
+    const d = await api('/admin/wlasciciele');
+    document.getElementById('wlCards').innerHTML = `
+      <div class="card"><div class="card-title">🔎 Poszukiwania aktywne</div><div class="card-value amber">${d.wanted.active}</div><div class="card-sub">${d.wanted.d7} nowych w 7 dni · ${d.wanted.total} łącznie · ${d.wanted.anon} bez konta</div></div>
+      <div class="card"><div class="card-title">🏠 Ogłoszenia właścicieli aktywne</div><div class="card-value">${d.listings.active}</div><div class="card-sub">${d.listings.d7} nowych w 7 dni · ${d.listings.with_photos} ze zdjęciami · ${d.listings.total} łącznie</div></div>
+      <div class="card"><div class="card-title">🏢 Biura — leady z poszukiwań</div><div class="card-value">${d.brokers.region}</div><div class="card-sub">ustawiło region · ${d.brokers.off} wyłączyło · reszta dostaje całą Polskę</div></div>`;
+    document.getElementById('wlWanted').innerHTML = d.wanted.items.map(w => `<tr style="${w.active ? '' : 'opacity:.5'}">
+      <td>${when(w.created_at)}</td><td>${escapeHtml(w.name || '')}<br><small style="color:#8ba3d4">${escapeHtml(w.phone || '')}<br>${escapeHtml(w.email || '')}${w.logged_in ? '' : ' · <span title="dodane bez konta">anon</span>'}</small></td>
+      <td>${w.transaction === 'wynajem' ? 'Wynajmę' : 'Kupię'} · ${escapeHtml(w.type || '')}</td><td>${escapeHtml(w.city || '')}${w.district ? ', ' + escapeHtml(w.district) : ''}${w.radius_km ? ' <small style="color:#8ba3d4">+' + w.radius_km + ' km</small>' : ''}</td>
+      <td>${pln(w.price_to)}${w.transaction === 'wynajem' ? '/mies.' : ''}</td><td><small>${[w.area_from ? 'od ' + w.area_from + ' m²' : '', (w.rooms || []).length ? w.rooms.join(', ') + ' pok.' : '', w.market ? 'rynek ' + w.market : '', w.note ? '„' + w.note + '”' : ''].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</small></td>
+      <td>${w.active ? '<span style="color:#4ade80">aktywne</span>' : '<span style="color:#8ba3d4">wyłączone</span>'}<br><small style="color:#8ba3d4">do ${when(w.expires_at).slice(0,10)}</small></td>
+      <td><a href="/poszukiwania?id=${encodeURIComponent(w.id)}" target="_blank" style="color:#FFB800">↗</a> <button class="refresh-btn" style="padding:3px 8px;font-size:11px" onclick="wlToggle('wanted','${w.id}')">${w.active ? 'wyłącz' : 'włącz'}</button></td></tr>`).join('') || '<tr><td colspan="8" style="color:#8ba3d4">Brak poszukiwań.</td></tr>';
+    document.getElementById('wlListings').innerHTML = d.listings.items.map(l => `<tr style="${l.status === 'active' ? '' : 'opacity:.5'}">
+      <td>${when(l.created_at)}</td><td>${l.seller_type === 'prywatna' ? '👤' : '🏢 ' + escapeHtml(l.agency_name || '')}<br><small style="color:#8ba3d4">${escapeHtml(l.owner_email || '')}<br>${escapeHtml(l.phone || '')}</small></td>
+      <td><a href="${escapeHtml(l.url)}" target="_blank" style="color:#FFB800">${escapeHtml(l.title || l.id)}</a><br><small style="color:#8ba3d4">${l.transaction === 'wynajem' ? 'Wynajem' : 'Sprzedaż'} · ${escapeHtml(l.type || '')} · ${escapeHtml(l.city || '')}${l.district ? ', ' + escapeHtml(l.district) : ''}</small></td>
+      <td>${pln(l.price)}${l.transaction === 'wynajem' ? '/mies.' : ''}</td><td><small>${[l.area_m2 ? l.area_m2 + ' m²' : '', l.rooms ? l.rooms + ' pok.' : ''].filter(Boolean).join(' · ') || '—'}</small></td><td>${l.photos}</td>
+      <td>${l.status === 'active' ? '<span style="color:#4ade80">aktywne</span>' : '<span style="color:#f87171">' + escapeHtml(l.status || '') + '</span>'}<br><small style="color:#8ba3d4">do ${when(l.expires_at).slice(0,10)}</small></td>
+      <td><button class="refresh-btn" style="padding:3px 8px;font-size:11px" onclick="wlToggle('listing','${escapeHtml(l.id)}')">${l.status === 'active' ? 'ukryj' : 'pokaż'}</button></td></tr>`).join('') || '<tr><td colspan="8" style="color:#8ba3d4">Nikt jeszcze nie dodał ogłoszenia.</td></tr>';
+  } catch (e) { document.getElementById('wlCards').innerHTML = '<div class="card"><div class="card-sub">Błąd: ' + escapeHtml(e.message || String(e)) + '</div></div>'; }
+}
+async function wlToggle(kind, id){
+  if (!confirm(kind === 'wanted' ? 'Przełączyć aktywność tego poszukiwania (i jego alert e-mail)?' : 'Przełączyć widoczność tego ogłoszenia w wyszukiwarce?')) return;
+  try { const r = await fetch(API_BASE + '/admin/wlasciciele/' + kind + '/' + encodeURIComponent(id) + '/toggle', { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken() } }); if (!r.ok) throw new Error('HTTP ' + r.status); loadWlasciciele(); }
+  catch (e) { alert('Błąd: ' + (e.message || e)); }
 }
 async function runJob(path, label){
   const m = document.getElementById('featMsg'); m.textContent = '⏳ ' + label + '…';

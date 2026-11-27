@@ -154,7 +154,19 @@ EXTRACTORS: Dict[str, Callable[[str], List[str]]] = {
     "lento": _generic,
     "allegrolokalnie": _generic,
     "listaprzetargow": _generic,
+    "homeportal": lambda h: _dedupe([u for u in re.findall(r'(https://homeportal\.pl/agencies/[^"\s]+?_l\.jpg/?)', h)]) or _generic(h),
+    "domy": _generic,
+    "klikmapa": lambda h: _dedupe(re.findall(r'(https://cdn\d*\.beldom\.pl/imgs/[^"&\s]+?_800\.jpg)', h.replace("&quot;", '"'))) or _generic(h),
+    "szybko": lambda h: _dedupe(re.findall(r'(https://mediaproxy\.szybko\.pl/1180x600/photo/asset/[^"\s]+)', h)) or _generic(h),
 }
+
+
+def _dedupe(urls):
+    seen, out = set(), []
+    for u in urls:
+        if u not in seen:
+            seen.add(u); out.append(u)
+    return out
 
 
 def extract_gallery(portal: str, html: str) -> List[str]:

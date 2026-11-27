@@ -44,6 +44,10 @@ OFFER_PATH = {
     "krn": re.compile(r"/oferta/|/\d{5,}"),
     "okolica": re.compile(r"/oferta|/\d{4,}"),
     "listaprzetargow": re.compile(r"^/oferty/\d+-"),
+    "homeportal": re.compile(r"/[A-Z0-9]+-[A-Z]{2}-\d+/?$"),
+    "domy": re.compile(r"/dol\d+$"),
+    "klikmapa": re.compile(r"^/oferty/[a-z0-9-]+"),
+    "szybko": re.compile(r"/oferta-\d+$"),
 }
 
 # Markery w HTML strony oferty (200) oznaczające ofertę zdjętą — tylko jednoznaczne frazy/atrybuty, nie słowa z opisów.
@@ -64,6 +68,9 @@ GONE_MARKERS = {
     "krn": [re.compile(r"Oferta nieaktualna|Ogłoszenie nieaktualne|Oferta archiwalna", re.I)],
     "okolica": [re.compile(r"Oferta nieaktualna|Ogłoszenie nieaktualne|Oferta archiwalna", re.I)],
     "listaprzetargow": [re.compile(r"Przetarg zakończony|Ogłoszenie nieaktualne|Oferta archiwalna", re.I)],
+    # homeportal/domy/klikmapa/szybko (27.11): brak zweryfikowanych markerów — szybko.pl ma „Oferta nieaktualna” w formularzu zgłoszenia
+    # na KAŻDEJ stronie, więc decydują tylko 404/410 i redirect poza stronę oferty.
+    "klikmapa": [re.compile(r'"isExpired"\s*:\s*true|&quot;isExpired&quot;:true')],
 }
 
 

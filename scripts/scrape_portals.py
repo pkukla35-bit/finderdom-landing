@@ -617,6 +617,188 @@ def parse_lento(html: str) -> List[Dict[str, Any]]:
 
 PORTALS["sprzedajemy"] = {"url": url_sprzedajemy, "parse": parse_sprzedajemy}
 PORTALS["lento"] = {"url": url_lento, "parse": parse_lento}
+
+
+# ───────────────────────── 27.11.2026: homeportal.pl, domy.pl, klikmapa.pl, szybko.pl (prośba użytkownika) ─────────────────────────
+def _pl_date(s: Optional[str]) -> Optional[str]:
+    """„18-11-2026” / „18.11.2026” / „27 lis 2026” / „dzisiaj” / „wczoraj” → ISO UTC."""
+    if not s: return None
+    t = s.strip().lower()
+    m = re.search(r"(\d{1,2})[.-](\d{1,2})[.-](\d{4})", t)
+    if m:
+        try: return datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)), 12, tzinfo=timezone.utc).isoformat()
+        except ValueError: return None
+    m = re.search(r"(\d{1,2})\s+([a-ząćęłńóśźż]{3})\w*\s+(\d{4})", t)
+    if m and m.group(2) in _PL_MONTHS:
+        return datetime(int(m.group(3)), _PL_MONTHS[m.group(2)], int(m.group(1)), 12, tzinfo=timezone.utc).isoformat()
+    return _rel_date(t)
+
+
+def url_homeportal(prop, trans, city, page):
+    """homeportal.pl — portal biur (agencje publikują bezpośrednio). Lista ogólnopolska SSR, 10 kart/str., sort=addedDesc."""
+    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki", "lokal": "lokale"}[prop]
+    if prop in ("dzialka", "lokal") and trans == "wynajem": return None
+    return f"https://homeportal.pl/{trans}/{seg}/?sort=addedDesc" + (f"&page={page}" if page > 1 else "")
+
+
+def parse_homeportal(html: str) -> List[Dict[str, Any]]:
+    out = []
+    for m in re.finditer(r'<article class="property-card.*?</article>', html, re.S):
+        c = m.group(0)
+        url = re.search(r'<a href="(/(?:sprzedaz|wynajem)/[^"]+/([A-Z0-9-]+)/)"', c)
+        if not url: continue
+        price = re.search(r'<h3[^>]*>([\d\s]+)\s*zł', c)
+        area = re.search(r'Powierzchnia\s*([\d.,]+)\s*m', c)
+        rooms = re.search(r'Ilość pokoi\s*(\d+)', c)
+        by = re.search(r'Rok Budowy\s*(\d{4})', c)
+        loc = re.search(r'<p class="text-xs text-gray-600 mt-1">([^<]*)</p>', c)
+        img = re.search(r'<img src="([^"]+)"', c)
+        added = re.search(r'leading-tight">\s*(\d{2}-\d{2}-\d{4})', c)
+        agency = re.search(r'/agencies/([^/]+)/', c)
+        parts = [p.strip() for p in _txt(loc.group(1)).split(",")] if loc else []
+        # „lubelskie, Lublin, Śródmieście” → voi, miasto, dzielnica
+        out.append({
+            "id": url.group(2), "url": "https://homeportal.pl" + url.group(1),
+            "title": "",
+            "price": _money(price.group(1)) if price else None, "area": _money(area.group(1)) if area else None,
+            "rooms": int(rooms.group(1)) if rooms else None, "floor": None, "build_year": int(by.group(1)) if by else None,
+            "image": img.group(1) if img else None,
+            "loc0": parts[1] if len(parts) > 1 else (parts[0] if parts else None),
+            "district": parts[2] if len(parts) > 2 else None, "street": None,
+            "desc": "", "seller": "posrednik", "agency": agency.group(1).replace("-", " ").title() if agency else None,
+            "posted_at": _pl_date(added.group(1) if added else None),
+        })
+    for it in out:
+        it["title"] = " ".join(x for x in [it.get("loc0"), it.get("district")] if x)
+    return out
+
+
+def url_domy(prop, trans, city, page):
+    """domy.pl (grupa Morizon-Gratka) — lista ogólnopolska, 25/str., sort po dacie. Karty „domy-gratka-ID” to syndykacja z Gratki (pomijane)."""
+    seg = {"mieszkanie": "mieszkania", "dom": "domy", "dzialka": "dzialki", "lokal": "lokale"}[prop]
+    if prop in ("dzialka", "lokal") and trans == "wynajem": return None
+    tr = "&ps%5Btransaction%5D=2" if trans == "wynajem" else ""
+    return f"https://domy.pl/{seg}---pl?ps%5Bsort_order%5D=date&ps%5Bsort_asc%5D=0&limit=25&page={page}{tr}"
+
+
+def parse_domy(html: str) -> List[Dict[str, Any]]:
+    out = []
+    for m in re.finditer(r'<article class="propertyBox.*?</article>', html, re.S):
+        c = m.group(0)
+        link = re.search(r'title="([^"]*)" class="property_link" href="(https://domy\.pl/[^"]+/dol(\d+))"', c)
+        alt = re.search(r'<img alt="([^"]*)"', c)
+        if not link: continue
+        if alt and "domy-gratka-" in alt.group(1): continue   # ta sama oferta jest już z Gratki
+        price = re.search(r'<span class="price">\s*([\d\s\xa0&nbsp;]+?)\s*(?:&nbsp;|\s)PLN', c)
+        area = re.search(r'<span class="area">([\d\s,.]+)\s*m', c)
+        floor = re.search(r'piętro:(?:&nbsp;|\s)*(\d+)', c)
+        desc = re.search(r'<span class="descriptionShort">(.*?)</span>', c, re.S)
+        lat = re.search(r'data-lat="([\d.]+)"', c); lng = re.search(r'data-lng="([\d.]+)"', c)
+        added = re.search(r'addedAt">\s*data:\s*<strong>([^<]*)<', c)
+        img = re.search(r'data-original="([^"]+)"', c)
+        title = _txt(link.group(1))
+        loc_txt = _txt(re.search(r'class="property_link"[^>]*>(.*?)</a>', c, re.S).group(1))
+        parts = [p.strip() for p in loc_txt.split(",") if p.strip()]
+        # „Warszawa, Bemowo, Lazurowa” / „mazowieckie, Warszawa, …” / „ostródzki, Ostróda, Jana Pawła II”
+        if parts and (parts[0].islower() or re.search(r"(ski|cki|zki)$", parts[0])) and len(parts) > 1: parts = parts[1:]
+        blob = (title + " " + (alt.group(1) if alt else "")).lower()
+        seller = "deweloper" if "w inwestycji" in blob else ("prywatna" if re.search(r"bezpośrednio|od właściciela|bez pośredni", _txt(desc.group(1)).lower() if desc else "") else None)
+        out.append({
+            "id": link.group(3), "url": link.group(2), "title": title,
+            "price": _money(price.group(1).replace("&nbsp;", "")) if price else None, "area": _money(area.group(1)) if area else None,
+            "rooms": None, "floor": int(floor.group(1)) if floor else None,
+            "image": img.group(1) if img else None, "loc0": parts[0] if parts else None,
+            "district": parts[1] if len(parts) > 2 else None, "street": parts[-1] if len(parts) > 1 else None,
+            "desc": _txt(desc.group(1)) if desc else "", "seller": seller,
+            "lat": float(lat.group(1)) if lat else None, "lng": float(lng.group(1)) if lng else None,
+            "posted_at": _pl_date(added.group(1) if added else None),
+        })
+    return out
+
+
+def url_klikmapa(prop, trans, city, page):
+    """klikmapa.pl (sieć beldom.pl) — Inertia: lista w atrybucie data-page (JSON), 12/str., domyślnie od najnowszych."""
+    seg = {"mieszkanie": "mieszkanie", "dom": "dom", "dzialka": "dzialka", "lokal": "miejsce_uzytkowe"}[prop]
+    if prop == "dzialka" and trans == "wynajem": return None
+    return f"https://klikmapa.pl/oferty?offer_type={trans}&real_estate_type={seg}&page={page}"
+
+
+def parse_klikmapa(html: str) -> List[Dict[str, Any]]:
+    m = re.search(r'data-page="([^"]*)"', html)
+    if not m: return []
+    try:
+        data = json.loads(htmllib.unescape(m.group(1)))["props"]["offers"]["data"]
+    except Exception:
+        return []
+    out = []
+    for o in data:
+        if not o.get("url") or o.get("is_expired") or o.get("active") == 0: continue
+        loc = o.get("location") or {}
+        nm = lambda k: ((loc.get(k) or {}).get("name") or "").strip()
+        coords = loc.get("coords") or {}
+        price = (o.get("price") or {}).get("value")
+        ut = o.get("user_type")
+        seller = "prywatna" if ut == "private" else ("deweloper" if (o.get("business_profile") == "developer" or o.get("is_investment")) else "posrednik")
+        out.append({
+            "id": str(o["id"]), "url": o["url"], "title": re.sub(r"\b([A-ZĄĆĘŁŃÓŚŹŻ]{2,})\b", lambda mm: mm.group(1).title(), o.get("title") or ""),
+            "price": float(price) if price else None, "area": float(o["object_size"]) if o.get("object_size") else None,
+            "rooms": o.get("rooms"), "floor": None, "image": o.get("offer_thumbnail"),
+            "loc0": nm("place").title() if nm("place") else None, "district": nm("district").title() or None, "street": nm("street").title() or None,
+            "desc": "", "seller": seller, "market": {"1": "pierwotny", "2": "wtorny"}.get(str(o.get("market_type") or "")),
+            "lat": float(coords["lat"]) if coords.get("lat") else None, "lng": float(coords["lon"]) if coords.get("lon") else None,
+            "posted_at": o.get("created_at"),
+        })
+    return out
+
+
+def url_szybko(prop, trans, city, page):
+    """szybko.pl — portal biur i deweloperów. Lista ogólnopolska SSR (schema.org), 12/str., sort=newest, strona=N."""
+    seg = {"mieszkanie": "lokal-mieszkalny+mieszkanie", "dom": "dom", "dzialka": "dzialka", "lokal": "nieruchomosci-komercyjne"}[prop]
+    t = "na-wynajem" if trans == "wynajem" else "na-sprzedaz"
+    return f"https://www.szybko.pl/l/{t}/{seg}?sort=newest" + (f"&strona={page}" if page > 1 else "")
+
+
+def parse_szybko(html: str) -> List[Dict[str, Any]]:
+    out = []
+    for m in re.finditer(r'<div id="asset-\d+" data-assetid="(\d+)".*?class="listing-footer">.*?</div>\s*</div>', html, re.S):
+        oid, c = m.group(1), m.group(0)
+        url = re.search(r'<a href="(/o/[^"]+)"', c)
+        if not url: continue
+        price = re.search(r'itemprop="price" content="([\d.]+)"', c)
+        title = re.search(r'class="listing-title-heading[^"]*"[^>]*>\s*([^<]*?)\s*</a>', c)
+        addr = re.search(r'<i class="fa fa-map-marker"></i>\s*([^<]*?)\s*</a>', c)
+        lat = re.search(r'data-lat="([\d.]+)"', c); lon = re.search(r'data-lon="([\d.]+)"', c)
+        area = re.search(r'asset-feature area">([\d.,]+)\s*m', c)
+        rooms = re.search(r'asset-feature rooms">(\d+)', c)
+        by = re.search(r'asset-feature year_built">(\d{4})', c)
+        desc = re.search(r'itemprop="description"[^>]*>(.*?)</span>', c, re.S)
+        img = re.search(r'<link itemprop="image" href="([^"]+)"', c)
+        added = re.search(r'asset-listing-date">.*?<span class="hidden-sm">\s*([^<]*?)\s*</span>', c, re.S)
+        agent = re.search(r'class="asset-listing-owner">([^<]*)<', c)
+        is_agent = bool(re.search(r'/posrednicy-nieruchomosci/|/deweloperzy/', c))
+        # „Piastów (Mazowieckie, gm. Piastów)” / „Warszawa Wola (Mazowieckie, …)”
+        a = re.sub(r"\(.*?\)", "", _txt(addr.group(1))).strip().rstrip(",") if addr else ""
+        toks = [t.strip(",") for t in a.split() if t.strip(",")]
+        city_name = " ".join(toks[:2]) if len(toks) > 1 and toks[1][0].isupper() and toks[0] in ("Nowy", "Nowa", "Nowe", "Zielona", "Gorzów", "Jelenia", "Dąbrowa", "Ruda", "Stalowa", "Tomaszów", "Piotrków", "Ostrów", "Bielsko", "Kędzierzyn") else (toks[0] if toks else None)
+        out.append({
+            "id": oid, "url": "https://www.szybko.pl" + url.group(1), "title": _txt(title.group(1)) if title else "",
+            "price": float(price.group(1)) if price else None, "area": _money(area.group(1)) if area else None,
+            "rooms": int(rooms.group(1)) if rooms else None, "floor": None, "build_year": int(by.group(1)) if by else None,
+            "image": img.group(1) if img else None, "loc0": city_name,
+            "district": " ".join(toks[len(city_name.split()):]) or None if city_name else None, "street": None,
+            "desc": _txt(desc.group(1)) if desc else "", "seller": "posrednik" if is_agent else None,
+            "agency": None,   # w stopce karty jest agent (osoba), nie nazwa biura
+            "lat": float(lat.group(1)) if lat else None, "lng": float(lon.group(1)) if lon else None,
+            "posted_at": _pl_date(added.group(1) if added else None),
+        })
+    return out
+
+
+PORTALS["homeportal"] = {"url": url_homeportal, "parse": parse_homeportal}
+PORTALS["domy"] = {"url": url_domy, "parse": parse_domy}
+PORTALS["klikmapa"] = {"url": url_klikmapa, "parse": parse_klikmapa}
+PORTALS["szybko"] = {"url": url_szybko, "parse": parse_szybko}
+NATIONAL_LIST_PORTALS |= {"homeportal", "domy", "klikmapa", "szybko"}
 CFFI_PORTALS |= {"sprzedajemy", "lento"}
 NATIONAL_LIST_PORTALS |= {"sprzedajemy", "lento"}
 _CFFI_SESSION = None
@@ -695,7 +877,7 @@ def guess_city(portal: str, it: Dict[str, Any]) -> Optional[str]:
         return toks[0] if toks and toks[0] else None
     elif portal == "listaprzetargow":
         return (it.get("loc0") or "").strip() or None   # „Radom, Południe” → Radom
-    elif portal in ("okolica", "krn", "allegrolokalnie", "sprzedajemy", "lento"):
+    elif portal in ("okolica", "krn", "allegrolokalnie", "sprzedajemy", "lento", "homeportal", "domy", "klikmapa", "szybko"):
         t = (it.get("loc0") or "").strip()              # okolica: „Szczecin, Dąbie, ul. X”; krn: addressLocality; allegro: <address>
         return (t.title() if t.islower() else t) or None
     return None
@@ -777,6 +959,8 @@ def main():
     if a.portal == "odwlasciciela": a.max_pages = max(a.max_pages, 3)   # mały portal — 20 ofert/strona
     if a.portal == "listaprzetargow": a.max_pages = max(a.max_pages, 4)  # lista ogólnopolska, 25/str. — 4 strony = ~100 najnowszych
     if a.portal in ("okolica", "krn", "sprzedajemy", "lento"): a.max_pages = max(a.max_pages, 4)   # listy ogólnopolskie 25–40/str.
+    if a.portal in ("homeportal", "klikmapa", "szybko"): a.max_pages = max(a.max_pages, 4)         # 10–12 kart/str. (27.11)
+    if a.portal == "domy": a.max_pages = max(a.max_pages, 3); a.delay = max(a.delay, 2.0)           # 25/str.; zrywa połączenia przy szybkich zapytaniach
     if a.portal == "allegrolokalnie": a.max_pages = max(a.max_pages, 6)    # 60/str., ale ~90% kart to syndykacja z Gratki (pomijana)
     if a.portal in CFFI_PORTALS: a.delay = max(a.delay, 2.5)                # krn.pl zrywa połączenia przy szybkich zapytaniach
     if not cities: log.error("Unknown city"); sys.exit(1)
@@ -866,8 +1050,9 @@ def _verify_adresowo_sellers(coll, prop: str, trans: str) -> None:
 #    na tokenie GitHub), więc lokal (sprzedaż + wynajem) jedzie w tym samym zadaniu co działki. 2.11.2026
 CHAIN_AFTER = {"dzialka": [("lokal", "sprzedaz"), ("lokal", "wynajem")]}
 # Nowe portale (5.11.2026) jadą w zadaniach istniejących portali (ta sama property/transaction):
-PORTAL_CHAIN = {"adresowo": ["odwlasciciela", "allegrolokalnie"], "domiporta": ["gethome", "krn"], "gratka": ["listaprzetargow", "sprzedajemy"],
-                "morizon": ["okolica", "lento"]}   # listaprzetargow (5.11): przetargi i licytacje, badge 🔨; okolica/krn/allegrolokalnie (16.11)
+PORTAL_CHAIN = {"adresowo": ["odwlasciciela", "allegrolokalnie", "szybko"], "domiporta": ["gethome", "krn", "klikmapa"],
+                "gratka": ["listaprzetargow", "sprzedajemy", "domy"], "morizon": ["okolica", "lento", "homeportal"]}
+# listaprzetargow (5.11): przetargi i licytacje, badge 🔨; okolica/krn/allegrolokalnie (16.11); homeportal/domy/klikmapa/szybko (27.11)
 
 
 def _run_portal_chain(argv0: List[str]) -> None:

@@ -145,6 +145,15 @@ gtag('set', 'url_passthrough', false);
   .wanted-bar .wb-form{display:none;margin-top:10px;gap:8px;flex-wrap:wrap;align-items:center}
   .wanted-bar .wb-form input{background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.14);border-radius:9px;color:#fff;padding:9px 11px;font-size:13px;min-height:40px;flex:1;min-width:140px}
   .wanted-bar .wb-form label{display:flex;gap:6px;align-items:flex-start;font-size:11.5px;color:#8ba3d4;flex-basis:100%}
+  .wanted-bar .wb-form{flex-direction:column;align-items:stretch}
+  .wanted-bar .wb-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .wanted-bar .wb-lbl{font-size:11px;color:#8ba3d4;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+  .wanted-bar .wb-seg{display:flex;gap:4px;flex-wrap:wrap}
+  .wanted-bar .wb-seg button{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:#c5d0e6;padding:7px 11px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;min-height:34px}
+  .wanted-bar .wb-seg button.on{background:#FFB800;color:#0B1836;border-color:#FFB800}
+  .wanted-bar .wb-form select{background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.14);border-radius:9px;color:#fff;padding:9px 11px;font-size:13px;min-height:40px;flex:1;min-width:140px}
+  .wanted-bar .wb-form select option{color:#0B1836}
+  .wanted-bar.mini{padding:9px 14px}
   .archive-info{display:none;background:linear-gradient(135deg,rgba(248,113,113,0.14),rgba(255,184,0,0.06));border:1px solid rgba(248,113,113,0.45);color:#c5d0e6;border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:14px;line-height:1.5}
   .archive-info b{color:#fca5a5}
   .archive-info a{color:#FFB800;font-weight:800;white-space:nowrap}
@@ -629,20 +638,36 @@ gtag('set', 'url_passthrough', false);
       🗄️ <b>Przeglądasz archiwum wygasłych ofert prywatnych</b> — ogłoszenia właścicieli, które zniknęły z portali w ostatnich 90 dniach, z numerem telefonu. Właściciel często wciąż sprzedaje: zadzwoń, zanim nieruchomość trafi do pośrednika.
       <a href="#" id="archiveBack">← Wróć do aktywnych ofert</a>
     </div>
-    <!-- 🔎 Baza poszukiwań: po wyszukaniu z miastem pytamy, czy dodać kryteria do bazy (właściciele + biura z regionu dostają e-mail) -->
+    <!-- 🔎 Baza poszukiwań: pasek nad wynikami — pełny formularz kryteriów (prefill z filtrów), „Nie teraz” zwija do jednej linii -->
     <div class="wanted-bar" id="wantedBar">
-      <button type="button" class="wb-x" id="wbClose" title="Nie teraz">✕</button>
-      <div id="wbText">🔎 <b>Szukasz mieszkania w Krakowie?</b> Dodaj swoje poszukiwanie do bazy — <b>właściciele i biura z tego regionu</b> dostaną je e-mailem i zadzwonią do Ciebie z ofertami. Nie musisz mieć konta.</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px" id="wbBtns"><button type="button" class="wb-btn" id="wbOpen">➕ Tak, dodaj moje poszukiwanie</button><button type="button" class="wb-sec" id="wbLater">Nie teraz</button><a href="/poszukiwania" style="align-self:center;color:#8ba3d4;font-size:12px">Zobacz bazę poszukiwań →</a></div>
-      <div class="wb-form" id="wbForm">
-        <input id="wbCity" maxlength="80" placeholder="Miejscowość *" autocomplete="address-level2" list="cityList" oninput="this.dataset.auto='0'">
-        <input id="wbName" maxlength="40" placeholder="Imię *" autocomplete="given-name">
-        <input id="wbPhone" type="tel" maxlength="20" placeholder="Telefon *" autocomplete="tel">
-        <input id="wbEmail" type="email" maxlength="120" placeholder="E-mail * (na pasujące oferty)" autocomplete="email">
-        <input id="wbPrice" type="number" min="0" step="1000" placeholder="Budżet do (zł) *" style="max-width:170px">
-        <label><input type="checkbox" id="wbConsent" checked style="flex:0 0 16px;min-width:16px;min-height:16px;width:16px;height:16px;padding:0;margin:2px 0 0;accent-color:#4ade80"> Zgadzam się na kontakt telefoniczny/e-mail od właścicieli i biur w sprawie tego poszukiwania. Publicznie widać tylko imię i kryteria. <a href="/polityka-prywatnosci" style="color:#8ba3d4">Polityka prywatności</a></label>
-        <button type="button" class="wb-btn" id="wbSave">🔎 Dodaj do bazy poszukiwań</button>
-        <span id="wbMsg" style="font-size:12px"></span>
+      <div id="wbMini" style="display:none;align-items:center;gap:10px;flex-wrap:wrap"><span>🔎 <b>Nie znalazłeś tego, czego szukasz?</b> Dodaj poszukiwanie do bazy — właściciele i biura z regionu zadzwonią do Ciebie.</span><button type="button" class="wb-btn" id="wbExpand" style="min-height:34px;padding:6px 12px">➕ Dodaj poszukiwanie</button></div>
+      <div id="wbFull">
+        <button type="button" class="wb-x" id="wbClose" title="Zwiń">✕</button>
+        <div id="wbText">🔎 <b>Szukasz mieszkania?</b> Dodaj swoje poszukiwanie do bazy — <b>właściciele i biura z tego regionu</b> dostaną je e-mailem i zadzwonią do Ciebie z ofertami. Nie musisz mieć konta.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px" id="wbBtns"><button type="button" class="wb-btn" id="wbOpen">➕ Tak, dodaj moje poszukiwanie</button><button type="button" class="wb-sec" id="wbLater">Nie teraz</button><a href="/poszukiwania" style="align-self:center;color:#8ba3d4;font-size:12px">Zobacz bazę poszukiwań →</a></div>
+        <div class="wb-form" id="wbForm">
+          <div class="wb-row"><span class="wb-lbl">Szukam</span><div class="wb-seg" id="wbTrans"><button type="button" data-v="sprzedaz" class="on">Kupię</button><button type="button" data-v="wynajem">Wynajmę</button></div>
+            <span class="wb-lbl">Rodzaj</span><div class="wb-seg" id="wbType"><button type="button" data-v="mieszkanie" class="on">Mieszkanie</button><button type="button" data-v="dom">Dom</button><button type="button" data-v="dzialka">Działka</button><button type="button" data-v="lokal">Lokal</button></div></div>
+          <div class="wb-row">
+            <input id="wbCity" maxlength="80" placeholder="Miejscowość *" autocomplete="address-level2" list="cityList" oninput="this.dataset.auto='0'">
+            <input id="wbDistrict" maxlength="80" placeholder="Dzielnica / okolica" style="max-width:200px">
+            <select id="wbRadius" style="max-width:170px"><option value="0">tylko ta miejscowość</option><option value="5">+5 km</option><option value="10" selected>+10 km</option><option value="25">+25 km</option><option value="50">+50 km</option></select>
+            <input id="wbPrice" type="number" min="0" step="1000" placeholder="Budżet do (zł) *" style="max-width:170px">
+          </div>
+          <div class="wb-row">
+            <input id="wbArea" type="number" min="0" placeholder="Metraż od (m²)" style="max-width:150px">
+            <span class="wb-lbl">Pokoje</span><div class="wb-seg" id="wbRooms"><button type="button" data-v="1">1</button><button type="button" data-v="2">2</button><button type="button" data-v="3">3</button><button type="button" data-v="4">4</button><button type="button" data-v="5">5+</button></div>
+            <select id="wbMarket" style="max-width:170px"><option value="">rynek: dowolny</option><option value="wtorny">rynek wtórny</option><option value="pierwotny">rynek pierwotny</option></select>
+          </div>
+          <div class="wb-row"><input id="wbNote" maxlength="600" placeholder="Uwagi (np. z balkonem, nie parter, gotówka, blisko szkoły)"></div>
+          <div class="wb-row">
+            <input id="wbName" maxlength="40" placeholder="Imię *" autocomplete="given-name" style="max-width:200px">
+            <input id="wbPhone" type="tel" maxlength="20" placeholder="Telefon *" autocomplete="tel" style="max-width:200px">
+            <input id="wbEmail" type="email" maxlength="120" placeholder="E-mail * (na pasujące oferty)" autocomplete="email">
+          </div>
+          <label><input type="checkbox" id="wbConsent" checked style="flex:0 0 16px;min-width:16px;min-height:16px;width:16px;height:16px;padding:0;margin:2px 0 0;accent-color:#4ade80"> Zgadzam się na kontakt telefoniczny/e-mail od właścicieli i biur w sprawie tego poszukiwania. Publicznie widać tylko imię i kryteria. <a href="/polityka-prywatnosci" style="color:#8ba3d4">Polityka prywatności</a></label>
+          <div class="wb-row"><button type="button" class="wb-btn" id="wbSave">🔎 Dodaj do bazy poszukiwań</button><span id="wbMsg" style="font-size:12px"></span></div>
+        </div>
       </div>
     </div>
     <div id="radiusInfo" style="display:none;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#c5d0e6;border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:14px"></div>
@@ -1371,7 +1396,8 @@ async function loadListings() {
     // Hero "Cena do" — jeśli ostrzejsze niż sidebar price_to
     const heroMax = numVal('heroPrice');
     if (heroMax && (!apiParams.get('price_to') || heroMax < parseFloat(apiParams.get('price_to')))) apiParams.set('price_to', String(heroMax));
-    try { updateWantedBar({ city: preCity, type: preType || 'mieszkanie', trans: preTrans || 'sprzedaz', price_to: parseFloat(apiParams.get('price_to') || '0') || 0, rooms: activeRoomsChips.map(r => parseInt(r, 10)).filter(n => n > 0), area_from: numVal('fAreaFrom') || null }); } catch (e) {}
+    try { updateWantedBar({ city: preCity, type: preType || 'mieszkanie', trans: preTrans || 'sprzedaz', price_to: parseFloat(apiParams.get('price_to') || '0') || 0, rooms: activeRoomsChips.map(r => parseInt(r, 10)).filter(n => n > 0), area_from: numVal('fAreaFrom') || null,
+      market: document.querySelector('.chip.active[data-filter="market_type"]')?.dataset.value || '', radius_km: numVal('heroRadiusKm') || numVal('fRadiusKm') || 0 }); } catch (e) {}
     // GEO filter: gdy user wpisal miasto + promien (heroRadiusKm), wysylamy lat/lng+radius zamiast city
     // Backend zwraca oferty z bounding box, wiec dla Krakow+50km dostaniemy tez Wieliczka, Skawina, Zabierzów
     // Deep link ?km=20: pole promienia seedowane jest dopiero PO pierwszym fetchu (applyScrapedData → URL params init),
@@ -2311,34 +2337,57 @@ function renderPager(totalPages) {
   }));
 }
 
-// 🔎 Baza poszukiwań — banner nad wynikami (pokazuje się po wyszukaniu z miastem; „Nie teraz” chowa na sesję; po dodaniu — na 30 dni)
-const WB = { ctx: null };
+// 🔎 Baza poszukiwań — pasek nad wynikami. Zawsze widoczny: pełny (tekst + formularz) albo zwinięty do jednej linii („Nie teraz”/✕, pamiętane w sesji).
+// Po dodaniu poszukiwania pasek znika na 30 dni. Formularz prefillowany z aktualnych filtrów (miasto, typ, transakcja, cena, metraż, pokoje, rynek, promień).
+const WB = { ctx: null, trans: 'sprzedaz', type: 'mieszkanie', rooms: new Set(), touched: false };
+function wbSeg(id, cb) { const box = document.getElementById(id); if (!box) return; box.querySelectorAll('button').forEach(b => { b.onclick = () => { box.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); WB.touched = true; cb(b.dataset.v); }; }); }
+function wbSetSeg(id, v) { document.querySelectorAll('#' + id + ' button').forEach(x => x.classList.toggle('on', x.dataset.v === v)); }
 function updateWantedBar(ctx) {
   const bar = document.getElementById('wantedBar'); if (!bar) return;
   WB.ctx = ctx;
-  const hide = window.ARCHIVE_MODE || sessionStorage.getItem('fd_wb_later') || (Date.now() - parseInt(localStorage.getItem('fd_wb_done') || '0', 10) < 30 * 864e5);
-  bar.style.display = hide ? 'none' : 'block';
-  if (hide) return;
+  const done = Date.now() - parseInt(localStorage.getItem('fd_wb_done') || '0', 10) < 30 * 864e5;
+  if (window.ARCHIVE_MODE || done) { bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+  const mini = !!sessionStorage.getItem('fd_wb_later');
+  document.getElementById('wbMini').style.display = mini ? 'flex' : 'none';
+  document.getElementById('wbFull').style.display = mini ? 'none' : 'block';
+  bar.classList.toggle('mini', mini);
   const TYPE_GEN = { mieszkanie: 'mieszkania', dom: 'domu', dzialka: 'działki', lokal: 'lokalu' };
   const what = (ctx.trans === 'wynajem' ? 'Szukasz do wynajęcia ' : 'Szukasz ') + (TYPE_GEN[ctx.type] || 'nieruchomości') + (ctx.city ? ' — ' + ctx.city : '') + (ctx.price_to ? ', do ' + Math.round(ctx.price_to).toLocaleString('pl-PL') + ' zł' : '') + '?';
-  const ci = document.getElementById('wbCity'); if (ci && ctx.city && (!ci.value || ci.dataset.auto === '1')) { ci.value = ctx.city; ci.dataset.auto = '1'; }
   const esc = (x) => String(x).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  document.getElementById('wbText').innerHTML = '🔎 <b>' + esc(what) + '</b> Dodaj swoje poszukiwanie do bazy — <b>właściciele i biura z tego regionu</b> dostaną je e-mailem i zadzwonią do Ciebie z ofertami. Dostaniesz też e-mail o każdej nowej pasującej ofercie. Nie musisz mieć konta.';
-  const pr = document.getElementById('wbPrice'); if (pr && ctx.price_to && !pr.value) pr.value = Math.round(ctx.price_to);
+  document.getElementById('wbText').innerHTML = '🔎 <b>' + esc(what) + '</b> Dodaj swoje poszukiwanie do bazy — <b>właściciele i biura z tego regionu</b> dostaną je e-mailem i zadzwonią do Ciebie z ofertami. Dostaniesz też e-mail o każdej nowej pasującej ofercie ze wszystkich portali. Nie musisz mieć konta.';
+  // prefill z filtrów — dopóki użytkownik sam nie zmienił pól formularza
+  if (!WB.touched) {
+    WB.trans = ctx.trans === 'wynajem' ? 'wynajem' : 'sprzedaz'; wbSetSeg('wbTrans', WB.trans);
+    WB.type = ['mieszkanie', 'dom', 'dzialka', 'lokal'].includes(ctx.type) ? ctx.type : 'mieszkanie'; wbSetSeg('wbType', WB.type);
+    WB.rooms = new Set((ctx.rooms || []).map(r => Math.min(5, r))); document.querySelectorAll('#wbRooms button').forEach(b => b.classList.toggle('on', WB.rooms.has(parseInt(b.dataset.v, 10))));
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+    set('wbCity', ctx.city); set('wbPrice', ctx.price_to ? Math.round(ctx.price_to) : ''); set('wbArea', ctx.area_from || '');
+    const mk = document.getElementById('wbMarket'); if (mk) mk.value = (ctx.market === 'pierwotny' || ctx.market === 'wtorny') ? ctx.market : '';
+    const rd = document.getElementById('wbRadius'); if (rd && ctx.radius_km) { const opts = [0, 5, 10, 25, 50]; rd.value = String(opts.reduce((a, b) => Math.abs(b - ctx.radius_km) < Math.abs(a - ctx.radius_km) ? b : a)); }
+    document.getElementById('wbPrice').placeholder = WB.trans === 'wynajem' ? 'Czynsz do (zł/mies.) *' : 'Budżet do (zł) *';
+  }
   const em = document.getElementById('wbEmail'); if (em) em.style.display = localStorage.getItem('finderdom_token') ? 'none' : '';
 }
 (function initWantedBar() {
   const bar = document.getElementById('wantedBar'); if (!bar) return;
-  const later = () => { sessionStorage.setItem('fd_wb_later', '1'); bar.style.display = 'none'; };
+  const later = () => { sessionStorage.setItem('fd_wb_later', '1'); updateWantedBar(WB.ctx || {}); };
   document.getElementById('wbClose').onclick = later;
   document.getElementById('wbLater').onclick = later;
-  document.getElementById('wbOpen').onclick = () => { document.getElementById('wbForm').style.display = 'flex'; document.getElementById('wbBtns').style.display = 'none'; document.getElementById('wbName').focus(); if (window.gtag) gtag('event', 'wanted_bar_open'); };
+  const open = () => { sessionStorage.removeItem('fd_wb_later'); updateWantedBar(WB.ctx || {}); document.getElementById('wbForm').style.display = 'flex'; document.getElementById('wbBtns').style.display = 'none'; (document.getElementById('wbCity').value ? document.getElementById('wbPrice') : document.getElementById('wbCity')).focus(); if (window.gtag) gtag('event', 'wanted_bar_open'); };
+  document.getElementById('wbOpen').onclick = open;
+  document.getElementById('wbExpand').onclick = open;
+  wbSeg('wbTrans', v => { WB.trans = v; document.getElementById('wbPrice').placeholder = v === 'wynajem' ? 'Czynsz do (zł/mies.) *' : 'Budżet do (zł) *'; });
+  wbSeg('wbType', v => { WB.type = v; });
+  document.querySelectorAll('#wbRooms button').forEach(b => { b.onclick = () => { const r = parseInt(b.dataset.v, 10); WB.touched = true; if (WB.rooms.has(r)) { WB.rooms.delete(r); b.classList.remove('on'); } else { WB.rooms.add(r); b.classList.add('on'); } }; });
+  ['wbCity', 'wbDistrict', 'wbRadius', 'wbPrice', 'wbArea', 'wbMarket', 'wbNote'].forEach(id => document.getElementById(id)?.addEventListener('input', () => { WB.touched = true; }));
   document.getElementById('wbSave').onclick = async () => {
-    const ctx = WB.ctx || {}; const msg = document.getElementById('wbMsg'); const v = (id) => (document.getElementById(id).value || '').trim();
+    const msg = document.getElementById('wbMsg'); const v = (id) => (document.getElementById(id).value || '').trim();
     const token = localStorage.getItem('finderdom_token');
-    const body = { transaction: ctx.trans === 'wynajem' ? 'wynajem' : 'sprzedaz', type: ctx.type || 'mieszkanie', city: v('wbCity') || ctx.city || '', radius_km: Math.min(100, parseInt(document.getElementById('heroRadiusKm')?.value || '10', 10) || 10),
-      price_to: parseFloat(v('wbPrice')) || 0, area_from: ctx.area_from || null, rooms: ctx.rooms || [], note: '', name: v('wbName'), phone: v('wbPhone'), email: v('wbEmail') || null, consent: document.getElementById('wbConsent').checked };
-    if (!body.city || !body.name || !body.phone || !body.price_to || (!token && !body.email)) { msg.style.color = '#f87171'; msg.textContent = 'Uzupełnij miejscowość, imię, telefon, ' + (token ? '' : 'e-mail ') + 'i budżet.'; return; }
+    const body = { transaction: WB.trans, type: WB.type, city: v('wbCity'), district: v('wbDistrict') || null, radius_km: parseInt(v('wbRadius') || '10', 10) || 0,
+      price_to: parseFloat(v('wbPrice')) || 0, area_from: parseFloat(v('wbArea')) || null, rooms: [...WB.rooms], market: v('wbMarket') || null, note: v('wbNote'),
+      name: v('wbName'), phone: v('wbPhone'), email: v('wbEmail') || null, consent: document.getElementById('wbConsent').checked };
+    if (!body.city || !body.name || !body.phone || !body.price_to || (!token && !body.email)) { msg.style.color = '#f87171'; msg.textContent = 'Uzupełnij miejscowość, budżet, imię, telefon' + (token ? '' : ' i e-mail') + '.'; return; }
     if (!body.consent) { msg.style.color = '#f87171'; msg.textContent = 'Zaznacz zgodę na kontakt.'; return; }
     const btn = document.getElementById('wbSave'); btn.disabled = true; msg.style.color = '#8ba3d4'; msg.textContent = 'Zapisuję…';
     try {

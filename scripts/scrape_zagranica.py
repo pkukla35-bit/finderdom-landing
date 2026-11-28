@@ -182,8 +182,9 @@ def parse_greenacres(html: str, dom: str) -> List[Dict[str, Any]]:
         t = _txt(title.group(1)) if title else ""          # „Zakup: Dom Rojales”
         kind = next((v for k, v in tags if "Typ" in k), "")
         rooms = next((int(re.search(r"\d+", v).group()) for k, v in tags if k == "Pokoje" and re.search(r"\d+", v)), None)
-        area = next((_money(v) for k, v in tags if "Powierzchnia" in k), None)
-        plot = next((_money(v) for k, v in tags if "Teren" in k), None)
+        area = next((_money(v) for k, v in tags if "Powierzchnia" in k and "teren" not in k.lower() and "działk" not in k.lower()), None)
+        plot = next((_money(v) for k, v in tags if "Teren" in k or "teren" in k.lower() or "działk" in k.lower()), None)
+        if typ_hint_plot := (area and plot and area == plot): area = None   # ta sama liczba = to była działka, nie powierzchnia użytkowa
         lt = _txt(loc.group(1)) if loc else ""
         mloc = re.match(r"(.*?)\s*\((.*?)\)\s*$", lt)
         city, region = (mloc.group(1).strip(), mloc.group(2).strip()) if mloc else (lt or None, None)

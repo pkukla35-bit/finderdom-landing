@@ -732,6 +732,7 @@ function proxyImg(url) {
   // + miniatura 640px do kart zamiast pełnego zdjęcia (≈30KB zamiast 100-400KB)
   if (u.includes('apollo.olxcdn.com')) return u.replace(/;s=\d+x\d+/, ';s=640x480');
   if (u.includes('galeria.domiporta.pl')) return u;
+  if (u.includes('realting.com/uploads/')) return 'https://wsrv.nl/?url=' + encodeURIComponent(u.replace(/^https?:\/\//, '')) + '&w=640&q=75&output=webp';
   // Morizon: wariant "m" (≈40KB) zamiast "l" (≈140KB) — wystarczy do karty; proxy wykrywa placeholder "BRAK ZDJĘĆ"
   if (u.includes('staticmorizon')) u = u.replace('/3x2_l:fill_and_crop/', '/3x2_m:fill_and_crop/');
   return '/api/img?u=' + encodeURIComponent(u);

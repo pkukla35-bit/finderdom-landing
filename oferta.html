@@ -816,6 +816,7 @@ async function loadOffer() {
             window.__listingLocked = !!fd.locked;
             window.__ownerListing = !!fd.owner_listing;   // 🏠 ogłoszenie dodane przez właściciela na FinderDom (bez linku do portalu)
             window.__contactRequiresLogin = !!(fd.listing && fd.listing.contact_requires_login);
+            window.__rawListing = fd.listing;   // 🌍 zagranica: opis/ceny w walucie z surowego dokumentu
             const normalized = normalizeScrapedListing(fd.listing);
             if (normalized) {
               currentListing = normalized;
@@ -963,6 +964,10 @@ function proxyImg(url) {
   if (u.includes('wsrv.nl') || u.includes('images.weserv.nl') || u.includes('/api/img?')) return u;
   // OLX / Domiporta CDN — publiczne, bez hotlink-protection → bezpośrednio (bez serverless hopu)
   if (u.includes('apollo.olxcdn.com') || u.includes('galeria.domiporta.pl')) return u;
+  // realting.com (zagranica) — serwer odrzuca nasz proxy (fingerprint TLS), a bezpośrednio z przeglądarki działa → wsrv.nl jako cache/resize
+  if (u.includes('realting.com/uploads/')) return 'https://wsrv.nl/?url=' + encodeURIComponent(u.replace(/^https?:\/\//, '')) + '&w=1200&q=80&output=webp';
+  // realting.com (zagranica) — serwer odrzuca nasz proxy (fingerprint TLS), a bezpośrednio z przeglądarki działa → wsrv.nl jako cache/resize
+  if (u.includes('realting.com/uploads/')) return 'https://wsrv.nl/?url=' + encodeURIComponent(u.replace(/^https?:\/\//, '')) + '&w=1200&q=80&output=webp';
   return '/api/img?u=' + encodeURIComponent(u);
 }
 
@@ -2094,7 +2099,15 @@ async function renderOffer(l, all) {
     specs.push({label:'📞 Telefon właściciela', val: `<a href="${l.url}" target="_blank" rel="noopener" style="color:#c5d0e6">numer tylko na ${l.portal || 'portalu'} <span style="font-size:11px;color:#8ba3d4">(portal ukrywa numer za logowaniem) →</span></a>`});
   }
   specs.push({label:'Portal', val: window.__ownerListing ? 'FinderDom — od właściciela' : (l.portal || 'Otodom')});
-  specs.push({label:'Dodane', val: l.added_display || '—'});
+  specs.push({label:'Dodane', val: l.added_display || (l.added_at ? new Date(l.added_at).toLocaleDateString('pl-PL') : '—')});
+  if (window.__rawListing && window.__rawListing.foreign) {
+    const r = window.__rawListing;
+    specs.push({label:'Kraj', val: `${r.country_flag || ''} ${r.country_name || r.country}`.trim()});
+    if (r.price_eur) specs.push({label:'Cena w EUR', val: '€' + Math.round(r.price_eur).toLocaleString('pl-PL')});
+    if (r.price_usd && r.currency_orig === 'USD') specs.push({label:'Cena w USD', val: '$' + Math.round(r.price_usd).toLocaleString('en-US')});
+    if (r.bedrooms) specs.push({label:'Sypialnie', val: String(r.bedrooms)});
+    if (r.bathrooms) specs.push({label:'Łazienki', val: String(r.bathrooms)});
+  }
   if (l.is_original === false) {
     specs.push({label:'Status', val: '📋 KOPIA (zobacz oryginał)'});
   } else {
@@ -2105,7 +2118,9 @@ async function renderOffer(l, all) {
   ).join('');
 
   // Description (jeśli nie ma opisu, wpisujemy fragment tytułu i info)
-  el('offerDesc').textContent = l.title + '. ' +
+  el('offerDesc').textContent = (window.__rawListing && window.__rawListing.foreign && window.__rawListing.description)
+    ? window.__rawListing.description + ` Cena: ${l.price_display}` + (window.__rawListing.price_eur ? ` (≈ €${Math.round(window.__rawListing.price_eur).toLocaleString('pl-PL')})` : window.__rawListing.price_usd ? ` (≈ $${Math.round(window.__rawListing.price_usd).toLocaleString('en-US')})` : '') + '.'
+    : l.title + '. ' +
     `Nieruchomość położona w ${l.city}${l.district ? ', ' + l.district : ''}, o powierzchni ${l.area_m2} m². ` +
     (l.rooms > 0 ? `Liczba pokoi: ${l.rooms}. ` : '') +
     (l.build_year ? `Rok budowy: ${l.build_year}. ` : '') +

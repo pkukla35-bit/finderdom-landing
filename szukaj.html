@@ -619,8 +619,8 @@ gtag('set', 'url_passthrough', false);
       </div>
       <button type="button" class="archive-toggle" id="archiveToggle" title="Wygasłe oferty właścicieli z ostatnich 90 dni — z numerem telefonu. Zadzwoń, zanim trafi do pośrednika.">🗄️ Archiwum prywatne</button>
       <select class="sort-select" id="sortSelect">
-        <option value="ai">Sortuj: AI - najlepsze okazje</option>
-        <option value="newest">Najnowsze</option>
+        <option value="newest" selected>Sortuj: Najnowsze</option>
+        <option value="ai">AI - najlepsze okazje</option>
         <option value="price_asc">Cena rosnąco</option>
         <option value="price_desc">Cena malejąco</option>
         <option value="ppm2_asc">Cena za m² rosnąco</option>
@@ -2717,7 +2717,7 @@ function collectFilterState() {
   }
 
   // Sortowanie
-  const sortMode = document.getElementById('sortSelect')?.value || 'ai';
+  const sortMode = document.getElementById('sortSelect')?.value || 'newest';
 
   const ppm2From = parseInt(document.getElementById('fPpm2From')?.value || '0', 10);
   const ppm2To   = parseInt(document.getElementById('fPpm2To')?.value   || '0', 10);
@@ -2997,7 +2997,7 @@ function applyAllFilters() {
     ppm2_desc:  (a, b) => b.price_pm2 - a.price_pm2,
     area_desc:  (a, b) => b.area_m2 - a.area_m2,
   };
-  const sortFn = sortFuncs[f.sortMode] || sortFuncs.ai;
+  const sortFn = sortFuncs[f.sortMode] || sortFuncs.newest;
   filtered.sort(sortFn);
 
   // Sync sidebar chip typu (jeśli hero-select zmienił typ)
@@ -3111,7 +3111,7 @@ function applyAiFilters(f) {
   if (f.portals === 'unique') document.getElementById('chipUnique')?.classList.add('active');
   if (f.portals === 'multi') document.getElementById('chipMulti')?.classList.add('active');
   const sortEl = document.getElementById('sortSelect');
-  if (sortEl) sortEl.value = f.sort || 'ai';  // applyAllFilters czyta sortSelect
+  if (sortEl) sortEl.value = f.sort || 'newest';  // applyAllFilters czyta sortSelect
   window.__aiKeywords = (f.keywords || []).filter(Boolean).slice(0, 6);
 }
 

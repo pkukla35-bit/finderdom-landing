@@ -2245,7 +2245,7 @@ async def listing_single(listing_id: str, request: Request, response: Response):
             try:
                 doc = await coll.find_one({"external_id": int(ext_id)}, {"_id": 0})
             except: pass
-        if not doc and ext_id.startswith("rt-"):
+        if not doc and ext_id.startswith(("rt-", "ga-", "ld-")):
             # 🌍 oferta zagraniczna (realting.com) — osobna kolekcja listings_foreign (scripts/scrape_zagranica.py)
             doc = await database().listings_foreign.find_one({"external_id": ext_id}, {"_id": 0})
             if doc: doc["foreign"] = True

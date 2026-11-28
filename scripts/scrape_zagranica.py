@@ -179,6 +179,14 @@ def _fmt_area(m2: Optional[float]) -> str:
     return (f"{m2 / 10000:.2f}".rstrip("0").rstrip(".") + " ha") if m2 >= 10000 else f"{m2:g} m²"
 
 
+def _area_bad(typ: str, area: Optional[float], rooms: Optional[int]) -> bool:
+    """Agent wpisał teren jako powierzchnię (np. „Willa · 3 pok. · 2293 m²”): mieszkanie > 600 m², dom > 1500 m² albo > 150 m²/pokój."""
+    if not area or typ in ("dzialka", "lokal"): return False
+    if typ == "mieszkanie" and area > 600: return True
+    if area > 1500: return True
+    return bool(rooms and rooms <= 8 and area / rooms > 150)
+
+
 def _ga_title(label: str, rooms: Optional[int], area: Optional[float], plot: Optional[float], typ: str, city: Optional[str], cname: str) -> str:
     size = _fmt_area(plot) if typ == "dzialka" else (_fmt_area(area) if area else (f"działka {_fmt_area(plot)}" if plot else ""))
     return " · ".join(x for x in [label, f"{rooms} pok." if rooms else "", size] if x) + " — " + (f"{city}, {cname}" if city else cname)
@@ -216,7 +224,7 @@ def parse_greenacres(html: str, dom: str) -> List[Dict[str, Any]]:
         ppln = round(pe * rate("EUR")) if pe else None
         typ = next((ty for ty, rx in GA_TYPE if re.search(rx, (kind + " " + t).lower())), "dom")
         if typ == "dzialka": plot, area = (plot or area), None                       # działka: metraż = teren
-        elif area and area > (1000 if typ == "mieszkanie" else 2500): area = None   # 2325 m² „mieszkanie” = błąd agenta (wpisany teren)
+        elif _area_bad(typ, area, rooms): area = None                           # 2325 m² „mieszkanie” = błąd agenta (wpisany teren)
         label = kind or t.split(":", 1)[-1].strip()
         dtxt = _txt(desc.group(1)) if desc else ""
         if typ == "dzialka" and _PLOT_PROJECT.search(dtxt): label = "Działka z projektem domu"   # green-acres: „Teren” + wizualizacja willi = działka z pozwoleniem/projektem
@@ -370,7 +378,7 @@ def fix_areas(coll=None) -> Dict[str, int]:
         upd: Dict[str, Any] = {}
         if plot and plot < 50: plot = plot * 10000; upd["plot_area_m2"] = plot; n["ha"] += 1      # hektary zapisane jak m²
         if typ == "dzialka" and area: plot, area = (plot or area), None; upd.update(plot_area_m2=plot, area_m2=None, price_pm2=None); n["area"] += 1
-        elif area and area > (1000 if typ == "mieszkanie" else 2500): area = None; upd.update(area_m2=None, price_pm2=None); n["area"] += 1
+        elif _area_bad(typ, area, d.get("rooms")): area = None; upd.update(area_m2=None, price_pm2=None); n["area"] += 1
         label = _txt((d.get("title") or "").split(" — ")[0].split(" · ")[0])
         if typ == "dzialka" and label == "Teren" and _PLOT_PROJECT.search(d.get("description") or ""): label = "Działka z projektem domu"
         title = _ga_title(label, d.get("rooms"), area, plot, typ, d.get("city"), d.get("country_name") or "")

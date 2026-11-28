@@ -159,6 +159,7 @@ EXTRACTORS: Dict[str, Callable[[str], List[str]]] = {
     "klikmapa": lambda h: _dedupe(re.findall(r'(https://cdn\d*\.beldom\.pl/imgs/[^"&\s]+?_800\.jpg)', h.replace("&quot;", '"'))) or _generic(h),
     "domplace": lambda h: _dedupe(re.findall(r'(https://domplace\.pl/uploads/listings/\d+/[A-Za-z0-9-]+\.(?:webp|jpg|jpeg|png))', h.replace("\\u002F", "/").replace("\\/", "/"))) or _generic(h),
     "szybko": lambda h: _dedupe(re.findall(r'(https://mediaproxy\.szybko\.pl/1180x600/photo/asset/[^"\s]+)', h)) or _generic(h),
+    "mojelokum": lambda h: _dedupe(["https://www.mojelokum.pl" + u for u in re.findall(r'(/ib/big/\d+/[^"\s]+\.(?:jpg|jpeg|png|webp))', h, re.I)]) or _generic(h),
 }
 
 

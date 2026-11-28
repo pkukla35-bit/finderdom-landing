@@ -889,7 +889,9 @@ def fetch(url: str) -> Optional[str]:
     for _ in range(3):
         try:
             r = S.get(url, timeout=30)
-            if r.status_code == 200 and len(r.text) > 3000: return r.text
+            if r.status_code == 200 and len(r.text) > 3000:
+                if "mojelokum.pl" in url: r.encoding = "utf-8"   # serwer nie podaje charsetu w nagłówku → requests zgaduje ISO-8859-1 (krzaczki w „zł”, nazwach)
+                return r.text
             if r.status_code == 404: return None
             if r.status_code in (403, 429): log.warning("  HTTP %s — pauza 20s", r.status_code); time.sleep(20)
         except requests.RequestException as e:
@@ -926,7 +928,7 @@ def guess_city(portal: str, it: Dict[str, Any]) -> Optional[str]:
         return toks[0] if toks and toks[0] else None
     elif portal == "listaprzetargow":
         return (it.get("loc0") or "").strip() or None   # „Radom, Południe” → Radom
-    elif portal in ("okolica", "krn", "allegrolokalnie", "sprzedajemy", "lento", "homeportal", "domy", "klikmapa", "szybko", "domplace"):
+    elif portal in ("okolica", "krn", "allegrolokalnie", "sprzedajemy", "lento", "homeportal", "domy", "klikmapa", "szybko", "domplace", "mojelokum"):
         t = (it.get("loc0") or "").strip()              # okolica: „Szczecin, Dąbie, ul. X”; krn: addressLocality; allegro: <address>
         return (t.title() if t.islower() else t) or None
     return None
@@ -1035,11 +1037,12 @@ def main():
                     time.sleep(a.delay); continue
                 log.info("  page %d: 0 ofert", page); break
             ops = []
-            if a.portal == "odwlasciciela":   # numer właściciela ze strony oferty — dla ofert, które nie mają jeszcze numeru w bazie (nowe i stare)
+            if a.portal in ("odwlasciciela", "mojelokum"):   # numer właściciela ze strony oferty — dla ofert prywatnych bez numeru w bazie (nowe i stare)
                 have_phone = {x["external_id"] for x in coll.find({"source": a.portal, "external_id": {"$in": [str(it["id"]) for it in items]}, "phone": {"$regex": r"\d{9}"}}, {"external_id": 1})}
                 for it in items:
+                    if a.portal == "mojelokum" and it.get("seller") != "prywatna": continue
                     if str(it["id"]) not in have_phone and tot.setdefault("phones", 0) < ODW_PHONE_LIMIT:
-                        ph = enrich_odwlasciciela_phone(it["url"]); time.sleep(0.8)
+                        ph = enrich_odwlasciciela_phone(it["url"]) if a.portal == "odwlasciciela" else enrich_mojelokum_phone(it["url"]); time.sleep(0.8)
                         if ph: it["phone"] = ph; tot["phones"] += 1
             docs_batch = [d for d in (normalize(a.portal, it, city["name"], a.property, a.transaction) for it in items) if d["price"]]
             ph = price_history_ops(coll, a.portal, docs_batch)
@@ -1108,7 +1111,89 @@ def _verify_adresowo_sellers(coll, prop: str, trans: str) -> None:
 #    na tokenie GitHub), więc lokal (sprzedaż + wynajem) jedzie w tym samym zadaniu co działki. 2.11.2026
 CHAIN_AFTER = {"dzialka": [("lokal", "sprzedaz"), ("lokal", "wynajem")]}
 # Nowe portale (5.11.2026) jadą w zadaniach istniejących portali (ta sama property/transaction):
-PORTAL_CHAIN = {"adresowo": ["odwlasciciela", "allegrolokalnie", "szybko"], "domiporta": ["gethome", "krn", "klikmapa"],
+# ───────────────────────── 28.11.2026: mojelokum.pl (lokalny portal — Pszczyna i okolice, pless.pl) ─────────────────────────
+# URL listy: /{strona},{kategoria 1 mieszkanie|2 dom|3 działka|4 lokal},0,0,0,{typ 1 sprzedam|3 wynajem},0,…,{dodano_przez idx14},{sort idx15 = 1 najnowsze},0,0,{rynek},lista,ogloszenia.html
+# 30 kart/str., kilka stron na kategorię. Kto dodał (osoba prywatna / firma / agencja) nie jest na karcie — pobieramy raz listę
+# „osoba prywatna” (dodano_przez=1) dla wszystkich kategorii i oznaczamy po ID; reszta = pośrednik (firma/agencja).
+_ML_KAT = {"mieszkanie": 1, "dom": 2, "dzialka": 3, "lokal": 4}
+_ML_PRIVATE_IDS: Optional[set] = None
+
+
+def _ml_url(kat: int, typ: int, page: int, dp: int = 0) -> str:
+    f = ["0"] * 19
+    f[0], f[1], f[5], f[14], f[15] = str(page), str(kat), str(typ), str(dp), "1"
+    return "https://www.mojelokum.pl/" + ",".join(f) + ",lista,ogloszenia.html"
+
+
+def url_mojelokum(prop, trans, city, page):
+    return _ml_url(_ML_KAT[prop], 3 if trans == "wynajem" else 1, page)
+
+
+def _ml_private_ids() -> set:
+    global _ML_PRIVATE_IDS
+    if _ML_PRIVATE_IDS is None:
+        ids = set()
+        for kat in (1, 2, 3, 4):
+            for typ in (1, 3):
+                for pg in (1, 2, 3):
+                    h = fetch(_ml_url(kat, typ, pg, dp=1))
+                    found = re.findall(r'<article id="o(\d+)" class="zajawka">', h or "")
+                    ids.update(found)
+                    if len(found) < 30: break
+        _ML_PRIVATE_IDS = ids
+        log.info("  mojelokum: %d ogłoszeń od osób prywatnych", len(ids))
+    return _ML_PRIVATE_IDS
+
+
+def parse_mojelokum(html: str) -> List[Dict[str, Any]]:
+    out = []
+    priv = _ml_private_ids()
+    for m in re.finditer(r'<article id="o(\d+)" class="zajawka">(.*?)</article>', html, re.S):
+        oid, c = m.group(1), m.group(2)
+        title = re.search(r"<h3>([^<]*)</h3>", c)
+        price = re.search(r'<span class="cena">([\d\s\xa0.,]+?)\s*zł', c)
+        area = re.search(r"</span>,\s*([\d\s.,]+)\s*m<sup>2", c)
+        loc = re.search(r'<span class="miejscowosc">([^<]*)</span>', c)
+        desc = re.search(r"</h3>\s*<p>(.*?)</p>", c, re.S)
+        date = re.search(r'<span class="data">[^:<]*:\s*([^<]*)</span>', c)
+        imgs = re.findall(r'<var href="(/ib/big/[^"]+)"', c)
+        t = _txt(title.group(1)) if title else ""
+        rooms = re.search(r"(\d)\s*pokoj", t) or re.search(r"(\d)\s*pok", t)
+        if "kawalerka" in t.lower(): rooms_n = 1
+        else: rooms_n = int(rooms.group(1)) if rooms else None
+        lp = [x.strip() for x in _txt(loc.group(1)).split(" - ", 1)] if loc else []
+        trans = "wynajem" if t.lower().startswith("mam do wynaj") else ("sprzedaz" if t.lower().startswith("sprzedam") else None)
+        if trans is None: continue   # „Kupię” / „Chcę wynająć” = poszukiwania, nie oferty
+        kind = t.split(":", 1)[1].strip() if ":" in t else t      # „Mieszkanie - 3 pokoje” / „Działka - budowlana”
+        nice = " ".join(x for x in [kind.replace(" - ", ", "), f"{area.group(1).strip()} m²" if area else "", "—", ", ".join(lp)] if x).strip(" —")
+        out.append({
+            "id": oid, "url": f"https://www.mojelokum.pl/0,0,0,0,0,0,0,0,{oid},0,0,0,0,0,0,0,0,0,0,ogloszenie,ogloszenia.html",
+            "title": nice or t, "price": _money(price.group(1)) if price else None, "area": _money(area.group(1)) if area else None,
+            "rooms": rooms_n, "floor": None, "build_year": None,
+            "image": ("https://www.mojelokum.pl" + imgs[0]) if imgs else None,
+            "images": ["https://www.mojelokum.pl" + u for u in imgs[:12]],
+            "loc0": lp[0] if lp else None, "district": lp[1] if len(lp) > 1 else None, "street": None,
+            "desc": _txt(desc.group(1)) if desc else "",
+            "seller": "prywatna" if oid in priv else "posrednik", "agency": None,
+            "posted_at": _pl_date(date.group(1) if date else None), "_trans": trans,
+        })
+    return out
+
+
+def enrich_mojelokum_phone(url: str) -> Optional[str]:
+    """Strona oferty mojelokum.pl: „tel. 661835929” w bloku kontaktu ogłoszeniodawcy."""
+    html = fetch(url)
+    if not html: return None
+    m = re.search(r"tel\.?\s*:?\s*(?:\+?48)?\s*((?:\d[\s-]?){9})", html, re.I)
+    if not m: return None
+    digits = re.sub(r"\D", "", m.group(1))
+    return "+48" + digits if len(digits) == 9 else None
+
+
+PORTALS["mojelokum"] = {"url": url_mojelokum, "parse": parse_mojelokum}
+NATIONAL_LIST_PORTALS |= {"mojelokum"}
+
+PORTAL_CHAIN = {"adresowo": ["odwlasciciela", "allegrolokalnie", "szybko"], "domiporta": ["gethome", "krn", "klikmapa", "mojelokum"],
                 "gratka": ["listaprzetargow", "sprzedajemy", "domy"], "morizon": ["okolica", "lento", "homeportal", "domplace"]}
 # listaprzetargow (5.11): przetargi i licytacje, badge 🔨; okolica/krn/allegrolokalnie (16.11); homeportal/domy/klikmapa/szybko (27.11)
 

@@ -183,6 +183,7 @@ gtag('set', 'url_passthrough', false);
       <a href="/dla-prywatnych">🏠 Dla prywatnych</a>
       <a href="/dla-biur">🏢 Dla biur</a>
       <a href="/dla-wlascicieli">📣 Sprzedam / Poszukuję</a>
+      <a href="/zagranica" class="active">🌍 Zagranica</a>
       <a href="/pomoc">💬 Pomoc</a>
     </div>
       <span id="authWidget"></span>
@@ -270,7 +271,7 @@ async function load(append){
   const q=new URLSearchParams(); if(F.country) q.set('country',F.country); if(F.trans) q.set('transaction',F.trans); if(F.type) q.set('type',F.type); if(F.city) q.set('city',F.city); if(F.price_to) q.set('price_to',F.price_to); q.set('sort',F.sort); q.set('offset',F.offset); q.set('limit',30);
   document.getElementById('count').textContent = append ? document.getElementById('count').textContent : 'Ładuję…';
   try { const r=await fetch('/api/zagranica?'+q.toString()); const d=await r.json(); if(!r.ok) throw new Error(d.detail||('Błąd '+r.status));
-    cached = append ? cached.concat(d.items) : d.items;
+    cached = append ? cached.concat(d.items) : d.items; if(!append) COUNTRIES=d.countries;
     document.getElementById('list').innerHTML = cached.map(card).join('') || '<div class="muted" style="grid-column:1/-1;text-align:center;padding:30px 10px">Brak ofert dla tych filtrów. <a href="/zagranica">Pokaż wszystkie →</a></div>';
     const n=d.total; document.getElementById('count').textContent = `Znaleziono: ${n.toLocaleString('pl-PL')} ofert${F.country?' · '+(COUNTRIES.find(c=>c.code===F.country)||{}).name:''}${F.city?' · '+F.city:''}`;
     document.getElementById('more').style.display = cached.length < n ? '' : 'none';

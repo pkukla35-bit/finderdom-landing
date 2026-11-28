@@ -2321,7 +2321,7 @@ async def zagranica(response: Response, country: Optional[str] = None, transacti
     cities = []
     if q.get("country"):
         cities = [{"city": c["_id"], "n": c["n"]} async for c in coll.aggregate(
-            [{"$match": {**base, "country": q["country"]}}, {"$group": {"_id": "$city", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 40}])]
+            [{"$match": {**base, "country": q["country"], "city": {"$nin": [None, FOREIGN_COUNTRIES[q["country"]][0]]}}}, {"$group": {"_id": "$city", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 40}])]
     response.headers["Cache-Control"] = "public, max-age=300, s-maxage=600, stale-while-revalidate=300"
     return {"total": total, "items": items,
             "countries": [{"code": k, "name": v[0], "flag": v[1], "n": countries.get(k, 0)} for k, v in FOREIGN_COUNTRIES.items()], "cities": cities}

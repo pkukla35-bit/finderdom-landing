@@ -89,7 +89,7 @@ def _type_from_title(t: str, default: str = "mieszkanie") -> str:
 def _title_pl(title: str, area: Optional[float], city: str, cname: str) -> str:
     parts = [re.sub(r"\s+", " ", title).strip()]
     if area: parts.append(f"{area:g} m²")
-    return " · ".join(parts) + f" — {city}, {cname}"
+    return " · ".join(parts) + " — " + (f"{city}, {cname}" if city else cname)
 
 
 def parse_cards(html: str, country_slug: str, cat: str) -> List[Dict[str, Any]]:
@@ -113,7 +113,7 @@ def parse_cards(html: str, country_slug: str, cat: str) -> List[Dict[str, Any]]:
         t = _txt(title.group(1)) if title else ""
         rt = _txt(route.group(1)) if route else ""
         loc = [x.strip() for x in rt.split(",") if x.strip()]
-        city = loc[0] if loc else cname
+        city = loc[0] if loc and loc[0] != cname else None     # route „Hiszpania” bez miasta → brak miasta
         region = loc[1] if len(loc) > 2 else None
         price_pln = _price(pln.group(1)) if pln else None
         area_v = _money(area.group(1)) if area else None
@@ -121,7 +121,7 @@ def parse_cards(html: str, country_slug: str, cat: str) -> List[Dict[str, Any]]:
         if trans == "sprzedaz" and typ_default is None: typ = _type_from_title(t)
         out.append({
             "source": "realting", "external_id": f"rt-{oid}", "url": url.group(1),
-            "title": _title_pl(t, area_v, city, cname), "title_orig": t,
+            "title": _title_pl(t, area_v, city or "", cname), "title_orig": t,
             "type": typ, "transaction_type": trans,
             "price": price_pln, "price_pln": price_pln,
             "price_eur": _price(eur.group(1)) if eur else None, "price_usd": _price(usd.group(1)) if usd else None,

@@ -147,6 +147,7 @@ gtag('set', 'url_passthrough', false);
   .ocard .p small{color:#8ba3d4;font-weight:700;font-size:12px;margin-left:6px}
   .ocard h4{margin:4px 0 4px;font-size:15px;line-height:1.35;color:#fff;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .ocard .d{color:#c5d0e6;font-size:13px}
+  .ocard .desc{color:#9fb0cf;font-size:12.5px;line-height:1.45;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .ocard .m{color:#8ba3d4;font-size:12px;margin-top:6px}
 </style>
 <!-- Google tag (gtag.js) -->
@@ -254,7 +255,7 @@ function card(l){
   const orig = l.currency_orig==='USD' ? (l.price_usd?('$'+Math.round(l.price_usd).toLocaleString('en-US')):'') : (l.price_eur?('€'+Math.round(l.price_eur).toLocaleString('pl-PL')):'');
   const ppm = l.price_pm2?`<small>${Math.round(l.price_pm2).toLocaleString('pl-PL')} zł/m²</small>`:'';
   return `<a class="ocard" href="/oferta?id=${encodeURIComponent(l.external_id)}"><div class="img">${(l.image && l.has_image!==false)?`<img src="${esc(l.image)}" alt="" loading="lazy">`:`<div style="text-align:center;padding:12px;line-height:1.5"><div style="font-size:34px">${l.seller_type==='prywatna'?'👤':'🏠'}</div>Zdjęcia na stronie oferty<br><span style="font-size:11px;opacity:.7">(${esc(l.location||l.city||'')})</span></div>`}<span class="tag">${l.country_flag||''} ${esc(l.country_name||'')}${l.seller_type==='prywatna'?' · 👤 właściciel':''}</span><span class="tag ag">${trans} · ${TY[l.type]||esc(l.type||'')}</span></div>
-    <div class="b"><div class="p">${money(l.price)}${l.transaction_type==='wynajem'?'<small>/mies.</small>':''}${ppm}${orig?`<span class="eur">${orig}</span>`:''}</div><h4>${esc(l.title)}</h4><div class="d">📍 ${esc(l.location||l.city)}</div>${specs?`<div class="d">${esc(specs)}</div>`:''}<div class="m">${({realting:'Realting',greenacres:'Green-Acres',landelity:'Landelity · od właściciela'})[l.source]||esc(l.source||'')} · ${ago(l.added_at)}</div></div></a>`;
+    <div class="b"><div class="p">${money(l.price)}${l.transaction_type==='wynajem'?'<small>/mies.</small>':''}${ppm}${orig?`<span class="eur">${orig}</span>`:''}</div><h4>${esc(l.title)}</h4><div class="d">📍 ${esc(l.location||l.city)}</div>${specs?`<div class="d">${esc(specs)}</div>`:''}${l.description?`<div class="desc">${esc(l.description.slice(0,220))}</div>`:''}<div class="m">${({realting:'Realting',greenacres:'Green-Acres',landelity:'Landelity · od właściciela'})[l.source]||esc(l.source||'')} · ${ago(l.added_at)}</div></div></a>`;
 }
 function renderTabs(cs){
   COUNTRIES=cs;

@@ -156,6 +156,7 @@ def rate(code: str) -> float:
 
 # ───────────────────────── green-acres (.es/.it/.pt — sprzedaż, 24 karty/str., do 20 zdjęć, sort=date) ─────────────────────────
 GA_DOMAINS = {"es": "spain", "it": "italy", "pt": "portugal"}
+_PLOT_PROJECT = re.compile(r"project|planning permission|licen[cs]e|approved|build(?:ing)? area|construction|villa|proyecto|licencia|progetto|projeto|CGI|render", re.I)
 GA_TYPE = [("dzialka", r"działk|grunt|teren|ziemi"), ("lokal", r"lokal|biur|sklep|hotel|magazyn|komercyj|restaurac|budynek|kamienic"),
            ("dom", r"dom|willa|szereg|bungalow|chalet|finca|cortijo|masseria|trullo|rustic|gospodarstw|rezydenc|zamek|casa"),
            ("mieszkanie", r"mieszkan|apartament|kawalerk|penthouse|studio|loft|duplex|attyk")]
@@ -217,6 +218,8 @@ def parse_greenacres(html: str, dom: str) -> List[Dict[str, Any]]:
         if typ == "dzialka": plot, area = (plot or area), None                       # działka: metraż = teren
         elif area and area > (1000 if typ == "mieszkanie" else 2500): area = None   # 2325 m² „mieszkanie” = błąd agenta (wpisany teren)
         label = kind or t.split(":", 1)[-1].strip()
+        dtxt = _txt(desc.group(1)) if desc else ""
+        if typ == "dzialka" and _PLOT_PROJECT.search(dtxt): label = "Działka z projektem domu"   # green-acres: „Teren” + wizualizacja willi = działka z pozwoleniem/projektem
         out.append({
             "source": "greenacres", "external_id": f"ga-{aid}", "url": url,
             "title": _ga_title(label, rooms, area, plot, typ, city, cname),
@@ -362,13 +365,14 @@ def fix_areas(coll=None) -> Dict[str, int]:
     powierzchnia mieszkania (2325 m² „mieszkanie”), działki bez metrażu w tytule. Idempotentne — można wołać co turę."""
     coll = coll if coll is not None else get_mongo()["listings_foreign"]
     n = {"ha": 0, "area": 0, "title": 0}
-    for d in coll.find({"source": "greenacres"}, {"title": 1, "type": 1, "area_m2": 1, "plot_area_m2": 1, "rooms": 1, "city": 1, "country_name": 1, "price_pln": 1}):
+    for d in coll.find({"source": "greenacres"}, {"title": 1, "type": 1, "area_m2": 1, "plot_area_m2": 1, "rooms": 1, "city": 1, "country_name": 1, "description": 1}):
         area, plot, typ = d.get("area_m2"), d.get("plot_area_m2"), d.get("type") or "dom"
         upd: Dict[str, Any] = {}
         if plot and plot < 50: plot = plot * 10000; upd["plot_area_m2"] = plot; n["ha"] += 1      # hektary zapisane jak m²
         if typ == "dzialka" and area: plot, area = (plot or area), None; upd.update(plot_area_m2=plot, area_m2=None, price_pm2=None); n["area"] += 1
         elif area and area > (1000 if typ == "mieszkanie" else 2500): area = None; upd.update(area_m2=None, price_pm2=None); n["area"] += 1
         label = _txt((d.get("title") or "").split(" — ")[0].split(" · ")[0])
+        if typ == "dzialka" and label == "Teren" and _PLOT_PROJECT.search(d.get("description") or ""): label = "Działka z projektem domu"
         title = _ga_title(label, d.get("rooms"), area, plot, typ, d.get("city"), d.get("country_name") or "")
         if label and title != d.get("title"): upd["title"] = title; n["title"] += 1
         if upd: coll.update_one({"_id": d["_id"]}, {"$set": upd})

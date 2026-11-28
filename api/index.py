@@ -2304,7 +2304,7 @@ async def zagranica(response: Response, country: Optional[str] = None, transacti
                     sort: str = "newest", limit: int = 30, offset: int = 0):
     """Lista + liczniki (kraje / miasta) ofert zagranicznych. Publiczne; link do portalu źródłowego tylko w /api/listing/{id} dla planów."""
     coll = database().listings_foreign
-    q: Dict[str, Any] = {"is_stale": {"$ne": True}}
+    q: Dict[str, Any] = {"is_stale": {"$ne": True}, "has_image": True}   # tylko oferty ze zdjęciami (landelity blokuje zdjęcia → wyłączone 28.11)
     if country and country.upper() in FOREIGN_COUNTRIES: q["country"] = country.upper()
     if transaction in ("sprzedaz", "wynajem"): q["transaction_type"] = transaction
     if type in ("mieszkanie", "dom", "dzialka", "lokal"): q["type"] = type

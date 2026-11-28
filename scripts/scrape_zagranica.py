@@ -367,5 +367,5 @@ if __name__ == "__main__":
     ap.add_argument("--stale", action="store_true")
     a = ap.parse_args()
     run(a.pages, [x for x in a.countries.split(",") if x] or None, [x for x in a.cats.split(",") if x] or None)
-    run_greenacres(a.pages); run_landelity(150); backfill_flags()
+    run_greenacres(a.pages); backfill_flags()   # landelity: run_landelity() dostępne, ale wyłączone (portal blokuje zdjęcia)
     if a.stale: mark_stale()

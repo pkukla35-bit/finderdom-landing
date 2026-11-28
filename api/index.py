@@ -2295,7 +2295,7 @@ async def listing_single(listing_id: str, request: Request, response: Response):
 FOREIGN_COUNTRIES = {"ES": ("Hiszpania", "🇪🇸"), "IT": ("Włochy", "🇮🇹"), "US": ("USA", "🇺🇸"), "PT": ("Portugalia", "🇵🇹")}
 _FOREIGN_PROJ = {"_id": 0, "external_id": 1, "title": 1, "type": 1, "transaction_type": 1, "price": 1, "price_eur": 1, "price_usd": 1,
                  "currency_orig": 1, "price_pm2": 1, "area_m2": 1, "rooms": 1, "bedrooms": 1, "bathrooms": 1, "city": 1, "region": 1,
-                 "country": 1, "country_name": 1, "country_flag": 1, "location": 1, "image": 1, "description": 1, "added_at": 1, "source": 1}
+                 "country": 1, "country_name": 1, "country_flag": 1, "location": 1, "image": 1, "description": 1, "added_at": 1, "source": 1, "seller_type": 1, "plot_area_m2": 1}
 
 
 @app.get("/api/zagranica")

@@ -965,9 +965,9 @@ function proxyImg(url) {
   // OLX / Domiporta CDN — publiczne, bez hotlink-protection → bezpośrednio (bez serverless hopu)
   if (u.includes('apollo.olxcdn.com') || u.includes('galeria.domiporta.pl')) return u;
   // realting.com (zagranica) — serwer odrzuca nasz proxy (fingerprint TLS), a bezpośrednio z przeglądarki działa → wsrv.nl jako cache/resize
-  if (u.includes('realting.com/uploads/')) return 'https://wsrv.nl/?url=' + encodeURIComponent(u.replace(/^https?:\/\//, '')) + '&w=1200&q=80&output=webp';
+  if (u.includes('realting.com/uploads/') || u.includes('landelity.com/img/')) return 'https://wsrv.nl/?url=' + encodeURIComponent(u.replace(/^https?:\/\//, '')) + '&w=1200&q=80&output=webp';
   // realting.com (zagranica) — serwer odrzuca nasz proxy (fingerprint TLS), a bezpośrednio z przeglądarki działa → wsrv.nl jako cache/resize
-  if (u.includes('realting.com/uploads/')) return 'https://wsrv.nl/?url=' + encodeURIComponent(u.replace(/^https?:\/\//, '')) + '&w=1200&q=80&output=webp';
+  if (u.includes('realting.com/uploads/') || u.includes('landelity.com/img/')) return 'https://wsrv.nl/?url=' + encodeURIComponent(u.replace(/^https?:\/\//, '')) + '&w=1200&q=80&output=webp';
   return '/api/img?u=' + encodeURIComponent(u);
 }
 
@@ -1130,7 +1130,7 @@ function normalizeScrapedListing(raw) {
 
 // Wykrywanie portalu z URL (oferta.html)
 // Bez planu API nie zwraca linku (url) — nazwę portalu bierzemy z pola source
-function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania',listaprzetargow:'ListaPrzetargów',okolica:'Okolica',krn:'KRN',allegrolokalnie:'Allegro Lokalnie',sprzedajemy:'Sprzedajemy',lento:'Lento',homeportal:'HomePortal',domy:'Domy.pl',klikmapa:'Klikmapa',szybko:'Szybko',domplace:'Domplace',mojelokum:'MojeLokum',realting:'Realting (zagranica)',finderdom:'FinderDom'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
+function portalFromSource(src) { const m = {otodom:'Otodom',olx:'OLX',nol:'NOL','nol-direct':'NOL',morizon:'Morizon',gratka:'Gratka',domiporta:'Domiporta',adresowo:'Adresowo',gethome:'Gethome',odwlasciciela:'OdWłaściciela',szybko:'Szybko',kupmieszkania:'KupMieszkania',listaprzetargow:'ListaPrzetargów',okolica:'Okolica',krn:'KRN',allegrolokalnie:'Allegro Lokalnie',sprzedajemy:'Sprzedajemy',lento:'Lento',homeportal:'HomePortal',domy:'Domy.pl',klikmapa:'Klikmapa',szybko:'Szybko',domplace:'Domplace',mojelokum:'MojeLokum',realting:'Realting (zagranica)',greenacres:'Green-Acres (zagranica)',landelity:'Landelity (zagranica)',finderdom:'FinderDom'}; const k = String(src || '').toLowerCase(); return m[k] || (k && k !== 'apify' && k !== 'scrapingbee' ? k.charAt(0).toUpperCase() + k.slice(1) : null); }
 function detectPortalFromUrlOff(url) {
   if (!url) return null;
   const u = String(url).toLowerCase();
@@ -1154,6 +1154,8 @@ function detectPortalFromUrlOff(url) {
   if (u.includes('domplace.pl')) return 'Domplace';
   if (u.includes('mojelokum.pl')) return 'MojeLokum';
   if (u.includes('realting.com')) return 'Realting';
+  if (u.includes('green-acres.')) return 'Green-Acres';
+  if (u.includes('landelity.com')) return 'Landelity';
   if (u.includes('domy.pl')) return 'Domy.pl';
   if (u.includes('klikmapa.pl') || u.includes('beldom.pl')) return 'Klikmapa';
   if (u.includes('kupmieszkania.pl')) return 'KupMieszkania';

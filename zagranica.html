@@ -216,7 +216,7 @@ gtag('set', 'url_passthrough', false);
 <div class="roi" style="margin-top:48px">
   <p><b>Chcesz dostać e-mail, gdy pojawi się apartament w Alicante do 600 tys. zł?</b> Oferty zagraniczne importujemy co 30 minut — ceny przeliczamy na złotówki po bieżącym kursie. Kolejne kraje (Grecja, Cypr, Chorwacja, Turcja, Dubaj) dodamy, gdy zobaczymy zainteresowanie.</p>
   <a class="cta-btn" href="/rejestracja">Załóż darmowe konto →</a>
-  <div class="note">Źródło: realting.com — międzynarodowa baza biur nieruchomości. Link do oferty źródłowej w planie Osobistym / Firmowym.</div>
+  <div class="note">Źródła: realting.com, green-acres (ES/IT/PT), landelity.com (ogłoszenia bezpośrednio od właścicieli). Link do oferty źródłowej w planie Osobistym / Firmowym.</div>
 </div>
 
 </main>
@@ -253,8 +253,8 @@ function card(l){
   const specs=[l.area_m2?l.area_m2+' m²':'', l.rooms?l.rooms+' pok.':'', l.bedrooms?l.bedrooms+' syp.':'', l.bathrooms?l.bathrooms+' łaz.':''].filter(Boolean).join(' · ');
   const orig = l.currency_orig==='USD' ? (l.price_usd?('$'+Math.round(l.price_usd).toLocaleString('en-US')):'') : (l.price_eur?('€'+Math.round(l.price_eur).toLocaleString('pl-PL')):'');
   const ppm = l.price_pm2?`<small>${Math.round(l.price_pm2).toLocaleString('pl-PL')} zł/m²</small>`:'';
-  return `<a class="ocard" href="/oferta?id=${encodeURIComponent(l.external_id)}"><div class="img">${l.image?`<img src="${esc(l.image)}" alt="" loading="lazy">`:'📷 brak zdjęć'}<span class="tag">${l.country_flag||''} ${esc(l.country_name||'')}</span><span class="tag ag">${trans} · ${TY[l.type]||esc(l.type||'')}</span></div>
-    <div class="b"><div class="p">${money(l.price)}${l.transaction_type==='wynajem'?'<small>/mies.</small>':''}${ppm}${orig?`<span class="eur">${orig}</span>`:''}</div><h4>${esc(l.title)}</h4><div class="d">📍 ${esc(l.location||l.city)}</div>${specs?`<div class="d">${esc(specs)}</div>`:''}<div class="m">Realting · ${ago(l.added_at)}</div></div></a>`;
+  return `<a class="ocard" href="/oferta?id=${encodeURIComponent(l.external_id)}"><div class="img">${l.image?`<img src="${esc(l.image)}" alt="" loading="lazy">`:'📷 brak zdjęć'}<span class="tag">${l.country_flag||''} ${esc(l.country_name||'')}${l.seller_type==='prywatna'?' · 👤 właściciel':''}</span><span class="tag ag">${trans} · ${TY[l.type]||esc(l.type||'')}</span></div>
+    <div class="b"><div class="p">${money(l.price)}${l.transaction_type==='wynajem'?'<small>/mies.</small>':''}${ppm}${orig?`<span class="eur">${orig}</span>`:''}</div><h4>${esc(l.title)}</h4><div class="d">📍 ${esc(l.location||l.city)}</div>${specs?`<div class="d">${esc(specs)}</div>`:''}<div class="m">${({realting:'Realting',greenacres:'Green-Acres',landelity:'Landelity · od właściciela'})[l.source]||esc(l.source||'')} · ${ago(l.added_at)}</div></div></a>`;
 }
 function renderTabs(cs){
   COUNTRIES=cs;

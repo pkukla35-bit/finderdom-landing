@@ -2295,7 +2295,7 @@ async def listing_single(listing_id: str, request: Request, response: Response):
 FOREIGN_COUNTRIES = {"ES": ("Hiszpania", "🇪🇸"), "IT": ("Włochy", "🇮🇹"), "US": ("USA", "🇺🇸"), "PT": ("Portugalia", "🇵🇹")}
 _FOREIGN_PROJ = {"_id": 0, "external_id": 1, "title": 1, "type": 1, "transaction_type": 1, "price": 1, "price_eur": 1, "price_usd": 1,
                  "currency_orig": 1, "price_pm2": 1, "area_m2": 1, "rooms": 1, "bedrooms": 1, "bathrooms": 1, "city": 1, "region": 1,
-                 "country": 1, "country_name": 1, "country_flag": 1, "location": 1, "image": 1, "description": 1, "added_at": 1, "source": 1, "seller_type": 1, "plot_area_m2": 1}
+                 "country": 1, "country_name": 1, "country_flag": 1, "location": 1, "image": 1, "description": 1, "added_at": 1, "source": 1, "seller_type": 1, "plot_area_m2": 1, "has_image": 1}
 
 
 @app.get("/api/zagranica")
@@ -2311,7 +2311,8 @@ async def zagranica(response: Response, country: Optional[str] = None, transacti
     if city and city.strip(): q["city"] = {"$regex": "^" + re.escape(city.strip()), "$options": "i"}
     if price_to: q["price"] = {"$lte": float(price_to)}
     if price_from: q.setdefault("price", {})["$gte"] = float(price_from)
-    sort_spec = {"newest": [("added_at", -1)], "price_asc": [("price", 1)], "price_desc": [("price", -1)], "pm2_asc": [("price_pm2", 1)]}.get(sort, [("added_at", -1)])
+    # „najnowsze”: oferty ze zdjęciem najpierw (landelity blokuje zdjęcia → placeholder, niżej)
+    sort_spec = {"newest": [("has_image", -1), ("added_at", -1)], "price_asc": [("price", 1)], "price_desc": [("price", -1)], "pm2_asc": [("price_pm2", 1)]}.get(sort, [("has_image", -1), ("added_at", -1)])
     limit = max(1, min(limit, 60))
     items = [d async for d in coll.find(q, _FOREIGN_PROJ).sort(sort_spec).skip(max(0, offset)).limit(limit)]
     total = await coll.count_documents(q)

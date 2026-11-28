@@ -130,7 +130,7 @@ def parse_cards(html: str, country_slug: str, cat: str) -> List[Dict[str, Any]]:
             "area_m2": area_v, "rooms": int(rooms.group(1)) if rooms else ((int(beds.group(1)) + 1) if beds else None), "bedrooms": int(beds.group(1)) if beds else None,
             "bathrooms": int(baths.group(1)) if baths else None, "floor": _txt(floor.group(1)) if floor else None,
             "city": city, "region": region, "country": iso, "country_name": cname, "country_flag": flag, "location": rt,
-            "image": img.group(1) if img else None, "images": [img.group(1)] if img else [],
+            "image": img.group(1) if img else None, "images": [img.group(1)] if img else [], "has_image": bool(img),
             "description": _txt(desc.group(1)).replace("…", "").strip() if desc else "",
             "seller_type": "posrednik", "agency_name": None,
             "is_stale": False, "last_seen_at": datetime.now(timezone.utc).isoformat(),
@@ -199,7 +199,7 @@ def parse_greenacres(html: str, dom: str) -> List[Dict[str, Any]]:
             "price_pm2": round(ppln / area) if ppln and area and area > 5 else None,
             "area_m2": area, "plot_area_m2": plot, "rooms": rooms, "bedrooms": None, "bathrooms": None, "floor": None,
             "city": city, "region": region, "country": iso, "country_name": cname, "country_flag": flag, "location": lt,
-            "image": imgs[0] if imgs else None, "images": imgs[:20],
+            "image": imgs[0] if imgs else None, "images": imgs[:20], "has_image": bool(imgs),
             "description": _txt(desc.group(1)).replace("...", "").strip() if desc else "",
             "seller_type": "posrednik", "agency_name": None,
             "is_stale": False, "last_seen_at": datetime.now(timezone.utc).isoformat(),
@@ -281,7 +281,8 @@ def run_landelity(limit: int = 150, coll=None, delay: float = 1.0) -> Dict[str, 
             "area_m2": area_v if typ != "dzialka" else None, "plot_area_m2": area_v if typ == "dzialka" else None, "rooms": None, "bedrooms": None, "bathrooms": None, "floor": None,
             "city": city, "region": addr.get("addressRegion") or None, "country": iso, "country_name": cname, "country_flag": flag,
             "location": ", ".join(x for x in [city, addr.get("addressRegion"), cname] if x),
-            "image": imgs[0] if imgs else None, "images": imgs[:20], "description": (d.get("description") or "").replace("…", "").strip(),
+            # landelity blokuje pobieranie zdjęć (403 także z przeglądarki) → has_image False: karta z placeholderem, niżej w sortowaniu
+            "image": imgs[0] if imgs else None, "images": imgs[:20], "has_image": False, "description": (d.get("description") or "").replace("…", "").strip(),
             "seller_type": "prywatna", "agency_name": None,   # landelity = ogłoszenia bezpośrednio od właścicieli (free listing)
             "is_stale": False, "last_seen_at": datetime.now(timezone.utc).isoformat(), "posted_at": lastmod,
         }
@@ -330,6 +331,15 @@ def run(pages: int = 2, countries: Optional[List[str]] = None, cats: Optional[Li
     return tot
 
 
+def backfill_flags(coll=None) -> None:
+    """has_image dla starszych dokumentów (sortowanie: ze zdjęciem najpierw)."""
+    coll = coll if coll is not None else get_mongo()["listings_foreign"]
+    coll.update_many({"has_image": {"$exists": False}},
+                     [{"$set": {"has_image": {"$and": [{"$ne": ["$image", None]}, {"$ne": ["$source", "landelity"]}]}}}])
+    try: coll.create_index([("has_image", -1), ("added_at", -1)])
+    except Exception: pass
+
+
 def mark_stale(coll=None, days: int = 10) -> int:
     """Oferta niewidziana na listach „najnowsze” przez N dni nie znaczy zdjęta (listy to tylko czubek) — stale-check robimy
     przez stronę oferty: 404/410 lub brak ceny → is_stale. Limit 150/run, najstarsze last_checked."""
@@ -357,5 +367,5 @@ if __name__ == "__main__":
     ap.add_argument("--stale", action="store_true")
     a = ap.parse_args()
     run(a.pages, [x for x in a.countries.split(",") if x] or None, [x for x in a.cats.split(",") if x] or None)
-    run_greenacres(a.pages); run_landelity(150)
+    run_greenacres(a.pages); run_landelity(150); backfill_flags()
     if a.stale: mark_stale()

@@ -1960,6 +1960,12 @@ async def admin_cleanup_stale(
         except Exception as e:
             logger.error("daily jobs failed: %s", str(e)[:200])
         await _scheduler_tick("cleanup-stale", force=True)
+        try:
+            foreign_tr = await asyncio.wait_for(_zagranica_translate_batch(80), timeout=40)   # 🌍 opisy zagraniczne → PL (partiami, co wywołanie)
+        except Exception as e:
+            foreign_tr = {"error": str(e)[:120]}
+    else:
+        foreign_tr = None
 
     limit = max(1, min(limit, 1000))
     concurrency = max(1, min(concurrency, 50))
@@ -2066,6 +2072,7 @@ async def admin_cleanup_stale(
         "dry_run": bool(dry_run),
         "sample_status_codes": [r[2] for r in results[:20]],
         "daily_jobs": daily,
+        "foreign_translated": foreign_tr,
     }
 
 
@@ -2304,7 +2311,7 @@ async def listing_single(listing_id: str, request: Request, response: Response):
 FOREIGN_COUNTRIES = {"ES": ("Hiszpania", "🇪🇸"), "IT": ("Włochy", "🇮🇹"), "US": ("USA", "🇺🇸"), "PT": ("Portugalia", "🇵🇹")}
 _FOREIGN_PROJ = {"_id": 0, "external_id": 1, "title": 1, "type": 1, "transaction_type": 1, "price": 1, "price_eur": 1, "price_usd": 1,
                  "currency_orig": 1, "price_pm2": 1, "area_m2": 1, "rooms": 1, "bedrooms": 1, "bathrooms": 1, "city": 1, "region": 1,
-                 "country": 1, "country_name": 1, "country_flag": 1, "location": 1, "image": 1, "description": 1, "added_at": 1, "source": 1, "seller_type": 1, "plot_area_m2": 1, "has_image": 1}
+                 "country": 1, "country_name": 1, "country_flag": 1, "location": 1, "image": 1, "description": 1, "description_pl": 1, "added_at": 1, "source": 1, "seller_type": 1, "plot_area_m2": 1, "has_image": 1}
 
 
 @app.get("/api/zagranica")
@@ -2324,6 +2331,16 @@ async def zagranica(response: Response, country: Optional[str] = None, transacti
     sort_spec = {"newest": [("has_image", -1), ("added_at", -1)], "price_asc": [("price", 1)], "price_desc": [("price", -1)], "pm2_asc": [("price_pm2", 1)]}.get(sort, [("has_image", -1), ("added_at", -1)])
     limit = max(1, min(limit, 60))
     items = [d async for d in coll.find(q, _FOREIGN_PROJ).sort(sort_spec).skip(max(0, offset)).limit(limit)]
+    # 🇵🇱 karty po polsku: opisy z portalu (EN/ES/IT) tłumaczymy raz i cache'ujemy (description_pl); brakujące — tu, z budżetem 7 s
+    todo = [d for d in items if d.get("description") and not d.get("description_pl")]
+    if todo:
+        try:
+            await asyncio.wait_for(_translate_foreign_docs(coll, todo), timeout=7)
+        except Exception as e:
+            logger.warning("zagranica translate inline: %s", str(e)[:120])
+    for d in items:
+        if d.get("description_pl"): d["description"] = d.pop("description_pl")
+        else: d.pop("description_pl", None)
     total = await coll.count_documents(q)
     # liczniki krajów (dla zakładek) i miast (dla wybranego kraju) — bez filtra miasta, żeby zakładki nie znikały
     base = {k: v for k, v in q.items() if k not in ("city", "country")}
@@ -5543,6 +5560,7 @@ async def admin_mailing_smtp_delete(admin: dict = Depends(require_admin)):
 # ═══════════════════════════════════════════════════════════════════════════
 AI_PROXY_URL = os.environ.get("INTEGRATION_PROXY_URL", "https://integrations.emergentagent.com") + "/llm/chat/completions"
 AI_DEFAULT_MODEL = "gpt-5.4"
+AI_TRANSLATE_MODEL = "gpt-5.4-mini"   # tłumaczenia opisów ofert zagranicznych (krótkie, tanie)
 _AI_RT: dict = {"cfg": None, "ts": 0.0}
 
 CHAT_SYSTEM_PROMPT = """Jesteś asystentem FinderDom.pl — polskiej wyszukiwarki ogłoszeń nieruchomości (agregator) i narzędzia wyceny.
@@ -5585,7 +5603,7 @@ async def _translate_pl(text: str) -> Optional[str]:
     try:
         async with httpx.AsyncClient(timeout=14) as client:
             r = await client.post(AI_PROXY_URL, headers={"Authorization": f"Bearer {cfg['key']}", "Content-Type": "application/json"},
-                                  json={"model": cfg["model"], "max_tokens": 900, "messages": [
+                                  json={"model": AI_TRANSLATE_MODEL, "max_tokens": 900, "messages": [
                                       {"role": "system", "content": "Przetłumacz opis nieruchomości na naturalny polski. Zachowaj liczby, metraże, nazwy miejscowości i akapity. Nie dodawaj komentarzy, zwróć sam przetłumaczony tekst."},
                                       {"role": "user", "content": text[:2500]}]})
         if r.status_code != 200: return None
@@ -5593,6 +5611,30 @@ async def _translate_pl(text: str) -> Optional[str]:
         return out or None
     except Exception as e:
         logger.warning("translate_pl: %s", str(e)[:120]); return None
+
+
+async def _translate_foreign_docs(coll, docs: list, concurrency: int = 10) -> int:
+    """Tłumaczy opisy podanych dokumentów listings_foreign (równolegle), zapisuje description_pl w bazie i w dict-ach. Zwraca liczbę przetłumaczonych."""
+    sem = asyncio.Semaphore(concurrency)
+    async def one(d):
+        async with sem:
+            pl = await _translate_pl(d["description"])
+        if pl:
+            d["description_pl"] = pl
+            await coll.update_one({"external_id": d["external_id"]}, {"$set": {"description_pl": pl}})
+        return bool(pl)
+    res = await asyncio.gather(*(one(d) for d in docs), return_exceptions=True)
+    return sum(1 for r in res if r is True)
+
+
+async def _zagranica_translate_batch(n: int = 80) -> dict:
+    """Partia tłumaczeń opisów zagranicznych (najnowsze ze zdjęciem najpierw) — wołana z cleanup-stale (GitHub, co 6 h)."""
+    coll = database().listings_foreign
+    docs = [d async for d in coll.find({"description": {"$nin": [None, ""]}, "description_pl": {"$exists": False}, "is_stale": {"$ne": True}},
+                                       {"_id": 0, "external_id": 1, "description": 1}).sort([("has_image", -1), ("added_at", -1)]).limit(max(1, min(n, 200)))]
+    done = await _translate_foreign_docs(coll, docs) if docs else 0
+    left = await coll.count_documents({"description": {"$nin": [None, ""]}, "description_pl": {"$exists": False}, "is_stale": {"$ne": True}})
+    return {"translated": done, "left": left}
 
 
 async def _ai_cfg() -> dict:

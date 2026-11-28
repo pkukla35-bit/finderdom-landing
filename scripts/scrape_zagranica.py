@@ -161,6 +161,28 @@ GA_TYPE = [("dzialka", r"działk|grunt|teren|ziemi"), ("lokal", r"lokal|biur|skl
            ("mieszkanie", r"mieszkan|apartament|kawalerk|penthouse|studio|loft|duplex|attyk")]
 
 
+def _area(v: str) -> Optional[float]:
+    """„198 m²”, „1 507 m²”, „8.15 hektarów działki”, „2,5 ha”, „12 arów” → m²."""
+    m = re.search(r"([\d\s.,\xa0]+)\s*(m²|m&#xB2;|m2|hektar|ha\b|ar[óo]?w?\b|a\b)", v.replace("&#xA0;", " "), re.I)
+    if not m: return None
+    n = _money(m.group(1))
+    if not n: return None
+    u = m.group(2).lower()
+    if u.startswith(("hektar", "ha")): return round(n * 10000, 1)
+    if u.startswith("a"): return round(n * 100, 1)
+    return n
+
+
+def _fmt_area(m2: Optional[float]) -> str:
+    if not m2: return ""
+    return (f"{m2 / 10000:.2f}".rstrip("0").rstrip(".") + " ha") if m2 >= 10000 else f"{m2:g} m²"
+
+
+def _ga_title(label: str, rooms: Optional[int], area: Optional[float], plot: Optional[float], typ: str, city: Optional[str], cname: str) -> str:
+    size = _fmt_area(plot) if typ == "dzialka" else (_fmt_area(area) if area else (f"działka {_fmt_area(plot)}" if plot else ""))
+    return " · ".join(x for x in [label, f"{rooms} pok." if rooms else "", size] if x) + " — " + (f"{city}, {cname}" if city else cname)
+
+
 def parse_greenacres(html: str, dom: str) -> List[Dict[str, Any]]:
     import base64
     iso, cname, flag = COUNTRIES[GA_DOMAINS[dom]]
@@ -180,21 +202,24 @@ def parse_greenacres(html: str, dom: str) -> List[Dict[str, Any]]:
         tags = re.findall(r'<div class="info-tag shown" title="([^"]*)">([^<]*)</div>', c)
         desc = re.search(r'<div class="description-details">\s*(.*?)\s*</div>', c, re.S)
         t = _txt(title.group(1)) if title else ""          # „Zakup: Dom Rojales”
-        kind = next((v for k, v in tags if "Typ" in k), "")
+        kind = _txt(next((v for k, v in tags if "Typ" in k), ""))
         rooms = next((int(re.search(r"\d+", v).group()) for k, v in tags if k == "Pokoje" and re.search(r"\d+", v)), None)
-        area = next((_money(v) for k, v in tags if "Powierzchnia" in k and "teren" not in k.lower() and "działk" not in k.lower()), None)
-        plot = next((_money(v) for k, v in tags if "Teren" in k or "teren" in k.lower() or "działk" in k.lower()), None)
-        if typ_hint_plot := (area and plot and area == plot): area = None   # ta sama liczba = to była działka, nie powierzchnia użytkowa
+        # „Powierzchnia mieszkalna: 198 m²” = użytkowa; „Teren: 263 m² terenu” / „8.15 hektarów działki” = działka (ha → m²)
+        area = next((_area(v) for k, v in tags if "Powierzchnia" in k and "teren" not in k.lower() and "działk" not in k.lower()), None)
+        plot = next((_area(v) for k, v in tags if "Teren" in k or "teren" in k.lower() or "działk" in k.lower()), None)
+        if area and plot and area == plot: area = None   # ta sama liczba = to była działka, nie powierzchnia użytkowa
         lt = _txt(loc.group(1)) if loc else ""
         mloc = re.match(r"(.*?)\s*\((.*?)\)\s*$", lt)
         city, region = (mloc.group(1).strip(), mloc.group(2).strip()) if mloc else (lt or None, None)
         pe = _price((price.group(1) or "").replace("\xa0", " ").replace("&#xA0;", " ")) if price else None
         ppln = round(pe * rate("EUR")) if pe else None
         typ = next((ty for ty, rx in GA_TYPE if re.search(rx, (kind + " " + t).lower())), "dom")
+        if typ == "dzialka": plot, area = (plot or area), None                       # działka: metraż = teren
+        elif area and area > (1000 if typ == "mieszkanie" else 2500): area = None   # 2325 m² „mieszkanie” = błąd agenta (wpisany teren)
         label = kind or t.split(":", 1)[-1].strip()
         out.append({
             "source": "greenacres", "external_id": f"ga-{aid}", "url": url,
-            "title": " · ".join(x for x in [label, f"{rooms} pok." if rooms else "", f"{area:g} m²" if area else ""] if x) + " — " + (f"{city}, {cname}" if city else cname),
+            "title": _ga_title(label, rooms, area, plot, typ, city, cname),
             "title_orig": t, "type": typ, "transaction_type": "sprzedaz",
             "price": ppln, "price_pln": ppln, "price_eur": pe, "price_usd": None, "currency_orig": "EUR",
             "price_pm2": round(ppln / area) if ppln and area and area > 5 else None,
@@ -332,6 +357,25 @@ def run(pages: int = 2, countries: Optional[List[str]] = None, cats: Optional[Li
     return tot
 
 
+def fix_areas(coll=None) -> Dict[str, int]:
+    """Naprawa starszych dokumentów green-acres (import sprzed 28.11): „8.15 hektarów” zapisane jako 8.15 m², teren wpisany jako
+    powierzchnia mieszkania (2325 m² „mieszkanie”), działki bez metrażu w tytule. Idempotentne — można wołać co turę."""
+    coll = coll if coll is not None else get_mongo()["listings_foreign"]
+    n = {"ha": 0, "area": 0, "title": 0}
+    for d in coll.find({"source": "greenacres"}, {"title": 1, "type": 1, "area_m2": 1, "plot_area_m2": 1, "rooms": 1, "city": 1, "country_name": 1, "price_pln": 1}):
+        area, plot, typ = d.get("area_m2"), d.get("plot_area_m2"), d.get("type") or "dom"
+        upd: Dict[str, Any] = {}
+        if plot and plot < 50: plot = plot * 10000; upd["plot_area_m2"] = plot; n["ha"] += 1      # hektary zapisane jak m²
+        if typ == "dzialka" and area: plot, area = (plot or area), None; upd.update(plot_area_m2=plot, area_m2=None, price_pm2=None); n["area"] += 1
+        elif area and area > (1000 if typ == "mieszkanie" else 2500): area = None; upd.update(area_m2=None, price_pm2=None); n["area"] += 1
+        label = _txt((d.get("title") or "").split(" — ")[0].split(" · ")[0])
+        title = _ga_title(label, d.get("rooms"), area, plot, typ, d.get("city"), d.get("country_name") or "")
+        if label and title != d.get("title"): upd["title"] = title; n["title"] += 1
+        if upd: coll.update_one({"_id": d["_id"]}, {"$set": upd})
+    log.info("zagranica fix_areas: ha=%d area=%d title=%d", n["ha"], n["area"], n["title"])
+    return n
+
+
 def backfill_flags(coll=None) -> None:
     """has_image dla starszych dokumentów (sortowanie: ze zdjęciem najpierw)."""
     coll = coll if coll is not None else get_mongo()["listings_foreign"]
@@ -366,7 +410,12 @@ if __name__ == "__main__":
     ap.add_argument("--countries", default="")
     ap.add_argument("--cats", default="")
     ap.add_argument("--stale", action="store_true")
+    ap.add_argument("--fix-areas", action="store_true", help="tylko naprawa metrażu starych dokumentów green-acres (ha, teren vs mieszkalna)")
+    ap.add_argument("--only", default="", help="realting | greenacres — puste = oba")
     a = ap.parse_args()
-    run(a.pages, [x for x in a.countries.split(",") if x] or None, [x for x in a.cats.split(",") if x] or None)
-    run_greenacres(a.pages); backfill_flags()   # landelity: run_landelity() dostępne, ale wyłączone (portal blokuje zdjęcia)
+    if a.fix_areas:
+        fix_areas(); sys.exit(0)
+    if a.only in ("", "realting"): run(a.pages, [x for x in a.countries.split(",") if x] or None, [x for x in a.cats.split(",") if x] or None)
+    if a.only in ("", "greenacres"): run_greenacres(a.pages)
+    fix_areas(); backfill_flags()   # landelity: run_landelity() dostępne, ale wyłączone (portal blokuje zdjęcia)
     if a.stale: mark_stale()

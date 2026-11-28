@@ -218,7 +218,10 @@ def main():
         # 🔎 tryb głęboki (max_pages ≥ 30 — jedyny parametr dostępny z workflow_dispatch): nie przerywaj po 1 stronie bez nowych —
 # listy „od najnowszych” mają w środku strony już zaimportowane, a za nimi starsze oferty, których nigdy nie pobraliśmy (brak duplikatów).
         deep = a.max_pages >= 300; zero_streak = 0   # OLX: lista ogólnopolska, domyślnie 120 stron
-        for page in range(1, a.max_pages + 1):
+        # ⏰ lekka tura ogólnopolska (max_pages ≤ 2, co 30–60 min): po przerwie w harmonogramie 2 strony nie wystarczają (28.11: 08:54
+        # page 2 → new=32/52, dalsze nowe za horyzontem). Dopóki strona daje ≥ 30 % nowych — czytaj dalej, do 10 stron.
+        adaptive = a.regions and not a.city and a.max_pages <= 2
+        for page in range(1, (10 if adaptive else a.max_pages) + 1):
             html = fetch(list_url(a.property, a.transaction, slug, page)); tot["pages"] += 1
             if not html: log.info("  page %d: brak HTML", page); break
             ads = parse_list(html)
@@ -246,6 +249,7 @@ def main():
             log.info("  page %d: %d ogłoszeń → new=%d upd=%d", page, len(ads), new, upd)
             zero_streak = zero_streak + 1 if new == 0 else 0
             if new == 0 and page >= 2 and zero_streak >= (4 if deep else 2): log.info("  → brak nowych, następne miasto"); break
+            if adaptive and page >= a.max_pages and new < 0.3 * max(1, len(ads)): break
             time.sleep(a.delay)
     log.info("═══ DONE olx %s/%s: new=%d updated=%d pages=%d ═══", a.transaction, a.property, tot["new"], tot["updated"], tot["pages"])
     # ⏰ Odświeżanie co 30 min (fresh_sweep): lekki job OLX może zostać liderem następnej tury (claim w Mongo). 27.11

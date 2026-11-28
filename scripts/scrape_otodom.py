@@ -100,7 +100,7 @@ def otodom_url(prop: str, city: Dict[str, str], page: int) -> str:
     slug = PROPERTY_SLUGS[prop]
     if city["slug"] == city["voi"]:   # tryb --regions: całe województwo, od najnowszych
         return f"https://www.otodom.pl/pl/wyniki/{TRANSACTION}/{slug}/{city['voi']}?limit=72&page={page}&by=LATEST&direction=DESC"
-    return f"https://www.otodom.pl/pl/wyniki/{TRANSACTION}/{slug}/{city['voi']}/{city['slug']}?limit=72&page={page}"
+    return f"https://www.otodom.pl/pl/wyniki/{TRANSACTION}/{slug}/{city['voi']}/{city['slug']}?limit=72&page={page}&by=LATEST&direction=DESC"   # 28.11: tura per miasto też od najnowszych (było: domyślne = promowane)
 
 
 def fetch_via_scrapingbee(url: str, api_key: str) -> Optional[str]:
@@ -180,21 +180,23 @@ def parse_listings(html: str) -> List[Dict[str, Any]]:
         data = json.loads(m.group(1))
     except Exception:
         return []
+    # Zbieramy WSZYSTKIE listy „items” (karty z id/slug) i bierzemy najdłuższą: na części stron pierwsza napotkana lista to
+    # 1 karta „promowana/polecana” (28.11: log „page 3: 1 items” przy 70+ ofertach na stronie) → gubiliśmy całe strony wyników.
+    found: List[list] = []
     def walk(node):
         if isinstance(node, dict):
             if "items" in node and isinstance(node["items"], list) and node["items"]:
                 first = node["items"][0]
                 if isinstance(first, dict) and ("id" in first or "slug" in first):
-                    return node["items"]
+                    found.append(node["items"])
             for v in node.values():
-                r = walk(v)
-                if r: return r
+                walk(v)
         elif isinstance(node, list):
             for v in node:
-                r = walk(v)
-                if r: return r
-        return None
-    return [x for x in (walk(data) or []) if isinstance(x, dict)]
+                walk(v)
+    walk(data)
+    best = max(found, key=len) if found else []
+    return [x for x in best if isinstance(x, dict)]
 
 
 def _num(v) -> Optional[float]:

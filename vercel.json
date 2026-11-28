@@ -40,6 +40,10 @@
       "destination": "/api/index"
     },
     {
+      "source": "/api/zagranica",
+      "destination": "/api/index"
+    },
+    {
       "source": "/api/wanted",
       "destination": "/api/index"
     },

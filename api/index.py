@@ -2245,6 +2245,10 @@ async def listing_single(listing_id: str, request: Request, response: Response):
             try:
                 doc = await coll.find_one({"external_id": int(ext_id)}, {"_id": 0})
             except: pass
+        if not doc and ext_id.startswith("rt-"):
+            # 🌍 oferta zagraniczna (realting.com) — osobna kolekcja listings_foreign (scripts/scrape_zagranica.py)
+            doc = await database().listings_foreign.find_one({"external_id": ext_id}, {"_id": 0})
+            if doc: doc["foreign"] = True
         if not doc:
             response.status_code = 404
             return {"error": "Listing not found", "id": listing_id}
@@ -2285,6 +2289,42 @@ async def listing_single(listing_id: str, request: Request, response: Response):
         logger.warning("listing/{%s} error: %s", listing_id, e)
         response.status_code = 500
         return {"error": str(e)[:200]}
+
+
+# ───────────────────────── 🌍 Zagranica — Hiszpania, Włochy, USA, Portugalia (realting.com) ─────────────────────────
+FOREIGN_COUNTRIES = {"ES": ("Hiszpania", "🇪🇸"), "IT": ("Włochy", "🇮🇹"), "US": ("USA", "🇺🇸"), "PT": ("Portugalia", "🇵🇹")}
+_FOREIGN_PROJ = {"_id": 0, "external_id": 1, "title": 1, "type": 1, "transaction_type": 1, "price": 1, "price_eur": 1, "price_usd": 1,
+                 "currency_orig": 1, "price_pm2": 1, "area_m2": 1, "rooms": 1, "bedrooms": 1, "bathrooms": 1, "city": 1, "region": 1,
+                 "country": 1, "country_name": 1, "country_flag": 1, "location": 1, "image": 1, "description": 1, "added_at": 1, "source": 1}
+
+
+@app.get("/api/zagranica")
+async def zagranica(response: Response, country: Optional[str] = None, transaction: Optional[str] = None, type: Optional[str] = None,
+                    city: Optional[str] = None, price_to: Optional[float] = None, price_from: Optional[float] = None,
+                    sort: str = "newest", limit: int = 30, offset: int = 0):
+    """Lista + liczniki (kraje / miasta) ofert zagranicznych. Publiczne; link do portalu źródłowego tylko w /api/listing/{id} dla planów."""
+    coll = database().listings_foreign
+    q: Dict[str, Any] = {"is_stale": {"$ne": True}}
+    if country and country.upper() in FOREIGN_COUNTRIES: q["country"] = country.upper()
+    if transaction in ("sprzedaz", "wynajem"): q["transaction_type"] = transaction
+    if type in ("mieszkanie", "dom", "dzialka", "lokal"): q["type"] = type
+    if city and city.strip(): q["city"] = {"$regex": "^" + re.escape(city.strip()), "$options": "i"}
+    if price_to: q["price"] = {"$lte": float(price_to)}
+    if price_from: q.setdefault("price", {})["$gte"] = float(price_from)
+    sort_spec = {"newest": [("added_at", -1)], "price_asc": [("price", 1)], "price_desc": [("price", -1)], "pm2_asc": [("price_pm2", 1)]}.get(sort, [("added_at", -1)])
+    limit = max(1, min(limit, 60))
+    items = [d async for d in coll.find(q, _FOREIGN_PROJ).sort(sort_spec).skip(max(0, offset)).limit(limit)]
+    total = await coll.count_documents(q)
+    # liczniki krajów (dla zakładek) i miast (dla wybranego kraju) — bez filtra miasta, żeby zakładki nie znikały
+    base = {k: v for k, v in q.items() if k not in ("city", "country")}
+    countries = {c["_id"]: c["n"] async for c in coll.aggregate([{"$match": base}, {"$group": {"_id": "$country", "n": {"$sum": 1}}}])}
+    cities = []
+    if q.get("country"):
+        cities = [{"city": c["_id"], "n": c["n"]} async for c in coll.aggregate(
+            [{"$match": {**base, "country": q["country"]}}, {"$group": {"_id": "$city", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 40}])]
+    response.headers["Cache-Control"] = "public, max-age=300, s-maxage=600, stale-while-revalidate=300"
+    return {"total": total, "items": items,
+            "countries": [{"code": k, "name": v[0], "flag": v[1], "n": countries.get(k, 0)} for k, v in FOREIGN_COUNTRIES.items()], "cities": cities}
 
 
 async def _find_duplicates(doc: dict, include_urls: bool) -> dict:

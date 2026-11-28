@@ -1066,6 +1066,13 @@ def main():
     log.info("═══ DONE %s %s/%s: new=%d updated=%d pages=%d ═══", a.portal, a.transaction, a.property, tot["new"], tot["updated"], tot["pages"])
     if a.portal == "adresowo":
         _verify_adresowo_sellers(coll, a.property, a.transaction)
+        if a.property == "mieszkanie" and a.transaction == "sprzedaz":
+            # 🌍 Zagranica (realting.com: ES/IT/US/PT) — co turę 2 najnowsze strony na kraj/kategorię; pełny import: --max-pages ≥ 30 → 12 stron
+            try:
+                from scrape_zagranica import run as _zagr_run, mark_stale as _zagr_stale
+                _zagr_run(pages=12 if a.max_pages >= 30 else 2, coll=coll.database["listings_foreign"]); _zagr_stale(coll.database["listings_foreign"])
+            except Exception as e:
+                log.error("zagranica failed: %s", str(e)[:200])
     # Galerie (do 12 zdjęć) ze stron najnowszych ofert bez galerii — ekstraktory per portal w scripts/gallery.py. 22.11
     try:
         from gallery import enrich_galleries as _enrich_galleries

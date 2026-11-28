@@ -321,6 +321,10 @@ gtag('set', 'url_passthrough', false);
       <span class="hero-pill-who">🏠 Dla osób prywatnych</span>
       <span class="hero-pill-what">Wszystkie portale, analiza AI cen, wycena PDF za 10 zł →</span>
     </a>
+    <a href="/zagranica" class="hero-pill">
+      <span class="hero-pill-who">🌍 Za granicą</span>
+      <span class="hero-pill-what">Hiszpania, Włochy, USA, Portugalia · ceny w zł — tego nie ma żadna inna wyszukiwarka →</span>
+    </a>
   </div>
 
   <!-- Hero -->
@@ -873,7 +877,7 @@ gtag('set', 'url_passthrough', false);
     const el = document.getElementById('headerAuth');
     if (!el) return;
     const token = localStorage.getItem('finderdom_token');
-    const pomocLink = '<a href="/dla-wlascicieli" class="a-nav" title="Dodaj ogłoszenie za darmo lub poszukiwanie">📣 Sprzedam / Poszukuję</a><a href="/raporty" class="a-nav" title="Tygodniowe raporty cen">📊 Raporty</a><a href="/blog" class="a-nav" title="Blog i porady">📝 Blog</a><a href="/pomoc" class="a-nav" title="Centrum pomocy">💬 Pomoc</a>';
+    const pomocLink = '<a href="/dla-wlascicieli" class="a-nav" title="Dodaj ogłoszenie za darmo lub poszukiwanie">📣 Sprzedam / Poszukuję</a><a href="/zagranica" title="Hiszpania, Włochy, USA, Portugalia — ceny w PLN">🌍 Zagranica</a><a href="/raporty" class="a-nav" title="Tygodniowe raporty cen">📊 Raporty</a><a href="/blog" class="a-nav" title="Blog i porady">📝 Blog</a><a href="/pomoc" class="a-nav" title="Centrum pomocy">💬 Pomoc</a>';
     if (token) {
       el.innerHTML = pomocLink + '<a href="/konto" class="a-cta">👤 Moje konto</a>';
     } else {

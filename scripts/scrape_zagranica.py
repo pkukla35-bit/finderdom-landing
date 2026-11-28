@@ -213,7 +213,7 @@ def run_greenacres(pages: int = 2, coll=None, delay: float = 1.5) -> Dict[str, i
     for dom in GA_DOMAINS:
         zero = 0
         for page in range(1, pages + 1):
-            html = fetch(f"https://www.green-acres.{dom}/pl/show_properties.htm?sort=date&page={page}")
+            html = fetch(f"https://www.green-acres.{dom}/pl/show_properties.htm?sort=date&p_n={page}")   # paginacja: p_n (nie page)
             if not html: break
             items = parse_greenacres(html, dom); tot["pages"] += 1
             if not items: break

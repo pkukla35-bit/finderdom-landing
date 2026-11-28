@@ -965,9 +965,11 @@ function proxyImg(url) {
   // OLX / Domiporta CDN — publiczne, bez hotlink-protection → bezpośrednio (bez serverless hopu)
   if (u.includes('apollo.olxcdn.com') || u.includes('galeria.domiporta.pl')) return u;
   // realting.com (zagranica) — serwer odrzuca nasz proxy (fingerprint TLS), a bezpośrednio z przeglądarki działa → wsrv.nl jako cache/resize
-  if (u.includes('realting.com/uploads/') || u.includes('landelity.com/img/')) return 'https://wsrv.nl/?url=' + encodeURIComponent(u.replace(/^https?:\/\//, '')) + '&w=1200&q=80&output=webp';
+  if (u.includes('landelity.com/img/')) return u;   // landelity: blokuje serwery (403), z przeglądarki użytkownika zwykle działa
+  if (u.includes('realting.com/uploads/')) return 'https://wsrv.nl/?url=' + encodeURIComponent(u.replace(/^https?:\/\//, '')) + '&w=1200&q=80&output=webp';
   // realting.com (zagranica) — serwer odrzuca nasz proxy (fingerprint TLS), a bezpośrednio z przeglądarki działa → wsrv.nl jako cache/resize
-  if (u.includes('realting.com/uploads/') || u.includes('landelity.com/img/')) return 'https://wsrv.nl/?url=' + encodeURIComponent(u.replace(/^https?:\/\//, '')) + '&w=1200&q=80&output=webp';
+  if (u.includes('landelity.com/img/')) return u;   // landelity: blokuje serwery (403), z przeglądarki użytkownika zwykle działa
+  if (u.includes('realting.com/uploads/')) return 'https://wsrv.nl/?url=' + encodeURIComponent(u.replace(/^https?:\/\//, '')) + '&w=1200&q=80&output=webp';
   return '/api/img?u=' + encodeURIComponent(u);
 }
 
